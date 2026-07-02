@@ -1,1 +1,142 @@
-@electron-builder.yml
+appId: com.ola.app
+productName: Ola
+buildVersion: ${version}
+directories:
+  buildResources: build
+afterPack: build/after-sign-mac.cjs
+files:
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # Exclude renderer-only / build-only node_modules (already bundled by Vite)
+  - '!node_modules/monaco-editor/**'
+  - '!node_modules/gpt-tokenizer/**'
+  - '!node_modules/@lobehub/**'
+  - '!node_modules/lucide-react/**'
+  - '!node_modules/lightningcss*/**'
+  - '!node_modules/@tailwindcss/**'
+  - '!node_modules/tailwindcss/**'
+  - '!node_modules/tailwind-merge/**'
+  - '!node_modules/tw-animate-css/**'
+  - '!node_modules/@babel/**'
+  - '!node_modules/rehype-highlight/**'
+  - '!node_modules/highlight.js/**'
+  - '!node_modules/framer-motion/**'
+  - '!node_modules/motion/**'
+  - '!node_modules/motion-dom/**'
+  - '!node_modules/motion-utils/**'
+  - '!node_modules/@radix-ui/**'
+  - '!node_modules/radix-ui/**'
+  - '!node_modules/@base-ui/**'
+  - '!node_modules/react/**'
+  - '!node_modules/react-dom/**'
+  - '!node_modules/react-markdown/**'
+  - '!node_modules/react-syntax-highlighter/**'
+  - '!node_modules/react-i18next/**'
+  - '!node_modules/i18next/**'
+  - '!node_modules/prismjs/**'
+  - '!node_modules/refractor/**'
+  - '!node_modules/@emotion/**'
+  - '!node_modules/polished/**'
+  - '!node_modules/cmdk/**'
+  - '!node_modules/sonner/**'
+  - '!node_modules/next-themes/**'
+  - '!node_modules/html-to-image/**'
+
+  - '!node_modules/immer/**'
+  - '!node_modules/zustand/**'
+  - '!node_modules/clsx/**'
+  - '!node_modules/class-variance-authority/**'
+  - '!node_modules/remark-gfm/**'
+  - '!node_modules/remark*/**'
+  - '!node_modules/rehype*/**'
+  - '!node_modules/unified/**'
+  - '!node_modules/unist*/**'
+  - '!node_modules/hast*/**'
+  - '!node_modules/mdast*/**'
+  - '!node_modules/micromark*/**'
+  - '!node_modules/vfile*/**'
+  - '!node_modules/@monaco-editor/**'
+  - '!node_modules/@vitejs/**'
+  - '!node_modules/@types/**'
+  - '!node_modules/marked/**'
+  - '!node_modules/dompurify/**'
+  - '!node_modules/jiti/**'
+  - '!node_modules/source-map/**'
+  - '!node_modules/scheduler/**'
+  - '!node_modules/ast-types/**'
+  - '!node_modules/tslib/**'
+  - '!node_modules/csstype/**'
+  - '!node_modules/style-to-object/**'
+  - '!node_modules/property-information/**'
+  - '!node_modules/space-separated-tokens/**'
+  - '!node_modules/comma-separated-tokens/**'
+  - '!node_modules/parse5/**'
+  - '!node_modules/entities/**'
+  - '!node_modules/devlop/**'
+  - '!node_modules/ccount/**'
+  - '!node_modules/character-entities*/**'
+  - '!node_modules/decode-named-character-reference/**'
+  - '!node_modules/stringify-entities/**'
+  - '!node_modules/zwitch/**'
+  - '!node_modules/bail/**'
+  - '!node_modules/trough/**'
+  - '!node_modules/is-plain-obj/**'
+  - '!node_modules/lowlight/**'
+  - '!node_modules/fault/**'
+  - '!node_modules/format/**'
+  # Exclude unnecessary files from all modules
+  - '!node_modules/**/README.md'
+  - '!node_modules/**/CHANGELOG.md'
+  - '!node_modules/**/*.ts'
+  - '!node_modules/**/*.map'
+asarUnpack:
+  - resources/**
+  - node_modules/ssh2/**
+  - node_modules/cpu-features/**
+  - node_modules/@jitsi/robotjs/**
+  - node_modules/node-gyp-build/**
+win:
+  executableName: ola
+  icon: build/icon.ico
+  legalTrademarks: Ola
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+mac:
+  icon: resources/icon-mac.png
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+    - NSLocalNetworkUsageDescription: Ola needs local network access to connect to SSH hosts and local services on your network.
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+  maintainer: electronjs.org
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+# Native modules are rebuilt by scripts/postinstall.mjs during npm ci.
+npmRebuild: false
+publish:
+  provider: github
+  owner: Leevity
+  repo: Ola
+  releaseType: release
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/
