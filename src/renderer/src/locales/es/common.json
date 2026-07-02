@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "Cancelar",
+    "delete": "Suprimir",
+    "save": "Guardar",
+    "confirm": "Confirmación",
+    "close": "Cerca",
+    "copy": "Copiado",
+    "copyPath": "Copiar el camino",
+    "rename": "Rename",
+    "refresh": "Refresh",
+    "retry": "Entrada",
+    "send": "Enviar",
+    "stop": "Para.",
+    "start": "Comienzo",
+    "clear": "Despejado",
+    "allow": "Permiso",
+    "deny": "Negar",
+    "undo": "Undo",
+    "open": "Abierto",
+    "export": "Exportación",
+    "import": "Importación",
+    "duplicate": "Duplicar",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "showMore": "Mostrar más",
+    "showLess": "Mostrar menos",
+    "more": "Más"
+  },
+  "status": {
+    "running": "corriendo",
+    "done": "hecho",
+    "pending": "pendientes",
+    "active": "activo",
+    "completed": "terminado",
+    "working": "trabajo",
+    "idle": "Idle",
+    "waiting": "esperando",
+    "stopped": "detenido",
+    "failed": "fracasado",
+    "error": "Error"
+  },
+  "time": {
+    "justNow": "ahora",
+    "mAgo": "{{count}} hace mucho tiempo",
+    "hAgo": "{{count}} h hace mucho tiempo",
+    "dAgo": "{{count}} # Hace mucho tiempo #",
+    "sAgo": "{{count}} s ago",
+    "sSession": "{{count}} período de sesiones",
+    "mSession": "{{count}} m sesión",
+    "hmSession": "{{h}} h {{m}} m sesión"
+  },
+  "unit": {
+    "tokens": "tokens",
+    "cached": "caché",
+    "reasoning": "razonamiento",
+    "messages": "mensajes",
+    "turns": "turnos",
+    "members": "miembros",
+    "tasks": "tareas",
+    "items": "Temas",
+    "lines": "líneas",
+    "files": "archivos",
+    "folders": "carpetas",
+    "calls": "llamadas",
+    "deps": "deps",
+    "chars": "chars",
+    "matches": "fósforos",
+    "sessions": "períodos de sesiones",
+    "msgs": "sgs"
+  },
+  "priority": {
+    "high": "alto",
+    "medium": "mediano",
+    "low": "bajo"
+  },
+  "theme": {
+    "light": "luz",
+    "dark": "oscuro",
+    "system": "sistema"
+  },
+  "mode": {
+    "chat": "Chat",
+    "clarify": "Clarify",
+    "cowork": "Cowork",
+    "code": "Código",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "Comienzo",
+    "next": "Siguiente",
+    "back": "Anterior",
+    "intro": {
+      "title": "Hola, bienvenido a Ola",
+      "subtitle": "Ola es un espacio de trabajo local para la colaboración con IA multiagente. Puede leer su contexto de proyecto, utilizar herramientas locales con aprobación y ayudar a los agentes a trabajar junto a usted en código, investigación, planificación y flujos de trabajo diarios.",
+      "points": {
+        "local": {
+          "title": "Herramientas locales, contexto real",
+          "desc": "Los agentes pueden trabajar con archivos, terminales, proyectos, memoria y contexto del espacio de trabajo en su máquina."
+        },
+        "team": {
+          "title": "Multi-agent collaboration",
+          "desc": "Cree asistentes enfocados, delegue tareas y mantenga un flujo de trabajo humano en el bucle."
+        },
+        "memory": {
+          "title": "Identidad personal y memoria",
+          "desc": "Elige una persona y perfil SOUL.md para que cada nueva solicitud comience con el estilo de colaboración adecuado."
+        }
+      }
+    },
+    "language": {
+      "title": "¿Qué idioma deberíamos usar?",
+      "shortLabel": "Idioma",
+      "detected": "El lenguaje del sistema detectado: {{language}}",
+      "zh": "Chino simplificado",
+      "en": "Inglés"
+    },
+    "nickname": {
+      "title": "¿Qué debería llamarte Ola?",
+      "subtitle": "Esto se almacena localmente y se escribe en USER.md para que los agentes puedan dirigirse a usted naturalmente.",
+      "placeholder": "Tu apodo"
+    },
+    "interests": {
+      "title": "¿En qué áreas te interesa?",
+      "subtitle": "Elija uno o más. Ola utiliza esto para elegir mejores defectos y personalizar su perfil local.",
+      "options": {
+        "content": "Creación de contenidos",
+        "coding": "Codificación y desarrollo",
+        "design": "Diseño y creatividad",
+        "learning": "Aprender e investigar",
+        "business": "Estrategia empresarial",
+        "marketing": "Comercialización y crecimiento",
+        "product": "Gestión de productos",
+        "sales": "Ventas y clientes",
+        "operations": "Operaciones y administración",
+        "hr": "Personas y recursos humanos",
+        "financeLaw": "Finanzas y derecho",
+        "creatorEconomy": "Economía creadora",
+        "investment": "Invertir y financiar",
+        "family": "Familia y crianza de los hijos",
+        "health": "Salud y hábitos",
+        "culture": "Hobbies y cultura",
+        "personal": "Vida personal",
+        "other": "Otras esferas"
+      }
+    },
+    "soul": {
+      "title": "Elige tu SOUL predeterminado",
+      "subtitle": "SOUL.md define la identidad a largo plazo del asistente, el estilo de comunicación y los límites de comportamiento. Puedes cambiarla más adelante en la memoria de identidad global.",
+      "loading": "Cargando plantillas SOUL incorporadas...",
+      "loadFailed": "No se puede cargar plantillas SOUL incorporadas",
+      "installFailed": "Failed to install default SOUL",
+      "empty": "No se encontraron plantillas SOUL incorporadas.",
+      "retry": "Entrada"
+    },
+    "done": {
+      "action": "Entra Ola",
+      "toast": "Ola está listo",
+      "failed": "Failed to end setup"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "Colaborador profesional equilibrado",
+        "description": "Un personaje predeterminado constante para el trabajo diario mixto, discusión reflexiva y asistencia general."
+      },
+      "senior-engineering-partner": {
+        "name": "Senior Software Engineering Partner",
+        "description": "Un personaje de programación riguroso para el código de lectura, haciendo cambios de alcance, depuración, exámenes y decisiones técnicas."
+      },
+      "daily-life-assistant": {
+        "name": "Daily Life Assistant",
+        "description": "Una persona cotidiana pragmática para la planificación, recordatorios, decisiones, mensajes, viajes, aprendizaje y organización personal."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Compañero afinado emocionalmente",
+        "description": "Una persona de apoyo emocional cuidadosa para la conversación reflexiva, la redacción de relaciones y momentos difíciles."
+      },
+      "research-writing-strategist": {
+        "name": "Strategist de investigación y escritura",
+        "description": "Una persona precisa para la síntesis de investigación, los planes de escritura, la edición, la calidad de los argumentos y el trabajo fuente-aware."
+      },
+      "product-strategy-operator": {
+        "name": "Product Strategy Operator",
+        "description": "Un personaje de producto y de negocios para la priorización, operaciones UX, planificación de lanzamientos y claridad operativa."
+      }
+    },
+    "categories": {
+      "general": "general",
+      "coding": "codificación",
+      "daily": "diario",
+      "emotional": "emocional",
+      "research": "investigación",
+      "business": "negocios"
+    },
+    "tags": {
+      "daily": "diario",
+      "balanced": "equilibrado",
+      "clear": "clara",
+      "programming": "programación",
+      "debugging": "debugging",
+      "review": "examen",
+      "planning": "planificación",
+      "organization": "organización",
+      "everyday": "diario",
+      "emotional-support": "apoyo emocional",
+      "reflection": "reflexión",
+      "relationships": "relaciones",
+      "research": "investigación",
+      "writing": "escritura",
+      "editing": "edición",
+      "product": "producto",
+      "strategy": "estrategia",
+      "operations": "operaciones"
+    }
+  },
+  "contextWindow": "Context window",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "↑",
+        "error": "❌ Failed",
+        "stopped": "Àngel Stopped"
+      },
+      "toolCallCount": "{{count}} herramienta llamadas",
+      "runFinished": "Cron task \" {{jobName}} \"Completo\" {{statusLabel}}, {{toolCallLabel}})",
+      "errorDetail": "*Error* {{message}}",
+      "noOutput": "(sin salida)"
+    },
+    "changelog": {
+      "title": "Cambio",
+      "translate": "AI Translate",
+      "translating": "Traduciendo...",
+      "showOriginal": "Show Original",
+      "showTranslation": "Mostrar traducción",
+      "translateError": "La traducción falló",
+      "noProvider": "No hay un proveedor de inteligencia artificial configurado."
+    },
+    "update": {
+      "availableTitle": "introductoria {{version}} disponible",
+      "availableDescription": "Haga clic en \"Actualizar ahora\" para comenzar a descargar",
+      "buttonLabel": "Actualización v {{version}}",
+      "buttonTooltip": "Una nueva versión está disponible. Haga clic para ver notas de lanzamiento.",
+      "currentVersion": "Corriente v {{version}}",
+      "latestVersion": "Última v {{version}}",
+      "releaseNotes": "Notas de lanzamiento",
+      "noReleaseNotes": "No se proporcionaron notas de liberación para esta versión.",
+      "downloading": "Descargar la actualización...",
+      "downloadingShort": "{{progress}} %",
+      "downloadingProgress": "Actualización de descarga {{progress}} %",
+      "actions": {
+        "updateNow": "Actualización",
+        "remindLater": "Recuérdame más tarde"
+      },
+      "downloadFailed": "Descarga fallido",
+      "delayed": "Actualización pospuesta",
+      "downloadedTitle": "Actualización descargada",
+      "downloadedDescription": "Versión {{version}} se instalará después de reiniciar",
+      "failed": "Actualización fallada"
+    },
+    "errors": {
+      "unhandledTitle": "Error sin manipular"
+    }
+  }
+}

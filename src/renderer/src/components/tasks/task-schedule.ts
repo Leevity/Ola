@@ -1,0 +1,359 @@
+import type { TFunction } from 'i18next'
+import type { CronJobEntry, CronSchedule } from '@renderer/stores/cron-store'
+import { resolveIntlLocale } from '@renderer/lib/i18n-language'
+
+export interface DayWindowEntry {
+  key: string
+  date: Date
+  start: number
+  end: number
+  isToday: boolean
+}
+
+const MINUTE_MS = 60_000
+const PLANNED_TIME_LIMIT = 500
+
+function resolveTaskLocale(language?: string): string {
+  return resolveIntlLocale(language)
+}
+
+export function startOfLocalDay(value: Date | number): Date {
+  const date = typeof value === 'number' ? new Date(value) : new Date(value)
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+}
+
+export function endOfLocalDay(value: Date | number): Date {
+  const start = startOfLocalDay(value)
+  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1)
+}
+
+export function dateKeyFromDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = `${date.getMonth() + 1}`.padStart(2, '0')
+  const day = `${date.getDate()}`.padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+export function dateKeyFromTimestamp(timestamp: number): string {
+  return dateKeyFromDate(new Date(timestamp))
+}
+
+export function buildDayWindow(pastDays = 7, futureDays = 30): DayWindowEntry[] {
+  const today = startOfLocalDay(Date.now())
+  const entries: DayWindowEntry[] = []
+  for (let offset = -pastDays; offset <= futureDays; offset++) {
+    const date = new Date(today)
+    date.setDate(today.getDate() + offset)
+    const start = startOfLocalDay(date).getTime()
+    const end = endOfLocalDay(date).getTime()
+    entries.push({
+      key: dateKeyFromDate(date),
+      date,
+      start,
+      end,
+      isToday: offset === 0
+    })
+  }
+  return entries
+}
+
+export function formatDayLabel(date: Date, t: TFunction, language?: string): string {
+  const locale = resolveTaskLocale(language)
+  const todayKey = dateKeyFromTimestamp(Date.now())
+  const key = dateKeyFromDate(date)
+  if (key === todayKey) return t('tasksPage.dayToday')
+  const tomorrow = new Date(startOfLocalDay(Date.now()))
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (key === dateKeyFromDate(tomorrow)) return t('tasksPage.dayTomorrow')
+  const yesterday = new Date(startOfLocalDay(Date.now()))
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (key === dateKeyFromDate(yesterday)) return t('tasksPage.dayYesterday')
+  return date.toLocaleDateString(locale, { month: 'numeric', day: 'numeric', weekday: 'short' })
+}
+
+export function formatTimeLabel(timestamp: number | null | undefined, language?: string): string {
+  if (!timestamp) return '—'
+  return new Date(timestamp).toLocaleTimeString(resolveTaskLocale(language), {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+export function formatDateTimeLabel(
+  timestamp: number | null | undefined,
+  language?: string
+): string {
+  if (!timestamp) return '—'
+  return new Date(timestamp).toLocaleString(resolveTaskLocale(language), {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+export function formatIntervalLabel(ms: number | null | undefined, t: TFunction): string {
+  if (!ms) return '—'
+  if (ms < 60_000) {
+    return t('tasksPage.intervalSeconds', {
+      value: Math.round(ms / 1000)
+    })
+  }
+  if (ms < 3_600_000) {
+    return t('tasksPage.intervalMinutes', {
+      value: Math.round(ms / 60_000)
+    })
+  }
+  if (ms < 86_400_000) {
+    return t('tasksPage.intervalHours', {
+      value: (ms / 3_600_000).toFixed(ms % 3_600_000 === 0 ? 0 : 1)
+    })
+  }
+  return t('tasksPage.intervalDays', {
+    value: (ms / 86_400_000).toFixed(ms % 86_400_000 === 0 ? 0 : 1)
+  })
+}
+
+export function scheduleKindLabel(kind: CronSchedule['kind'], t: TFunction): string {
+  switch (kind) {
+    case 'at':
+      return t('tasksPage.scheduleKindAt')
+    case 'every':
+      return t('tasksPage.scheduleKindEvery')
+    case 'cron':
+      return t('tasksPage.scheduleKindCron')
+  }
+}
+
+export function scheduleSummary(job: CronJobEntry, t: TFunction, language?: string): string {
+  if (job.schedule.kind === 'at') return formatDateTimeLabel(job.schedule.at, language)
+  if (job.schedule.kind === 'every') return formatIntervalLabel(job.schedule.every, t)
+  return job.schedule.expr ?? '—'
+}
+
+function normalizeCronToken(token: string): string {
+  return token.trim() === '?' ? '*' : token.trim()
+}
+
+function matchesCronField(field: string, value: number): boolean {
+  const normalized = normalizeCronToken(field)
+  if (normalized === '*') return true
+
+  for (const part of normalized.split(',')) {
+    const segment = part.trim()
+    if (!segment) continue
+
+    const stepMatch = segment.match(/^(.+)\/(\d+)$/)
+    const step = stepMatch ? Number.parseInt(stepMatch[2], 10) : 0
+    const base = stepMatch ? stepMatch[1] : segment
+
+    if (base === '*') {
+      if (!step) return true
+      if (value % step === 0) return true
+      continue
+    }
+
+    const rangeMatch = base.match(/^(\d+)-(\d+)$/)
+    if (rangeMatch) {
+      const start = Number.parseInt(rangeMatch[1], 10)
+      const end = Number.parseInt(rangeMatch[2], 10)
+      if (value < start || value > end) continue
+      if (!step) return true
+      if ((value - start) % step === 0) return true
+      continue
+    }
+
+    const exact = Number.parseInt(base, 10)
+    if (!Number.isNaN(exact) && exact === value) return true
+  }
+
+  return false
+}
+
+function expandCronFieldValues(field: string, min: number, max: number): number[] {
+  const values: number[] = []
+  for (let value = min; value <= max; value++) {
+    if (matchesCronField(field, value)) {
+      values.push(value)
+    }
+  }
+  return values
+}
+
+function getWeekdayIndex(label: string): number {
+  const lower = label.toLowerCase()
+  const map: Record<string, number> = {
+    sun: 0,
+    sunday: 0,
+    mon: 1,
+    monday: 1,
+    tue: 2,
+    tuesday: 2,
+    wed: 3,
+    wednesday: 3,
+    thu: 4,
+    thursday: 4,
+    fri: 5,
+    friday: 5,
+    sat: 6,
+    saturday: 6
+  }
+  return map[lower] ?? 0
+}
+
+function getZonedParts(
+  timestamp: number,
+  timeZone?: string
+): {
+  minute: number
+  second: number
+  hour: number
+  day: number
+  month: number
+  weekday: number
+} {
+  const date = new Date(timestamp)
+  if (!timeZone || timeZone === 'UTC') {
+    return {
+      second: date.getUTCSeconds(),
+      minute: date.getUTCMinutes(),
+      hour: date.getUTCHours(),
+      day: date.getUTCDate(),
+      month: date.getUTCMonth() + 1,
+      weekday: date.getUTCDay()
+    }
+  }
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+    hourCycle: 'h23',
+    weekday: 'short'
+  }).formatToParts(date)
+
+  const byType = new Map(parts.map((part) => [part.type, part.value]))
+  return {
+    second: Number.parseInt(byType.get('second') ?? '0', 10),
+    minute: Number.parseInt(byType.get('minute') ?? '0', 10),
+    hour: Number.parseInt(byType.get('hour') ?? '0', 10),
+    day: Number.parseInt(byType.get('day') ?? '1', 10),
+    month: Number.parseInt(byType.get('month') ?? '1', 10),
+    weekday: getWeekdayIndex(byType.get('weekday') ?? 'Sun')
+  }
+}
+
+function parseCronExpression(expr: string): {
+  second: string
+  minute: string
+  hour: string
+  dayOfMonth: string
+  month: string
+  dayOfWeek: string
+} | null {
+  const parts = expr.trim().split(/\s+/)
+  if (parts.length === 5) {
+    return {
+      second: '0',
+      minute: parts[0],
+      hour: parts[1],
+      dayOfMonth: parts[2],
+      month: parts[3],
+      dayOfWeek: parts[4]
+    }
+  }
+  if (parts.length === 6) {
+    return {
+      second: parts[0],
+      minute: parts[1],
+      hour: parts[2],
+      dayOfMonth: parts[3],
+      month: parts[4],
+      dayOfWeek: parts[5]
+    }
+  }
+  return null
+}
+
+function matchesCronMinuteWindow(
+  parsed: NonNullable<ReturnType<typeof parseCronExpression>>,
+  timestamp: number,
+  timeZone?: string
+): boolean {
+  const zoned = getZonedParts(timestamp, timeZone)
+  return (
+    matchesCronField(parsed.minute, zoned.minute) &&
+    matchesCronField(parsed.hour, zoned.hour) &&
+    matchesCronField(parsed.dayOfMonth, zoned.day) &&
+    matchesCronField(parsed.month, zoned.month) &&
+    matchesCronField(parsed.dayOfWeek, zoned.weekday)
+  )
+}
+
+export function listPlannedTimesForDay(
+  job: CronJobEntry,
+  dayStart: number,
+  dayEnd: number
+): number[] {
+  if (job.deletedAt) return []
+  const { schedule } = job
+
+  if (schedule.kind === 'at') {
+    const at = schedule.at ?? null
+    if (!at || at < dayStart || at > dayEnd) return []
+    return [at]
+  }
+
+  if (schedule.kind === 'every') {
+    const every = schedule.every ?? null
+    if (!every || every < 1000) return []
+    const anchor = job.lastFiredAt ?? job.updatedAt ?? job.createdAt
+    let next = anchor <= dayStart ? dayStart : anchor
+    const offset = (next - anchor) % every
+    if (offset !== 0) next += every - offset
+    const result: number[] = []
+    for (let current = next; current <= dayEnd; current += every) {
+      if (current >= dayStart) result.push(current)
+      if (result.length >= PLANNED_TIME_LIMIT) break
+    }
+    return result
+  }
+
+  if (schedule.kind === 'cron' && schedule.expr) {
+    const parsed = parseCronExpression(schedule.expr)
+    if (!parsed) return []
+    const seconds = expandCronFieldValues(parsed.second, 0, 59)
+    if (seconds.length === 0) return []
+
+    const result: number[] = []
+    const firstMinute = Math.floor(dayStart / MINUTE_MS) * MINUTE_MS
+    for (let current = firstMinute; current <= dayEnd; current += MINUTE_MS) {
+      if (matchesCronMinuteWindow(parsed, current, schedule.tz)) {
+        for (const second of seconds) {
+          const plannedAt = current + second * 1000
+          if (plannedAt < dayStart || plannedAt > dayEnd) continue
+          result.push(plannedAt)
+          if (result.length >= PLANNED_TIME_LIMIT) break
+        }
+      }
+      if (result.length >= PLANNED_TIME_LIMIT) break
+    }
+    return result
+  }
+
+  return []
+}
+
+export function listDateKeysForJob(job: CronJobEntry, window: DayWindowEntry[]): string[] {
+  const keys: string[] = []
+  for (const day of window) {
+    if (listPlannedTimesForDay(job, day.start, day.end).length > 0) {
+      keys.push(day.key)
+    }
+  }
+  return keys
+}

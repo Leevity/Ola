@@ -1,0 +1,273 @@
+{
+  "action": {
+    "cancel": "取消",
+    "delete": "删除",
+    "save": "保存",
+    "confirm": "确认",
+    "close": "关闭",
+    "copy": "复制",
+    "copyPath": "复制路径",
+    "rename": "重命名",
+    "refresh": "刷新",
+    "retry": "重试",
+    "send": "发送",
+    "stop": "停止",
+    "start": "开始",
+    "clear": "清除",
+    "allow": "允许",
+    "deny": "拒绝",
+    "undo": "撤销",
+    "open": "打开",
+    "export": "导出",
+    "import": "导入",
+    "duplicate": "复制会话",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "showMore": "显示更多",
+    "showLess": "收起",
+    "more": "更多"
+  },
+  "status": {
+    "running": "运行中",
+    "done": "完成",
+    "pending": "待处理",
+    "active": "进行中",
+    "completed": "已完成",
+    "working": "工作中",
+    "idle": "空闲",
+    "waiting": "等待中",
+    "stopped": "已停止",
+    "failed": "失败",
+    "error": "错误"
+  },
+  "time": {
+    "justNow": "刚刚",
+    "mAgo": "{{count}}分钟前",
+    "hAgo": "{{count}}小时前",
+    "dAgo": "{{count}}天前",
+    "sAgo": "{{count}}秒前",
+    "sSession": "{{count}}秒会话",
+    "mSession": "{{count}}分钟会话",
+    "hmSession": "{{h}}小时{{m}}分钟会话"
+  },
+  "unit": {
+    "tokens": "tokens",
+    "cached": "缓存",
+    "reasoning": "推理",
+    "messages": "消息",
+    "turns": "轮次",
+    "members": "成员",
+    "tasks": "任务",
+    "items": "项",
+    "lines": "行",
+    "files": "文件",
+    "folders": "文件夹",
+    "calls": "调用",
+    "deps": "依赖",
+    "chars": "字符",
+    "matches": "匹配",
+    "sessions": "会话",
+    "msgs": "消息"
+  },
+  "priority": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "theme": {
+    "light": "浅色",
+    "dark": "深色",
+    "system": "跟随系统"
+  },
+  "mode": {
+    "chat": "对话",
+    "clarify": "澄清",
+    "cowork": "协作",
+    "code": "编程",
+    "acp": "ACP",
+    "descriptions": {
+      "chat": "快速对话，不调用项目工具",
+      "clarify": "厘清需求，先产出可评审计划",
+      "cowork": "边规划边执行，与你协同验证",
+      "code": "专注动手编码实现",
+      "acp": "负责架构设计并委派子代理"
+    }
+  },
+  "onboarding": {
+    "start": "开始",
+    "next": "下一步",
+    "back": "上一步",
+    "intro": {
+      "title": "你好，欢迎使用 Ola",
+      "subtitle": "Ola 是一个本地优先的多 Agent AI 协作工作台。它可以理解你的项目上下文，在授权下使用本地工具，并让 Agent 在编程、研究、计划和日常流程中与你一起工作。",
+      "points": {
+        "local": {
+          "title": "本地工具，真实上下文",
+          "desc": "Agent 可以基于你的本机文件、终端、项目、记忆和工作区上下文开展工作。"
+        },
+        "team": {
+          "title": "多 Agent 协作",
+          "desc": "创建专注的助手，分派任务，并保持人类可确认、可介入的工作流。"
+        },
+        "memory": {
+          "title": "个人身份与记忆",
+          "desc": "选择 SOUL.md 人格与个人资料，让每次新请求都从合适的协作风格开始。"
+        }
+      }
+    },
+    "language": {
+      "title": "我们用哪种语言协作？",
+      "shortLabel": "语言",
+      "detected": "已检测到系统语言：{{language}}",
+      "zh": "简体中文",
+      "en": "English"
+    },
+    "nickname": {
+      "title": "Ola 该如何称呼你？",
+      "subtitle": "昵称会保存在本地，并写入 USER.md，方便 Agent 更自然地与你协作。",
+      "placeholder": "你的昵称"
+    },
+    "interests": {
+      "title": "你感兴趣的领域有哪些？",
+      "subtitle": "可多选。Ola 会用它来选择更合适的默认配置，并写入你的本地资料。",
+      "options": {
+        "content": "内容创作",
+        "coding": "编程与开发",
+        "design": "设计与创意",
+        "learning": "学习与研究",
+        "business": "商业与战略",
+        "marketing": "市场与增长",
+        "product": "产品与管理",
+        "sales": "销售与客户",
+        "operations": "运营与行政",
+        "hr": "人事与人力资源",
+        "financeLaw": "金融与法律",
+        "creatorEconomy": "创作者经济",
+        "investment": "投资与财经",
+        "family": "家庭与育儿",
+        "health": "健康与习惯",
+        "culture": "爱好与文化",
+        "personal": "个人生活",
+        "other": "其他领域"
+      }
+    },
+    "soul": {
+      "title": "选择默认 SOUL",
+      "subtitle": "SOUL.md 定义助手的长期人格、沟通风格和行为边界。之后你也可以在全局人格与记忆中随时调整。",
+      "loading": "正在加载内置 SOUL 模板...",
+      "loadFailed": "加载内置 SOUL 模板失败",
+      "installFailed": "安装默认 SOUL 失败",
+      "empty": "未找到内置 SOUL 模板。",
+      "retry": "重试"
+    },
+    "done": {
+      "action": "进入 Ola",
+      "toast": "Ola 已准备好",
+      "failed": "初始化配置失败"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "平衡型专业协作者",
+        "description": "适合混合日常工作、深度讨论与通用协助的稳定默认人格。"
+      },
+      "senior-engineering-partner": {
+        "name": "高级软件工程伙伴",
+        "description": "适合阅读代码、精确改动、调试、代码审查与技术决策的严谨编程人格。"
+      },
+      "daily-life-assistant": {
+        "name": "日常生活助手",
+        "description": "适合计划、提醒、决策、消息撰写、旅行、学习与个人整理的务实日常人格。"
+      },
+      "emotionally-attuned-companion": {
+        "name": "情感共鸣陪伴者",
+        "description": "适合反思性对话、人际措辞与困难时刻的细致情感支持人格。"
+      },
+      "research-writing-strategist": {
+        "name": "研究与写作策略师",
+        "description": "适合研究综合、写作规划、编辑、论证质量与来源意识工作的精确人格。"
+      },
+      "product-strategy-operator": {
+        "name": "产品策略执行伙伴",
+        "description": "适合优先级判断、UX 取舍、发布计划与运营梳理的产品与商业人格。"
+      }
+    },
+    "categories": {
+      "general": "通用",
+      "coding": "编程",
+      "daily": "日常",
+      "emotional": "情感",
+      "research": "研究",
+      "business": "商业"
+    },
+    "tags": {
+      "daily": "日常",
+      "balanced": "平衡",
+      "clear": "清晰",
+      "programming": "编程",
+      "debugging": "调试",
+      "review": "审查",
+      "planning": "计划",
+      "organization": "整理",
+      "everyday": "日常",
+      "emotional-support": "情感支持",
+      "reflection": "反思",
+      "relationships": "关系",
+      "research": "研究",
+      "writing": "写作",
+      "editing": "编辑",
+      "product": "产品",
+      "strategy": "策略",
+      "operations": "运营"
+    }
+  },
+  "contextWindow": "上下文窗口",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "✅ 成功",
+        "error": "❌ 失败",
+        "stopped": "⚠️ 中止"
+      },
+      "toolCallCount": "{{count}} 次工具调用",
+      "runFinished": "Cron 任务 \"{{jobName}}\" 执行完成（{{statusLabel}}，{{toolCallLabel}}）",
+      "errorDetail": "**错误：** {{message}}",
+      "noOutput": "（无输出）"
+    },
+    "changelog": {
+      "title": "更新日志",
+      "translate": "AI 翻译",
+      "translating": "翻译中...",
+      "showOriginal": "显示原文",
+      "showTranslation": "显示翻译",
+      "translateError": "翻译失败",
+      "noProvider": "未配置 AI 服务商，请先在设置中完成配置。"
+    },
+    "update": {
+      "availableTitle": "🎉 新版本 {{version}} 可用",
+      "availableDescription": "点击“立即更新”开始下载",
+      "buttonLabel": "更新 v{{version}}",
+      "buttonTooltip": "发现新版本，点击查看更新内容",
+      "currentVersion": "当前版本 v{{version}}",
+      "latestVersion": "最新版本 v{{version}}",
+      "releaseNotes": "更新说明",
+      "noReleaseNotes": "当前版本未提供更新说明。",
+      "downloading": "开始下载更新...",
+      "downloadingShort": "下载中 {{progress}}%",
+      "downloadingProgress": "正在下载更新 {{progress}}%",
+      "actions": {
+        "updateNow": "立即更新",
+        "remindLater": "稍后提醒"
+      },
+      "downloadFailed": "下载失败",
+      "delayed": "已推迟更新",
+      "downloadedTitle": "更新已下载",
+      "downloadedDescription": "版本 {{version}} 将在重启后安装",
+      "failed": "更新失败"
+    },
+    "errors": {
+      "unhandledTitle": "未处理的错误"
+    }
+  }
+}

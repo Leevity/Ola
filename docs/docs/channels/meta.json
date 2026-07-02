@@ -1,0 +1,18 @@
+{
+  "title": "Channels",
+  "description": "Connect Ola to Feishu, DingTalk, Discord, Telegram, QQ, WeCom, Weixin, and WhatsApp.",
+  "root": true,
+  "pages": [
+    "index",
+    "---Workplace platforms---",
+    "feishu",
+    "dingtalk",
+    "wecom",
+    "---Community chat---",
+    "qq",
+    "weixin-personal",
+    "telegram",
+    "discord",
+    "whatsapp"
+  ]
+}

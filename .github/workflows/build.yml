@@ -1,0 +1,654 @@
+name: Build & Release
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+on:
+  # 在 GitHub 上发布 Release 时自动触发构建
+  release:
+    types: [published]
+
+  # 手动触发 (用于调试或重新构建)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (如 1.2.3，不带 v 前缀)'
+        required: true
+        type: string
+
+# 同一时间只允许一个构建流水线运行
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  # ── 准备阶段：提取版本号与发布内容 ──
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      release_body: ${{ steps.meta.outputs.release_body }}
+      tag_name: ${{ steps.meta.outputs.tag_name }}
+      checkout_ref: ${{ steps.meta.outputs.checkout_ref }}
+      is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
+      release_id: ${{ steps.meta.outputs.release_id }}
+    steps:
+      - name: Checkout (gh cli needs repo context)
+        uses: actions/checkout@v6
+
+      - name: Extract release metadata
+        id: meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
+          RELEASE_ID: ${{ github.event.release.id }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ "$EVENT_NAME" = "release" ]; then
+            # 从 Release 事件中获取版本号 (去掉 v 前缀)
+            VERSION="${RELEASE_TAG#v}"
+            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+            echo "tag_name=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+            echo "checkout_ref=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=${RELEASE_PRERELEASE}" >> "$GITHUB_OUTPUT"
+            echo "release_id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+
+            # 获取 Release body 内容 (base64 编码避免多行问题)
+            BODY=$(printf '%s' "$RELEASE_BODY" | base64 -w 0)
+            echo "release_body=${BODY}" >> "$GITHUB_OUTPUT"
+          else
+            # workflow_dispatch 手动触发：通过 tag 查找已有 Release，找不到则创建
+            TAG="v${INPUT_VERSION}"
+            echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+            echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
+            echo "checkout_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "release_body=$(printf '%s' '手动触发构建' | base64 -w 0)" >> "$GITHUB_OUTPUT"
+
+            # 尝试查找已有 Release
+            if gh release view "$TAG" > /dev/null 2>&1; then
+              echo "✅ Found existing Release: ${TAG}"
+            else
+              # 创建 draft Release
+              gh release create "$TAG" --title "Release ${TAG}" --notes "手动触发构建" --draft
+              echo "✅ Created draft Release: ${TAG}"
+            fi
+          fi
+
+      - name: Print build info
+        run: |
+          echo "📦 Version: ${{ steps.meta.outputs.version }}"
+          echo "🏷️ Tag: ${{ steps.meta.outputs.tag_name }}"
+          echo "🚀 Pre-release: ${{ steps.meta.outputs.is_prerelease }}"
+
+  # ── 多平台构建 ──
+  compile:
+    needs: prepare
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential libx11-dev libxtst-dev libpng++-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Sync version to package.json
+        run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Build (electron-vite)
+        run: npx electron-vite build
+
+      - name: Upload compiled app
+        uses: actions/upload-artifact@v6
+        with:
+          name: ola-build-output
+          path: out
+          if-no-files-found: error
+          retention-days: 30
+
+  build:
+    needs: [prepare, compile]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            platform: win
+            build_arch: x64
+            artifact_arch: amd64
+            native_worker_rid: win-x64
+          - os: windows-11-arm
+            platform: win
+            build_arch: arm64
+            artifact_arch: arm64
+            native_worker_rid: win-arm64
+          - os: ubuntu-latest
+            platform: linux
+            build_arch: x64
+            artifact_arch: amd64
+            native_worker_rid: linux-x64
+          - os: ubuntu-24.04-arm
+            platform: linux
+            build_arch: arm64
+            artifact_arch: arm64
+            native_worker_rid: linux-arm64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      # Linux 需要构建原生模块的依赖
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential clang zlib1g-dev libx11-dev libxtst-dev libpng++-dev
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 将 Release 版本号同步写入 package.json
+      - name: Sync version to package.json
+        run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Publish native worker (${{ matrix.native_worker_rid }})
+        run: npm run native:publish
+        env:
+          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
+
+      - name: Download compiled app
+        uses: actions/download-artifact@v6
+        with:
+          name: ola-build-output
+          path: out
+
+      - name: Package (${{ matrix.platform }}-${{ matrix.artifact_arch }})
+        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.build_arch }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
+          # Windows 代码签名 (可选)
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
+
+      # ── 上传构建产物 ──
+
+      - name: Prepare Windows artifacts
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          mkdir -p release-assets
+
+          exe_file=$(find dist -maxdepth 1 -type f -name '*.exe' ! -name '*.blockmap' | head -n 1)
+          blockmap_file=$(find dist -maxdepth 1 -type f -name '*.exe.blockmap' | head -n 1)
+
+          if [ -z "$exe_file" ]; then
+            echo "❌ No Windows installer artifact found"
+            exit 1
+          fi
+
+          cp "$exe_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}-setup.exe"
+
+          if [ -n "$blockmap_file" ]; then
+            cp "$blockmap_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}-setup.exe.blockmap"
+          fi
+
+      - name: Patch Windows update metadata
+        if: matrix.platform == 'win' && matrix.artifact_arch == 'amd64'
+        shell: bash
+        run: |
+          if [ -f "dist/latest.yml" ]; then
+            node -e "
+              const fs = require('fs');
+              const p = 'dist/latest.yml';
+              let c = fs.readFileSync(p, 'utf8');
+              const m = c.match(/path: (\S+\.exe)/);
+              if (m) {
+                const n = 'Ola-win-amd64-setup.exe';
+                c = c.split(m[1]).join(n);
+                fs.writeFileSync(p, c);
+                console.log('Patched latest.yml:', m[1], '->', n);
+              }
+            "
+          fi
+
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}
+          path: |
+            release-assets/*.exe
+            release-assets/*.exe.blockmap
+            dist/latest*.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Windows assets to Release
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+        run: |
+          echo "📦 Uploading Windows assets to Release: ${TAG_NAME}"
+          for file in release-assets/*; do
+            [ -f "$file" ] || continue
+            echo "  ⬆️  $(basename "$file")"
+            gh release upload "${TAG_NAME}" "$file" --clobber
+          done
+
+          if [ "${{ matrix.artifact_arch }}" = "amd64" ]; then
+            for file in dist/latest*.yml; do
+              [ -f "$file" ] || continue
+              echo "  ⬆️  $(basename "$file")"
+              gh release upload "${TAG_NAME}" "$file" --clobber
+            done
+          fi
+
+      - name: Prepare Linux artifacts
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          mkdir -p release-assets
+
+          appimage_file=$(find dist -maxdepth 1 -type f -name '*.AppImage' | head -n 1)
+          zsync_file=$(find dist -maxdepth 1 -type f -name '*.AppImage.zsync' | head -n 1)
+          deb_file=$(find dist -maxdepth 1 -type f -name '*.deb' | head -n 1)
+
+          if [ -n "$appimage_file" ]; then
+            cp "$appimage_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.AppImage"
+          fi
+
+          if [ -n "$zsync_file" ]; then
+            cp "$zsync_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.AppImage.zsync"
+          fi
+
+          if [ -n "$deb_file" ]; then
+            cp "$deb_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.deb"
+          fi
+
+      - name: Patch Linux update metadata
+        if: matrix.platform == 'linux' && matrix.artifact_arch == 'amd64'
+        shell: bash
+        run: |
+          for yml in dist/latest-linux.yml dist/latest.yml; do
+            [ -f "$yml" ] || continue
+            node -e "
+              const fs = require('fs');
+              const p = process.argv[1];
+              let c = fs.readFileSync(p, 'utf8');
+              const m = c.match(/path: (\S+\.AppImage)/);
+              if (m) {
+                const n = 'Ola-linux-amd64.AppImage';
+                c = c.split(m[1]).join(n);
+                fs.writeFileSync(p, c);
+                console.log('Patched ' + p + ':', m[1], '->', n);
+              }
+            " "$yml"
+          done
+
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}
+          path: |
+            release-assets/*.AppImage
+            release-assets/*.AppImage.zsync
+            release-assets/*.deb
+            dist/latest*.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Linux assets to Release
+        if: matrix.platform == 'linux'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+        run: |
+          echo "📦 Uploading Linux assets to Release: ${TAG_NAME}"
+          for file in release-assets/*; do
+            [ -f "$file" ] || continue
+            echo "  ⬆️  $(basename "$file")"
+            gh release upload "${TAG_NAME}" "$file" --clobber
+          done
+
+          if [ "${{ matrix.artifact_arch }}" = "amd64" ]; then
+            for file in dist/latest*.yml; do
+              [ -f "$file" ] || continue
+              echo "  ⬆️  $(basename "$file")"
+              gh release upload "${TAG_NAME}" "$file" --clobber
+            done
+          fi
+
+  # ── macOS 构建（分别产出 Apple Silicon / Intel 安装包） ──
+  build-macos:
+    needs: [prepare, compile]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            build_arch: arm64
+            artifact_arch: arm64
+            native_worker_rid: osx-arm64
+          - os: macos-15-intel
+            platform: mac
+            build_arch: x64
+            artifact_arch: amd64
+            native_worker_rid: osx-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.checkout_ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      # 将 Release 版本号同步写入 package.json
+      - name: Sync version to package.json
+        run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Publish native worker (${{ matrix.native_worker_rid }})
+        run: npm run native:publish
+        env:
+          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
+
+      - name: Download compiled app
+        uses: actions/download-artifact@v6
+        with:
+          name: ola-build-output
+          path: out
+
+      - name: Resolve macOS code signing
+        id: mac_signing
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK || '' }}
+        run: |
+          echo "csc_link=" >> "$GITHUB_OUTPUT"
+
+          if [ -z "$CSC_LINK" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS code signing disabled: CSC_LINK is not configured"
+            exit 0
+          fi
+
+          if [ "$CSC_LINK" = '.' ] || [ "$CSC_LINK" = './' ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::macOS code signing disabled: CSC_LINK points to the repository root"
+            exit 0
+          fi
+
+          if [ -d "$CSC_LINK" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::macOS code signing disabled: CSC_LINK points to a directory"
+            exit 0
+          fi
+
+          if printf '%s' "$CSC_LINK" | grep -Eq '^https?://'; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "csc_link=${CSC_LINK}" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS code signing enabled via certificate URL"
+            exit 0
+          fi
+
+          if [ -f "$CSC_LINK" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "csc_link=${CSC_LINK}" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS code signing enabled via local certificate file"
+            exit 0
+          fi
+
+          normalized_csc_link=$(printf '%s' "$CSC_LINK" | tr -d '\n\r')
+          if [ ${#normalized_csc_link} -ge 512 ] && printf '%s' "$normalized_csc_link" | grep -Eq '^[A-Za-z0-9+/=]+$'; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=true" >> "$GITHUB_OUTPUT"
+            echo "csc_link=${normalized_csc_link}" >> "$GITHUB_OUTPUT"
+            echo "::notice::macOS code signing enabled via base64 certificate data"
+            exit 0
+          fi
+
+          echo "enabled=false" >> "$GITHUB_OUTPUT"
+          echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
+          echo "::warning::macOS code signing disabled: CSC_LINK is neither a certificate file, URL, nor base64 certificate data"
+
+      - name: Package ${{ matrix.platform }}-${{ matrix.artifact_arch }}
+        shell: bash
+        run: |
+          if [ "${MAC_SIGNING_ENABLED}" = "true" ]; then
+            export CSC_LINK="${MAC_SIGNING_CSC_LINK}"
+            export CSC_KEY_PASSWORD="${MAC_SIGNING_CSC_KEY_PASSWORD}"
+            export APPLE_ID="${MAC_SIGNING_APPLE_ID}"
+            export APPLE_APP_SPECIFIC_PASSWORD="${MAC_SIGNING_APPLE_APP_SPECIFIC_PASSWORD}"
+            export APPLE_TEAM_ID="${MAC_SIGNING_APPLE_TEAM_ID}"
+            export CSC_IDENTITY_AUTO_DISCOVERY=true
+            echo "Using configured macOS code signing credentials"
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            export CSC_IDENTITY_AUTO_DISCOVERY=false
+            echo "Building macOS package without code signing"
+          fi
+
+          npx electron-builder --mac dmg zip --${{ matrix.build_arch }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
+          MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
+          MAC_SIGNING_CSC_LINK: ${{ steps.mac_signing.outputs.csc_link }}
+          MAC_SIGNING_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          MAC_SIGNING_APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+          MAC_SIGNING_APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          MAC_SIGNING_APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Prepare macOS artifacts
+        shell: bash
+        env:
+          MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
+        run: |
+          mkdir -p release-assets
+          dmg_file=$(find dist -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+          zip_file=$(find dist -maxdepth 1 -type f -name '*.zip' | head -n 1)
+          yml_file=$(find dist -maxdepth 1 -type f -name 'latest-mac.yml' | head -n 1)
+
+          if [ -z "$dmg_file" ]; then
+            echo "❌ No macOS dmg artifact found"
+            exit 1
+          fi
+
+          cp "$dmg_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.dmg"
+          echo "✅ Prepared $(basename "$dmg_file") -> Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.dmg"
+
+          if [ -z "$zip_file" ]; then
+            echo "❌ No macOS zip artifact found"
+            exit 1
+          fi
+
+          cp "$zip_file" "release-assets/Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.zip"
+          echo "✅ Prepared $(basename "$zip_file") -> Ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}.zip"
+
+          if [ -n "$yml_file" ]; then
+            cp "$yml_file" "release-assets/latest-mac-${{ matrix.artifact_arch }}.yml"
+            echo "✅ Prepared $(basename "$yml_file") -> latest-mac-${{ matrix.artifact_arch }}.yml"
+          elif [ "${MAC_SIGNING_ENABLED}" = "true" ]; then
+            echo "❌ No macOS update metadata found"
+            exit 1
+          else
+            echo "ℹ️ No macOS updater metadata was produced for this unsigned build"
+          fi
+
+      - name: Patch macOS update metadata
+        shell: bash
+        run: |
+          yml="release-assets/latest-mac-${{ matrix.artifact_arch }}.yml"
+          if [ ! -f "$yml" ]; then
+            echo "ℹ️ Skip macOS metadata patch because updater metadata is missing"
+            exit 0
+          fi
+
+          node -e "
+            const fs = require('fs');
+            const p = process.argv[1];
+            const arch = process.argv[2];
+            let c = fs.readFileSync(p, 'utf8');
+            const m = c.match(/path: (\S+\.zip)/);
+            if (m) {
+              const n = 'Ola-mac-' + arch + '.zip';
+              c = c.split(m[1]).join(n);
+              fs.writeFileSync(p, c);
+              console.log('Patched ' + p + ':', m[1], '->', n);
+            }
+          " "$yml" "${{ matrix.artifact_arch }}"
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}
+          path: |
+            release-assets/*.dmg
+            release-assets/*.zip
+            release-assets/latest-mac-*.yml
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload macOS assets to Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+        run: |
+          echo "📦 Uploading macOS assets to Release: ${TAG_NAME}"
+          for file in release-assets/*; do
+            [ -f "$file" ] || continue
+            if [[ "$file" == *.yml ]]; then
+              continue
+            fi
+            echo "  ⬆️  $(basename "$file")"
+            gh release upload "${TAG_NAME}" "$file" --clobber
+          done
+
+  publish-macos-update-metadata:
+    needs: [prepare, build-macos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download macOS arm64 artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: ola-mac-arm64
+          path: mac-arm64
+
+      - name: Download macOS amd64 artifacts
+        uses: actions/download-artifact@v6
+        with:
+          name: ola-mac-amd64
+          path: mac-amd64
+
+      - name: Check macOS update metadata
+        id: mac_update_metadata
+        shell: bash
+        run: |
+          if [ ! -f "mac-arm64/latest-mac-arm64.yml" ] || [ ! -f "mac-amd64/latest-mac-amd64.yml" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "ℹ️ Skip merged macOS update metadata because signed updater files were not produced"
+            exit 0
+          fi
+
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Merge macOS update metadata
+        if: steps.mac_update_metadata.outputs.available == 'true'
+        shell: bash
+        run: |
+          ruby <<'RUBY'
+          require 'yaml'
+
+          def read_update_info(path)
+            data = YAML.load_file(path) || {}
+            files = Array(data['files']).map { |item| item.is_a?(Hash) ? item.dup : {} }
+
+            if files.empty? && data['path']
+              fallback = { 'url' => data['path'] }
+              fallback['sha512'] = data['sha512'] if data['sha512']
+              fallback['size'] = data['size'] if data['size']
+              files << fallback
+            end
+
+            [data, files]
+          end
+
+          arm_data, arm_files = read_update_info('mac-arm64/latest-mac-arm64.yml')
+          amd_data, amd_files = read_update_info('mac-amd64/latest-mac-amd64.yml')
+
+          merged = arm_data.dup
+          merged['files'] = (arm_files + amd_files).uniq { |item| item['url'] }
+          merged['releaseDate'] ||= amd_data['releaseDate']
+          merged['path'] ||= arm_data['path'] || merged['files'].first&.fetch('url', nil)
+          merged['sha512'] ||= arm_data['sha512'] || merged['files'].find { |item| item['url'] == merged['path'] }&.fetch('sha512', nil)
+
+          File.write('latest-mac.yml', YAML.dump(merged))
+          RUBY
+
+      - name: Upload merged macOS update metadata to Release
+        if: steps.mac_update_metadata.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release upload "${TAG_NAME}" latest-mac.yml --clobber --repo "${GH_REPO}"

@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "إلغاء",
+    "delete": "تحذف",
+    "save": "أنقذ",
+    "confirm": "Confirm",
+    "close": "اقترب",
+    "copy": "نسخ",
+    "copyPath": "علم",
+    "rename": "الاسم",
+    "refresh": "التجديد",
+    "retry": "Retry",
+    "send": "أرسل",
+    "stop": "توقف",
+    "start": "ابدأ",
+    "clear": "آمن",
+    "allow": "الاستحقاق",
+    "deny": "ديني",
+    "undo": "Undo",
+    "open": "مفتوح",
+    "export": "الصادرات",
+    "import": "الواردات",
+    "duplicate": "ازدواج",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "showMore": "أظهر المزيد",
+    "showLess": "عرض أقل",
+    "more": "أكثر"
+  },
+  "status": {
+    "running": "تشغيل",
+    "done": "القيام به",
+    "pending": "معلقة",
+    "active": "نشطة",
+    "completed": "أنجزت",
+    "working": "العمل",
+    "idle": "idle",
+    "waiting": "الانتظار",
+    "stopped": "توقف",
+    "failed": "فشل",
+    "error": "خطأ"
+  },
+  "time": {
+    "justNow": "الآن",
+    "mAgo": "{{count}} قبل",
+    "hAgo": "{{count}} منذ",
+    "dAgo": "{{count}} منذ",
+    "sAgo": "{{count}} منذ",
+    "sSession": "{{count}} الدورة",
+    "mSession": "{{count}} ميم - الدورة",
+    "hmSession": "{{h}} h {{m}} ميم - الدورة"
+  },
+  "unit": {
+    "tokens": "tokens",
+    "cached": "Cached",
+    "reasoning": "المنطق",
+    "messages": "رسائل",
+    "turns": "دوران",
+    "members": "الأعضاء",
+    "tasks": "المهام",
+    "items": "البنود",
+    "lines": "خطوط",
+    "files": "الملفات",
+    "folders": "الملفات",
+    "calls": "المكالمات",
+    "deps": "deps",
+    "chars": "chars",
+    "matches": "تطابق",
+    "sessions": "الدورات",
+    "msgs": "msgs"
+  },
+  "priority": {
+    "high": "عالية",
+    "medium": "متوسطة",
+    "low": "منخفضة"
+  },
+  "theme": {
+    "light": "الضوء",
+    "dark": "الظلام",
+    "system": "النظام"
+  },
+  "mode": {
+    "chat": "Chat",
+    "clarify": "توضيح",
+    "cowork": "العمل الجماعي",
+    "code": "المدونة",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "ابدأ",
+    "next": "التالي",
+    "back": "سابقا",
+    "intro": {
+      "title": "مرحباً، مرحباً بكم في \"إفتتاح كورك\"",
+      "subtitle": "المفتوحة هي مكان عمل في البداية المحلية للتعاون المتعدد الوكلاء، ويمكنها قراءة سياق مشروعك، واستخدام الأدوات المحلية بموافقة، ومساعدة العملاء على العمل جنباً إلى جنب معك في مجالات البرمج والبحث والتخطيط وسير العمل اليومية.",
+      "points": {
+        "local": {
+          "title": "الأدوات المحلية، السياق الحقيقي",
+          "desc": "العملاء يمكن أن يعملوا مع الملفات، والمحطات النهائية، والمشاريع، والذاكرة، وسياق الفضاء العمل على آلة الخاص بك."
+        },
+        "team": {
+          "title": "التعاون المتعدد العناصر",
+          "desc": "إنشاء مساعدين مركزين، مهام تفويض، والحفاظ على تدفق العمل الإنساني."
+        },
+        "memory": {
+          "title": "الهوية الشخصية والذاكرة",
+          "desc": "اختر شخصاً من نوع SOUL.md ونبذه لكي يبدأ كل طلب جديد من أسلوب التعاون الصحيح."
+        }
+      }
+    },
+    "language": {
+      "title": "أي لغة يجب أن نستخدمها؟",
+      "shortLabel": "اللغة",
+      "detected": "اللغة النظامية المكتشفة: {{language}}",
+      "zh": "الصينيون المبسطون",
+      "en": "الإنكليزية"
+    },
+    "nickname": {
+      "title": "ماذا يَجِبُ أَنْ يَنْادَكَ (أورك)؟",
+      "subtitle": "هذه مخزنة محلياً و مكتوبة إلى وكالة USER.md لكي يستطيع العملاء مخاطبتك بشكل طبيعي.",
+      "placeholder": "لقبك"
+    },
+    "interests": {
+      "title": "ما هي المناطق التي تهتم بها؟",
+      "subtitle": "اختر واحداً أو أكثر، (إفتتاح كووك) يستخدم هذا لاختيار خطأ أفضل وشخصية ملفك المحلي",
+      "options": {
+        "content": "إنشاء المحتوى",
+        "coding": "الترميز والتنمية",
+        "design": "التصميم والإبداع",
+        "learning": "التعلم والبحث",
+        "business": "استراتيجية الأعمال",
+        "marketing": "التسويق والنمو",
+        "product": "إدارة المنتجات",
+        "sales": "المبيعات والعملاء",
+        "operations": "العمليات والإعلان",
+        "hr": "People and HR",
+        "financeLaw": "المالية والقانونية",
+        "creatorEconomy": "اقتصاد المبدعين",
+        "investment": "الاستثمار والتمويل",
+        "family": "الأسرة والوالدية",
+        "health": "الصحة والعادات",
+        "culture": "الهوايات والثقافة",
+        "personal": "الحياة الشخصية",
+        "other": "مجالات أخرى"
+      }
+    },
+    "soul": {
+      "title": "اختر قبوك",
+      "subtitle": "(سو إل إمد) تعرف هوية المساعد الطويلة الأجل، أسلوب التواصل، والحدود السلوكية يمكنك تغييرها لاحقاً في الذاكرة العالمية للهوية",
+      "loading": "وضع نماذج صلبة في SOUL",
+      "loadFailed": "فشل في تحميل النماذج المبنية في SOUL",
+      "installFailed": "فشل في تركيب قزم",
+      "empty": "لم يتم العثور على نماذج مدمجة في SOUL.",
+      "retry": "Retry"
+    },
+    "done": {
+      "action": "Enter Ola",
+      "toast": "جاهز",
+      "failed": "فشل في إنهاء التجهيز"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "المتعاونون المتوازنون من الفئة الفنية",
+        "description": "شخص متعطل ثابت (أ) للعمل اليومي المختلط، والمناقشة المدروسة، والمساعدة العامة."
+      },
+      "senior-engineering-partner": {
+        "name": "Senior Software Engineering Partner",
+        "description": "A rigorous programming persona for reading code, making scoped changes, debugging, reviews, and technical decisions."
+      },
+      "daily-life-assistant": {
+        "name": "مساعد لشؤون الحياة اليومية",
+        "description": "شخص عملي كل يوم للتخطيط والتذكير والقرارات والرسائل والسفر والتعلم والتنظيم الشخصي."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Emotionally Attuned Companion",
+        "description": "شخص متأنق للدعم العاطفي(أ) للمحادثة التأملية، صياغة العلاقة، واللحظات الصعبة."
+      },
+      "research-writing-strategist": {
+        "name": "البحث والكتابة",
+        "description": "A precise persona for research synthesis, writing plans, editing, argue quality, and source-aware work."
+      },
+      "product-strategy-operator": {
+        "name": "مشروع استراتيجية المنتجات",
+        "description": "A product and business persona for prioritization, UX tradeoffs, launch planning, and operational clarity."
+      }
+    },
+    "categories": {
+      "general": "عامة",
+      "coding": "الترميز",
+      "daily": "يوميا",
+      "emotional": "عاطفي",
+      "research": "البحوث",
+      "business": "الأعمال التجارية"
+    },
+    "tags": {
+      "daily": "يوميا",
+      "balanced": "متوازن",
+      "clear": "واضح",
+      "programming": "البرمجة",
+      "debugging": "debugging",
+      "review": "الاستعراض",
+      "planning": "التخطيط",
+      "organization": "المنظمة",
+      "everyday": "كل يوم",
+      "emotional-support": "الدعم العاطفي",
+      "reflection": "انعكاس",
+      "relationships": "العلاقات",
+      "research": "البحوث",
+      "writing": "كتابة",
+      "editing": "التحرير",
+      "product": "المنتج",
+      "strategy": "الاستراتيجية",
+      "operations": "العمليات"
+    }
+  },
+  "contextWindow": "نافذة السياق",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "النجاح",
+        "error": "♪ Failed",
+        "stopped": "توقف"
+      },
+      "toolCallCount": "{{count}} المكالمات",
+      "runFinished": "\"المهمة الحديدية\" {{jobName}} اكتملت {{statusLabel}}.. {{toolCallLabel}})",
+      "errorDetail": "** {{message}}",
+      "noOutput": "(لا ناتج)"
+    },
+    "changelog": {
+      "title": "التغيير",
+      "translate": "AI Translate",
+      "translating": "ترجمة...",
+      "showOriginal": "العرض الأصلي",
+      "showTranslation": "الترجمة التحريرية",
+      "translateError": "فشل الترجمة التحريرية",
+      "noProvider": "لا يوجد مُقدّم للمُقدّم في \"سيتينغز\" أولاً."
+    },
+    "update": {
+      "availableTitle": "🎉 Version {{version}} متاحة",
+      "availableDescription": "إضغط على \"مواعدة الآن\" لبدء التحميل",
+      "buttonLabel": "Update v {{version}}",
+      "buttonTooltip": "وهناك نسخة جديدة متاحة.",
+      "currentVersion": "Current v {{version}}",
+      "latestVersion": "Latest v {{version}}",
+      "releaseNotes": "ملاحظات الإصدار",
+      "noReleaseNotes": "No release notes were provided for this version.",
+      "downloading": "تحميل تحديث...",
+      "downloadingShort": "{{progress}} النسبة المئوية",
+      "downloadingProgress": "تحديث المعلومات {{progress}} النسبة المئوية",
+      "actions": {
+        "updateNow": "التحديث الآن",
+        "remindLater": "ذكريني لاحقا"
+      },
+      "downloadFailed": "الحمولة فشلت",
+      "delayed": "آخر المستجدات",
+      "downloadedTitle": "آخر تحميل",
+      "downloadedDescription": "Version {{version}} سوف تستقر بعد العودة",
+      "failed": "آخر التطورات فشلت"
+    },
+    "errors": {
+      "unhandledTitle": "رعب غير منصف"
+    }
+  }
+}

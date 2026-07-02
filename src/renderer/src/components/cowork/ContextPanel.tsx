@@ -1,0 +1,727 @@
+import { useMemo, useState } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { useTranslation } from 'react-i18next'
+import {
+  Database,
+  FolderOpen,
+  FolderPlus,
+  RefreshCw,
+  MessageSquare,
+  Clock,
+  Cpu,
+  Zap,
+  ExternalLink,
+  Copy,
+  Check,
+  Wrench,
+  Brain,
+  ShieldCheck,
+  Archive,
+  Square,
+  Terminal,
+  Trash2
+} from 'lucide-react'
+import { Button } from '@renderer/components/ui/button'
+import { Separator } from '@renderer/components/ui/separator'
+import { useChatStore } from '@renderer/stores/chat-store'
+import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useAgentStore, type BackgroundProcessState } from '@renderer/stores/agent-store'
+import { useProviderStore } from '@renderer/stores/provider-store'
+import { useTeamStore } from '@renderer/stores/team-store'
+import { useUIStore } from '@renderer/stores/ui-store'
+import { isProjectSession } from '@renderer/lib/session-scope'
+import {
+  formatTokens,
+  calculateCost,
+  formatCost,
+  getBillableInputTokens,
+  getBillableTotalTokens
+} from '@renderer/lib/format-tokens'
+import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { useChatActions } from '@renderer/hooks/use-chat-actions'
+import { GoalPanelCard } from '@renderer/components/goal/GoalSessionControls'
+import {
+  getCompressionTriggerTokens,
+  getEffectiveContextWindow,
+  getPreCompressionTriggerTokens,
+  resolveCompressionContextLength,
+  resolveCompressionReservedOutputBudget,
+  resolveCompressionThreshold
+} from '@renderer/lib/agent/context-compression'
+
+const BACKGROUND_SHELL_DISPLAY_LIMIT = 8
+
+function compactShellCommand(command: string): string {
+  return command.replace(/\s+/g, ' ').trim()
+}
+
+function compactShellPath(path: string | undefined): string {
+  if (!path) return ''
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  if (parts.length <= 3) return path
+  return `.../${parts.slice(-3).join('/')}`
+}
+
+function getProcessStatusTone(process: BackgroundProcessState): string {
+  if (process.status === 'running') return 'bg-emerald-500'
+  if (process.status === 'error') return 'bg-destructive'
+  if (process.status === 'stopped') return 'bg-amber-500'
+  return 'bg-muted-foreground/45'
+}
+
+function getProcessRowTone(process: BackgroundProcessState): string {
+  if (process.status === 'running') {
+    return 'border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20'
+  }
+  if (process.status === 'error') {
+    return 'border-destructive/20 bg-destructive/10 hover:bg-destructive/20'
+  }
+  return 'border-border/55 bg-muted/35 hover:bg-muted/55'
+}
+
+function processOutputLineCount(process: BackgroundProcessState): number {
+  if (!process.output.trim()) return 0
+  return process.output.split('\n').length
+}
+
+function BackgroundShellsSection({
+  processes,
+  activeSessionId
+}: {
+  processes: BackgroundProcessState[]
+  activeSessionId: string | null
+}): React.JSX.Element {
+  const { t } = useTranslation('cowork')
+  const sessions = useChatStore((s) => s.sessions)
+  const ensureTerminalTab = useUIStore((s) => s.ensureTerminalTab)
+  const stopBackgroundProcess = useAgentStore((s) => s.stopBackgroundProcess)
+  const removeBackgroundProcess = useAgentStore((s) => s.removeBackgroundProcess)
+  const sessionsById = useMemo(
+    () => new Map(sessions.map((session) => [session.id, session])),
+    [sessions]
+  )
+  const runningCount = processes.filter((process) => process.status === 'running').length
+  const finishedProcesses = processes.filter((process) => process.status !== 'running')
+  const visibleProcesses = processes.slice(0, BACKGROUND_SHELL_DISPLAY_LIMIT)
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          {t('context.backgroundShellsTitle')}
+        </h4>
+        {finishedProcesses.length > 0 ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            className="text-muted-foreground/65 hover:text-foreground"
+            title={t('context.clearFinishedShells')}
+            aria-label={t('context.clearFinishedShells')}
+            onClick={() =>
+              finishedProcesses.forEach((process) => removeBackgroundProcess(process.id))
+            }
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        ) : null}
+      </div>
+
+      {processes.length === 0 ? (
+        <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-[11px] text-muted-foreground/65">
+          {t('context.backgroundShellsEmpty')}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground/60">
+            <span>
+              {t('context.backgroundShellsSummary', {
+                running: runningCount,
+                total: processes.length
+              })}
+            </span>
+          </div>
+          {visibleProcesses.map((process) => {
+            const isRunning = process.status === 'running'
+            const command = compactShellCommand(process.command) || process.id
+            const session = process.sessionId ? sessionsById.get(process.sessionId) : null
+            const sessionLabel = !process.sessionId
+              ? t('context.globalShell')
+              : process.sessionId === activeSessionId
+                ? t('context.currentSession')
+                : (session?.title ?? t('context.otherSession'))
+            const outputLines = processOutputLineCount(process)
+            const metaParts = [
+              t(`context.shellStatus.${process.status}`),
+              process.port ? `:${process.port}` : null,
+              outputLines > 0 ? t('context.shellOutputLines', { count: outputLines }) : null
+            ].filter((part): part is string => !!part)
+            return (
+              <div
+                key={process.id}
+                className={`group flex min-w-0 items-center gap-1.5 rounded-md border px-2 py-1.5 transition-colors ${getProcessRowTone(process)}`}
+              >
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  title={`${command}${process.cwd ? `\n${process.cwd}` : ''}`}
+                  onClick={() => ensureTerminalTab(process.id, command)}
+                >
+                  <span className="relative flex size-5 shrink-0 items-center justify-center rounded border border-border/60 bg-background/55 text-muted-foreground">
+                    <Terminal className="size-3" />
+                    <span
+                      className={`absolute -right-0.5 -top-0.5 size-1.5 rounded-full ${getProcessStatusTone(process)}`}
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-[11px] text-foreground/88">
+                      {command}
+                    </span>
+                    <span className="block truncate text-[10px] text-muted-foreground/60">
+                      {sessionLabel}
+                      {process.cwd ? ` · ${compactShellPath(process.cwd)}` : ''}
+                    </span>
+                  </span>
+                </button>
+                <span className="hidden max-w-24 truncate text-[9px] text-muted-foreground/55 lg:inline">
+                  {metaParts.join(' · ')}
+                </span>
+                {isRunning ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-6 text-muted-foreground/70 hover:text-destructive"
+                    title={t('context.stopShell')}
+                    aria-label={t('context.stopShell')}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      void stopBackgroundProcess(process.id)
+                    }}
+                  >
+                    <Square className="size-3" />
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    className="size-6 text-muted-foreground/60 hover:text-foreground"
+                    title={t('context.removeShell')}
+                    aria-label={t('context.removeShell')}
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      removeBackgroundProcess(process.id)
+                    }}
+                  >
+                    <Trash2 className="size-3" />
+                  </Button>
+                )}
+              </div>
+            )
+          })}
+          {processes.length > visibleProcesses.length ? (
+            <div className="px-1 text-[10px] text-muted-foreground/55">
+              {t('context.moreBackgroundShells', {
+                count: processes.length - visibleProcesses.length
+              })}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function ContextPanel(): React.JSX.Element {
+  const { t } = useTranslation('cowork')
+  const { t: tCommon } = useTranslation('common')
+  const [copiedPath, setCopiedPath] = useState(false)
+  const [compressing, setCompressing] = useState(false)
+  const [showCompressPanel, setShowCompressPanel] = useState(false)
+  const [focusPrompt, setFocusPrompt] = useState('')
+  const { manualCompressContext } = useChatActions()
+  const {
+    activeSessionId,
+    resolvedProjectId,
+    activeSession,
+    activeProject,
+    activeProjectId,
+    updateProjectDirectory
+  } = useChatStore(
+    useShallow((s) => {
+      const activeSession = s.sessions.find((session) => session.id === s.activeSessionId)
+      const resolvedProjectId = activeSession?.projectId ?? s.activeProjectId ?? null
+      const activeProject = resolvedProjectId
+        ? s.projects.find((project) => project.id === resolvedProjectId)
+        : undefined
+      return {
+        activeSessionId: s.activeSessionId,
+        resolvedProjectId,
+        activeSession,
+        activeProject,
+        activeProjectId: s.activeProjectId,
+        updateProjectDirectory: s.updateProjectDirectory
+      }
+    })
+  )
+  const workingFolder = activeProject?.workingFolder
+  const chatView = useUIStore((s) => s.chatView)
+  const backgroundShells = useAgentStore(
+    useShallow((s) =>
+      Object.values(s.backgroundProcesses)
+        .filter((process) => process.source === 'bash-tool')
+        .sort((a, b) => {
+          if (a.status === 'running' && b.status !== 'running') return -1
+          if (a.status !== 'running' && b.status === 'running') return 1
+          return b.updatedAt - a.updatedAt
+        })
+    )
+  )
+  const providerState = useProviderStore(
+    useShallow((s) => ({
+      providers: s.providers,
+      activeProviderId: s.activeProviderId,
+      activeModelId: s.activeModelId
+    }))
+  )
+  const resolvedProviderId = activeSession?.providerId ?? providerState.activeProviderId
+  const resolvedModelId = activeSession?.modelId ?? providerState.activeModelId
+  const activeProvider =
+    providerState.providers.find((provider) => provider.id === resolvedProviderId) ?? null
+  const activeModelCfg =
+    activeProvider?.models.find((model) => model.id === resolvedModelId) ?? null
+  const fallbackProvider = useSettingsStore((s) => s.provider)
+  const fallbackModel = useSettingsStore((s) => s.model)
+  const provider = activeProvider?.name ?? fallbackProvider
+  const model = activeModelCfg?.name ?? fallbackModel
+  const compressionConfig = activeModelCfg
+    ? {
+        enabled: true,
+        contextLength: resolveCompressionContextLength(activeModelCfg),
+        threshold: resolveCompressionThreshold(activeModelCfg),
+        preCompressThreshold: 0.65,
+        reservedOutputBudget: resolveCompressionReservedOutputBudget(activeModelCfg)
+      }
+    : null
+  const compressionWindow = compressionConfig ? getEffectiveContextWindow(compressionConfig) : null
+  const manualCompressionTrigger = compressionConfig
+    ? getPreCompressionTriggerTokens(compressionConfig)
+    : null
+  const autoCompressionTrigger = compressionConfig
+    ? getCompressionTriggerTokens(compressionConfig)
+    : null
+  const projectScopedSession = isProjectSession({
+    chatView,
+    session: activeSession,
+    activeProjectId,
+    workingFolder
+  })
+  const handleSelectFolder = async (): Promise<void> => {
+    if (!resolvedProjectId) return
+    const result = (await ipcClient.invoke('fs:select-folder')) as {
+      canceled?: boolean
+      path?: string
+    }
+    if (result.canceled || !result.path) return
+
+    updateProjectDirectory(resolvedProjectId, {
+      workingFolder: result.path,
+      sshConnectionId: null
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      {projectScopedSession && (
+        <div className="space-y-2">
+          <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            {t('context.workingFolder')}
+          </h4>
+          {workingFolder ? (
+            <div className="space-y-1.5">
+              <button
+                className="group flex w-full items-center gap-2 rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/50"
+                onClick={() => {
+                  navigator.clipboard.writeText(workingFolder)
+                  setCopiedPath(true)
+                  setTimeout(() => setCopiedPath(false), 1500)
+                }}
+                title={t('context.clickToCopy')}
+              >
+                <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate">{workingFolder}</span>
+                {copiedPath ? (
+                  <Check className="size-3 shrink-0 text-green-500" />
+                ) : (
+                  <Copy className="size-3 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+                )}
+              </button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1.5 px-2 text-[10px] text-muted-foreground"
+                  onClick={handleSelectFolder}
+                >
+                  <RefreshCw className="size-3" />
+                  {t('context.changeFolder')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 gap-1.5 px-2 text-[10px] text-muted-foreground"
+                  onClick={() => ipcClient.invoke('shell:openPath', workingFolder)}
+                >
+                  <ExternalLink className="size-3" />
+                  {t('context.open')}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2 text-xs"
+              onClick={handleSelectFolder}
+            >
+              <FolderPlus className="size-3.5" />
+              {t('context.selectFolder')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <BackgroundShellsSection processes={backgroundShells} activeSessionId={activeSessionId} />
+
+      {/* Session Info */}
+      {activeSession && (
+        <>
+          <Separator />
+          <GoalPanelCard sessionId={activeSessionId} />
+          <Separator />
+          <div className="space-y-2">
+            <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              {t('context.sessionInfo')}
+            </h4>
+            <div className="space-y-1.5 text-xs">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <MessageSquare className="size-3 shrink-0" />
+                <span>
+                  {activeSession.messages.filter((m) => m.role !== 'system').length}{' '}
+                  {tCommon('unit.messages')}
+                  <span className="text-muted-foreground/50">
+                    {' '}
+                    ({activeSession.messages.filter((m) => m.role === 'user').length}{' '}
+                    {tCommon('unit.turns')})
+                  </span>
+                </span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="size-3 shrink-0" />
+                <span>
+                  Created {new Date(activeSession.createdAt).toLocaleDateString()}
+                  {activeSession.messages.length >= 2 &&
+                    (() => {
+                      const first = activeSession.messages[0]?.createdAt
+                      const last =
+                        activeSession.messages[activeSession.messages.length - 1]?.createdAt
+                      if (!first || !last || last <= first) return null
+                      const secs = Math.floor((last - first) / 1000)
+                      if (secs < 60) return ` · ${secs}s session`
+                      const mins = Math.floor(secs / 60)
+                      if (mins < 60) return ` · ${mins}m session`
+                      return ` · ${Math.floor(mins / 60)}h${mins % 60}m session`
+                    })()}
+                </span>
+              </div>
+              {(() => {
+                let toolUseCount = 0
+                let subAgentCount = 0
+                for (const m of activeSession.messages) {
+                  if (Array.isArray(m.content)) {
+                    for (const b of m.content) {
+                      if (b.type === 'tool_use') {
+                        toolUseCount++
+                        if (b.name === 'Task') subAgentCount++
+                      }
+                    }
+                  }
+                }
+                return toolUseCount > 0 ? (
+                  <>
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Wrench className="size-3 shrink-0" />
+                      <span>{t('context.toolCalls', { count: toolUseCount })}</span>
+                    </div>
+                    {subAgentCount > 0 && (
+                      <div className="flex items-center gap-2 text-violet-500/70">
+                        <Brain className="size-3 shrink-0" />
+                        <span>{t('context.subAgentRuns', { count: subAgentCount })}</span>
+                      </div>
+                    )}
+                  </>
+                ) : null
+              })()}
+              {(() => {
+                const approved = useAgentStore.getState().approvedToolNames
+                return approved.length > 0 ? (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <ShieldCheck className="size-3 shrink-0 text-green-500/60" />
+                    <span className="text-muted-foreground/60">
+                      Auto-approved: {approved.join(', ')}
+                    </span>
+                  </div>
+                ) : null
+              })()}
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Cpu className="size-3 shrink-0" />
+                <span className="truncate">
+                  {model} ({provider})
+                </span>
+              </div>
+              {(() => {
+                const totals = activeSession.messages.reduce(
+                  (acc, m) => {
+                    if (m.usage) {
+                      acc.input += getBillableInputTokens(m.usage, activeModelCfg?.type)
+                      acc.output += m.usage.outputTokens
+                      if (m.usage.cacheCreationTokens)
+                        acc.cacheCreation += m.usage.cacheCreationTokens
+                      if (m.usage.cacheCreation5mTokens)
+                        acc.cacheCreation5m += m.usage.cacheCreation5mTokens
+                      if (m.usage.cacheCreation1hTokens)
+                        acc.cacheCreation1h += m.usage.cacheCreation1hTokens
+                      if (m.usage.cacheReadTokens) acc.cacheRead += m.usage.cacheReadTokens
+                      if (m.usage.reasoningTokens) acc.reasoning += m.usage.reasoningTokens
+                    }
+                    return acc
+                  },
+                  {
+                    input: 0,
+                    output: 0,
+                    cacheCreation: 0,
+                    cacheCreation5m: 0,
+                    cacheCreation1h: 0,
+                    cacheRead: 0,
+                    reasoning: 0
+                  }
+                )
+                // Include team member token usage (active team + history for this session)
+                const teamStore = useTeamStore.getState()
+                const allTeamMembers = [
+                  ...(teamStore.activeTeam?.sessionId === activeSessionId
+                    ? teamStore.activeTeam.members
+                    : []),
+                  ...teamStore.teamHistory
+                    .filter((t) => t.sessionId === activeSessionId)
+                    .flatMap((t) => t.members)
+                ]
+                for (const member of allTeamMembers) {
+                  if (member.usage) {
+                    totals.input += getBillableInputTokens(member.usage, activeModelCfg?.type)
+                    totals.output += member.usage.outputTokens
+                    if (member.usage.cacheCreationTokens)
+                      totals.cacheCreation += member.usage.cacheCreationTokens
+                    if (member.usage.cacheCreation5mTokens)
+                      totals.cacheCreation5m += member.usage.cacheCreation5mTokens
+                    if (member.usage.cacheCreation1hTokens)
+                      totals.cacheCreation1h += member.usage.cacheCreation1hTokens
+                    if (member.usage.cacheReadTokens)
+                      totals.cacheRead += member.usage.cacheReadTokens
+                    if (member.usage.reasoningTokens)
+                      totals.reasoning += member.usage.reasoningTokens
+                  }
+                }
+                const hasTokenUsage = totals.input + totals.output > 0
+                const totalUsage = {
+                  inputTokens: totals.input,
+                  outputTokens: totals.output,
+                  billableInputTokens: totals.input,
+                  cacheCreationTokens: totals.cacheCreation || undefined,
+                  cacheCreation5mTokens: totals.cacheCreation5m || undefined,
+                  cacheCreation1hTokens: totals.cacheCreation1h || undefined,
+                  cacheReadTokens: totals.cacheRead || undefined
+                }
+                const cost = hasTokenUsage ? calculateCost(totalUsage, activeModelCfg) : null
+                const totalTokens = hasTokenUsage
+                  ? getBillableTotalTokens(totalUsage, activeModelCfg?.type)
+                  : 0
+                const lastUsage = [...activeSession.messages].reverse().find((m) => {
+                  if (!m.usage) return false
+                  return (m.usage.contextTokens ?? 0) > 0
+                })?.usage
+                const ctxUsed = lastUsage?.contextTokens ?? 0
+                const ctxLimit =
+                  lastUsage?.contextLength ?? compressionConfig?.contextLength ?? null
+                const ctxGaugeLimit = compressionWindow ?? ctxLimit
+                const pct = ctxGaugeLimit ? Math.min((ctxUsed / ctxGaugeLimit) * 100, 100) : null
+                const barColor =
+                  pct === null
+                    ? ''
+                    : pct > 80
+                      ? 'bg-red-500'
+                      : pct > 50
+                        ? 'bg-amber-500'
+                        : 'bg-green-500'
+                if (!hasTokenUsage && pct === null) return null
+                return (
+                  <>
+                    {hasTokenUsage && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Zap className="size-3 shrink-0" />
+                        <span>
+                          {formatTokens(totalTokens)} tokens
+                          <span className="text-muted-foreground/50">
+                            {' '}
+                            ({formatTokens(totals.input)}↓ {formatTokens(totals.output)}↑)
+                          </span>
+                          {cost !== null && (
+                            <span className="text-emerald-500/70"> · {formatCost(cost)}</span>
+                          )}
+                          {totals.cacheRead > 0 && (
+                            <span className="text-green-500/60">
+                              {' '}
+                              · {formatTokens(totals.cacheRead)} {tCommon('unit.cached')}
+                            </span>
+                          )}
+                          {totals.reasoning > 0 && (
+                            <span className="text-blue-500/60">
+                              {' '}
+                              · {formatTokens(totals.reasoning)} {tCommon('unit.reasoning')}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {pct !== null && (
+                      <div className="mt-1 space-y-0.5">
+                        <div className="flex items-center justify-between text-[9px] text-muted-foreground/40">
+                          <span>
+                            {t('compressionBudget', { defaultValue: 'Compression budget' })}
+                          </span>
+                          <span>
+                            {formatTokens(ctxUsed)} / {formatTokens(ctxGaugeLimit!)} (
+                            {pct.toFixed(0)}%)
+                          </span>
+                        </div>
+                        <div className="h-1.5 w-full rounded-full bg-muted/40 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        {manualCompressionTrigger && autoCompressionTrigger ? (
+                          <div className="flex items-center justify-between text-[9px] text-muted-foreground/40">
+                            <span>
+                              {t('manualCompressionThreshold', {
+                                defaultValue: 'Recommend manual compress >= {{threshold}}',
+                                threshold: formatTokens(manualCompressionTrigger)
+                              })}
+                            </span>
+                            <span>
+                              {t('autoCompressionThreshold', {
+                                defaultValue: 'Auto compress >= {{threshold}}',
+                                threshold: formatTokens(autoCompressionTrigger)
+                              })}
+                            </span>
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                    {activeSession.messages.length > 0 && !showCompressPanel && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="mt-1 h-6 gap-1.5 px-2 text-[10px] text-muted-foreground"
+                          disabled={compressing}
+                          onClick={() => setShowCompressPanel(true)}
+                        >
+                          <Archive className="size-3" />
+                          {compressing ? 'Compressing...' : 'Compress context'}
+                        </Button>
+                        {manualCompressionTrigger && ctxUsed < manualCompressionTrigger ? (
+                          <p className="mt-1 text-[10px] text-muted-foreground/60">
+                            {t('manualCompressionHint', {
+                              defaultValue:
+                                'Current {{used}}, recommend compressing after reaching {{threshold}}',
+                              used: formatTokens(ctxUsed),
+                              threshold: formatTokens(manualCompressionTrigger)
+                            })}
+                          </p>
+                        ) : null}
+                      </>
+                    )}
+                    {showCompressPanel && (
+                      <div className="mt-1.5 space-y-1.5 rounded-md border p-2">
+                        <input
+                          type="text"
+                          className="w-full rounded border bg-background px-2 py-1 text-[11px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder="Focus area (optional), e.g.: keep API-related changes"
+                          value={focusPrompt}
+                          onChange={(e) => setFocusPrompt(e.target.value)}
+                          disabled={compressing}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && !compressing) {
+                              e.preventDefault()
+                              setCompressing(true)
+                              manualCompressContext(focusPrompt || undefined).finally(() => {
+                                setCompressing(false)
+                                setShowCompressPanel(false)
+                                setFocusPrompt('')
+                              })
+                            }
+                          }}
+                        />
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="h-5 px-2 text-[10px]"
+                            disabled={compressing}
+                            onClick={() => {
+                              setCompressing(true)
+                              manualCompressContext(focusPrompt || undefined).finally(() => {
+                                setCompressing(false)
+                                setShowCompressPanel(false)
+                                setFocusPrompt('')
+                              })
+                            }}
+                          >
+                            <Archive className="size-3 mr-1" />
+                            {compressing ? 'Compressing...' : 'Confirm compression'}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 px-2 text-[10px] text-muted-foreground"
+                            disabled={compressing}
+                            onClick={() => {
+                              setShowCompressPanel(false)
+                              setFocusPrompt('')
+                            }}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()}
+            </div>
+          </div>
+        </>
+      )}
+
+      {!projectScopedSession && !activeSession && (
+        <div className="flex flex-col items-center justify-center py-8 text-center">
+          <Database className="mb-3 size-8 text-muted-foreground/40" />
+          <p className="text-sm text-muted-foreground">{t('context.noContext')}</p>
+          <p className="mt-1 text-xs text-muted-foreground/60">{t('context.noContextDesc')}</p>
+        </div>
+      )}
+    </div>
+  )
+}

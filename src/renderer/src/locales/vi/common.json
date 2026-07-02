@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "Thôi",
+    "delete": "Xoá",
+    "save": "Lưu",
+    "confirm": "Xác nhận",
+    "close": "Đóng",
+    "copy": "Chép",
+    "copyPath": "Chép đường dẫn",
+    "rename": "Thay tên",
+    "refresh": "Cập nhật",
+    "retry": "Thử lại",
+    "send": "Gởi",
+    "stop": "Dừng",
+    "start": "Chạy",
+    "clear": "& Xoá",
+    "allow": "Cho phép",
+    "deny": "Từ chối",
+    "undo": "Hủy bước",
+    "open": "Mở",
+    "export": "Xuất",
+    "import": "Nhập",
+    "duplicate": "Lặp lại",
+    "pin": "Pin",
+    "unpin": "Bỏ ra",
+    "showMore": "Hiện thêm",
+    "showLess": "Hiện",
+    "more": "Thêm nữa"
+  },
+  "status": {
+    "running": "đang chạy",
+    "done": "xong",
+    "pending": "Đang đợi",
+    "active": "Cửa sổ không chọn",
+    "completed": "hoàn tất",
+    "working": "làm việc",
+    "idle": "không làm việc",
+    "waiting": "đợi",
+    "stopped": "Dừng",
+    "failed": "bị lỗi",
+    "error": "Lỗi"
+  },
+  "time": {
+    "justNow": "Vừa nãy",
+    "mAgo": "{{count}} m trước",
+    "hAgo": "{{count}} H trước",
+    "dAgo": "{{count}} d trước",
+    "sAgo": "{{count}} s trước",
+    "sSession": "{{count}} phiên chạy s",
+    "mSession": "{{count}} phiên chạy m",
+    "hmSession": "{{h}} H {{m}} phiên chạy m"
+  },
+  "unit": {
+    "tokens": "biểu tượng",
+    "cached": "Bộ nhớ tạm",
+    "reasoning": "Lý luận",
+    "messages": "tin nhắn",
+    "turns": "Quay",
+    "members": "Thành viên",
+    "tasks": "tác vụ",
+    "items": "mục",
+    "lines": "dòng",
+    "files": "Tập tin",
+    "folders": "Thư mục",
+    "calls": "cuộc gọi",
+    "deps": "deps",
+    "chars": "ký tự",
+    "matches": "Khớp",
+    "sessions": "phiên chạy",
+    "msgs": "msgs"
+  },
+  "priority": {
+    "high": "cao",
+    "medium": "trung bình",
+    "low": "thấp"
+  },
+  "theme": {
+    "light": "ánh sáng",
+    "dark": "Tối",
+    "system": "Hệ thống"
+  },
+  "mode": {
+    "chat": "Tán gẫu",
+    "clarify": "Làm sáng",
+    "cowork": "Hợp tác",
+    "code": "Bộ mã",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "Chạy",
+    "next": "Kế",
+    "back": "Lùi",
+    "intro": {
+      "title": "Chào mừng đến với Ola",
+      "subtitle": "Ola là một không gian làm việc địa phương đầu tiên cho sự hợp tác đa đặc vụ Al. nó có thể đọc bối cảnh dự án của bạn, sử dụng công cụ địa phương với sự chấp thuận, và giúp các đặc vụ làm việc cùng bạn trong mã hóa, nghiên cứu, lên kế hoạch, và lưu lượng công việc hàng ngày.",
+      "points": {
+        "local": {
+          "title": "Công cụ cục bộ, ngữ cảnh thật",
+          "desc": "Các đặc vụ có thể làm việc với các tập tin, trạm cuối, các dự án, bộ nhớ, và bối cảnh không gian làm việc trên máy của bạn."
+        },
+        "team": {
+          "title": "Hợp tác đa tác",
+          "desc": "Tạo ra các trợ lý tập trung, giao phó các nhiệm vụ, và giữ cho một mạch làm việc của con người trong không gian."
+        },
+        "memory": {
+          "title": "Nhận diện và bộ nhớ cá nhân",
+          "desc": "Chọn một nhân vật và hồ sơ SOUL để mọi yêu cầu mới bắt đầu từ kiểu hợp tác đúng đắn."
+        }
+      }
+    },
+    "language": {
+      "title": "Chúng ta nên dùng ngôn ngữ nào?",
+      "shortLabel": "Ngôn ngữ",
+      "detected": "Phát hiện ngôn ngữ hệ thống: {{language}}",
+      "zh": "Name",
+      "en": "Tiếng Anh"
+    },
+    "nickname": {
+      "title": "Ola gọi bạn là gì?",
+      "subtitle": "Cái này được lưu trữ tại địa phương và được viết vào USER.md để các đặc vụ có thể tự nhiên chỉ định bạn.",
+      "placeholder": "Biệt danh của bạn"
+    },
+    "interests": {
+      "title": "Anh quan tâm đến lĩnh vực nào?",
+      "subtitle": "Chọn một hay nhiều hơn. Ola dùng nó để chọn mặc định tốt hơn và cá nhân hoá hồ sơ cục bộ.",
+      "options": {
+        "content": "Tạo nội dung",
+        "coding": "Kết hợp và phát triển",
+        "design": "Thiết kế và sáng tạo",
+        "learning": "Học hỏi và nghiên cứu",
+        "business": "Chiến lược kinh doanh",
+        "marketing": "Thị trường và sự phát triển",
+        "product": "Quản lý sản phẩm",
+        "sales": "Bán hàng và khách hàng",
+        "operations": "Name",
+        "hr": "Nhân dân và nhân sự",
+        "financeLaw": "Tài chính và hợp pháp",
+        "creatorEconomy": "Nền kinh tế sáng tạo",
+        "investment": "Đầu tư và tài chính",
+        "family": "Gia đình và cha mẹ",
+        "health": "Sức khỏe và thói quen",
+        "culture": "Sở thích và văn hóa",
+        "personal": "Cuộc sống cá nhân",
+        "other": "Vùng khác"
+      }
+    },
+    "soul": {
+      "title": "Chọn giá trị mặc định",
+      "subtitle": "SOUL.md định nghĩa danh tính dài hạn của trợ lý, kiểu giao tiếp và giới hạn hành vi. Bạn có thể thay đổi nó sau này trong bộ nhớ & nhân dạng toàn cầu.",
+      "loading": "Đang nạp các mẫu có sẵn...",
+      "loadFailed": "Lỗi tải các mẫu có sẵn",
+      "installFailed": "Lỗi cài đặt SOUL mặc định",
+      "empty": "Không tìm thấy mẫu có sẵn.",
+      "retry": "Thử lại"
+    },
+    "done": {
+      "action": "Nhập Ola",
+      "toast": "Ola đã sẵn sàng",
+      "failed": "Lỗi kết thúc thiết lập"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "Hợp tác chặt chẽ",
+        "description": "Một nhân vật mặc định đều đặn cho công việc hàng ngày lẫn lộn, thảo luận sâu sắc và hỗ trợ nói chung."
+      },
+      "senior-engineering-partner": {
+        "name": "Cộng tác viên cơ khí cao cấp",
+        "description": "Một nhân vật lập trình khắt khe cho việc đọc mã, thực hiện những thay đổi bị hạn chế, gỡ lỗi, phê bình và quyết định kỹ thuật."
+      },
+      "daily-life-assistant": {
+        "name": "Trợ lý đời sống hàng ngày",
+        "description": "Một nhân vật thực tế hàng ngày để lập kế hoạch, nhắc nhở, quyết định, thông điệp, du lịch, học hỏi và tổ chức cá nhân."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Bạn bè bị xúc động",
+        "description": "Một cá nhân cẩn thận ủng hộ cảm xúc cho việc nói chuyện, nói chuyện với nhau và những lúc khó khăn."
+      },
+      "research-writing-strategist": {
+        "name": "Nghiên cứu và viết ra chiến thuật",
+        "description": "Một nhân vật chính xác cho việc tổng hợp nghiên cứu, viết kế hoạch, biên tập, chất lượng tranh luận và nhận thức nguồn."
+      },
+      "product-strategy-operator": {
+        "name": "Tổng đài chiến thuật sản xuất",
+        "description": "Một sản phẩm và nhân vật kinh doanh cho việc ưu tiên, giao dịch UX, lập kế hoạch phóng và hoạt động rõ ràng."
+      }
+    },
+    "categories": {
+      "general": "Chung",
+      "coding": "Mã hóa",
+      "daily": "ngày",
+      "emotional": "cảm xúc",
+      "research": "Nghiên cứu",
+      "business": "kinh doanh"
+    },
+    "tags": {
+      "daily": "ngày",
+      "balanced": "cân bằng",
+      "clear": "xoá",
+      "programming": "Chương trình",
+      "debugging": "Đang gỡ lỗi",
+      "review": "Xem xét",
+      "planning": "kế hoạch",
+      "organization": "tổ chức",
+      "everyday": "ngày",
+      "emotional-support": "hỗ trợ tình cảm",
+      "reflection": "phản ánh",
+      "relationships": "Mối quan hệ",
+      "research": "Nghiên cứu",
+      "writing": "ghi",
+      "editing": "Sửa",
+      "product": "sản phẩm",
+      "strategy": "chiến thuật",
+      "operations": "thao tác"
+    }
+  },
+  "contextWindow": "Cửa sổ ngữ cảnh",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "▪ Thành công",
+        "error": "Thất bại",
+        "stopped": "▪ Dừng lại"
+      },
+      "toolCallCount": "{{count}} cuộc gọi công cụ",
+      "runFinished": "Nhiệm vụ củaron.\" {{jobName}} \"hoàn tất ({{statusLabel}}. {{toolCallLabel}})",
+      "errorDetail": "**Error:** {{message}}",
+      "noOutput": "(không có kết xuất)"
+    },
+    "changelog": {
+      "title": "Bản ghi đổi",
+      "translate": "Al Dịch",
+      "translating": "Đang chuyển đổi...",
+      "showOriginal": "Hiện gốc",
+      "showTranslation": "Hiện bản dịch",
+      "translateError": "Lỗi dịch",
+      "noProvider": "Chưa cấu hình nhà cung cấp AI. Thiết lập nhà cung cấp trong Thiết lập trước."
+    },
+    "update": {
+      "availableTitle": "Phiên bản {{version}} sẵn sàng",
+      "availableDescription": "Nhấn \"Update now\" để bắt đầu tải về",
+      "buttonLabel": "Cập nhật v {{version}}",
+      "buttonTooltip": "Có sẵn một phiên bản mới. Nhấn để xem ghi chú nhả.",
+      "currentVersion": "v hiện có {{version}}",
+      "latestVersion": "Mới nhất v {{version}}",
+      "releaseNotes": "Ghi chú",
+      "noReleaseNotes": "Không có ghi chú giải thích nào được cung cấp cho phiên bản này.",
+      "downloading": "Đang tải về...",
+      "downloadingShort": "{{progress}} %s",
+      "downloadingProgress": "Đang tải về {{progress}} %s",
+      "actions": {
+        "updateNow": "Cập nhật bây giờ",
+        "remindLater": "Nhớ nhắc tôi sau nhé."
+      },
+      "downloadFailed": "Tải về thất bại",
+      "delayed": "Đã cập nhật",
+      "downloadedTitle": "Cập nhật đã tải",
+      "downloadedDescription": "Phiên bản {{version}} cài đặt sau khi khởi chạy lại",
+      "failed": "Cập nhật thất bại"
+    },
+    "errors": {
+      "unhandledTitle": "Lỗi không điều khiển"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "title": "Ops",
+  "description": "Configuration, scheduled work, persistence, and local runtime operations.",
+  "root": true,
+  "pages": [
+    "index",
+    "configuration",
+    "cron-jobs",
+    "database",
+    "---Related---",
+    "[Help](/docs/help)",
+    "[Reference](/docs/reference)"
+  ]
+}

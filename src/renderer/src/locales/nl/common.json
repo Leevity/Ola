@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "Annuleren",
+    "delete": "Verwijderen",
+    "save": "Opslaan",
+    "confirm": "Bevestigen",
+    "close": "Sluiten",
+    "copy": "Kopiëren",
+    "copyPath": "Pad kopiëren",
+    "rename": "Hernoemen",
+    "refresh": "Verversen",
+    "retry": "Opnieuw proberen",
+    "send": "Verzenden",
+    "stop": "Stoppen",
+    "start": "Begin",
+    "clear": "Wissen",
+    "allow": "Toestaan",
+    "deny": "Weigeren",
+    "undo": "Ongedaan maken",
+    "open": "Open",
+    "export": "Uitvoer",
+    "import": "Importeren",
+    "duplicate": "Dupliceren",
+    "pin": "Pin",
+    "unpin": "Verwijderen",
+    "showMore": "Meer tonen",
+    "showLess": "Minder tonen",
+    "more": "Meer"
+  },
+  "status": {
+    "running": "draait",
+    "done": "klaar",
+    "pending": "in behandeling",
+    "active": "actief",
+    "completed": "voltooid",
+    "working": "werken",
+    "idle": "stationair",
+    "waiting": "wachten",
+    "stopped": "gestopt",
+    "failed": "mislukt",
+    "error": "Fout"
+  },
+  "time": {
+    "justNow": "Net",
+    "mAgo": "{{count}} m geleden",
+    "hAgo": "{{count}} h geleden",
+    "dAgo": "{{count}} d geleden",
+    "sAgo": "{{count}} s geleden",
+    "sSession": "{{count}} sessie",
+    "mSession": "{{count}} m sessie",
+    "hmSession": "{{h}} h {{m}} m sessie"
+  },
+  "unit": {
+    "tokens": "tokens",
+    "cached": "gecached",
+    "reasoning": "motivering",
+    "messages": "berichten",
+    "turns": "draaien",
+    "members": "leden",
+    "tasks": "taken",
+    "items": "items",
+    "lines": "regels",
+    "files": "bestanden",
+    "folders": "mappen",
+    "calls": "oproepen",
+    "deps": "deps",
+    "chars": "tekens",
+    "matches": "overeenkomsten",
+    "sessions": "zittingen",
+    "msgs": "msgs"
+  },
+  "priority": {
+    "high": "hoog",
+    "medium": "medium",
+    "low": "laag"
+  },
+  "theme": {
+    "light": "licht",
+    "dark": "donker",
+    "system": "systeem"
+  },
+  "mode": {
+    "chat": "Gesprek",
+    "clarify": "Verduidelijken",
+    "cowork": "Cowork",
+    "code": "Rubriek",
+    "acp": "ACS"
+  },
+  "onboarding": {
+    "start": "Begin",
+    "next": "Volgende",
+    "back": "Vorige",
+    "intro": {
+      "title": "Welkom bij Ola.",
+      "subtitle": "Ola is een lokaal-eerste werkplek voor multi-agent AI samenwerking. Het kan uw project context lezen, gebruik maken van lokale tools met goedkeuring, en help agenten werken samen met u in code, onderzoek, planning en dagelijkse workflows.",
+      "points": {
+        "local": {
+          "title": "Lokale hulpmiddelen, echte context",
+          "desc": "Agenten kunnen werken met bestanden, terminals, projecten, geheugen en werkruimte context op uw machine."
+        },
+        "team": {
+          "title": "Samenwerking met meerdere agenten",
+          "desc": "Maak gefocuste assistenten, delegeer taken, en houd een human-in-the-loop workflow."
+        },
+        "memory": {
+          "title": "Persoonlijke identiteit en geheugen",
+          "desc": "Kies een SOUL.md persona en profiel zodat elke nieuwe aanvraag begint met de juiste samenwerking stijl."
+        }
+      }
+    },
+    "language": {
+      "title": "Welke taal moeten we gebruiken?",
+      "shortLabel": "Taal",
+      "detected": "Systeemtaal gedetecteerd: {{language}}",
+      "zh": "Vereenvoudigd Chinees",
+      "en": "Engels"
+    },
+    "nickname": {
+      "title": "Hoe moet Ola je noemen?",
+      "subtitle": "Dit wordt lokaal opgeslagen en geschreven in USER.md zodat agenten je op natuurlijke wijze kunnen aanspreken.",
+      "placeholder": "Uw bijnaam"
+    },
+    "interests": {
+      "title": "In welke gebieden bent u geïnteresseerd?",
+      "subtitle": "Kies er één of meer. Ola gebruikt dit om betere standaards te kiezen en uw lokale profiel te personaliseren.",
+      "options": {
+        "content": "Aanmaken van inhoud",
+        "coding": "Codering en ontwikkeling",
+        "design": "Ontwerp en creativiteit",
+        "learning": "Leren en onderzoek",
+        "business": "Bedrijfsstrategie",
+        "marketing": "Marketing en groei",
+        "product": "Productbeheer",
+        "sales": "Verkoop en klanten",
+        "operations": "Operaties en administratie",
+        "hr": "Mensen en HR",
+        "financeLaw": "Financiën en justitie",
+        "creatorEconomy": "Creatoreconomie",
+        "investment": "Investeren en financieren",
+        "family": "Gezin en ouderschap",
+        "health": "Gezondheid en gewoonten",
+        "culture": "Hobby's en cultuur",
+        "personal": "Persoonlijk leven",
+        "other": "Andere gebieden"
+      }
+    },
+    "soul": {
+      "title": "Kies uw standaard SOUL",
+      "subtitle": "SOUL.md definieert de lange termijn identiteit, communicatiestijl en gedragsgrenzen van de assistent. U kunt deze later wijzigen in Global Identity & Memory.",
+      "loading": "Ingebouwde SOUL-sjablonen worden geladen...",
+      "loadFailed": "Kon ingebouwde SOUL-sjablonen niet laden",
+      "installFailed": "Kon standaard SOUL niet installeren",
+      "empty": "Er zijn geen ingebouwde SOUL-sjablonen gevonden.",
+      "retry": "Opnieuw proberen"
+    },
+    "done": {
+      "action": "Ola invoeren",
+      "toast": "Ola is klaar",
+      "failed": "Afwerking mislukt"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "Gebalanceerde professionele medewerker",
+        "description": "Een constante standaard persona voor gemengd dagelijks werk, attente discussie, en algemene bijstand."
+      },
+      "senior-engineering-partner": {
+        "name": "Senior Software Engineering Partner",
+        "description": "Een rigoureuze programmering persona voor het lezen van code, het maken van ingrijpende wijzigingen, debuggen, reviews en technische beslissingen."
+      },
+      "daily-life-assistant": {
+        "name": "Dagelijkse levensassistent",
+        "description": "Een pragmatische dagelijkse persona voor planning, herinneringen, beslissingen, boodschappen, reizen, leren, en persoonlijke organisatie."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Emotioneel afgestemd metgezel",
+        "description": "Een zorgvuldige emotionele ondersteuning persona voor reflectief gesprek, relatie formulering, en moeilijke momenten."
+      },
+      "research-writing-strategist": {
+        "name": "Onderzoek en schrijfstrateeg",
+        "description": "Een precieze persona voor onderzoek synthese, het schrijven van plannen, bewerken, argument kwaliteit, en bron-bewust werk."
+      },
+      "product-strategy-operator": {
+        "name": "Exploitant van productstrategie",
+        "description": "Een product en business persona voor prioritering, UX tradeoffs, lancering planning, en operationele duidelijkheid."
+      }
+    },
+    "categories": {
+      "general": "algemeen",
+      "coding": "codering",
+      "daily": "dagelijks",
+      "emotional": "emotioneel",
+      "research": "onderzoek",
+      "business": "zaken"
+    },
+    "tags": {
+      "daily": "dagelijks",
+      "balanced": "evenwichtig",
+      "clear": "duidelijk",
+      "programming": "programmering",
+      "debugging": "debuggen",
+      "review": "herziening",
+      "planning": "planning",
+      "organization": "organisatie",
+      "everyday": "dagelijks",
+      "emotional-support": "emotionele ondersteuning",
+      "reflection": "reflectie",
+      "relationships": "relaties",
+      "research": "onderzoek",
+      "writing": "schrijven",
+      "editing": "bewerken",
+      "product": "product",
+      "strategy": "strategie",
+      "operations": "concrete acties"
+    }
+  },
+  "contextWindow": "Contextvenster",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "Succes",
+        "error": "❌ mislukt",
+        "stopped": "Gestopt"
+      },
+      "toolCallCount": "{{count}} gereedschap aanroepen",
+      "runFinished": "Cron taak \" {{jobName}} \" voltooid ({{statusLabel}}, {{toolCallLabel}})",
+      "errorDetail": "**Fout:** {{message}}",
+      "noOutput": "(geen output)"
+    },
+    "changelog": {
+      "title": "Changelog",
+      "translate": "AI vertalen",
+      "translating": "Vertalen...",
+      "showOriginal": "Origineel tonen",
+      "showTranslation": "Vertaling tonen",
+      "translateError": "Vertaling mislukt",
+      "noProvider": "Geen AI provider geconfigureerd. Stel eerst een provider in Instellingen in."
+    },
+    "update": {
+      "availableTitle": "Versie {{version}} is beschikbaar",
+      "availableDescription": "Klik op \"Nu bijwerken\" om te beginnen met downloaden",
+      "buttonLabel": "Bijwerken v {{version}}",
+      "buttonTooltip": "Een nieuwe versie is beschikbaar. Klik om de release notes te bekijken.",
+      "currentVersion": "Huidige {{version}}",
+      "latestVersion": "Laatste v {{version}}",
+      "releaseNotes": "Release notes",
+      "noReleaseNotes": "Voor deze versie werden geen release notes verstrekt.",
+      "downloading": "Downloaden van update...",
+      "downloadingShort": "{{progress}} %",
+      "downloadingProgress": "Update downloaden {{progress}} %",
+      "actions": {
+        "updateNow": "Nu bijwerken",
+        "remindLater": "Herinner me er later aan."
+      },
+      "downloadFailed": "Downloaden is mislukt",
+      "delayed": "Bijwerken uitgesteld",
+      "downloadedTitle": "Gedownload bijwerken",
+      "downloadedDescription": "Versie {{version}} zal installeren na herstart",
+      "failed": "Bijwerken mislukt"
+    },
+    "errors": {
+      "unhandledTitle": "Ongehandelde fout"
+    }
+  }
+}

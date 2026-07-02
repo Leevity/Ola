@@ -1,0 +1,5 @@
+provider: github
+owner: Leevity
+repo: Ola
+releaseType: release
+updaterCacheDirName: ola-updater
