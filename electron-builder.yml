@@ -1,6 +1,6 @@
 appId: com.ola.app
 productName: Ola
-buildVersion: ${version}
+buildVersion: ${version}.0
 directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs
