@@ -1,6 +1,6 @@
 appId: com.ola.app
 productName: Ola
-buildVersion: ${version}.0
+buildVersion: 1.0.0.0
 directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs
@@ -102,6 +102,10 @@ asarUnpack:
 win:
   executableName: ola
   icon: build/icon.ico
+  # Windows resource requires FileVersion to be a 4-segment number
+  # (major.minor.patch.build). Pin to the release's resolved version.
+  fileVersion: 1.0.0.0
+  productVersion: 1.0.0.0
   legalTrademarks: Ola
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
