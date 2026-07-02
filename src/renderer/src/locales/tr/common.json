@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "Cancel Cancel Cancel Cancel",
+    "delete": "Delete",
+    "save": "Kaydet Kaydet Kaydet",
+    "confirm": "Onay Onay Onay Onaylandı",
+    "close": "Close Close Close Close",
+    "copy": "Kopya kopya",
+    "copyPath": "Kopya Path",
+    "rename": "Rename",
+    "refresh": "Yenileme",
+    "retry": "Retry",
+    "send": "Send Send Send Gönder",
+    "stop": "Dur Dur Dur Dur Dur",
+    "start": "Start Start Start Start Start",
+    "clear": "Clear Clear Clear Clear",
+    "allow": "İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin İzin",
+    "deny": "Deny",
+    "undo": "Undo",
+    "open": "Open Open Open Open",
+    "export": "İhracat İhracatı",
+    "import": "İthalat",
+    "duplicate": "Duplicate",
+    "pin": "Pin Pin Pin",
+    "unpin": "Unpin",
+    "showMore": "Daha fazlasını göster",
+    "showLess": "Daha az göster",
+    "more": "Daha fazla"
+  },
+  "status": {
+    "running": "running running running running",
+    "done": "done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done done",
+    "pending": "Beklemek için bekleyen bekleme",
+    "active": "aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif aktif",
+    "completed": "Tamam tamamlandı tamamlandı tamamlandı tamamlandı",
+    "working": "Çalışma çalışması",
+    "idle": "idle",
+    "waiting": "Beklemek için bekliyor",
+    "stopped": "durduruldu durduruldu durduruldu",
+    "failed": "Başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız başarısız oldu",
+    "error": "Hata"
+  },
+  "time": {
+    "justNow": "Şimdi sadece şimdi",
+    "mAgo": "{{count}} m ago",
+    "hAgo": "{{count}} h ago",
+    "dAgo": "{{count}} d önce",
+    "sAgo": "{{count}} s ago ago",
+    "sSession": "{{count}} Oturum",
+    "mSession": "{{count}} m seans",
+    "hmSession": "{{h}} h {{m}} m seans"
+  },
+  "unit": {
+    "tokens": "jetonlar",
+    "cached": "Önbelli önbelli",
+    "reasoning": "Nedeni",
+    "messages": "Mesaj mesajları",
+    "turns": "Döndü dönüş",
+    "members": "üyeler",
+    "tasks": "görevler görevler görevler",
+    "items": "Madde öğeleri",
+    "lines": "çizgiler hatları",
+    "files": "dosyaları dosyaları dosyaları dosyaları",
+    "folders": "klasörler",
+    "calls": "Arama çağrıları",
+    "deps": "deps",
+    "chars": "Karlar",
+    "matches": "maç maçları maçları",
+    "sessions": "seans seans oturumları",
+    "msgs": "msgs"
+  },
+  "priority": {
+    "high": "Yüksek yüksek yüksek yüksek",
+    "medium": "orta orta orta orta orta orta orta",
+    "low": "düşük düşük düşük"
+  },
+  "theme": {
+    "light": "ışık ışığı",
+    "dark": "karanlık karanlık karanlık",
+    "system": "Sistem sistemi sistemi sistemi sistemi sistemi sistemi sistemi sistemi"
+  },
+  "mode": {
+    "chat": "Chat Chat Chat",
+    "clarify": "Clarify",
+    "cowork": "Cowork",
+    "code": "Kod Kodu",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "Start Start Start Start Start",
+    "next": "Sonraki Sonraki Sonraki Sonraki Sonraki Sonraki Sonraki Sonraki",
+    "back": "Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki Önceki",
+    "intro": {
+      "title": "Merhaba, Ola için hoş geldiniz",
+      "subtitle": "Ola, multi-agent AI işbirliği için yerel bir ilk çalışma alanıdır. Proje bağlamını okuyabilirsiniz, onay ile yerel araçları kullanabilir ve ajanlar size kod, araştırma, planlama ve günlük iş akışlarında birlikte çalışır.",
+      "points": {
+        "local": {
+          "title": "Yerel araçlar, gerçek bağlam",
+          "desc": "Ajanlar dosyaları, terminaller, projeler, hafıza ve makinenizde çalışma alanı bağlamı ile çalışabilir."
+        },
+        "team": {
+          "title": "Multi-agent işbirliği",
+          "desc": "odaklanmış asistanlar, delege görevleri oluşturun ve bir insan-in-the-loop akışı tut."
+        },
+        "memory": {
+          "title": "Kişisel kimlik ve hafıza",
+          "desc": "Bir SOUL.md persona ve profil seçin, böylece her yeni istek doğru işbirliği tarzından başlar."
+        }
+      }
+    },
+    "language": {
+      "title": "Hangi dili kullanmalıyız?",
+      "shortLabel": "Dil Dili",
+      "detected": "Sistem dili tespit edildi: {{language}}",
+      "zh": "Basitleştirilmiş Çin",
+      "en": "İngilizce İngilizce İngilizce English"
+    },
+    "nickname": {
+      "title": "Ola sizi ne aramalı?",
+      "subtitle": "Bu yerel olarak depolanır ve ABD'ye yazılır, bu yüzden ajanlar sizi doğal olarak ele geçirebilirler.",
+      "placeholder": "Senin takma adın"
+    },
+    "interests": {
+      "title": "Hangi alanlarda ilgileniyorsunuz?",
+      "subtitle": "Bir veya daha fazlasını seçin. Ola daha iyi varsayılanları seçmek ve yerel profilinizi kişiselleştirmek için bunu kullanır.",
+      "options": {
+        "content": "İçerik oluşturma",
+        "coding": "Coding ve gelişim",
+        "design": "Tasarım ve yaratıcılık",
+        "learning": "Öğrenme ve araştırma",
+        "business": "İş stratejisi",
+        "marketing": "Pazarlama ve büyüme",
+        "product": "Ürün yönetimi",
+        "sales": "Satış ve müşteriler",
+        "operations": "Operasyonlar ve yönetim",
+        "hr": "İnsanlar ve HR",
+        "financeLaw": "Finans ve yasal",
+        "creatorEconomy": "Yaratıcı ekonomi",
+        "investment": "Yatırım ve finanse etmek",
+        "family": "Aile ve ebeveynlik",
+        "health": "Sağlık ve alışkanlıklar",
+        "culture": "Hobbies ve kültür",
+        "personal": "Kişisel hayat",
+        "other": "Diğer alanlar"
+      }
+    },
+    "soul": {
+      "title": "Varsayılan SOUL seçin",
+      "subtitle": "SOUL.md asistanın uzun vadeli kimliğini, iletişim stilini ve davranışları sınırlarını tanımlar. Daha sonra Global Identity & Memory'da değiştirebilirsiniz.",
+      "loading": "Yükleme yerleşik SOUL şablonları...",
+      "loadFailed": "İnşa edilen SOUL şablonlarını yüklemek için başarısız oldu",
+      "installFailed": "Varsayılan olarak yüklemeye başarısız oldu SOUL",
+      "empty": "Hiçbir yerleşik SOUL şablonları bulunamadı.",
+      "retry": "Retry"
+    },
+    "done": {
+      "action": "Ola",
+      "toast": "Ola hazır",
+      "failed": "Yüklemeyi bitirmek için başarısız oldu"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "Dengeli Profesyonel Collaborator",
+        "description": "Sürekli bir varsayılan kişi günlük çalışma, düşünceli tartışma ve genel yardım için."
+      },
+      "senior-engineering-partner": {
+        "name": "Senior Software Engineering Partner",
+        "description": "Okuma kodu için titiz bir programlama insanı, kapsamı değişiklikleri yapmak, debugging, yorumları ve teknik kararlar."
+      },
+      "daily-life-assistant": {
+        "name": "Günlük Yaşam Asistanı",
+        "description": "Planlama, hatırlatmalar, kararlar, mesajlar, seyahat, öğrenme ve kişisel organizasyon için pragmatik bir günlük kişi."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Duygusal olarak Attuned Companion",
+        "description": "Etkili bir konuşma, ilişki sözcüğü ve zor anlar için dikkatli bir duygusal destek."
+      },
+      "research-writing-strategist": {
+        "name": "Araştırma ve Yazma Strategist",
+        "description": "Araştırma sentezi, yazma planları, düzenleme, tartışma kalitesi ve kaynak-aware çalışması için kesin bir kişi."
+      },
+      "product-strategy-operator": {
+        "name": "Ürün Stratejisi Operatör",
+        "description": "Öncelik için bir ürün ve iş insanı, UX tradeoffs, planlama ve operasyonel açıklık."
+      }
+    },
+    "categories": {
+      "general": "general general general general general general general general general general general general general general general",
+      "coding": "kodlama kodlama",
+      "daily": "Günlük günlük günlük günlük günlük günlük",
+      "emotional": "Duygusal duygusal duygusal duygusal",
+      "research": "Araştırma araştırma araştırma araştırma araştırma araştırma araştırma araştırma",
+      "business": "business business business business business"
+    },
+    "tags": {
+      "daily": "Günlük günlük günlük günlük günlük günlük",
+      "balanced": "dengeli dengeli dengeli dengeli",
+      "clear": "net açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık açık",
+      "programming": "programlama programlama programlama programlama",
+      "debugging": "Debugging",
+      "review": "İnceleme incelemesi",
+      "planning": "Planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama planlama",
+      "organization": "Organizasyon organizasyonu",
+      "everyday": "Günlük Günlük Günlük Günlük Günlük Günlük Günlük Günlük Günlük",
+      "emotional-support": "Duygusal destek",
+      "reflection": "yansıma",
+      "relationships": "İlişkiler ilişkileri",
+      "research": "Araştırma araştırma araştırma araştırma araştırma araştırma araştırma araştırma",
+      "writing": "Yazı yazı yazmak",
+      "editing": "Düzenleme",
+      "product": "ürün ürün ürün ürün ürün ürün ürün ürün ürün ürünü",
+      "strategy": "strateji strateji stratejisi",
+      "operations": "Operasyon operasyonları operasyonları"
+    }
+  },
+  "contextWindow": "Context penceresi",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "Başarı",
+        "error": "Başarısız",
+        "stopped": "Durdu"
+      },
+      "toolCallCount": "{{count}} araç arama çağrıları",
+      "runFinished": "Cron görevi \" {{jobName}} \" tamamlandı (İngilizce). {{statusLabel}}, {{toolCallLabel}})",
+      "errorDetail": "**Error:** {{message}}",
+      "noOutput": "(No print)"
+    },
+    "changelog": {
+      "title": "Changelog",
+      "translate": "AI Translate",
+      "translating": "Translating...",
+      "showOriginal": "Show Original",
+      "showTranslation": "Show Translation",
+      "translateError": "Tercüme başarısız oldu",
+      "noProvider": "Hiçbir AI sağlayıcısı yapılandırıldı. ilk önce Ayarlarda bir tedarikçi kurdu."
+    },
+    "update": {
+      "availableTitle": "🎉 Version {{version}} mevcuttur.",
+      "availableDescription": "Click \"Update now\" to start indir",
+      "buttonLabel": "Update v {{version}}",
+      "buttonTooltip": "Yeni bir versiyon mevcuttur. sürüm notlarını görüntülemek için tıklayın.",
+      "currentVersion": "Current v {{version}}",
+      "latestVersion": "En son v {{version}}",
+      "releaseNotes": "Yayın notları",
+      "noReleaseNotes": "Bu sürüm için sürüm notları sağlanmadı.",
+      "downloading": "Downloading update...",
+      "downloadingShort": "{{progress}} % % % % % % % % %",
+      "downloadingProgress": "Downloading update {{progress}} % % % % % % % % %",
+      "actions": {
+        "updateNow": "Güncelleme şimdi",
+        "remindLater": "Beni daha sonra Remind"
+      },
+      "downloadFailed": "Download başarısız",
+      "delayed": "Güncelleme ertelendi",
+      "downloadedTitle": "Güncelleme indir",
+      "downloadedDescription": "Version Version Version {{version}} Yeniden başlatmadan sonra yüklenecek",
+      "failed": "Güncelleme başarısız oldu"
+    },
+    "errors": {
+      "unhandledTitle": "Unhandled Hata"
+    }
+  }
+}

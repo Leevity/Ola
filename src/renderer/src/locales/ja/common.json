@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "キャンセル",
+    "delete": "削除",
+    "save": "保存",
+    "confirm": "確認",
+    "close": "閉じる",
+    "copy": "コピー",
+    "copyPath": "パスをコピー",
+    "rename": "名前変更",
+    "refresh": "更新",
+    "retry": "再試行",
+    "send": "送信",
+    "stop": "停止",
+    "start": "開始",
+    "clear": "クリア",
+    "allow": "許可",
+    "deny": "拒否",
+    "undo": "元に戻す",
+    "open": "開く",
+    "export": "エクスポート",
+    "import": "インポート",
+    "duplicate": "複製",
+    "pin": "固定",
+    "unpin": "固定解除",
+    "showMore": "もっと表示",
+    "showLess": "折りたたむ",
+    "more": "その他"
+  },
+  "status": {
+    "running": "実行中",
+    "done": "完了",
+    "pending": "保留中",
+    "active": "アクティブ",
+    "completed": "完了済み",
+    "working": "作業中",
+    "idle": "待機中",
+    "waiting": "待機中",
+    "stopped": "停止済み",
+    "failed": "失敗",
+    "error": "エラー"
+  },
+  "time": {
+    "justNow": "たった今",
+    "mAgo": "{{count}}分前",
+    "hAgo": "{{count}}時間前",
+    "dAgo": "{{count}}日前",
+    "sAgo": "{{count}}秒前",
+    "sSession": "{{count}}秒のセッション",
+    "mSession": "{{count}}分のセッション",
+    "hmSession": "{{h}}時間{{m}}分のセッション"
+  },
+  "unit": {
+    "tokens": "トークン",
+    "cached": "キャッシュ",
+    "reasoning": "推論",
+    "messages": "メッセージ",
+    "turns": "ターン",
+    "members": "メンバー",
+    "tasks": "タスク",
+    "items": "項目",
+    "lines": "行",
+    "files": "ファイル",
+    "folders": "フォルダ",
+    "calls": "呼び出し",
+    "deps": "依存",
+    "chars": "文字",
+    "matches": "一致",
+    "sessions": "セッション",
+    "msgs": "件"
+  },
+  "priority": {
+    "high": "高",
+    "medium": "中",
+    "low": "低"
+  },
+  "theme": {
+    "light": "ライト",
+    "dark": "ダーク",
+    "system": "システムに従う"
+  },
+  "mode": {
+    "chat": "チャット",
+    "clarify": "確認",
+    "cowork": "協働",
+    "code": "コード",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "開始",
+    "next": "次へ",
+    "back": "戻る",
+    "intro": {
+      "title": "Ola へようこそ",
+      "subtitle": "Ola はローカルファーストのマルチエージェント AI コラボレーション用ワークスペースです。プロジェクトの文脈を読み取り、許可のもとでローカルツールを使い、コード、リサーチ、計画、日常業務でエージェントがあなたと並走します。",
+      "points": {
+        "local": {
+          "title": "ローカルツールで、実際の文脈を扱う",
+          "desc": "エージェントはあなたのマシン上のファイル、ターミナル、プロジェクト、メモリ、ワークスペース文脈を使って作業できます。"
+        },
+        "team": {
+          "title": "マルチエージェントの協働",
+          "desc": "役割ごとのアシスタントを作成し、タスクを割り当て、人間が介在するワークフローを保てます。"
+        },
+        "memory": {
+          "title": "個人のアイデンティティと記憶",
+          "desc": "SOUL.md の人格とプロフィールを選ぶことで、毎回の依頼を適切な協働スタイルから始められます。"
+        }
+      }
+    },
+    "language": {
+      "title": "どの言語で使いますか？",
+      "shortLabel": "言語",
+      "detected": "システム言語が検出されました: {{language}}",
+      "zh": "簡体字中国語",
+      "en": "英語"
+    },
+    "nickname": {
+      "title": "Ola から何と呼ばれたいですか？",
+      "subtitle": "この情報はローカルに保存され、USER.md に書き込まれるので、エージェントが自然にあなたを呼べます。",
+      "placeholder": "ニックネーム"
+    },
+    "interests": {
+      "title": "興味のある分野は何ですか？",
+      "subtitle": "1つ以上選択してください。Ola はこれを使って適切な初期設定を選び、ローカルプロフィールを最適化します。",
+      "options": {
+        "content": "コンテンツ作成",
+        "coding": "コーディングと開発",
+        "design": "デザインと創作",
+        "learning": "学習と研究",
+        "business": "ビジネス戦略",
+        "marketing": "マーケティングと成長",
+        "product": "プロダクト管理",
+        "sales": "営業と顧客対応",
+        "operations": "運用と事務",
+        "hr": "人事・採用",
+        "financeLaw": "金融と法務",
+        "creatorEconomy": "クリエイターエコノミー",
+        "investment": "投資と資産運用",
+        "family": "家族と子育て",
+        "health": "健康と習慣",
+        "culture": "趣味と文化",
+        "personal": "個人生活",
+        "other": "その他の分野"
+      }
+    },
+    "soul": {
+      "title": "既定の SOUL を選択",
+      "subtitle": "SOUL.md は、アシスタントの長期的なアイデンティティ、コミュニケーションスタイル、行動の境界を定義します。後から「Global Identity & Memory」で変更できます。",
+      "loading": "内蔵 SOUL テンプレートを読み込み中...",
+      "loadFailed": "内蔵 SOUL テンプレートの読み込みに失敗しました",
+      "installFailed": "既定 SOUL のインストールに失敗しました",
+      "empty": "内蔵 SOUL テンプレートが見つかりませんでした。",
+      "retry": "再試行"
+    },
+    "done": {
+      "action": "Ola を開始",
+      "toast": "Ola の準備ができました",
+      "failed": "セットアップの完了に失敗しました"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "バランスの取れたプロフェッショナルコラベータ",
+        "description": "日常業務、思考力、一般支援のための定番のペルソナ。"
+      },
+      "senior-engineering-partner": {
+        "name": "シニアソフトウェアエンジニアリングパートナー",
+        "description": "コードを読み、スコープ変更、デバッグ、レビュー、技術的な決定を行うための厳格なプログラミングパーソナ。"
+      },
+      "daily-life-assistant": {
+        "name": "日常生活アシスタント",
+        "description": "計画、リマインダー、決定、メッセージ、旅行、学習、個人的な組織のための実用的な日常のペルソナ。"
+      },
+      "emotionally-attuned-companion": {
+        "name": "感情的に調整されたコンパニオン",
+        "description": "反射的な会話、関係の言葉遣い、困難な瞬間のための慎重な感情的なサポートペルソナ。"
+      },
+      "research-writing-strategist": {
+        "name": "研究と執筆戦略",
+        "description": "研究合成、ライティング計画、編集、引数の質、およびソースアウェアの作業のための正確なペルソナ。"
+      },
+      "product-strategy-operator": {
+        "name": "製品戦略オペレータ",
+        "description": "優先順位付け、UXトレードオフ、ローンチ計画、運用明快さのための製品とビジネスパーソナ。"
+      }
+    },
+    "categories": {
+      "general": "一般",
+      "coding": "プログラミング",
+      "daily": "日 日",
+      "emotional": "プロモーション",
+      "research": "リサーチ",
+      "business": "事業内容"
+    },
+    "tags": {
+      "daily": "日 日",
+      "balanced": "バランス調整",
+      "clear": "クリア",
+      "programming": "プログラミング",
+      "debugging": "デバッグ",
+      "review": "レビュー",
+      "planning": "プランニング",
+      "organization": "組織図",
+      "everyday": "日常の日常",
+      "emotional-support": "感情的なサポート",
+      "reflection": "リフレクション",
+      "relationships": "関連記事",
+      "research": "リサーチ",
+      "writing": "ライティング",
+      "editing": "編集",
+      "product": "プロダクト",
+      "strategy": "戦略",
+      "operations": "業務内容"
+    }
+  },
+  "contextWindow": "コンテキストウィンドウ",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "✅ 成功",
+        "error": "❌ 失敗",
+        "stopped": "⚠️ 停止"
+      },
+      "toolCallCount": "{{count}} 回のツール呼び出し",
+      "runFinished": "Cron タスク「{{jobName}}」が完了しました（{{statusLabel}}、{{toolCallLabel}}）",
+      "errorDetail": "**エラー:** {{message}}",
+      "noOutput": "（出力なし）"
+    },
+    "changelog": {
+      "title": "変更履歴",
+      "translate": "AI 翻訳",
+      "translating": "翻訳中...",
+      "showOriginal": "原文を表示",
+      "showTranslation": "翻訳を表示",
+      "translateError": "翻訳に失敗しました",
+      "noProvider": "AI プロバイダが設定されていません。先に設定でプロバイダを構成してください。"
+    },
+    "update": {
+      "availableTitle": "🎉 バージョン {{version}} が利用可能です",
+      "availableDescription": "「今すぐ更新」をクリックするとダウンロードを開始します",
+      "buttonLabel": "v{{version}} を更新",
+      "buttonTooltip": "新しいバージョンがあります。クリックしてリリースノートを確認してください。",
+      "currentVersion": "現在 v{{version}}",
+      "latestVersion": "最新 v{{version}}",
+      "releaseNotes": "リリースノート",
+      "noReleaseNotes": "このバージョンのリリースノートはありません。",
+      "downloading": "更新をダウンロード中...",
+      "downloadingShort": "{{progress}}%",
+      "downloadingProgress": "更新をダウンロード中 {{progress}}%",
+      "actions": {
+        "updateNow": "今すぐ更新",
+        "remindLater": "後で通知"
+      },
+      "downloadFailed": "ダウンロードに失敗しました",
+      "delayed": "更新を延期しました",
+      "downloadedTitle": "更新をダウンロードしました",
+      "downloadedDescription": "バージョン {{version}} は再起動後にインストールされます",
+      "failed": "更新に失敗しました"
+    },
+    "errors": {
+      "unhandledTitle": "未処理のエラー"
+    }
+  }
+}

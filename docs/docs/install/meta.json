@@ -1,0 +1,12 @@
+{
+  "title": "Install",
+  "description": "Install Ola on desktop platforms and verify the local runtime.",
+  "root": true,
+  "pages": [
+    "index",
+    "---Related---",
+    "[Quick start](/docs/start/quick-start)",
+    "[Platforms](/docs/platforms)",
+    "[Building from source](/docs/reference/building)"
+  ]
+}

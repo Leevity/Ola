@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "Batal",
+    "delete": "Hapus",
+    "save": "Simpan",
+    "confirm": "Konfirmasi",
+    "close": "Tutup",
+    "copy": "Salin",
+    "copyPath": "Salin Lokasi",
+    "rename": "Ganti Nama",
+    "refresh": "Segarkan",
+    "retry": "Coba lagi",
+    "send": "Kirim",
+    "stop": "Berhenti",
+    "start": "Mulai",
+    "clear": "Hapus",
+    "allow": "Ijinkan",
+    "deny": "Deny",
+    "undo": "Tak Jadi",
+    "open": "Buka",
+    "export": "Ekspor",
+    "import": "Impor",
+    "duplicate": "Duplikat",
+    "pin": "Pin",
+    "unpin": "Lepaskan pin",
+    "showMore": "Tampilkan lebih banyak",
+    "showLess": "Tampilkan kurang",
+    "more": "Lebih"
+  },
+  "status": {
+    "running": "berjalan",
+    "done": "selesai",
+    "pending": "tertunda",
+    "active": "aktif",
+    "completed": "selesai",
+    "working": "bekerja",
+    "idle": "menganggur",
+    "waiting": "menunggu",
+    "stopped": "dihentikan",
+    "failed": "gagal",
+    "error": "Galat"
+  },
+  "time": {
+    "justNow": "baru saja",
+    "mAgo": "{{count}} m yang lalu",
+    "hAgo": "{{count}} h yang lalu",
+    "dAgo": "{{count}} d yang lalu",
+    "sAgo": "{{count}} s yang lalu",
+    "sSession": "{{count}} sesi s",
+    "mSession": "{{count}} sesi m",
+    "hmSession": "{{h}} h {{m}} sesi m"
+  },
+  "unit": {
+    "tokens": "token",
+    "cached": "cache",
+    "reasoning": "alasan",
+    "messages": "pesan",
+    "turns": "putaran",
+    "members": "anggota",
+    "tasks": "tugas",
+    "items": "butir",
+    "lines": "baris",
+    "files": "berkas",
+    "folders": "folder",
+    "calls": "panggilan",
+    "deps": "deps",
+    "chars": "karakter",
+    "matches": "cocok",
+    "sessions": "sesi",
+    "msgs": "msgs"
+  },
+  "priority": {
+    "high": "tinggi",
+    "medium": "sedang",
+    "low": "rendah"
+  },
+  "theme": {
+    "light": "cahaya",
+    "dark": "gelap",
+    "system": "sistem"
+  },
+  "mode": {
+    "chat": "Obrolan",
+    "clarify": "Clarify",
+    "cowork": "Kowork",
+    "code": "Kode",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "Mulai",
+    "next": "Berikutnya",
+    "back": "Sebelumnya",
+    "intro": {
+      "title": "Hai, selamat datang di Ola",
+      "subtitle": "Ola adalah area kerja pertama untuk kolaborasi multi- agen AI. Ini dapat membaca konteks proyek Anda, menggunakan alat lokal dengan persetujuan, dan membantu agen bekerja bersama Anda dalam kode, penelitian, perencanaan, dan arus kerja harian.",
+      "points": {
+        "local": {
+          "title": "Perkakas lokal, konteks sebenarnya",
+          "desc": "Agen dapat bekerja dengan berkas, terminal, proyek, memori, dan konteks area kerja pada mesin Anda."
+        },
+        "team": {
+          "title": "Kolaborasi multi- agen",
+          "desc": "Buat asisten fokus, mendelegasikan tugas, dan tetap manusia dalam-lingkaran mengalir."
+        },
+        "memory": {
+          "title": "Identitas pribadi dan memori",
+          "desc": "Pilih persona SOUL.md dan profil sehingga setiap permintaan baru dimulai dari gaya kolaborasi yang tepat."
+        }
+      }
+    },
+    "language": {
+      "title": "Bahasa mana yang harus kita gunakan?",
+      "shortLabel": "Bahasa",
+      "detected": "Bahasa sistem terdeteksi: {{language}}",
+      "zh": "Cina Sederhana",
+      "en": "Inggris"
+    },
+    "nickname": {
+      "title": "Ola harus memanggilmu apa?",
+      "subtitle": "Ini disimpan secara lokal dan ditulis ke USER.md sehingga agen dapat mengatasi Anda secara alami.",
+      "placeholder": "Nama panggilan Anda"
+    },
+    "interests": {
+      "title": "Kau tertarik pada area mana?",
+      "subtitle": "Pilih satu atau lebih. Ola menggunakan ini untuk memilih default yang lebih baik dan personalisasi profil lokal Anda.",
+      "options": {
+        "content": "Penciptaan isi",
+        "coding": "Coding dan pengembangan",
+        "design": "Desain dan kreativitas",
+        "learning": "Belajar dan penelitian",
+        "business": "Strategi bisnis",
+        "marketing": "Pemasaran dan pertumbuhan",
+        "product": "Manajemen produk",
+        "sales": "Penjualan dan pelanggan",
+        "operations": "Operasi dan admin",
+        "hr": "Orang-orang dan HR",
+        "financeLaw": "Keuangan dan hukum",
+        "creatorEconomy": "Ekonomi pembuat",
+        "investment": "Investasi dan keuangan",
+        "family": "Keluarga dan orangtua",
+        "health": "Kesehatan dan kebiasaan",
+        "culture": "Hobi dan budaya",
+        "personal": "Kehidupan pribadi",
+        "other": "Daerah lain"
+      }
+    },
+    "soul": {
+      "title": "Pilih soul baku Anda",
+      "subtitle": "SOUL.md mendefinisikan identitas jangka panjang asisten, gaya komunikasi, dan batas perilaku. Anda dapat mengubahnya nanti di Global Identity & Memory.",
+      "loading": "Memuat built-in Templat SOUL...",
+      "loadFailed": "Gagal memuat built-dalam templat SOUL",
+      "installFailed": "Gagal menginstal baku SOUL",
+      "empty": "Tak ada bangunan di Templat SOUL yang ditemukan.",
+      "retry": "Coba lagi"
+    },
+    "done": {
+      "action": "Masukkan Ola",
+      "toast": "Ola siap",
+      "failed": "Gagal menyelesaikan setup"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "Kolaborator Profesional seimbang",
+        "description": "Persona standar untuk kerja harian campuran, diskusi bijaksana, dan bantuan umum."
+      },
+      "senior-engineering-partner": {
+        "name": "Senior Software Engineering Partner",
+        "description": "Persona pemrograman yang ketat untuk membaca kode, membuat perubahan, debug, ulasan, dan keputusan teknis."
+      },
+      "daily-life-assistant": {
+        "name": "Asisten Kehidupan Harian",
+        "description": "Persona pragmatis sehari-hari untuk perencanaan, pengingat, keputusan, pesan, perjalanan, belajar, dan organisasi pribadi."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Perusahaan Emosional",
+        "description": "Kepribadian dukungan emosional hati-hati untuk percakapan reflektif, hubungan memburuk, dan saat-saat sulit."
+      },
+      "research-writing-strategist": {
+        "name": "Riset dan Menulis Strategi",
+        "description": "Sebuah persona yang tepat untuk penelitian sintesis, rencana menulis, editing, kualitas argumen, dan sumber-sadar bekerja."
+      },
+      "product-strategy-operator": {
+        "name": "Operator Strategi Produk",
+        "description": "Sebuah persona produk dan bisnis untuk prioritas, perdagangan UX, perencanaan peluncuran, dan kejelasan operasional."
+      }
+    },
+    "categories": {
+      "general": "jenderal",
+      "coding": "coding",
+      "daily": "harian",
+      "emotional": "emosional",
+      "research": "penelitian",
+      "business": "bisnis"
+    },
+    "tags": {
+      "daily": "harian",
+      "balanced": "seimbang",
+      "clear": "jelas",
+      "programming": "pemrograman",
+      "debugging": "debug",
+      "review": "ulasan",
+      "planning": "perencanaan",
+      "organization": "organisasi",
+      "everyday": "sehari-hari",
+      "emotional-support": "dukungan emosional",
+      "reflection": "refleksi",
+      "relationships": "hubungan",
+      "research": "penelitian",
+      "writing": "menulis",
+      "editing": "edit",
+      "product": "produk",
+      "strategy": "strategi",
+      "operations": "operasi"
+    }
+  },
+  "contextWindow": "Jendela konteks",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "Sukses",
+        "error": "Gagal",
+        "stopped": "Dihentikan"
+      },
+      "toolCallCount": "{{count}} panggilan alat",
+      "runFinished": "Tugas cron \" {{jobName}} \"selesai ({{statusLabel}}, {{toolCallLabel}})",
+      "errorDetail": "Kesalahan: {{message}}",
+      "noOutput": "(tidak ada keluaran) My tools (error)"
+    },
+    "changelog": {
+      "title": "Changelog",
+      "translate": "Al Terjemahkan",
+      "translating": "Menerjemahkan...",
+      "showOriginal": "Tampilkan Asli",
+      "showTranslation": "Tampilkan Terjemahan",
+      "translateError": "Terjemahan gagal",
+      "noProvider": "Tidak ada penyedia AI yang dikonfigurasi. Atur penyedia dalam Pengaturan pertama."
+    },
+    "update": {
+      "availableTitle": "Versi: {{version}} tersedia",
+      "availableDescription": "Klik \"Update now\" untuk mulai mengunduh",
+      "buttonLabel": "Update v {{version}}",
+      "buttonTooltip": "Versi baru tersedia. Klik untuk melihat catatan rilis.",
+      "currentVersion": "v saat ini {{version}}",
+      "latestVersion": "Terakhir v {{version}}",
+      "releaseNotes": "Rilis catatan",
+      "noReleaseNotes": "Tidak ada catatan rilis yang disediakan untuk versi ini.",
+      "downloading": "Mengunduh pemutakhiran...",
+      "downloadingShort": "{{progress}} %",
+      "downloadingProgress": "Mengunduh pemutakhiran {{progress}} %",
+      "actions": {
+        "updateNow": "Mutakhirkan sekarang",
+        "remindLater": "Ingatkan aku nanti."
+      },
+      "downloadFailed": "Gagal mengunduh",
+      "delayed": "Perbarui ditunda",
+      "downloadedTitle": "Mutakhirkan diunduh",
+      "downloadedDescription": "Versi {{version}} akan memasang setelah restart",
+      "failed": "Pemutakhiran gagal"
+    },
+    "errors": {
+      "unhandledTitle": "Galat Tak Tertangani"
+    }
+  }
+}

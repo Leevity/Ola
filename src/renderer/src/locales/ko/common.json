@@ -1,0 +1,266 @@
+{
+  "action": {
+    "cancel": "취소",
+    "delete": "삭제",
+    "save": "저장",
+    "confirm": "확인",
+    "close": "닫기",
+    "copy": "복사",
+    "copyPath": "경로 복사",
+    "rename": "이름 변경",
+    "refresh": "새로고침",
+    "retry": "다시 시도",
+    "send": "보내기",
+    "stop": "중지",
+    "start": "시작",
+    "clear": "지우기",
+    "allow": "허용",
+    "deny": "거부",
+    "undo": "되돌리기",
+    "open": "열기",
+    "export": "내보내기",
+    "import": "가져오기",
+    "duplicate": "복제",
+    "pin": "고정",
+    "unpin": "고정 해제",
+    "showMore": "더 보기",
+    "showLess": "접기",
+    "more": "더 보기"
+  },
+  "status": {
+    "running": "실행 중",
+    "done": "완료",
+    "pending": "보류 중",
+    "active": "활성",
+    "completed": "완료됨",
+    "working": "작업 중",
+    "idle": "대기 중",
+    "waiting": "대기 중",
+    "stopped": "중지됨",
+    "failed": "실패",
+    "error": "오류"
+  },
+  "time": {
+    "justNow": "방금",
+    "mAgo": "{{count}}분 전",
+    "hAgo": "{{count}}시간 전",
+    "dAgo": "{{count}}일 전",
+    "sAgo": "{{count}}초 전",
+    "sSession": "{{count}}초 세션",
+    "mSession": "{{count}}분 세션",
+    "hmSession": "{{h}}시간{{m}}분 세션"
+  },
+  "unit": {
+    "tokens": "토큰",
+    "cached": "캐시됨",
+    "reasoning": "추론",
+    "messages": "메시지",
+    "turns": "턴",
+    "members": "멤버",
+    "tasks": "작업",
+    "items": "항목",
+    "lines": "줄",
+    "files": "파일",
+    "folders": "폴더",
+    "calls": "호출",
+    "deps": "의존성",
+    "chars": "문자",
+    "matches": "일치",
+    "sessions": "세션",
+    "msgs": "건"
+  },
+  "priority": {
+    "high": "높음",
+    "medium": "보통",
+    "low": "낮음"
+  },
+  "theme": {
+    "light": "라이트",
+    "dark": "다크",
+    "system": "시스템 따르기"
+  },
+  "mode": {
+    "chat": "채팅",
+    "clarify": "확인",
+    "cowork": "협업",
+    "code": "코드",
+    "acp": "ACP"
+  },
+  "onboarding": {
+    "start": "시작",
+    "next": "다음",
+    "back": "뒤로",
+    "intro": {
+      "title": "Ola에 오신 것을 환영합니다",
+      "subtitle": "Ola는 로컬 우선의 멀티 에이전트 AI 협업 작업 공간입니다. 프로젝트 문맥을 읽고, 허가를 받아 로컬 도구를 사용하며, 에이전트가 코드, 리서치, 계획, 일상 업무에서 당신과 함께 일합니다.",
+      "points": {
+        "local": {
+          "title": "로컬 도구, 실제 문맥",
+          "desc": "에이전트는 당신의 기기에서 파일, 터미널, 프로젝트, 메모리, 작업 공간 문맥을 활용할 수 있습니다."
+        },
+        "team": {
+          "title": "멀티 에이전트 협업",
+          "desc": "집중된 도우미를 만들고, 작업을 위임하며, 사람이 개입하는 워크플로를 유지할 수 있습니다."
+        },
+        "memory": {
+          "title": "개인 정체성과 기억",
+          "desc": "SOUL.md 페르소나와 프로필을 선택해, 새 요청이 항상 적절한 협업 스타일에서 시작되게 할 수 있습니다."
+        }
+      }
+    },
+    "language": {
+      "title": "어떤 언어로 사용할까요?",
+      "shortLabel": "언어",
+      "detected": "시스템 언어가 감지되었습니다: {{language}}",
+      "zh": "간체 중국어",
+      "en": "영어"
+    },
+    "nickname": {
+      "title": "Ola가 당신을 뭐라고 부르면 될까요?",
+      "subtitle": "이 정보는 로컬에 저장되며 USER.md에 기록되어 에이전트가 자연스럽게 당신을 부를 수 있게 합니다.",
+      "placeholder": "별명"
+    },
+    "interests": {
+      "title": "어떤 분야에 관심이 있나요?",
+      "subtitle": "하나 이상 선택하세요. Ola는 이를 바탕으로 더 나은 기본값을 고르고 로컬 프로필을 개인화합니다.",
+      "options": {
+        "content": "콘텐츠 제작",
+        "coding": "코딩과 개발",
+        "design": "디자인과 창작",
+        "learning": "학습과 연구",
+        "business": "비즈니스 전략",
+        "marketing": "마케팅과 성장",
+        "product": "제품 관리",
+        "sales": "영업과 고객",
+        "operations": "운영과 행정",
+        "hr": "인사와 채용",
+        "financeLaw": "금융과 법무",
+        "creatorEconomy": "크리에이터 경제",
+        "investment": "투자와 재무",
+        "family": "가족과 육아",
+        "health": "건강과 습관",
+        "culture": "취미와 문화",
+        "personal": "개인 생활",
+        "other": "기타 분야"
+      }
+    },
+    "soul": {
+      "title": "기본 SOUL 선택",
+      "subtitle": "SOUL.md는 어시스턴트의 장기적 정체성, 커뮤니케이션 스타일, 행동 경계를 정의합니다. 나중에 Global Identity & Memory에서 바꿀 수 있습니다.",
+      "loading": "내장 SOUL 템플릿을 불러오는 중...",
+      "loadFailed": "내장 SOUL 템플릿을 불러오지 못했습니다",
+      "installFailed": "기본 SOUL 설치에 실패했습니다",
+      "empty": "내장 SOUL 템플릿을 찾을 수 없습니다.",
+      "retry": "다시 시도"
+    },
+    "done": {
+      "action": "Ola 시작",
+      "toast": "Ola 준비 완료",
+      "failed": "설정을 완료하지 못했습니다"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "균형 잡힌 직업적인 Collaborator",
+        "description": "일상적인 일, 사려깊은 토론 및 일반 지원을 위한 꾸준한 기본 인사."
+      },
+      "senior-engineering-partner": {
+        "name": "수석 소프트웨어 공학 파트너",
+        "description": "읽는 부호를 위한 엄격한 프로그램 persona, 범위를 넓히는 변화, 벌레잡기, 리뷰 및 기술적인 결정."
+      },
+      "daily-life-assistant": {
+        "name": "일상 생활 보조",
+        "description": "계획, 알림, 의사 결정, 메시지, 여행, 학습 및 개인 조직을위한 실제 일상적인 사람."
+      },
+      "emotionally-attuned-companion": {
+        "name": "감정적으로 Attuned Companion",
+        "description": "감정적 인 대화, 관계 wording 및 어려운 순간에 대한 주의적 인 지원 인."
+      },
+      "research-writing-strategist": {
+        "name": "연구 및 쓰기 전략",
+        "description": "연구 합성, 쓰기 계획, 편집, 인수 품질, 소스 인식 작업에 대한 정확한 인사."
+      },
+      "product-strategy-operator": {
+        "name": "제품 전략 운영자",
+        "description": "사전화, UX 거래, 시작 계획 및 운영 명확성에 대한 제품 및 비즈니스 인사."
+      }
+    },
+    "categories": {
+      "general": "한국어",
+      "coding": "코딩",
+      "daily": "1 일",
+      "emotional": "이름 *",
+      "research": "연구분야",
+      "business": "회사연혁"
+    },
+    "tags": {
+      "daily": "1 일",
+      "balanced": "관련 상품",
+      "clear": "뚱 베어",
+      "programming": "지원하다",
+      "debugging": "디버깅",
+      "review": "뚱 베어",
+      "planning": "회사연혁",
+      "organization": "회사연혁",
+      "everyday": "한국어",
+      "emotional-support": "감정적 인 지원",
+      "reflection": "관련 상품",
+      "relationships": "이름 *",
+      "research": "연구분야",
+      "writing": "이름 *",
+      "editing": "관련 기사",
+      "product": "제품정보",
+      "strategy": "회사연혁",
+      "operations": "회사연혁"
+    }
+  },
+  "contextWindow": "컨텍스트 윈도우",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "✅ 성공",
+        "error": "❌ 실패",
+        "stopped": "⚠️ 중지됨"
+      },
+      "toolCallCount": "도구 호출 {{count}}회",
+      "runFinished": "Cron 작업 \"{{jobName}}\" 완료 ({{statusLabel}}, {{toolCallLabel}})",
+      "errorDetail": "**오류:** {{message}}",
+      "noOutput": "(출력 없음)"
+    },
+    "changelog": {
+      "title": "변경 로그",
+      "translate": "AI 번역",
+      "translating": "번역 중...",
+      "showOriginal": "원문 보기",
+      "showTranslation": "번역 보기",
+      "translateError": "번역에 실패했습니다",
+      "noProvider": "AI 공급자가 설정되어 있지 않습니다. 먼저 설정에서 공급자를 구성하세요."
+    },
+    "update": {
+      "availableTitle": "🎉 버전 {{version}} 사용 가능",
+      "availableDescription": "\"지금 업데이트\"를 클릭하면 다운로드가 시작됩니다",
+      "buttonLabel": "v{{version}} 업데이트",
+      "buttonTooltip": "새 버전이 있습니다. 클릭해 릴리스 노트를 확인하세요.",
+      "currentVersion": "현재 v{{version}}",
+      "latestVersion": "최신 v{{version}}",
+      "releaseNotes": "릴리스 노트",
+      "noReleaseNotes": "이 버전에 대한 릴리스 노트가 제공되지 않았습니다.",
+      "downloading": "업데이트를 다운로드하는 중...",
+      "downloadingShort": "{{progress}}%",
+      "downloadingProgress": "업데이트 다운로드 중 {{progress}}%",
+      "actions": {
+        "updateNow": "지금 업데이트",
+        "remindLater": "나중에 알림"
+      },
+      "downloadFailed": "다운로드 실패",
+      "delayed": "업데이트를 나중으로 미룸",
+      "downloadedTitle": "업데이트 다운로드 완료",
+      "downloadedDescription": "{{version}} 버전은 다시 시작 후 설치됩니다",
+      "failed": "업데이트 실패"
+    },
+    "errors": {
+      "unhandledTitle": "처리되지 않은 오류"
+    }
+  }
+}

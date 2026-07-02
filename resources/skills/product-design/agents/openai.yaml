@@ -1,0 +1,4 @@
+interface:
+  display_name: "Product Design"
+  short_description: "Design briefs, visual directions, prototypes, audits, and QA"
+  default_prompt: "Use $product-design to confirm the design brief, then help with setup, ideation, URL cloning, image-to-code prototypes, audits, research, prototype QA, or sharing."

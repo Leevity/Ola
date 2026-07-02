@@ -1,0 +1,20 @@
+services:
+  docs:
+    build:
+      context: ..
+      dockerfile: docs/Dockerfile
+    image: hejiale010426/ola-docs:latest
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      OPENCOWORK_RELEASE_REPO: Leevity/Ola
+      OPENCOWORK_RELEASE_TAG: latest
+      OPENCOWORK_RELEASE_SYNC_INTERVAL_MS: 3600000
+    ports:
+      - '3000:3000'
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ola-docs-net

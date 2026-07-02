@@ -1,0 +1,2293 @@
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
+import packageJson from '../../../../../package.json'
+import { useTranslation } from 'react-i18next'
+import {
+  ArrowDownAZ,
+  BookOpen,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
+  CloudSync,
+  Copy,
+  Download,
+  Eraser,
+  ExternalLink,
+  FileText,
+  FolderInput,
+  FolderOpen,
+  GitBranch,
+  Image,
+  ListFilter,
+  Loader2,
+  MessageSquare,
+  Monitor,
+  MoreHorizontal,
+  PanelLeftClose,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Settings,
+  Server,
+  Sparkles,
+  Trash2,
+  Upload,
+  Wand2
+} from 'lucide-react'
+import { Button } from '@renderer/components/ui/button'
+import { Input } from '@renderer/components/ui/input'
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger
+} from '@renderer/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from '@renderer/components/ui/alert-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
+import {
+  useChatStore,
+  type Project,
+  type Session,
+  type SessionMode
+} from '@renderer/stores/chat-store'
+import { useUIStore } from '@renderer/stores/ui-store'
+import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useAgentStore } from '@renderer/stores/agent-store'
+import { useTeamStore } from '@renderer/stores/team-store'
+import { useBackgroundSessionStore } from '@renderer/stores/background-session-store'
+import {
+  abortSession,
+  clearPendingSessionMessages,
+  getPendingSessionMessageCountForSession,
+  subscribePendingSessionMessages
+} from '@renderer/hooks/use-chat-actions'
+import {
+  exportSessionMarkdownFromDb,
+  exportSessionSnapshotFromDb
+} from '@renderer/lib/utils/export-chat'
+import { openDetachedSessionWindow, openSessionOrFocusDetached } from '@renderer/lib/session-window'
+import { cn } from '@renderer/lib/utils'
+import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { IPC } from '@renderer/lib/ipc/channels'
+import { getDroppedLocalPaths, filterDirectories } from '@renderer/lib/drag-folder'
+import { generateSessionTitle } from '@renderer/lib/api/generate-title'
+import { resolveIntlLocale } from '@renderer/lib/i18n-language'
+import { clampLeftSidebarWidth, LEFT_SIDEBAR_DEFAULT_WIDTH } from './right-panel-defs'
+import { WorkingFolderSelectorDialog } from '@renderer/components/chat/WorkingFolderSelectorDialog'
+import { toast } from 'sonner'
+import { confirm } from '@renderer/components/ui/confirm-dialog'
+
+const DEFAULT_VISIBLE_SESSIONS_PER_PROJECT = 4
+const MINUTE_MS = 60 * 1000
+const HOUR_MS = 60 * MINUTE_MS
+const DAY_MS = 24 * HOUR_MS
+const WEEK_MS = 7 * DAY_MS
+const PROJECT_SORT_STORAGE_KEY = 'openCowork.workspaceSidebar.projectSortMode'
+const SIDEBAR_TREE_ROW_CLASS = 'workspace-sidebar-row min-h-8 rounded-md border border-transparent'
+const SIDEBAR_TREE_ACTIVE_CLASS = 'workspace-sidebar-row--active text-foreground'
+const SIDEBAR_TREE_HOVER_CLASS =
+  'workspace-sidebar-row--hover text-foreground/90 hover:text-foreground'
+const SIDEBAR_TREE_ACTION_BUTTON_CLASS = 'workspace-sidebar-row-action size-6 rounded-md'
+const SIDEBAR_TREE_LABEL_CLASS = 'text-[13px] leading-5'
+const SIDEBAR_TREE_META_CLASS = 'text-[10px]'
+const PROJECT_SORT_MODES = ['updatedAt', 'name', 'createdAt'] as const
+type ProjectSortMode = (typeof PROJECT_SORT_MODES)[number]
+
+const PROJECT_SORT_LABEL_KEYS: Record<ProjectSortMode, string> = {
+  updatedAt: 'sidebar.projectSortRecentlyUpdated',
+  name: 'sidebar.projectSortName',
+  createdAt: 'sidebar.projectSortCreatedAt'
+}
+
+type FolderPickerTarget =
+  | { type: 'create'; projectName: string; preferredSection?: 'local' | 'ssh' }
+  | { type: 'project'; projectId: string }
+type SessionListItem = ReturnType<typeof mapSession>
+type ProjectListItem = ReturnType<typeof mapProject>
+
+interface ProjectTreeGroup {
+  project: ProjectListItem
+  sessions: SessionListItem[]
+  isRunning: boolean
+}
+
+function mapSession(session: ReturnType<typeof useChatStore.getState>['sessions'][number]): {
+  id: string
+  title: string
+  icon?: string
+  mode: SessionMode
+  updatedAt: number
+  createdAt: number
+  pinned?: boolean
+  messageCount: number
+  projectId?: string
+} {
+  return {
+    id: session.id,
+    title: session.title,
+    icon: session.icon,
+    mode: session.mode,
+    updatedAt: session.updatedAt,
+    createdAt: session.createdAt,
+    pinned: session.pinned,
+    messageCount: session.messageCount,
+    projectId: session.projectId
+  }
+}
+
+function mapProject(project: ReturnType<typeof useChatStore.getState>['projects'][number]): {
+  id: string
+  name: string
+  createdAt: number
+  updatedAt: number
+  workingFolder?: string
+  sshConnectionId?: string
+  pluginId?: string
+  pinned?: boolean
+} {
+  return {
+    id: project.id,
+    name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    workingFolder: project.workingFolder,
+    sshConnectionId: project.sshConnectionId,
+    pluginId: project.pluginId,
+    pinned: project.pinned
+  }
+}
+
+function areProjectListsEqual(
+  left: ReturnType<typeof useChatStore.getState>['projects'],
+  right: ReturnType<typeof useChatStore.getState>['projects']
+): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index]
+    const b = right[index]
+    if (a === b) continue
+    if (
+      a.id !== b.id ||
+      a.name !== b.name ||
+      a.createdAt !== b.createdAt ||
+      a.updatedAt !== b.updatedAt ||
+      a.workingFolder !== b.workingFolder ||
+      a.sshConnectionId !== b.sshConnectionId ||
+      a.pluginId !== b.pluginId ||
+      !!a.pinned !== !!b.pinned
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function areSessionListsEqual(
+  left: ReturnType<typeof useChatStore.getState>['sessions'],
+  right: ReturnType<typeof useChatStore.getState>['sessions']
+): boolean {
+  if (left === right) return true
+  if (left.length !== right.length) return false
+  for (let index = 0; index < left.length; index += 1) {
+    const a = left[index]
+    const b = right[index]
+    if (a === b) continue
+    if (
+      a.id !== b.id ||
+      a.title !== b.title ||
+      a.icon !== b.icon ||
+      a.mode !== b.mode ||
+      a.updatedAt !== b.updatedAt ||
+      a.createdAt !== b.createdAt ||
+      !!a.pinned !== !!b.pinned ||
+      a.messageCount !== b.messageCount ||
+      a.projectId !== b.projectId
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function deriveProjectNameFromFolder(folderPath?: string | null): string {
+  const normalized = folderPath?.trim().replace(/[\\/]+$/, '')
+  if (!normalized) return 'New Project'
+  const parts = normalized.split(/[\\/]/).filter(Boolean)
+  return parts[parts.length - 1] || 'New Project'
+}
+
+function downloadMarkdown(filename: string, content: string): void {
+  const blob = new Blob([content], { type: 'text/markdown' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadJson(filename: string, data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
+
+function sanitizeExportFileName(name: string): string {
+  const sanitized = name.replace(/[^a-zA-Z0-9-_ ]/g, '').trim()
+  return sanitized || 'conversation'
+}
+
+function isProjectSortMode(value: string | null): value is ProjectSortMode {
+  return PROJECT_SORT_MODES.includes(value as ProjectSortMode)
+}
+
+function readProjectSortMode(): ProjectSortMode {
+  try {
+    const stored = window.localStorage.getItem(PROJECT_SORT_STORAGE_KEY)
+    if (isProjectSortMode(stored)) return stored
+  } catch {
+    // Ignore storage failures and keep the existing default order.
+  }
+  return 'updatedAt'
+}
+
+function writeProjectSortMode(mode: ProjectSortMode): void {
+  try {
+    window.localStorage.setItem(PROJECT_SORT_STORAGE_KEY, mode)
+  } catch {
+    // Sorting still works for the current session if persistence is unavailable.
+  }
+}
+
+function compareProjectNames(
+  left: ProjectListItem,
+  right: ProjectListItem,
+  collator: Intl.Collator
+): number {
+  return collator.compare(left.name, right.name)
+}
+
+function compareProjectIds(left: ProjectListItem, right: ProjectListItem): number {
+  return left.id.localeCompare(right.id)
+}
+
+function sortProjects(
+  left: ProjectListItem,
+  right: ProjectListItem,
+  mode: ProjectSortMode,
+  collator: Intl.Collator
+): number {
+  if (!!left.pinned !== !!right.pinned) return left.pinned ? -1 : 1
+  if (mode === 'name') {
+    return (
+      compareProjectNames(left, right, collator) ||
+      right.updatedAt - left.updatedAt ||
+      right.createdAt - left.createdAt ||
+      compareProjectIds(left, right)
+    )
+  }
+  if (mode === 'createdAt') {
+    return (
+      right.createdAt - left.createdAt ||
+      compareProjectNames(left, right, collator) ||
+      right.updatedAt - left.updatedAt ||
+      compareProjectIds(left, right)
+    )
+  }
+  return (
+    right.updatedAt - left.updatedAt ||
+    compareProjectNames(left, right, collator) ||
+    right.createdAt - left.createdAt ||
+    compareProjectIds(left, right)
+  )
+}
+
+function sortSessions(left: SessionListItem, right: SessionListItem): number {
+  if (!!left.pinned !== !!right.pinned) return left.pinned ? -1 : 1
+  return right.updatedAt - left.updatedAt
+}
+
+function formatRelativeTime(updatedAt: number, locale: string): string {
+  const elapsed = Date.now() - updatedAt
+  const rtf = new Intl.RelativeTimeFormat(locale, {
+    numeric: 'always',
+    style: 'narrow'
+  })
+  if (elapsed < HOUR_MS) {
+    return rtf.format(-Math.max(1, Math.round(elapsed / MINUTE_MS)), 'minute')
+  }
+  if (elapsed < DAY_MS) {
+    return rtf.format(-Math.max(1, Math.round(elapsed / HOUR_MS)), 'hour')
+  }
+  if (elapsed < WEEK_MS) {
+    return rtf.format(-Math.max(1, Math.round(elapsed / DAY_MS)), 'day')
+  }
+  return rtf.format(-Math.max(1, Math.round(elapsed / WEEK_MS)), 'week')
+}
+
+function getSessionMessageText(message: Session['messages'][number]): string {
+  if (typeof message.content === 'string') return message.content.trim()
+
+  const parts: string[] = []
+  for (const block of message.content) {
+    if (block.type === 'text') {
+      parts.push(block.text)
+    }
+  }
+  return parts.join('\n').trim()
+}
+
+function buildSmartRenameInput(session: Session): string {
+  const excerpts: string[] = []
+
+  for (const message of session.messages) {
+    if (message.role === 'system') continue
+    const text = getSessionMessageText(message)
+    if (!text) continue
+    excerpts.push(`${message.role}: ${text.slice(0, 1200)}`)
+    if (excerpts.length >= 16) break
+  }
+
+  const transcript = excerpts.join('\n\n').slice(0, 6000).trim()
+  if (!transcript) return ''
+
+  return [
+    'Generate a concise session title from this conversation.',
+    `Current title: ${session.title}`,
+    'Conversation excerpt:',
+    transcript
+  ].join('\n\n')
+}
+
+type ExportedSessionPayload = {
+  version: 1
+  type: 'session'
+  session: Session
+}
+
+type ExportedProjectPayload = {
+  version: 1
+  type: 'project'
+  project: Project
+  sessions: Session[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+export function WorkspaceSidebar(): React.JSX.Element {
+  const { t } = useTranslation('layout')
+  const { t: tCommon } = useTranslation('common')
+  const isMac = /Mac/.test(navigator.userAgent)
+  const chatView = useUIStore((state) => state.chatView)
+  const settingsPageOpen = useUIStore((state) => state.settingsPageOpen)
+  const skillsPageOpen = useUIStore((state) => state.skillsPageOpen)
+  const soulsPageOpen = useUIStore((state) => state.soulsPageOpen)
+  const syncPageOpen = useUIStore((state) => state.syncPageOpen)
+  const resourcesPageOpen = useUIStore((state) => state.resourcesPageOpen)
+  const drawPageOpen = useUIStore((state) => state.drawPageOpen)
+  const translatePageOpen = useUIStore((state) => state.translatePageOpen)
+  const tasksPageOpen = useUIStore((state) => state.tasksPageOpen)
+  const leftSidebarWidth = useUIStore((state) => state.leftSidebarWidth)
+  const setLeftSidebarWidth = useUIStore((state) => state.setLeftSidebarWidth)
+  const toggleLeftSidebar = useUIStore((state) => state.toggleLeftSidebar)
+  const persistedLeftSidebarWidth = useSettingsStore((state) => state.leftSidebarWidth)
+  const updateSettings = useSettingsStore((state) => state.updateSettings)
+  const projectsRaw = useStoreWithEqualityFn(
+    useChatStore,
+    (state) => state.projects,
+    areProjectListsEqual
+  )
+  const sessionsRaw = useStoreWithEqualityFn(
+    useChatStore,
+    (state) => state.sessions,
+    areSessionListsEqual
+  )
+  const projects = useMemo(() => projectsRaw.map(mapProject), [projectsRaw])
+  const sessions = useMemo(() => sessionsRaw.map(mapSession), [sessionsRaw])
+  const activeProjectId = useChatStore((state) => state.activeProjectId)
+  const activeSessionId = useChatStore((state) => state.activeSessionId)
+  const streamingSessionIdsSig = useChatStore((state) =>
+    Object.keys(state.streamingMessages).sort().join('\u0000')
+  )
+  const createProject = useChatStore((state) => state.createProject)
+  const setActiveProject = useChatStore((state) => state.setActiveProject)
+  const setActiveProjectHome = useChatStore((state) => state.setActiveProjectHome)
+  const renameProject = useChatStore((state) => state.renameProject)
+  const deleteProject = useChatStore((state) => state.deleteProject)
+  const togglePinProject = useChatStore((state) => state.togglePinProject)
+  const updateProjectDirectory = useChatStore((state) => state.updateProjectDirectory)
+  const deleteSession = useChatStore((state) => state.deleteSession)
+  const updateSessionTitle = useChatStore((state) => state.updateSessionTitle)
+  const updateSessionIcon = useChatStore((state) => state.updateSessionIcon)
+  const duplicateSession = useChatStore((state) => state.duplicateSession)
+  const clearSessionMessages = useChatStore((state) => state.clearSessionMessages)
+  const togglePinSession = useChatStore((state) => state.togglePinSession)
+  const importSession = useChatStore((state) => state.importSession)
+  const importProjectArchive = useChatStore((state) => state.importProjectArchive)
+  const runningSessions = useAgentStore((state) => state.runningSessions)
+  const runningSubAgentSessionIdsSig = useAgentStore((state) => state.runningSubAgentSessionIdsSig)
+  const runningBackgroundSessionIdsSig = useAgentStore((state) =>
+    Object.values(state.backgroundProcesses)
+      .filter((process) => process.sessionId && process.status === 'running')
+      .map((process) => process.sessionId as string)
+      .sort()
+      .join('\u0000')
+  )
+  const activeTeamSessionId = useTeamStore((state) => state.activeTeam?.sessionId ?? null)
+  const waitingReplySessionIdsSig = useBackgroundSessionStore((state) => {
+    const ids = new Set<string>()
+    for (const item of state.inboxItems) {
+      if (item.type === 'ask_user') ids.add(item.sessionId)
+    }
+    return [...ids].sort().join('\u0000')
+  })
+  const language = useSettingsStore((state) => state.language)
+  const relativeTimeLocale = useMemo(() => resolveIntlLocale(language), [language])
+  const projectNameCollator = useMemo(
+    () => new Intl.Collator(relativeTimeLocale, { numeric: true, sensitivity: 'base' }),
+    [relativeTimeLocale]
+  )
+  const importSessionInputRef = useRef<HTMLInputElement>(null)
+  const importProjectInputRef = useRef<HTMLInputElement>(null)
+  const treeScrollRef = useRef<HTMLDivElement>(null)
+  const [renameDialog, setRenameDialog] = useState<
+    | { type: 'project'; id: string; currentName: string }
+    | { type: 'session'; id: string; currentName: string }
+    | null
+  >(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { type: 'project'; id: string; name: string; sessionCount: number }
+    | { type: 'session'; id: string; title: string }
+    | null
+  >(null)
+  const [clearSessionTarget, setClearSessionTarget] = useState<{
+    id: string
+    title: string
+    pendingCount: number
+  } | null>(null)
+  const [clearProjectSessionsTarget, setClearProjectSessionsTarget] = useState<{
+    id: string
+    name: string
+    clearableCount: number
+    runningCount: number
+  } | null>(null)
+  const [autoRenamingSessionId, setAutoRenamingSessionId] = useState<string | null>(null)
+  const [folderPickerTarget, setFolderPickerTarget] = useState<FolderPickerTarget | null>(null)
+  const [featureMenuOpen, setFeatureMenuOpen] = useState(false)
+  const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false)
+  const [projectSortMode, setProjectSortMode] = useState<ProjectSortMode>(readProjectSortMode)
+  const [isFolderDragOver, setIsFolderDragOver] = useState(false)
+  const [chatsSectionCollapsed, setChatsSectionCollapsed] = useState(false)
+  const [collapsedProjectIds, setCollapsedProjectIds] = useState<Set<string>>(() => new Set())
+  const [expandedProjectIds, setExpandedProjectIds] = useState<Set<string>>(() => new Set())
+  const featureMenuCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const runningSubAgentSessionIds = useMemo(
+    () => new Set(runningSubAgentSessionIdsSig ? runningSubAgentSessionIdsSig.split('\u0000') : []),
+    [runningSubAgentSessionIdsSig]
+  )
+  const runningBackgroundSessionIds = useMemo(
+    () =>
+      new Set(runningBackgroundSessionIdsSig ? runningBackgroundSessionIdsSig.split('\u0000') : []),
+    [runningBackgroundSessionIdsSig]
+  )
+  const waitingReplySessionIds = useMemo(
+    () => new Set(waitingReplySessionIdsSig ? waitingReplySessionIdsSig.split('\u0000') : []),
+    [waitingReplySessionIdsSig]
+  )
+  const streamingSessionIds = useMemo(
+    () => new Set(streamingSessionIdsSig ? streamingSessionIdsSig.split('\u0000') : []),
+    [streamingSessionIdsSig]
+  )
+  const pendingQueueSignature = useSyncExternalStore(
+    subscribePendingSessionMessages,
+    () =>
+      sessions
+        .map((session) => `${session.id}:${getPendingSessionMessageCountForSession(session.id)}`)
+        .join('|'),
+    () => ''
+  )
+  const activeSessionProjectId = useMemo(
+    () => sessions.find((session) => session.id === activeSessionId)?.projectId ?? null,
+    [activeSessionId, sessions]
+  )
+  const currentProjectId = activeSessionProjectId ?? activeProjectId ?? null
+  const visibleProjects = useMemo(
+    () =>
+      projects
+        .filter((project) => !project.pluginId)
+        .slice()
+        .sort((left, right) => sortProjects(left, right, projectSortMode, projectNameCollator)),
+    [projectNameCollator, projectSortMode, projects]
+  )
+  const folderPickerProjectId =
+    folderPickerTarget?.type === 'project' ? folderPickerTarget.projectId : null
+  const folderPickerProject = folderPickerProjectId
+    ? visibleProjects.find((project) => project.id === folderPickerProjectId)
+    : undefined
+  const chatSurfaceActive =
+    !settingsPageOpen &&
+    !skillsPageOpen &&
+    !soulsPageOpen &&
+    !syncPageOpen &&
+    !resourcesPageOpen &&
+    !drawPageOpen &&
+    !translatePageOpen &&
+    !tasksPageOpen
+  const featureMenuActive =
+    resourcesPageOpen || skillsPageOpen || soulsPageOpen || syncPageOpen || drawPageOpen
+  const sessionsByProject = useMemo(() => {
+    const next = new Map<string, SessionListItem[]>()
+    for (const session of sessions) {
+      if (!session.projectId) continue
+      const bucket = next.get(session.projectId)
+      if (bucket) {
+        bucket.push(session)
+      } else {
+        next.set(session.projectId, [session])
+      }
+    }
+    for (const bucket of next.values()) {
+      bucket.sort(sortSessions)
+    }
+    return next
+  }, [sessions])
+  const chatSessions = useMemo(
+    () =>
+      sessions
+        .filter((session) => !session.projectId)
+        .slice()
+        .sort(sortSessions),
+    [sessions]
+  )
+
+  const projectGroups = useMemo<ProjectTreeGroup[]>(() => {
+    return visibleProjects.map((project) => {
+      const projectSessions = sessionsByProject.get(project.id) ?? []
+      const isRunning = projectSessions.some((session) => {
+        return (
+          runningSessions[session.id] === 'running' ||
+          runningSessions[session.id] === 'retrying' ||
+          runningSubAgentSessionIds.has(session.id) ||
+          runningBackgroundSessionIds.has(session.id) ||
+          streamingSessionIds.has(session.id) ||
+          activeTeamSessionId === session.id
+        )
+      })
+      return {
+        project,
+        sessions: projectSessions,
+        isRunning
+      }
+    })
+  }, [
+    activeTeamSessionId,
+    runningBackgroundSessionIds,
+    runningSessions,
+    runningSubAgentSessionIds,
+    sessionsByProject,
+    streamingSessionIds,
+    visibleProjects
+  ])
+
+  useEffect(() => {
+    const projectId = activeSessionProjectId ?? activeProjectId
+    if (!projectId) return
+    setCollapsedProjectIds((current) => {
+      if (!current.has(projectId)) return current
+      const next = new Set(current)
+      next.delete(projectId)
+      return next
+    })
+  }, [activeProjectId, activeSessionProjectId])
+
+  const currentSidebarWidth = clampLeftSidebarWidth(
+    leftSidebarWidth || persistedLeftSidebarWidth || LEFT_SIDEBAR_DEFAULT_WIDTH
+  )
+
+  const openCommandPalette = useCallback(() => {
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', {
+        key: 'k',
+        ctrlKey: true,
+        bubbles: true
+      })
+    )
+  }, [])
+
+  const openChatHome = useCallback(() => {
+    const uiStore = useUIStore.getState()
+    setActiveProjectHome(null)
+    uiStore.setMode('chat')
+    uiStore.navigateToHome()
+  }, [setActiveProjectHome])
+
+  const openProjectHome = useCallback(
+    (projectId: string) => {
+      const uiStore = useUIStore.getState()
+      setActiveProjectHome(projectId)
+      if (uiStore.mode === 'chat') {
+        uiStore.setMode('cowork')
+      }
+      uiStore.navigateToProject(projectId)
+    },
+    [setActiveProjectHome]
+  )
+
+  const openProjectNewSession = useCallback(
+    (projectId: string) => {
+      const uiStore = useUIStore.getState()
+      setActiveProjectHome(projectId)
+      if (uiStore.mode === 'chat') {
+        uiStore.setMode('cowork')
+      }
+      uiStore.navigateToHome()
+    },
+    [setActiveProjectHome]
+  )
+
+  const handleCreateChatSession = useCallback(() => {
+    openChatHome()
+  }, [openChatHome])
+
+  const navigateProjectView = useCallback(
+    (projectId: string, view: 'project' | 'archive' | 'channels' | 'git' = 'project') => {
+      setActiveProject(projectId)
+      const ui = useUIStore.getState()
+      if (view === 'archive') {
+        ui.navigateToArchive(projectId)
+        return
+      }
+      if (view === 'channels') {
+        ui.navigateToChannels(projectId)
+        return
+      }
+      if (view === 'git') {
+        ui.navigateToGit(projectId)
+        return
+      }
+      ui.navigateToProject(projectId)
+    },
+    [setActiveProject]
+  )
+
+  const openProjectSession = useCallback(
+    (projectId: string) => {
+      const latestSession = (sessionsByProject.get(projectId) ?? [])[0]
+      if (!latestSession) {
+        openProjectHome(projectId)
+        return
+      }
+      void openSessionOrFocusDetached(latestSession.id)
+    },
+    [openProjectHome, sessionsByProject]
+  )
+
+  const openSession = useCallback((sessionId: string) => {
+    void openSessionOrFocusDetached(sessionId)
+  }, [])
+
+  const handleImportSessionFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      if (!file) return
+      try {
+        const text = await file.text()
+        const payload = JSON.parse(text) as unknown
+        if (!isRecord(payload) || payload.type !== 'session' || !('session' in payload)) {
+          throw new Error('invalid-session-file')
+        }
+        importSession(payload.session as Session, activeProjectId)
+        toast.success(t('sidebar.importSuccess'))
+      } catch {
+        toast.error(t('sidebar.importFailed'))
+      }
+    },
+    [activeProjectId, importSession, t]
+  )
+
+  const handleImportProjectFile = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0]
+      event.target.value = ''
+      if (!file) return
+      try {
+        const text = await file.text()
+        const payload = JSON.parse(text) as unknown
+        if (
+          !isRecord(payload) ||
+          payload.type !== 'project' ||
+          !('project' in payload) ||
+          !('sessions' in payload) ||
+          !Array.isArray(payload.sessions)
+        ) {
+          throw new Error('invalid-project-file')
+        }
+        importProjectArchive({
+          project: payload.project as Project,
+          sessions: payload.sessions as Session[]
+        })
+        toast.success(t('sidebar.importSuccess'))
+      } catch {
+        toast.error(t('sidebar.importFailed'))
+      }
+    },
+    [importProjectArchive, t]
+  )
+
+  const handleCreateProjectWithDirectory = useCallback(
+    async (workingFolder: string, sshConnectionId: string | null) => {
+      const projectId = await createProject({
+        name: deriveProjectNameFromFolder(workingFolder),
+        workingFolder,
+        sshConnectionId: sshConnectionId ?? undefined
+      })
+      openProjectHome(projectId)
+      toast.success(t('sidebar_toast.projectCreated'))
+    },
+    [createProject, openProjectHome, t]
+  )
+
+  const handleRevealProject = useCallback(
+    async (workingFolder?: string | null) => {
+      if (!workingFolder) return
+      const result = (await ipcClient.invoke(IPC.SHELL_SHOW_ITEM_IN_FOLDER, workingFolder)) as
+        | { error?: string }
+        | undefined
+      if (result && typeof result === 'object' && typeof result.error === 'string') {
+        toast.error(t('sidebar_toast.revealFailed'), { description: result.error })
+      }
+    },
+    [t]
+  )
+
+  const handleDropFolders = useCallback(
+    async (dataTransfer: DataTransfer | null) => {
+      const localPaths = getDroppedLocalPaths(dataTransfer)
+      if (localPaths.length === 0) return
+      const folders = await filterDirectories(localPaths)
+      if (folders.length === 0) {
+        toast.error(t('sidebar_toast.dropNotFolder'))
+        return
+      }
+      if (folders.length === 1) {
+        await handleCreateProjectWithDirectory(folders[0], null)
+        return
+      }
+      for (const folder of folders) {
+        await createProject({
+          name: deriveProjectNameFromFolder(folder),
+          workingFolder: folder
+        })
+      }
+      toast.success(t('sidebar_toast.projectsCreatedCount', { count: folders.length }))
+    },
+    [createProject, handleCreateProjectWithDirectory, t]
+  )
+
+  const handleCreateSession = useCallback(
+    (projectId: string) => {
+      openProjectNewSession(projectId)
+    },
+    [openProjectNewSession]
+  )
+
+  const handleProjectSortModeChange = useCallback((value: string) => {
+    if (!isProjectSortMode(value)) return
+    setProjectSortMode(value)
+    writeProjectSortMode(value)
+  }, [])
+
+  const handleClearChatSessions = useCallback(async () => {
+    const chatSessionIds = useChatStore
+      .getState()
+      .sessions.filter((session) => !session.projectId)
+      .map((session) => session.id)
+    const total = chatSessionIds.length
+    if (total === 0) {
+      toast.info(t('sidebar.noConversations'))
+      return
+    }
+    const ok = await confirm({
+      title: t('sidebar.deleteAllConfirm', { count: total }),
+      variant: 'destructive'
+    })
+    if (!ok) return
+    for (const sessionId of chatSessionIds) {
+      clearPendingSessionMessages(sessionId)
+      deleteSession(sessionId)
+    }
+    toast.success(t('sidebar_toast.allDeleted'))
+  }, [deleteSession, t])
+
+  const confirmClearSessionMessages = useCallback(() => {
+    if (!clearSessionTarget) return
+    clearSessionMessages(clearSessionTarget.id)
+    clearPendingSessionMessages(clearSessionTarget.id)
+    toast.success(t('sidebar_toast.messagesCleared'))
+    setClearSessionTarget(null)
+  }, [clearSessionMessages, clearSessionTarget, t])
+
+  const isSessionRunning = useCallback(
+    (sessionId: string): boolean =>
+      runningSessions[sessionId] === 'running' ||
+      runningSessions[sessionId] === 'retrying' ||
+      runningSubAgentSessionIds.has(sessionId) ||
+      runningBackgroundSessionIds.has(sessionId) ||
+      streamingSessionIds.has(sessionId) ||
+      activeTeamSessionId === sessionId,
+    [
+      activeTeamSessionId,
+      runningBackgroundSessionIds,
+      runningSessions,
+      runningSubAgentSessionIds,
+      streamingSessionIds
+    ]
+  )
+
+  const confirmClearProjectSessions = useCallback(() => {
+    if (!clearProjectSessionsTarget) return
+    const projectSessions = useChatStore
+      .getState()
+      .sessions.filter((session) => session.projectId === clearProjectSessionsTarget.id)
+    const clearableSessions = projectSessions.filter((session) => !isSessionRunning(session.id))
+    for (const session of clearableSessions) {
+      clearPendingSessionMessages(session.id)
+      deleteSession(session.id)
+    }
+    setClearProjectSessionsTarget(null)
+    if (clearableSessions.length === 0) {
+      toast.info(t('sidebar_toast.noProjectSessionsCleared'))
+      return
+    }
+    toast.success(
+      t('sidebar_toast.projectSessionsCleared', {
+        count: clearableSessions.length
+      })
+    )
+  }, [clearProjectSessionsTarget, deleteSession, isSessionRunning, t])
+
+  const confirmRename = useCallback(() => {
+    if (!renameDialog) return
+    const nextName = renameValue.trim()
+    if (!nextName) return
+    if (renameDialog.type === 'project') {
+      renameProject(renameDialog.id, nextName)
+    } else {
+      updateSessionTitle(renameDialog.id, nextName)
+    }
+    setRenameDialog(null)
+    toast.success(tCommon('action.rename'))
+  }, [renameDialog, renameProject, renameValue, tCommon, updateSessionTitle])
+
+  const handleSmartRenameSession = useCallback(
+    async (sessionId: string) => {
+      if (autoRenamingSessionId) return
+      setAutoRenamingSessionId(sessionId)
+
+      try {
+        await useChatStore.getState().loadRecentSessionMessages(sessionId, true, 30)
+        const session = useChatStore.getState().sessions.find((item) => item.id === sessionId)
+        if (!session) return
+
+        const titleInput = buildSmartRenameInput(session)
+        if (!titleInput) {
+          toast.error(t('sidebar_toast.smartRenameNoContent'))
+          return
+        }
+
+        const result = await generateSessionTitle(titleInput, { maxInputChars: 6000 })
+        const nextTitle = result?.title.trim()
+        const nextIcon = result?.icon.trim()
+        if (!nextTitle) {
+          toast.error(t('sidebar_toast.smartRenameFailed'))
+          return
+        }
+
+        updateSessionTitle(sessionId, nextTitle)
+        if (nextIcon) {
+          updateSessionIcon(sessionId, nextIcon)
+        }
+        toast.success(t('sidebar_toast.smartRenameSuccess'))
+      } catch (error) {
+        toast.error(t('sidebar_toast.smartRenameFailed'), {
+          description: error instanceof Error ? error.message : String(error)
+        })
+      } finally {
+        setAutoRenamingSessionId((current) => (current === sessionId ? null : current))
+      }
+    },
+    [autoRenamingSessionId, t, updateSessionIcon, updateSessionTitle]
+  )
+
+  const deferDropdownAction = useCallback((action: () => void) => {
+    window.setTimeout(action, 0)
+  }, [])
+
+  const confirmDelete = useCallback(async () => {
+    if (!deleteTarget) return
+    if (deleteTarget.type === 'project') {
+      await deleteProject(deleteTarget.id)
+      if (useChatStore.getState().activeProjectId === deleteTarget.id) {
+        useUIStore.getState().navigateToHome()
+      }
+      toast.success(t('sidebar_toast.projectDeleted'))
+    } else {
+      const hasRunning =
+        runningSessions[deleteTarget.id] === 'running' ||
+        runningSessions[deleteTarget.id] === 'retrying' ||
+        runningSubAgentSessionIds.has(deleteTarget.id) ||
+        runningBackgroundSessionIds.has(deleteTarget.id) ||
+        streamingSessionIds.has(deleteTarget.id) ||
+        activeTeamSessionId === deleteTarget.id
+      if (hasRunning) {
+        abortSession(deleteTarget.id)
+      }
+      clearPendingSessionMessages(deleteTarget.id)
+      deleteSession(deleteTarget.id)
+      toast.success(t('sidebar_toast.sessionDeleted'))
+    }
+    setDeleteTarget(null)
+  }, [
+    activeTeamSessionId,
+    deleteProject,
+    deleteSession,
+    deleteTarget,
+    runningBackgroundSessionIds,
+    runningSessions,
+    runningSubAgentSessionIds,
+    streamingSessionIds,
+    t
+  ])
+
+  const startRename = useCallback((dialog: NonNullable<typeof renameDialog>) => {
+    setRenameDialog(dialog)
+    setRenameValue(dialog.currentName)
+  }, [])
+
+  const toggleProjectCollapsed = useCallback((projectId: string) => {
+    setCollapsedProjectIds((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }, [])
+
+  const toggleProjectExpansion = useCallback((projectId: string) => {
+    setExpandedProjectIds((current) => {
+      const next = new Set(current)
+      if (next.has(projectId)) {
+        next.delete(projectId)
+      } else {
+        next.add(projectId)
+      }
+      return next
+    })
+  }, [])
+
+  const navItems = [
+    {
+      key: 'new-chat',
+      label: t('sidebar.newChat'),
+      icon: <Pencil className="size-4 shrink-0" />,
+      active: false,
+      onClick: handleCreateChatSession
+    },
+    {
+      key: 'search',
+      label: t('sidebar.searchLabel'),
+      icon: <Search className="size-4 shrink-0" />,
+      active: false,
+      onClick: openCommandPalette
+    },
+    {
+      key: 'plugins',
+      label: t('sidebar.pluginsLabel'),
+      icon: <Wand2 className="size-4 shrink-0" />,
+      active: settingsPageOpen && useUIStore.getState().settingsTab === 'plugin',
+      onClick: () => useUIStore.getState().openSettingsPage('plugin')
+    },
+    {
+      key: 'automation',
+      label: t('sidebar.automationLabel'),
+      icon: <CalendarDays className="size-4 shrink-0" />,
+      active: tasksPageOpen,
+      onClick: () => useUIStore.getState().openTasksPage()
+    }
+  ]
+
+  const renderNavItem = (item: (typeof navItems)[number]): React.JSX.Element => (
+    <button
+      key={item.key}
+      type="button"
+      onClick={item.onClick}
+      className={cn(
+        'flex h-8 w-full items-center gap-2 px-2 text-[13px] font-medium transition-colors',
+        SIDEBAR_TREE_ROW_CLASS,
+        item.active ? SIDEBAR_TREE_ACTIVE_CLASS : SIDEBAR_TREE_HOVER_CLASS
+      )}
+    >
+      {item.icon}
+      <span className="truncate">{item.label}</span>
+    </button>
+  )
+
+  const renderSessionItem = (
+    session: SessionListItem,
+    locale: string,
+    active: boolean
+  ): React.JSX.Element => {
+    void pendingQueueSignature
+    const sessionRunStatus = runningSessions[session.id]
+    const isRunning =
+      sessionRunStatus === 'running' ||
+      sessionRunStatus === 'retrying' ||
+      runningSubAgentSessionIds.has(session.id) ||
+      runningBackgroundSessionIds.has(session.id) ||
+      streamingSessionIds.has(session.id) ||
+      activeTeamSessionId === session.id
+    const hasWaitingReply = waitingReplySessionIds.has(session.id)
+    const pendingCount = getPendingSessionMessageCountForSession(session.id)
+    const canClearSession = session.messageCount > 0 || pendingCount > 0
+
+    return (
+      <ContextMenu key={session.id}>
+        <ContextMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'group/session flex w-full items-center gap-1.5 px-1.5 py-1 text-left transition-colors',
+              SIDEBAR_TREE_ROW_CLASS,
+              active ? SIDEBAR_TREE_ACTIVE_CLASS : SIDEBAR_TREE_HOVER_CLASS
+            )}
+            onClick={() => openSession(session.id)}
+          >
+            <span className="inline-flex size-3.5 shrink-0 items-center justify-center">
+              {isRunning ? (
+                <Loader2
+                  className={`size-3.5 shrink-0 animate-spin ${
+                    sessionRunStatus === 'retrying' ? 'text-amber-500' : 'text-primary'
+                  }`}
+                />
+              ) : session.pinned ? (
+                <Pin className="size-3.5 text-amber-500" />
+              ) : (
+                <span aria-hidden="true" className="size-3.5 shrink-0" />
+              )}
+            </span>
+            <span className={cn('min-w-0 flex-1 truncate font-medium', SIDEBAR_TREE_LABEL_CLASS)}>
+              {session.title}
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-1">
+              {hasWaitingReply && (
+                <span className="whitespace-nowrap rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+                  {t('sidebar.waitingReply', { defaultValue: 'Waiting reply' })}
+                </span>
+              )}
+              {pendingCount > 0 && (
+                <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                  {pendingCount > 99 ? '99+' : pendingCount}
+                </span>
+              )}
+              <span className={cn('text-muted-foreground/80', SIDEBAR_TREE_META_CLASS)}>
+                {formatRelativeTime(session.updatedAt, locale)}
+              </span>
+            </span>
+          </button>
+        </ContextMenuTrigger>
+        <ContextMenuContent className="w-52">
+          <ContextMenuItem onClick={() => openSession(session.id)}>
+            <MessageSquare className="size-4" />
+            {t('topbar.openSession')}
+          </ContextMenuItem>
+          <ContextMenuItem onClick={() => void openDetachedSessionWindow(session.id)}>
+            <ExternalLink className="size-4" />
+            {t('sidebar.openInNewWindow')}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onSelect={() =>
+              deferDropdownAction(() =>
+                startRename({
+                  type: 'session',
+                  id: session.id,
+                  currentName: session.title
+                })
+              )
+            }
+          >
+            <Pencil className="size-4" />
+            {tCommon('action.rename')}
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!!autoRenamingSessionId || session.messageCount === 0}
+            onClick={() => {
+              void handleSmartRenameSession(session.id)
+            }}
+          >
+            {autoRenamingSessionId === session.id ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <Wand2 className="size-4" />
+            )}
+            {autoRenamingSessionId === session.id
+              ? t('sidebar.smartRenaming')
+              : t('sidebar.smartRename')}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={() => {
+              togglePinSession(session.id)
+              toast.success(
+                session.pinned ? t('sidebar_toast.unpinned') : t('sidebar_toast.pinnedMsg')
+              )
+            }}
+          >
+            {session.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
+            {session.pinned ? tCommon('action.unpin') : t('sidebar.pinToTop')}
+          </ContextMenuItem>
+          <ContextMenuItem
+            onClick={async () => {
+              await duplicateSession(session.id)
+              toast.success(t('sidebar_toast.sessionDuplicated'))
+            }}
+          >
+            <Copy className="size-4" />
+            {tCommon('action.duplicate')}
+          </ContextMenuItem>
+          {session.messageCount > 0 && (
+            <ContextMenuItem
+              onClick={async () => {
+                const snapshot = useChatStore
+                  .getState()
+                  .sessions.find((item) => item.id === session.id)
+                if (!snapshot) return
+                downloadMarkdown(
+                  `${sanitizeExportFileName(snapshot.title)}.md`,
+                  await exportSessionMarkdownFromDb(snapshot)
+                )
+                toast.success(t('sidebar_toast.exportedOne'))
+              }}
+            >
+              <FileText className="size-4" />
+              {t('sidebar.exportAsMarkdown')}
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem
+            onClick={async () => {
+              const snapshot = useChatStore
+                .getState()
+                .sessions.find((item) => item.id === session.id)
+              if (!snapshot) return
+              downloadJson(`${sanitizeExportFileName(snapshot.title)}.json`, {
+                version: 1,
+                type: 'session',
+                session: await exportSessionSnapshotFromDb(snapshot)
+              } satisfies ExportedSessionPayload)
+              toast.success(t('sidebar.exportedAsJson'))
+            }}
+          >
+            <Download className="size-4" />
+            {t('sidebar.exportAsJson')}
+          </ContextMenuItem>
+          <ContextMenuItem
+            disabled={!canClearSession}
+            onSelect={() =>
+              deferDropdownAction(() =>
+                setClearSessionTarget({
+                  id: session.id,
+                  title: session.title,
+                  pendingCount
+                })
+              )
+            }
+          >
+            <Eraser className="size-4" />
+            {t('sidebar.clearMessages')}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          <ContextMenuItem
+            variant="destructive"
+            onSelect={() =>
+              deferDropdownAction(() =>
+                setDeleteTarget({
+                  type: 'session',
+                  id: session.id,
+                  title: session.title
+                })
+              )
+            }
+          >
+            <Trash2 className="size-4" />
+            {tCommon('action.delete')}
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    )
+  }
+
+  const handleExportProject = useCallback(
+    async (project: ProjectListItem) => {
+      const projectSessions = useChatStore
+        .getState()
+        .sessions.filter((session) => session.projectId === project.id)
+      const snapshotSessions = await Promise.all(projectSessions.map(exportSessionSnapshotFromDb))
+      downloadJson(`${sanitizeExportFileName(project.name)}.json`, {
+        version: 1,
+        type: 'project',
+        project,
+        sessions: snapshotSessions
+      } satisfies ExportedProjectPayload)
+      toast.success(t('sidebar.exportedAsJson'))
+    },
+    [t]
+  )
+
+  const clearFeatureMenuCloseTimer = useCallback(() => {
+    if (!featureMenuCloseTimerRef.current) return
+    clearTimeout(featureMenuCloseTimerRef.current)
+    featureMenuCloseTimerRef.current = null
+  }, [])
+
+  const openFeatureMenu = useCallback(() => {
+    clearFeatureMenuCloseTimer()
+    setFeatureMenuOpen(true)
+  }, [clearFeatureMenuCloseTimer])
+
+  const closeFeatureMenu = useCallback(() => {
+    clearFeatureMenuCloseTimer()
+    setFeatureMenuOpen(false)
+  }, [clearFeatureMenuCloseTimer])
+
+  const scheduleFeatureMenuClose = useCallback(() => {
+    clearFeatureMenuCloseTimer()
+    featureMenuCloseTimerRef.current = setTimeout(() => {
+      setFeatureMenuOpen(false)
+      featureMenuCloseTimerRef.current = null
+    }, 120)
+  }, [clearFeatureMenuCloseTimer])
+
+  useEffect(() => clearFeatureMenuCloseTimer, [clearFeatureMenuCloseTimer])
+
+  const projectSortLabel = t(PROJECT_SORT_LABEL_KEYS[projectSortMode])
+  const ProjectSortIcon =
+    projectSortMode === 'name'
+      ? ArrowDownAZ
+      : projectSortMode === 'createdAt'
+        ? CalendarDays
+        : ListFilter
+
+  return (
+    <>
+      <aside
+        className="workspace-sidebar-surface relative flex h-full shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground"
+        style={{ width: currentSidebarWidth }}
+      >
+        <div
+          className={cn(
+            'workspace-sidebar-titlebar titlebar-drag flex h-10 shrink-0 items-center gap-2 px-2',
+            isMac ? 'pl-[104px]' : ''
+          )}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="workspace-titlebar-action titlebar-no-drag size-7 shrink-0 rounded-md text-sidebar-foreground/70 hover:text-sidebar-foreground"
+            onClick={toggleLeftSidebar}
+            title={t('commandPalette.toggleSidebar')}
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
+          <div className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-foreground/90">
+            Ola
+          </div>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="space-y-1 px-2 py-1.5">
+            {navItems.slice(0, 3).map(renderNavItem)}
+
+            <DropdownMenu
+              open={featureMenuOpen}
+              onOpenChange={(open) => {
+                if (open) {
+                  openFeatureMenu()
+                } else {
+                  closeFeatureMenu()
+                }
+              }}
+            >
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  onMouseEnter={openFeatureMenu}
+                  onMouseLeave={scheduleFeatureMenuClose}
+                  className={cn(
+                    'flex h-8 w-full items-center gap-2 px-2 text-[13px] font-medium transition-colors',
+                    SIDEBAR_TREE_ROW_CLASS,
+                    featureMenuActive || featureMenuOpen
+                      ? SIDEBAR_TREE_ACTIVE_CLASS
+                      : SIDEBAR_TREE_HOVER_CLASS
+                  )}
+                >
+                  <FolderOpen className="size-4 shrink-0" />
+                  <span className="truncate">{t('sidebar.extensionsLabel')}</span>
+                  <ChevronRight className="ml-auto size-3.5 shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                side="right"
+                align="start"
+                sideOffset={6}
+                className="w-40"
+                onMouseEnter={openFeatureMenu}
+                onMouseLeave={scheduleFeatureMenuClose}
+              >
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openResourcesPage()}
+                  className={cn(resourcesPageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <FolderOpen className="size-4" />
+                  <span>{t('navRail.resources')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openDrawPage()}
+                  className={cn(drawPageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <Image className="size-4" />
+                  <span>{t('navRail.draw')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openSkillsPage()}
+                  className={cn(skillsPageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <Wand2 className="size-4" />
+                  <span>{t('navRail.skills')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openSoulsPage()}
+                  className={cn(soulsPageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <Sparkles className="size-4" />
+                  <span>{t('navRail.souls')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openSyncPage()}
+                  className={cn(syncPageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <CloudSync className="size-4" />
+                  <span>{t('navRail.sync')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
+                  }}
+                >
+                  <Monitor className="size-4" />
+                  <span>{t('navRail.ssh')}</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {navItems.slice(3).map(renderNavItem)}
+          </div>
+
+          <div
+            ref={treeScrollRef}
+            className={cn(
+              'min-h-0 flex-1 overflow-y-auto px-2 pb-2',
+              isFolderDragOver && 'rounded-lg ring-2 ring-primary/50 ring-inset'
+            )}
+            onDragOver={(event) => {
+              if (!Array.from(event.dataTransfer.types).includes('Files')) return
+              event.preventDefault()
+              event.dataTransfer.dropEffect = 'copy'
+              if (!isFolderDragOver) setIsFolderDragOver(true)
+            }}
+            onDragLeave={(event) => {
+              const next = event.relatedTarget as Node | null
+              if (next && event.currentTarget.contains(next)) return
+              setIsFolderDragOver(false)
+            }}
+            onDrop={(event) => {
+              if (!Array.from(event.dataTransfer.types).includes('Files')) return
+              event.preventDefault()
+              setIsFolderDragOver(false)
+              void handleDropFolders(event.dataTransfer)
+            }}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2 px-1">
+              <button
+                type="button"
+                aria-expanded={!projectsSectionCollapsed}
+                className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left transition-colors hover:bg-accent/70 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                onClick={() => setProjectsSectionCollapsed((collapsed) => !collapsed)}
+                title={projectsSectionCollapsed ? t('rightPanel.expand') : t('rightPanel.collapse')}
+              >
+                {projectsSectionCollapsed ? (
+                  <ChevronRight className="size-3 text-muted-foreground/80" />
+                ) : (
+                  <ChevronDown className="size-3 text-muted-foreground/80" />
+                )}
+                <span className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/80">
+                  {t('sidebar.projects')}
+                </span>
+                <span className="rounded-full border border-border/60 bg-muted/45 px-1 py-0.5 text-[9px] text-muted-foreground">
+                  {projectGroups.length}
+                </span>
+              </button>
+              <div className="flex items-center gap-0.5">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6"
+                      title={t('sidebar.projectSortTitle', { sort: projectSortLabel })}
+                      aria-label={t('sidebar.projectSortTitle', { sort: projectSortLabel })}
+                    >
+                      <ProjectSortIcon className="size-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel className="px-2 py-1 text-[11px] text-muted-foreground">
+                      {t('sidebar.projectSortBy')}
+                    </DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={projectSortMode}
+                      onValueChange={handleProjectSortModeChange}
+                    >
+                      {PROJECT_SORT_MODES.map((mode) => {
+                        const SortOptionIcon =
+                          mode === 'name'
+                            ? ArrowDownAZ
+                            : mode === 'createdAt'
+                              ? CalendarDays
+                              : ListFilter
+                        return (
+                          <DropdownMenuRadioItem key={mode} value={mode}>
+                            <SortOptionIcon className="size-4" />
+                            <span>{t(PROJECT_SORT_LABEL_KEYS[mode])}</span>
+                          </DropdownMenuRadioItem>
+                        )
+                      })}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() => importProjectInputRef.current?.click()}
+                  title={t('sidebar.importProject')}
+                >
+                  <Upload className="size-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  onClick={() =>
+                    setFolderPickerTarget({
+                      type: 'create',
+                      projectName: t('sidebar.newProject'),
+                      preferredSection: 'local'
+                    })
+                  }
+                  title={t('sidebar.newProject')}
+                >
+                  <Plus className="size-3.5" />
+                </Button>
+              </div>
+            </div>
+
+            <div
+              className={cn(
+                'grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out',
+                projectsSectionCollapsed
+                  ? 'grid-rows-[0fr] opacity-0'
+                  : 'grid-rows-[1fr] opacity-100'
+              )}
+            >
+              <div className="min-h-0 overflow-hidden">
+                {projectGroups.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-border/60 px-3.5 py-5 text-center text-[12px] text-muted-foreground">
+                    {t('sidebar.noProjects')}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {projectGroups.map((group) => {
+                      const project = group.project
+                      const isCollapsed = collapsedProjectIds.has(project.id)
+                      const isProjectActive =
+                        chatSurfaceActive && currentProjectId === project.id && chatView !== 'home'
+                      const defaultVisibleSessions = group.sessions.filter(
+                        (session, index) =>
+                          index < DEFAULT_VISIBLE_SESSIONS_PER_PROJECT ||
+                          session.id === activeSessionId
+                      )
+                      const displayedSessions = expandedProjectIds.has(project.id)
+                        ? group.sessions
+                        : defaultVisibleSessions
+                      const remainingSessions = Math.max(
+                        0,
+                        group.sessions.length - displayedSessions.length
+                      )
+                      const canToggleExpansion =
+                        group.sessions.length > DEFAULT_VISIBLE_SESSIONS_PER_PROJECT
+                      const runningProjectSessionCount = group.sessions.filter((session) =>
+                        isSessionRunning(session.id)
+                      ).length
+                      const clearableProjectSessionCount =
+                        group.sessions.length - runningProjectSessionCount
+                      const projectToggleTitle = isCollapsed
+                        ? t('rightPanel.expand')
+                        : t('rightPanel.collapse')
+                      const ProjectIcon = project.sshConnectionId ? Server : FolderOpen
+                      const handleProjectRowKeyDown = (
+                        event: React.KeyboardEvent<HTMLDivElement>
+                      ): void => {
+                        if (event.target !== event.currentTarget) return
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        event.preventDefault()
+                        toggleProjectCollapsed(project.id)
+                      }
+
+                      return (
+                        <div key={project.id} className="space-y-0.5">
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                              <div
+                                role="button"
+                                tabIndex={0}
+                                aria-label={`${project.name} ${projectToggleTitle}`}
+                                className={cn(
+                                  'group/project flex w-full items-center gap-1.5 px-1.5 py-1 transition-colors',
+                                  SIDEBAR_TREE_ROW_CLASS,
+                                  SIDEBAR_TREE_HOVER_CLASS,
+                                  isProjectActive && 'text-foreground'
+                                )}
+                                onClick={() => toggleProjectCollapsed(project.id)}
+                                onKeyDown={handleProjectRowKeyDown}
+                                title={project.workingFolder ?? project.name}
+                              >
+                                <ProjectIcon
+                                  className={cn(
+                                    'size-3.5 shrink-0',
+                                    isProjectActive ? 'text-primary/80' : 'text-muted-foreground/80'
+                                  )}
+                                />
+
+                                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                                  <span
+                                    className={cn(
+                                      'truncate font-semibold text-foreground',
+                                      SIDEBAR_TREE_LABEL_CLASS
+                                    )}
+                                  >
+                                    {project.name}
+                                  </span>
+                                  {project.sshConnectionId ? (
+                                    <span
+                                      className="inline-flex shrink-0 items-center gap-0.5 rounded border border-sky-500/30 bg-sky-500/10 px-1 py-px text-[9px] font-semibold leading-none text-sky-600 dark:text-sky-300"
+                                      title={t('sidebar.sshProject')}
+                                    >
+                                      <Server className="size-2.5" />
+                                      {t('sidebar.sshLabel')}
+                                    </span>
+                                  ) : null}
+                                </div>
+
+                                <div className="relative flex h-6 w-[88px] shrink-0 items-center justify-end overflow-hidden">
+                                  <div
+                                    className={cn(
+                                      'absolute inset-0 flex items-center justify-end gap-1 text-muted-foreground transition-opacity',
+                                      SIDEBAR_TREE_META_CLASS,
+                                      isProjectActive
+                                        ? 'pointer-events-none opacity-0'
+                                        : 'opacity-100 group-hover/project:opacity-0'
+                                    )}
+                                  >
+                                    {group.isRunning ? (
+                                      <Loader2 className="size-3.5 animate-spin text-primary" />
+                                    ) : null}
+                                    {project.pinned ? (
+                                      <Pin className="size-3.5 text-amber-500" />
+                                    ) : null}
+                                    <span className="text-muted-foreground/80">
+                                      {project.sshConnectionId
+                                        ? t('sidebar.sshLabel')
+                                        : t('sidebar.localLabel')}
+                                    </span>
+                                    <span>{group.sessions.length}</span>
+                                    <ChevronRight
+                                      className={cn(
+                                        'size-3.5 transition-transform duration-200 ease-out',
+                                        !isCollapsed && 'rotate-90'
+                                      )}
+                                    />
+                                  </div>
+
+                                  <div
+                                    className={cn(
+                                      'absolute inset-0 flex items-center justify-end gap-0.5 transition-opacity',
+                                      isProjectActive
+                                        ? 'opacity-100'
+                                        : 'pointer-events-none opacity-0 group-hover/project:pointer-events-auto group-hover/project:opacity-100'
+                                    )}
+                                  >
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className={SIDEBAR_TREE_ACTION_BUTTON_CLASS}
+                                      onClick={(event) => {
+                                        event.stopPropagation()
+                                        handleCreateSession(project.id)
+                                      }}
+                                      title={t('sidebar.newChat')}
+                                    >
+                                      <Plus className="size-3.5" />
+                                    </Button>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className={SIDEBAR_TREE_ACTION_BUTTON_CLASS}
+                                          onClick={(event) => event.stopPropagation()}
+                                          title={tCommon('action.more')}
+                                        >
+                                          <MoreHorizontal className="size-3.5" />
+                                        </Button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-52">
+                                        <DropdownMenuItem
+                                          onClick={() => openProjectSession(project.id)}
+                                        >
+                                          <ProjectIcon className="size-4" />
+                                          {t('sidebar.openProject')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={() =>
+                                            deferDropdownAction(() =>
+                                              startRename({
+                                                type: 'project',
+                                                id: project.id,
+                                                currentName: project.name
+                                              })
+                                            )
+                                          }
+                                        >
+                                          <Pencil className="size-4" />
+                                          {tCommon('action.rename')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={() =>
+                                            deferDropdownAction(() =>
+                                              setFolderPickerTarget({
+                                                type: 'project',
+                                                projectId: project.id
+                                              })
+                                            )
+                                          }
+                                        >
+                                          <FolderInput className="size-4" />
+                                          {t('sidebar.changeWorkingFolder')}
+                                        </DropdownMenuItem>
+                                        {project.workingFolder && !project.sshConnectionId && (
+                                          <DropdownMenuItem
+                                            onClick={() =>
+                                              void handleRevealProject(project.workingFolder)
+                                            }
+                                          >
+                                            <ExternalLink className="size-4" />
+                                            {t('sidebar.revealInFolder')}
+                                          </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onClick={() => navigateProjectView(project.id, 'archive')}
+                                        >
+                                          <BookOpen className="size-4" />
+                                          {t('sidebar.projectArchive')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() =>
+                                            navigateProjectView(project.id, 'channels')
+                                          }
+                                        >
+                                          <MessageSquare className="size-4" />
+                                          {t('sidebar.projectChannels')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => navigateProjectView(project.id, 'git')}
+                                        >
+                                          <GitBranch className="size-4" />
+                                          {t('sidebar.projectGit')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          onClick={() => void handleExportProject(project)}
+                                        >
+                                          <Download className="size-4" />
+                                          {t('sidebar.exportProjectAsJson')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          variant="destructive"
+                                          disabled={clearableProjectSessionCount === 0}
+                                          onSelect={() =>
+                                            deferDropdownAction(() =>
+                                              setClearProjectSessionsTarget({
+                                                id: project.id,
+                                                name: project.name,
+                                                clearableCount: clearableProjectSessionCount,
+                                                runningCount: runningProjectSessionCount
+                                              })
+                                            )
+                                          }
+                                        >
+                                          <Eraser className="size-4" />
+                                          {t('sidebar.clearProjectSessions')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onClick={() => {
+                                            togglePinProject(project.id)
+                                            toast.success(
+                                              project.pinned
+                                                ? t('sidebar_toast.projectUnpinned')
+                                                : t('sidebar_toast.projectPinned')
+                                            )
+                                          }}
+                                        >
+                                          {project.pinned ? (
+                                            <PinOff className="size-4" />
+                                          ) : (
+                                            <Pin className="size-4" />
+                                          )}
+                                          {project.pinned
+                                            ? tCommon('action.unpin')
+                                            : t('sidebar.pinToTop')}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                          variant="destructive"
+                                          onSelect={() =>
+                                            deferDropdownAction(() =>
+                                              setDeleteTarget({
+                                                type: 'project',
+                                                id: project.id,
+                                                name: project.name,
+                                                sessionCount: group.sessions.length
+                                              })
+                                            )
+                                          }
+                                        >
+                                          <Trash2 className="size-4" />
+                                          {tCommon('action.delete')}
+                                        </DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+                                  </div>
+                                </div>
+                              </div>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent className="w-52">
+                              <ContextMenuItem onClick={() => openProjectSession(project.id)}>
+                                <ProjectIcon className="size-4" />
+                                {t('sidebar.openProject')}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onSelect={() =>
+                                  deferDropdownAction(() =>
+                                    startRename({
+                                      type: 'project',
+                                      id: project.id,
+                                      currentName: project.name
+                                    })
+                                  )
+                                }
+                              >
+                                <Pencil className="size-4" />
+                                {tCommon('action.rename')}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onSelect={() =>
+                                  deferDropdownAction(() =>
+                                    setFolderPickerTarget({
+                                      type: 'project',
+                                      projectId: project.id
+                                    })
+                                  )
+                                }
+                              >
+                                <FolderInput className="size-4" />
+                                {t('sidebar.changeWorkingFolder')}
+                              </ContextMenuItem>
+                              {project.workingFolder && !project.sshConnectionId && (
+                                <ContextMenuItem
+                                  onClick={() => void handleRevealProject(project.workingFolder)}
+                                >
+                                  <ExternalLink className="size-4" />
+                                  {t('sidebar.revealInFolder')}
+                                </ContextMenuItem>
+                              )}
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                onClick={() => navigateProjectView(project.id, 'archive')}
+                              >
+                                <BookOpen className="size-4" />
+                                {t('sidebar.projectArchive')}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => navigateProjectView(project.id, 'channels')}
+                              >
+                                <MessageSquare className="size-4" />
+                                {t('sidebar.projectChannels')}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => navigateProjectView(project.id, 'git')}
+                              >
+                                <GitBranch className="size-4" />
+                                {t('sidebar.projectGit')}
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem onClick={() => void handleExportProject(project)}>
+                                <Download className="size-4" />
+                                {t('sidebar.exportProjectAsJson')}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                variant="destructive"
+                                disabled={clearableProjectSessionCount === 0}
+                                onSelect={() =>
+                                  deferDropdownAction(() =>
+                                    setClearProjectSessionsTarget({
+                                      id: project.id,
+                                      name: project.name,
+                                      clearableCount: clearableProjectSessionCount,
+                                      runningCount: runningProjectSessionCount
+                                    })
+                                  )
+                                }
+                              >
+                                <Eraser className="size-4" />
+                                {t('sidebar.clearProjectSessions')}
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => {
+                                  togglePinProject(project.id)
+                                  toast.success(
+                                    project.pinned
+                                      ? t('sidebar_toast.projectUnpinned')
+                                      : t('sidebar_toast.projectPinned')
+                                  )
+                                }}
+                              >
+                                {project.pinned ? (
+                                  <PinOff className="size-4" />
+                                ) : (
+                                  <Pin className="size-4" />
+                                )}
+                                {project.pinned ? tCommon('action.unpin') : t('sidebar.pinToTop')}
+                              </ContextMenuItem>
+                              <ContextMenuSeparator />
+                              <ContextMenuItem
+                                variant="destructive"
+                                onSelect={() =>
+                                  deferDropdownAction(() =>
+                                    setDeleteTarget({
+                                      type: 'project',
+                                      id: project.id,
+                                      name: project.name,
+                                      sessionCount: group.sessions.length
+                                    })
+                                  )
+                                }
+                              >
+                                <Trash2 className="size-4" />
+                                {tCommon('action.delete')}
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
+
+                          <div
+                            className={cn(
+                              'grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out',
+                              isCollapsed
+                                ? 'grid-rows-[0fr] opacity-0'
+                                : 'grid-rows-[1fr] opacity-100'
+                            )}
+                          >
+                            <div
+                              className="min-h-0 space-y-0.5 overflow-hidden"
+                              title={project.workingFolder ?? project.name}
+                            >
+                              {displayedSessions.length > 0 ? (
+                                <>
+                                  {displayedSessions.map((session) =>
+                                    renderSessionItem(
+                                      session,
+                                      relativeTimeLocale,
+                                      chatSurfaceActive &&
+                                        chatView === 'session' &&
+                                        session.id === activeSessionId
+                                    )
+                                  )}
+                                  {canToggleExpansion ? (
+                                    <button
+                                      type="button"
+                                      className={cn(
+                                        'flex h-6 items-center gap-1 rounded-md border border-transparent px-1.5 text-[10px] text-muted-foreground transition-colors',
+                                        'hover:border-border/60 hover:bg-accent/80 hover:text-accent-foreground'
+                                      )}
+                                      onClick={() => toggleProjectExpansion(project.id)}
+                                    >
+                                      {expandedProjectIds.has(project.id) ? (
+                                        <ChevronDown className="size-3" />
+                                      ) : (
+                                        <ChevronRight className="size-3" />
+                                      )}
+                                      <span>
+                                        {expandedProjectIds.has(project.id)
+                                          ? t('sidebar.showLessSessions')
+                                          : t('sidebar.showMoreSessions', {
+                                              count: remainingSessions
+                                            })}
+                                      </span>
+                                    </button>
+                                  ) : null}
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-2 pt-1">
+              <div className="flex items-center justify-between gap-2 px-1">
+                <button
+                  type="button"
+                  aria-expanded={!chatsSectionCollapsed}
+                  className="flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-1 text-left transition-colors hover:bg-accent/70 hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  onClick={() => setChatsSectionCollapsed((collapsed) => !collapsed)}
+                  title={chatsSectionCollapsed ? t('rightPanel.expand') : t('rightPanel.collapse')}
+                >
+                  {chatsSectionCollapsed ? (
+                    <ChevronRight className="size-3 text-muted-foreground/80" />
+                  ) : (
+                    <ChevronDown className="size-3 text-muted-foreground/80" />
+                  )}
+                  <span className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/80">
+                    {t('sidebar.chats')}
+                  </span>
+                  <span className="rounded-full border border-border/60 bg-muted/45 px-1 py-0.5 text-[9px] text-muted-foreground">
+                    {chatSessions.length}
+                  </span>
+                </button>
+                <div className="flex items-center gap-0.5">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-4"
+                        title={tCommon('action.more')}
+                      >
+                        <MoreHorizontal className="size-2.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <DropdownMenuItem onClick={() => importSessionInputRef.current?.click()}>
+                        <Upload className="size-4" />
+                        {t('sidebar.importSession')}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onSelect={() => deferDropdownAction(() => void handleClearChatSessions())}
+                        disabled={chatSessions.length === 0}
+                      >
+                        <Trash2 className="size-4" />
+                        {t('sidebar.deleteAllSessions')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="size-4"
+                    onClick={handleCreateChatSession}
+                    title={t('sidebar.newChat')}
+                  >
+                    <Plus className="size-2.5" />
+                  </Button>
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  'mt-2 grid overflow-hidden transition-[grid-template-rows,opacity] duration-200 ease-out',
+                  chatsSectionCollapsed
+                    ? 'grid-rows-[0fr] opacity-0'
+                    : 'grid-rows-[1fr] opacity-100'
+                )}
+              >
+                <div className="min-h-0 space-y-0.5 overflow-hidden">
+                  {chatSessions.length > 0 ? (
+                    chatSessions.map((session) =>
+                      renderSessionItem(
+                        session,
+                        relativeTimeLocale,
+                        chatSurfaceActive &&
+                          chatView === 'session' &&
+                          session.id === activeSessionId
+                      )
+                    )
+                  ) : (
+                    <div className="px-1.5 py-1 text-[10px] text-muted-foreground">
+                      {t('sidebar.noChats')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="mt-auto px-2 pb-2 pt-1.5">
+          <Button
+            variant="ghost"
+            className={cn(
+              'h-8 w-full justify-between gap-2 px-2 text-[12px]',
+              SIDEBAR_TREE_ROW_CLASS,
+              SIDEBAR_TREE_HOVER_CLASS
+            )}
+            onClick={() => useUIStore.getState().openSettingsPage('general')}
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <Settings className="size-4 shrink-0" />
+              <span className="truncate">{t('sidebar.systemSettings')}</span>
+            </span>
+            <span className="shrink-0 text-[10px] text-muted-foreground/80">
+              v{packageJson.version}
+            </span>
+          </Button>
+        </div>
+
+        <input
+          ref={importSessionInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={handleImportSessionFile}
+        />
+        <input
+          ref={importProjectInputRef}
+          type="file"
+          accept="application/json,.json"
+          className="hidden"
+          onChange={handleImportProjectFile}
+        />
+        <div
+          className="absolute right-0 top-0 h-full w-1.5 cursor-col-resize transition-colors hover:bg-primary/20"
+          onMouseDown={(event) => {
+            event.preventDefault()
+            const startX = event.clientX
+            const startWidth = currentSidebarWidth
+            const handleMouseMove = (mouseEvent: MouseEvent): void => {
+              setLeftSidebarWidth(startWidth + (mouseEvent.clientX - startX))
+            }
+            const handleMouseUp = (): void => {
+              const nextWidth = clampLeftSidebarWidth(useUIStore.getState().leftSidebarWidth)
+              setLeftSidebarWidth(nextWidth)
+              updateSettings({ leftSidebarWidth: nextWidth })
+              window.removeEventListener('mousemove', handleMouseMove)
+              window.removeEventListener('mouseup', handleMouseUp)
+            }
+            window.addEventListener('mousemove', handleMouseMove)
+            window.addEventListener('mouseup', handleMouseUp)
+          }}
+        />
+      </aside>
+
+      <Dialog open={!!renameDialog} onOpenChange={(open) => !open && setRenameDialog(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{tCommon('action.rename')}</DialogTitle>
+          </DialogHeader>
+          <Input value={renameValue} onChange={(event) => setRenameValue(event.target.value)} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameDialog(null)}>
+              {tCommon('action.cancel')}
+            </Button>
+            <Button onClick={confirmRename}>{tCommon('action.save')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <WorkingFolderSelectorDialog
+        open={!!folderPickerTarget}
+        onOpenChange={(open) => {
+          if (!open) setFolderPickerTarget(null)
+        }}
+        workingFolder={folderPickerProject?.workingFolder}
+        sshConnectionId={folderPickerProject?.sshConnectionId}
+        projectName={
+          folderPickerTarget?.type === 'create' ? folderPickerTarget.projectName : undefined
+        }
+        createMode={folderPickerTarget?.type === 'create'}
+        preferredSection={
+          folderPickerTarget?.type === 'create' ? folderPickerTarget.preferredSection : undefined
+        }
+        onSelectLocalFolder={async (folderPath) => {
+          if (folderPickerTarget?.type === 'create') {
+            await handleCreateProjectWithDirectory(folderPath, null)
+            return
+          }
+          if (!folderPickerProjectId) return
+          updateProjectDirectory(folderPickerProjectId, {
+            workingFolder: folderPath,
+            sshConnectionId: null
+          })
+          toast.success(t('sidebar_toast.projectWorkingFolderUpdated'))
+        }}
+        onSelectSshFolder={async (folderPath, connectionId) => {
+          if (folderPickerTarget?.type === 'create') {
+            await handleCreateProjectWithDirectory(folderPath, connectionId)
+            return
+          }
+          if (!folderPickerProjectId) return
+          updateProjectDirectory(folderPickerProjectId, {
+            workingFolder: folderPath,
+            sshConnectionId: connectionId
+          })
+          toast.success(t('sidebar_toast.projectWorkingFolderUpdated'))
+        }}
+      />
+
+      <AlertDialog
+        open={!!clearSessionTarget}
+        onOpenChange={(open) => !open && setClearSessionTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('sidebar.clearMessagesConfirmTitle', {
+                title: clearSessionTarget?.title ?? ''
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('sidebar.clearMessagesConfirmDescription')}
+              {(clearSessionTarget?.pendingCount ?? 0) > 0
+                ? ` ${t('sidebar.clearQueuedMessagesNotice', {
+                    count: clearSessionTarget?.pendingCount ?? 0
+                  })}`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tCommon('action.cancel')}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmClearSessionMessages}>
+              {t('sidebar.clearMessagesConfirmAction')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!clearProjectSessionsTarget}
+        onOpenChange={(open) => !open && setClearProjectSessionsTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('sidebar.clearProjectSessionsConfirmTitle', {
+                projectName: clearProjectSessionsTarget?.name ?? ''
+              })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('sidebar.clearProjectSessionsConfirmDescription', {
+                count: clearProjectSessionsTarget?.clearableCount ?? 0
+              })}
+              {(clearProjectSessionsTarget?.runningCount ?? 0) > 0
+                ? ` ${t('sidebar.clearProjectSessionsRunningNotice', {
+                    count: clearProjectSessionsTarget?.runningCount ?? 0
+                  })}`
+                : ''}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tCommon('action.cancel')}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={confirmClearProjectSessions}>
+              {t('sidebar.clearProjectSessionsConfirmAction')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{tCommon('action.delete')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.type === 'project'
+                ? t('sidebar.deleteProjectConfirm', {
+                    projectName: deleteTarget.name,
+                    count: deleteTarget.sessionCount
+                  })
+                : t('sidebar.deleteConfirm', { title: deleteTarget?.title ?? '' })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{tCommon('action.cancel')}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={() => void confirmDelete()}>
+              {tCommon('action.delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  )
+}

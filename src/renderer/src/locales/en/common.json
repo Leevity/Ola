@@ -1,0 +1,273 @@
+{
+  "action": {
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "save": "Save",
+    "confirm": "Confirm",
+    "close": "Close",
+    "copy": "Copy",
+    "copyPath": "Copy Path",
+    "rename": "Rename",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "send": "Send",
+    "stop": "Stop",
+    "start": "Start",
+    "clear": "Clear",
+    "allow": "Allow",
+    "deny": "Deny",
+    "undo": "Undo",
+    "open": "Open",
+    "export": "Export",
+    "import": "Import",
+    "duplicate": "Duplicate",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "showMore": "Show more",
+    "showLess": "Show less",
+    "more": "More"
+  },
+  "status": {
+    "running": "running",
+    "done": "done",
+    "pending": "pending",
+    "active": "active",
+    "completed": "completed",
+    "working": "working",
+    "idle": "idle",
+    "waiting": "waiting",
+    "stopped": "stopped",
+    "failed": "failed",
+    "error": "Error"
+  },
+  "time": {
+    "justNow": "just now",
+    "mAgo": "{{count}}m ago",
+    "hAgo": "{{count}}h ago",
+    "dAgo": "{{count}}d ago",
+    "sAgo": "{{count}}s ago",
+    "sSession": "{{count}}s session",
+    "mSession": "{{count}}m session",
+    "hmSession": "{{h}}h{{m}}m session"
+  },
+  "unit": {
+    "tokens": "tokens",
+    "cached": "cached",
+    "reasoning": "reasoning",
+    "messages": "messages",
+    "turns": "turns",
+    "members": "members",
+    "tasks": "tasks",
+    "items": "items",
+    "lines": "lines",
+    "files": "files",
+    "folders": "folders",
+    "calls": "calls",
+    "deps": "deps",
+    "chars": "chars",
+    "matches": "matches",
+    "sessions": "sessions",
+    "msgs": "msgs"
+  },
+  "priority": {
+    "high": "high",
+    "medium": "medium",
+    "low": "low"
+  },
+  "theme": {
+    "light": "light",
+    "dark": "dark",
+    "system": "system"
+  },
+  "mode": {
+    "chat": "Chat",
+    "clarify": "Clarify",
+    "cowork": "Cowork",
+    "code": "Code",
+    "acp": "ACP",
+    "descriptions": {
+      "chat": "Quick conversation, no project tools",
+      "clarify": "Turn ambiguity into a reviewable plan",
+      "cowork": "Plan, act, and verify alongside you",
+      "code": "Focused hands-on implementation",
+      "acp": "Architect and delegate to sub-agents"
+    }
+  },
+  "onboarding": {
+    "start": "Start",
+    "next": "Next",
+    "back": "Previous",
+    "intro": {
+      "title": "Hi, welcome to Ola",
+      "subtitle": "Ola is a local-first workspace for multi-agent AI collaboration. It can read your project context, use local tools with approval, and help agents work alongside you in code, research, planning, and daily workflows.",
+      "points": {
+        "local": {
+          "title": "Local tools, real context",
+          "desc": "Agents can work with files, terminals, projects, memory, and workspace context on your machine."
+        },
+        "team": {
+          "title": "Multi-agent collaboration",
+          "desc": "Create focused assistants, delegate tasks, and keep a human-in-the-loop workflow."
+        },
+        "memory": {
+          "title": "Personal identity and memory",
+          "desc": "Choose a SOUL.md persona and profile so every new request starts from the right collaboration style."
+        }
+      }
+    },
+    "language": {
+      "title": "Which language should we use?",
+      "shortLabel": "Language",
+      "detected": "System language detected: {{language}}",
+      "zh": "Simplified Chinese",
+      "en": "English"
+    },
+    "nickname": {
+      "title": "What should Ola call you?",
+      "subtitle": "This is stored locally and written into USER.md so agents can address you naturally.",
+      "placeholder": "Your nickname"
+    },
+    "interests": {
+      "title": "What areas are you interested in?",
+      "subtitle": "Pick one or more. Ola uses this to choose better defaults and personalize your local profile.",
+      "options": {
+        "content": "Content creation",
+        "coding": "Coding and development",
+        "design": "Design and creativity",
+        "learning": "Learning and research",
+        "business": "Business strategy",
+        "marketing": "Marketing and growth",
+        "product": "Product management",
+        "sales": "Sales and customers",
+        "operations": "Operations and admin",
+        "hr": "People and HR",
+        "financeLaw": "Finance and legal",
+        "creatorEconomy": "Creator economy",
+        "investment": "Investing and finance",
+        "family": "Family and parenting",
+        "health": "Health and habits",
+        "culture": "Hobbies and culture",
+        "personal": "Personal life",
+        "other": "Other areas"
+      }
+    },
+    "soul": {
+      "title": "Choose your default SOUL",
+      "subtitle": "SOUL.md defines the assistant's long-term identity, communication style, and behavior boundaries. You can change it later in Global Identity & Memory.",
+      "loading": "Loading built-in SOUL templates...",
+      "loadFailed": "Failed to load built-in SOUL templates",
+      "installFailed": "Failed to install default SOUL",
+      "empty": "No built-in SOUL templates were found.",
+      "retry": "Retry"
+    },
+    "done": {
+      "action": "Enter Ola",
+      "toast": "Ola is ready",
+      "failed": "Failed to finish setup"
+    }
+  },
+  "builtinSouls": {
+    "templates": {
+      "balanced-collaborator": {
+        "name": "Balanced Professional Collaborator",
+        "description": "A steady default persona for mixed daily work, thoughtful discussion, and general assistance."
+      },
+      "senior-engineering-partner": {
+        "name": "Senior Software Engineering Partner",
+        "description": "A rigorous programming persona for reading code, making scoped changes, debugging, reviews, and technical decisions."
+      },
+      "daily-life-assistant": {
+        "name": "Daily Life Assistant",
+        "description": "A pragmatic everyday persona for planning, reminders, decisions, messages, travel, learning, and personal organization."
+      },
+      "emotionally-attuned-companion": {
+        "name": "Emotionally Attuned Companion",
+        "description": "A careful emotional support persona for reflective conversation, relationship wording, and difficult moments."
+      },
+      "research-writing-strategist": {
+        "name": "Research and Writing Strategist",
+        "description": "A precise persona for research synthesis, writing plans, editing, argument quality, and source-aware work."
+      },
+      "product-strategy-operator": {
+        "name": "Product Strategy Operator",
+        "description": "A product and business persona for prioritization, UX tradeoffs, launch planning, and operational clarity."
+      }
+    },
+    "categories": {
+      "general": "general",
+      "coding": "coding",
+      "daily": "daily",
+      "emotional": "emotional",
+      "research": "research",
+      "business": "business"
+    },
+    "tags": {
+      "daily": "daily",
+      "balanced": "balanced",
+      "clear": "clear",
+      "programming": "programming",
+      "debugging": "debugging",
+      "review": "review",
+      "planning": "planning",
+      "organization": "organization",
+      "everyday": "everyday",
+      "emotional-support": "emotional support",
+      "reflection": "reflection",
+      "relationships": "relationships",
+      "research": "research",
+      "writing": "writing",
+      "editing": "editing",
+      "product": "product",
+      "strategy": "strategy",
+      "operations": "operations"
+    }
+  },
+  "contextWindow": "Context window",
+  "app": {
+    "cron": {
+      "status": {
+        "success": "✅ Success",
+        "error": "❌ Failed",
+        "stopped": "⚠️ Stopped"
+      },
+      "toolCallCount": "{{count}} tool calls",
+      "runFinished": "Cron task \"{{jobName}}\" completed ({{statusLabel}}, {{toolCallLabel}})",
+      "errorDetail": "**Error:** {{message}}",
+      "noOutput": "(no output)"
+    },
+    "changelog": {
+      "title": "Changelog",
+      "translate": "AI Translate",
+      "translating": "Translating...",
+      "showOriginal": "Show Original",
+      "showTranslation": "Show Translation",
+      "translateError": "Translation failed",
+      "noProvider": "No AI provider configured. Set up a provider in Settings first."
+    },
+    "update": {
+      "availableTitle": "🎉 Version {{version}} is available",
+      "availableDescription": "Click \"Update now\" to start downloading",
+      "buttonLabel": "Update v{{version}}",
+      "buttonTooltip": "A new version is available. Click to view release notes.",
+      "currentVersion": "Current v{{version}}",
+      "latestVersion": "Latest v{{version}}",
+      "releaseNotes": "Release notes",
+      "noReleaseNotes": "No release notes were provided for this version.",
+      "downloading": "Downloading update...",
+      "downloadingShort": "{{progress}}%",
+      "downloadingProgress": "Downloading update {{progress}}%",
+      "actions": {
+        "updateNow": "Update now",
+        "remindLater": "Remind me later"
+      },
+      "downloadFailed": "Download failed",
+      "delayed": "Update postponed",
+      "downloadedTitle": "Update downloaded",
+      "downloadedDescription": "Version {{version}} will install after restart",
+      "failed": "Update failed"
+    },
+    "errors": {
+      "unhandledTitle": "Unhandled Error"
+    }
+  }
+}
