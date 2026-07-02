@@ -1,6 +1,14 @@
 appId: com.ola.app
 productName: Ola
+# Windows resource requires FileVersion to be a 4-segment number
+# (major.minor.patch.build). The 'buildVersion' shortcut is concatenated
+# with ${version} as a literal string, so we set the explicit 4-segment
+# numbers via releaseInfo instead.
 buildVersion: 1.0.0.0
+releaseInfo:
+  releaseNotes: Ola v${version}
+  fileVersion: 1.0.0.0
+  productVersion: 1.0.0.0
 directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs
@@ -102,10 +110,6 @@ asarUnpack:
 win:
   executableName: ola
   icon: build/icon.ico
-  # Windows resource requires FileVersion to be a 4-segment number
-  # (major.minor.patch.build). Pin to the release's resolved version.
-  fileVersion: 1.0.0.0
-  productVersion: 1.0.0.0
   legalTrademarks: Ola
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
