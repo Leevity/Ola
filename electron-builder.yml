@@ -1,14 +1,9 @@
 appId: com.ola.app
 productName: Ola
-# Windows resource requires FileVersion to be a 4-segment number
-# (major.minor.patch.build). The 'buildVersion' shortcut is concatenated
-# with ${version} as a literal string, so we set the explicit 4-segment
-# numbers via releaseInfo instead.
+# Pin to a 4-segment version so the Windows resource compiler accepts
+# FileVersion. Use a literal value (not ${version}) so electron-builder
+# does not concatenate the placeholder as a raw string into rcedit args.
 buildVersion: 1.0.0.0
-releaseInfo:
-  releaseNotes: Ola v${version}
-  fileVersion: 1.0.0.0
-  productVersion: 1.0.0.0
 directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs
