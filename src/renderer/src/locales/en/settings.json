@@ -946,6 +946,8 @@
     "addedProvider": "Added provider: {{name}}",
     "proxyUrl": "API Proxy URL",
     "proxyUrlHint": "Custom endpoint for proxy or third-party compatible services",
+    "resetToDefault": "Reset to default",
+    "resetToDefaultSuccess": "{{field}} has been reset to default",
     "userAgent": "User-Agent",
     "userAgentHint": "Leave empty to use {{defaultUserAgent}}. Set a custom value to simulate another client.",
     "connectionCheck": "Connection Check",

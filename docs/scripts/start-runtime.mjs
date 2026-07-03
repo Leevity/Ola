@@ -5,10 +5,10 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 
-const releaseRepo = process.env.OPENCOWORK_RELEASE_REPO ?? 'Leevity/Ola'
-const releaseTag = process.env.OPENCOWORK_RELEASE_TAG ?? 'latest'
-const syncIntervalMs = Number(process.env.OPENCOWORK_RELEASE_SYNC_INTERVAL_MS ?? 60 * 60 * 1000)
-const githubToken = process.env.OPENCOWORK_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN ?? ''
+const releaseRepo = process.env.OLA_RELEASE_REPO ?? 'Leevity/Ola'
+const releaseTag = process.env.OLA_RELEASE_TAG ?? 'latest'
+const syncIntervalMs = Number(process.env.OLA_RELEASE_SYNC_INTERVAL_MS ?? 60 * 60 * 1000)
+const githubToken = process.env.OLA_GITHUB_TOKEN ?? process.env.GITHUB_TOKEN ?? ''
 const downloadsDir = path.join(process.cwd(), 'public', 'downloads')
 
 const assetTargets = [
