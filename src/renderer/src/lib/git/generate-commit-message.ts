@@ -3,6 +3,7 @@ import { useProviderStore } from '@renderer/stores/provider-store'
 import type { ProviderConfig, UnifiedMessage } from '@renderer/lib/api/types'
 import { resolveLanguageName, type AppLanguage } from '@renderer/lib/i18n-language'
 import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
+import { withWorkspacePromptCacheKey } from '@renderer/lib/agent/prompt-cache-key'
 
 const stripReasoningBlocks = (value: string): string =>
   value.replace(/<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi, '').replace(/<\/think>/gi, '')
@@ -38,7 +39,8 @@ export async function generateCommitMessageFromStagedDiff(
   patchText: string,
   language: AppLanguage,
   branchHint?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  workingFolder?: string
 ): Promise<string | null> {
   const settings = useSettingsStore.getState()
   const providerStore = useProviderStore.getState()
@@ -71,6 +73,10 @@ export async function generateCommitMessageFromStagedDiff(
       : null
 
   if (!config || (config.requiresApiKey !== false && !config.apiKey)) return null
+  const scopedConfig = await withWorkspacePromptCacheKey(config, {
+    workingFolder,
+    target: 'local'
+  })
 
   const branchLine = branchHint?.trim()
     ? language === 'zh'
@@ -96,7 +102,7 @@ export async function generateCommitMessageFromStagedDiff(
 
     const timeout = window.setTimeout(() => abortController.abort(), 60_000)
     const text = await runSidecarTextRequest({
-      provider: config,
+      provider: scopedConfig,
       messages,
       signal: abortController.signal
     })

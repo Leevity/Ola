@@ -15,6 +15,10 @@ import {
   buildSidecarAgentRunRequest,
   isNativeSidecarProviderConfig
 } from '@renderer/lib/ipc/sidecar-protocol'
+import type {
+  SidecarSlashCommandContext,
+  SidecarSystemCommandContext
+} from '@renderer/lib/ipc/sidecar-protocol'
 import { agentStream } from '@renderer/lib/ipc/agent-stream-receiver'
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
@@ -23,26 +27,49 @@ import { toMessagePackChannel } from '../../../../shared/messagepack/binary-ipc'
 
 class AgentBridgeClient {
   private initialized = false
+  private initializePromise: Promise<boolean> | null = null
 
   async initialize(): Promise<boolean> {
     if (this.initialized) return true
-
-    const result = (await ipcClient.invoke('sidecar:start')) as { ok: boolean }
-    if (!result.ok) {
-      console.warn('[AgentBridge] Failed to start sidecar')
-      return false
-    }
-
-    try {
-      await this.request('initialize', {
-        workingFolder: undefined
+    if (!this.initializePromise) {
+      this.initializePromise = this.initializeWithRetry().finally(() => {
+        this.initializePromise = null
       })
-      this.initialized = true
-      return true
-    } catch (err) {
-      console.error('[AgentBridge] Initialize failed:', err)
-      return false
     }
+
+    return await this.initializePromise
+  }
+
+  private async initializeWithRetry(): Promise<boolean> {
+    const maxAttempts = 2
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        const result = (await ipcClient.invoke('sidecar:start')) as { ok: boolean }
+        if (!result.ok) {
+          throw new Error('sidecar:start returned ok=false')
+        }
+
+        await this.request('initialize', {
+          workingFolder: undefined
+        })
+        this.initialized = true
+        return true
+      } catch (err) {
+        this.initialized = false
+        console.error(`[AgentBridge] Initialize failed (attempt ${attempt}/${maxAttempts}):`, err)
+
+        if (attempt < maxAttempts) {
+          await ipcClient.invoke('sidecar:stop').catch(() => {})
+          await new Promise((resolve) => setTimeout(resolve, 250))
+          continue
+        }
+
+        return false
+      }
+    }
+
+    return false
   }
 
   async request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
@@ -99,6 +126,7 @@ class AgentBridgeClient {
   }
 
   async stop(): Promise<void> {
+    this.initializePromise = null
     await ipcClient.invoke('sidecar:stop')
     this.initialized = false
   }
@@ -119,6 +147,18 @@ export async function canSidecarHandle(capability: string): Promise<boolean> {
  * Singleton bridge client instance.
  */
 export const agentBridge = new AgentBridgeClient()
+
+export async function readSidecarDebugBody(bodyRef: string): Promise<string> {
+  const result = (await agentBridge.request('agent/debug-body-read', { bodyRef })) as {
+    success?: boolean
+    body?: string
+    error?: string
+  }
+  if (!result.success || typeof result.body !== 'string') {
+    throw new Error(result.error || 'Debug body is unavailable')
+  }
+  return result.body
+}
 
 export function runSidecarCleanup(unsubscribe: (() => void) | null): void {
   if (unsubscribe) {
@@ -235,6 +275,11 @@ export async function* streamSidecarProviderTurn(args: {
   provider: ProviderConfig
   messages: UnifiedMessage[]
   tools: ToolDefinition[]
+  planMode?: boolean
+  slashCommand?: SidecarSlashCommandContext
+  systemCommand?: SidecarSystemCommandContext
+  requestContextTexts?: readonly string[]
+  includeFullDebugBody?: boolean
   signal?: AbortSignal
 }): AsyncGenerator<StreamEvent> {
   if (!isNativeSidecarProviderConfig(args.provider)) {
@@ -254,6 +299,11 @@ export async function* streamSidecarProviderTurn(args: {
     tools: args.tools,
     maxIterations: 1,
     forceApproval: false,
+    planMode: args.planMode,
+    slashCommand: args.slashCommand,
+    systemCommand: args.systemCommand,
+    requestContextTexts: args.requestContextTexts,
+    includeFullDebugBody: args.includeFullDebugBody,
     providerTurnOnly: true
   })
   if (!sidecarRequest) {
@@ -286,7 +336,7 @@ export async function* streamSidecarProviderTurn(args: {
       yield {
         type: 'error',
         error: {
-          type: 'native_unavailable',
+          type: 'sidecar_unavailable',
           message: 'Sidecar unavailable.'
         }
       }
@@ -547,22 +597,22 @@ export async function runSidecarContextCompression(args: {
     throw new Error('Sidecar unavailable')
   }
 
-  const result = await invokeMessagePackBinary<{ messages: UnifiedMessage[]; result: CompressionResult }>(
-    toMessagePackChannel('agent:compress-context'),
-    {
-      provider: args.provider,
-      messages: args.messages,
-      ...(typeof args.preserveCount === 'number' && Number.isFinite(args.preserveCount)
-        ? { preserveCount: args.preserveCount }
-        : {}),
-      ...(args.focusPrompt ? { focusPrompt: args.focusPrompt } : {}),
-      ...(args.pinnedContext ? { pinnedContext: args.pinnedContext } : {}),
-      ...(args.trigger ? { trigger: args.trigger } : {}),
-      ...(typeof args.preTokens === 'number' && Number.isFinite(args.preTokens)
-        ? { preTokens: args.preTokens }
-        : {})
-    }
-  )
+  const result = await invokeMessagePackBinary<{
+    messages: UnifiedMessage[]
+    result: CompressionResult
+  }>(toMessagePackChannel('agent:compress-context'), {
+    provider: args.provider,
+    messages: args.messages,
+    ...(typeof args.preserveCount === 'number' && Number.isFinite(args.preserveCount)
+      ? { preserveCount: args.preserveCount }
+      : {}),
+    ...(args.focusPrompt ? { focusPrompt: args.focusPrompt } : {}),
+    ...(args.pinnedContext ? { pinnedContext: args.pinnedContext } : {}),
+    ...(args.trigger ? { trigger: args.trigger } : {}),
+    ...(typeof args.preTokens === 'number' && Number.isFinite(args.preTokens)
+      ? { preTokens: args.preTokens }
+      : {})
+  })
 
   if (args.signal?.aborted) {
     throw new Error('aborted')

@@ -2,7 +2,12 @@ import type { ToolDefinition } from '../../api/types'
 import type { SubAgentDefinition } from './types'
 
 const DEFAULT_SUB_AGENT_TOOLS = ['Read', 'Glob', 'Grep', 'LS', 'Skill']
-export const MANDATORY_SUB_AGENT_DISALLOWED_TOOLS = ['AskUserQuestion'] as const
+export const MANDATORY_SUB_AGENT_DISALLOWED_TOOLS = [
+  'Task',
+  'AskUserQuestion',
+  'EnterPlanMode',
+  'ExitPlanMode'
+] as const
 
 export function getEffectiveSubAgentDisallowedTools(
   disallowedTools: readonly string[] = []

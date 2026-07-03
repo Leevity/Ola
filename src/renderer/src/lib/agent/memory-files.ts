@@ -118,7 +118,13 @@ function buildDailyMemoryDates(now = new Date()): string[] {
 }
 
 export function isMissingFileErrorMessage(error: string): boolean {
-  return /ENOENT|No such file|Could not find/i.test(error)
+  return (
+    /ENOENT/i.test(error) ||
+    /No such file/i.test(error) ||
+    /Could not find (?:file|a part of the path)/i.test(error) ||
+    /(?:system )?cannot find (?:the )?(?:file|path)(?: specified)?/i.test(error) ||
+    /file not found/i.test(error)
+  )
 }
 
 async function loadDailyMemoryEntries(

@@ -110,6 +110,11 @@ function buildSubAgentRenderSignature(
     agent.description ?? '',
     agent.prompt ?? '',
     agent.report ?? '',
+    agent.requestModel?.providerId ?? '',
+    agent.requestModel?.providerBuiltinId ?? '',
+    agent.requestModel?.modelId ?? '',
+    agent.requestModel?.modelName ?? '',
+    agent.requestModel?.modelIcon ?? '',
     String(agent.toolCalls.length),
     buildToolCallStatusSignature(agent.toolCalls)
   ]

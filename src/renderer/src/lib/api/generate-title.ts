@@ -5,6 +5,10 @@ import { RESPONSES_SESSION_SCOPE_GENERATE_TITLE } from './responses-session-poli
 import type { ProviderConfig, UnifiedMessage } from './types'
 import { SESSION_ICONS_PROMPT_LIST } from '@renderer/lib/constants/session-icons'
 import { type AppLanguage } from '@renderer/lib/i18n-language'
+import {
+  type WorkspacePromptCacheScope,
+  withWorkspacePromptCacheKey
+} from '@renderer/lib/agent/prompt-cache-key'
 
 export interface SessionTitleResult {
   title: string
@@ -182,6 +186,7 @@ export async function generateSessionTitle(
   userMessage: string,
   options?: {
     maxInputChars?: number
+    workspace?: WorkspacePromptCacheScope
   }
 ): Promise<SessionTitleResult | null> {
   const settings = useSettingsStore.getState()
@@ -215,6 +220,7 @@ export async function generateSessionTitle(
       : null
 
   if (!config || (config.requiresApiKey !== false && !config.apiKey)) return null
+  const scopedConfig = await withWorkspacePromptCacheKey(config, options?.workspace)
 
   const messages: UnifiedMessage[] = [
     {
@@ -230,7 +236,7 @@ export async function generateSessionTitle(
     const timeout = setTimeout(() => abortController.abort(), 15000)
 
     const title = await runSidecarTextRequest({
-      provider: config,
+      provider: scopedConfig,
       messages,
       signal: abortController.signal,
       maxIterations: 1,

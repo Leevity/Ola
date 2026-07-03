@@ -5,7 +5,7 @@ import type {
 import { AGENT_STREAM_PROTOCOL_VERSION } from '../../../../shared/agent-stream-protocol'
 import {
   AGENT_STREAM_MSGPACK_CHANNEL,
-  decodeAgentStreamEnvelope
+  decodeAgentStreamEnvelopes
 } from '../../../../shared/messagepack/agent-stream-codec'
 import { ipcClient } from './ipc-client'
 
@@ -27,11 +27,14 @@ export class AgentStreamReceiver {
       (_ipcEvent: unknown, bytes: ArrayBuffer | ArrayBufferView) => {
         const startedAt = performance.now()
         try {
-          const envelope = decodeAgentStreamEnvelope(bytes)
-          this.acceptEnvelope(envelope, {
+          const envelopes = decodeAgentStreamEnvelopes(bytes)
+          const metrics = {
             byteLength: getByteLength(bytes),
             decodeMs: Math.round((performance.now() - startedAt) * 100) / 100
-          })
+          }
+          for (const envelope of envelopes) {
+            this.acceptEnvelope(envelope, metrics)
+          }
         } catch (error) {
           console.warn(
             '[AgentStream] Failed to decode MessagePack envelope',

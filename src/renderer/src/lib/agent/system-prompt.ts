@@ -316,6 +316,7 @@ export function buildSystemPrompt(options: {
       `**You are currently in Plan Mode.** Explore the codebase and produce a detailed implementation plan (not code).`,
       `\n**RULES:**`,
       `- Do not change code or unrelated files. Use Read/Glob/Grep and the Task tool to understand the codebase.`,
+      `- Use Task only for investigation. The lead agent must write the plan file and call ExitPlanMode itself; sub-agents cannot create or finalize plans.`,
       `- Ask the user when requirements are unclear or multiple valid approaches exist.`,
       `- If you entered Plan Mode from Clarify mode, plan creation is mandatory. Enter only after questioning is exhausted or the user explicitly asks to move on, and once here do not bounce back into open-ended clarification.`,
       `- Convert non-blocking uncertainty into explicit assumptions or risks inside the plan instead of delaying plan delivery.`,

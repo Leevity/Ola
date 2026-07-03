@@ -76,7 +76,7 @@ The Task tool launches specialized agents (sub-agents) that autonomously handle 
 
 Available agent types and the tools they have access to:
 ${agentLines}
-- custom: General-purpose sub-agent with a built-in default system prompt and broad tool access except Task and AskUserQuestion. Use this when none of the specialized agents above are a clean fit. You only supply the task via "prompt" - do NOT try to pass a system prompt, tools list, or permissions; those are fixed by the runtime. (Tools: All tools except Task, AskUserQuestion)
+- custom: General-purpose sub-agent with a built-in default system prompt and broad tool access except Task, AskUserQuestion, and plan-mode tools (EnterPlanMode/ExitPlanMode). Use this when none of the specialized agents above are a clean fit. You only supply the task via "prompt" - do NOT try to pass a system prompt, tools list, or permissions; those are fixed by the runtime. (Tools: All tools except Task, AskUserQuestion, EnterPlanMode, ExitPlanMode)
 
 When using the Task tool, you MUST specify a "subagent_type" parameter to select which agent type to use.
 
@@ -143,7 +143,7 @@ export function createTaskTool(_providerGetter: () => ProviderConfig): ToolHandl
                 type: 'string',
                 enum: subTypeEnum,
                 description:
-                  'The type of specialized agent to use for this task. Use "custom" for a general-purpose sub-agent with broad tool access except Task and AskUserQuestion and a built-in default system prompt - you only supply the task via "prompt".'
+                  'The type of specialized agent to use for this task. Use "custom" for a general-purpose sub-agent with broad tool access except Task, AskUserQuestion, and plan-mode tools (EnterPlanMode/ExitPlanMode) and a built-in default system prompt - you only supply the task via "prompt".'
               },
               model: {
                 type: 'string',
@@ -186,7 +186,7 @@ export function createTaskTool(_providerGetter: () => ProviderConfig): ToolHandl
                 type: 'string',
                 enum: subTypeEnum,
                 description:
-                  'Optional specialized background agent type to use for this teammate. Use "custom" for a general-purpose teammate with broad tool access except Task and AskUserQuestion.'
+                  'Optional specialized background agent type to use for this teammate. Use "custom" for a general-purpose teammate with broad tool access except Task, AskUserQuestion, and plan-mode tools (EnterPlanMode/ExitPlanMode).'
               },
               model: {
                 type: 'string',
