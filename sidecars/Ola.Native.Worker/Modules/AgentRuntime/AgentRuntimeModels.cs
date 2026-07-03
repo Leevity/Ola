@@ -125,7 +125,10 @@ internal sealed record AgentRuntimeRequestDebugInfo(
     string? ProviderBuiltinId = null,
     string? Model = null,
     string ExecutionPath = "sidecar",
-    string Transport = "http");
+    string Transport = "http",
+    string? PromptCacheKeyHash = null,
+    string? BodyRef = null,
+    long? BodyBytes = null);
 
 internal sealed record AgentRuntimeTokenUsage(
     int InputTokens,

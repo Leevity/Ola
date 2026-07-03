@@ -29,6 +29,7 @@ internal static partial class AgentRuntimeAnthropicMessagesProvider
         var body = BuildRequestBody(parameters, provider, conversation, out var validationStats);
         ValidateAnthropicRequestBodyToolReplay(body);
         LogAnthropicConversationValidation(validationStats, model);
+        var debugBody = AgentRuntimeDebugPayload.PrepareBodyFile(body, parameters);
 
         await AgentRuntimeTools.EmitAsync(
             state,
@@ -43,7 +44,9 @@ internal static partial class AgentRuntimeAnthropicMessagesProvider
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     JsonHelpers.GetString(provider, "providerId"),
                     JsonHelpers.GetString(provider, "providerBuiltinId"),
-                    model)));
+                    model,
+                    BodyRef: debugBody?.Ref,
+                    BodyBytes: debugBody?.Bytes)));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Content = new StringContent(body, Encoding.UTF8, "application/json");

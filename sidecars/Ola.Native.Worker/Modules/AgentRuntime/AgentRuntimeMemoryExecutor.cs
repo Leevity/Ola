@@ -110,7 +110,7 @@ internal static class AgentRuntimeMemoryExecutor
         {
             try
             {
-                content = await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken);
+                content = await ReadOrCreateLocalMemoryFileAsync(root, file, path, cancellationToken);
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -509,6 +509,57 @@ internal static class AgentRuntimeMemoryExecutor
     {
         var file = value?.Trim();
         return MemoryReadFiles.Contains(file, StringComparer.Ordinal) ? file! : "memory_summary.md";
+    }
+
+    private static async Task<string> ReadOrCreateLocalMemoryFileAsync(
+        MemoryRootDescriptor root,
+        string file,
+        string path,
+        CancellationToken cancellationToken)
+    {
+        if (File.Exists(path))
+        {
+            return await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken);
+        }
+
+        var content = DefaultMemoryFileContent(root, file);
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        try
+        {
+            await using var stream = new FileStream(
+                path,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.Read);
+            await using var writer = new StreamWriter(stream, Encoding.UTF8);
+            await writer.WriteAsync(content.AsMemory(), cancellationToken);
+            return content;
+        }
+        catch (IOException) when (File.Exists(path))
+        {
+            return await File.ReadAllTextAsync(path, Encoding.UTF8, cancellationToken);
+        }
+    }
+
+    private static string DefaultMemoryFileContent(MemoryRootDescriptor root, string file)
+    {
+        var isProject = string.Equals(root.Scope, "project", StringComparison.Ordinal);
+        return file switch
+        {
+            "USER.md" => isProject
+                ? "# USER.md\n\nThis file captures workspace-specific preferences for the human you are helping.\n\n## Preferences\n"
+                : "# USER.md\n\nThis file captures durable user preferences and collaboration style.\n\n## Preferences\n",
+            "MEMORY.md" => isProject
+                ? "# MEMORY.md\n\nThis file stores project-scoped durable memory.\n\n## Decisions\n\n## Workflow Habits\n\n## Recurring Errors\n\n## Context\n"
+                : "# MEMORY.md\n\nThis file stores global durable memory shared across Ola sessions.\n\n## Stable Preferences\n\n## Workflow Habits\n\n## Recurring Errors\n\n## Durable Decisions\n",
+            "raw_memories.md" => "# Raw Memories\n",
+            _ => "# Memory Summary\n\n## Summary\n"
+        };
     }
 
     private static string ReadScope(JsonElement input)

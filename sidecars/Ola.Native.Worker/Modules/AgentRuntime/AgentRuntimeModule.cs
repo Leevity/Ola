@@ -4,6 +4,7 @@ internal sealed class AgentRuntimeModule : IWorkerModule
 
     public void Register(WorkerModuleContext context)
     {
+        AgentRuntimeDebugPayload.CleanupTempFiles();
         context.Register("initialize", AgentRuntimeTools.Initialize);
         context.Register("ping", AgentRuntimeTools.Ping);
         context.Register("shutdown", AgentRuntimeTools.Shutdown);
@@ -13,6 +14,7 @@ internal sealed class AgentRuntimeModule : IWorkerModule
         context.Register("agent/request-stop", AgentRuntimeTools.RequestStop);
         context.Register("agent/append-messages", AgentRuntimeTools.AppendMessages);
         context.Register("agent/compress-context", AgentRuntimeContextCompression.CompressAsync);
+        context.Register("agent/debug-body-read", AgentRuntimeDebugPayload.ReadBody);
         context.Register("agent/reverse-response", AgentRuntimeTools.ReverseResponse);
         context.Register("agent/session-visibility", AgentRuntimeTools.SessionVisibility);
         context.Register("team-runtime/create", AgentRuntimeTeamRuntimeApi.Create);

@@ -73,7 +73,10 @@ internal static partial class AgentRuntimeSubAgentExecutor
             JsonHelpers.GetString(call.Input, "model")?.Trim());
         var promptMessage = BuildPromptMessage(call.Input, definition.InitialPrompt);
         var parentTools = ReadToolDefinitions(parameters);
-        var innerTools = ResolveTools(definition, parentTools);
+        var innerTools = ResolveTools(
+            definition,
+            parentTools,
+            JsonHelpers.GetBool(parameters, "planMode", false));
         innerTools.Add(BuildSubmitReportToolDefinition());
 
         var snapshot = AgentRuntimeTeamRuntimeStore.AddWorkerMember(
