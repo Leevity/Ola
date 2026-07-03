@@ -269,6 +269,7 @@ export interface SubAgentState {
   report: string
   reportStatus: SubAgentReportStatus
   usage?: TokenUsage
+  requestModel?: MessageRequestModelMeta
   startedAt: number
   completedAt: number | null
 }
@@ -467,6 +468,7 @@ function upsertSubAgentHistory(history: SubAgentState[], sa: SubAgentState): voi
       existing.startedAt === snapshot.startedAt &&
       existing.completedAt === snapshot.completedAt &&
       JSON.stringify(existing.usage) === JSON.stringify(snapshot.usage) &&
+      JSON.stringify(existing.requestModel) === JSON.stringify(snapshot.requestModel) &&
       existing.transcript.length === snapshot.transcript.length &&
       existing.toolCalls.length === snapshot.toolCalls.length
     ) {
@@ -1947,6 +1949,7 @@ export const useAgentStore = create<AgentStore>()(
                 report: '',
                 reportStatus: 'queued',
                 usage: undefined,
+                requestModel: undefined,
                 startedAt: Date.now(),
                 completedAt: null
               }
@@ -2000,7 +2003,7 @@ export const useAgentStore = create<AgentStore>()(
                 rebuildRunningSubAgentDerived(state)
                 break
               }
-              if (existing?.isRunning) return
+              if (existing) return
               state.activeSubAgents[id] = {
                 name: event.subAgentName,
                 displayName: String(event.input.subagent_type ?? event.subAgentName),
@@ -2026,6 +2029,7 @@ export const useAgentStore = create<AgentStore>()(
                 report: '',
                 reportStatus: 'pending',
                 usage: undefined,
+                requestModel: undefined,
                 startedAt: Date.now(),
                 completedAt: null
               }
@@ -2043,8 +2047,9 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_iteration': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 sa.iteration = event.iteration
+                sa.requestModel = event.assistantMessage.meta?.requestModel ?? sa.requestModel
                 const currentAssistant = sa.currentAssistantMessageId
                   ? sa.transcript.find((item) => item.id === sa.currentAssistantMessageId)
                   : null
@@ -2057,12 +2062,12 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_thinking_delta': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) appendThinkingToSubAgent(sa, event.thinking)
+              if (sa?.isRunning) appendThinkingToSubAgent(sa, event.thinking)
               break
             }
             case 'sub_agent_thinking_encrypted': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 appendThinkingEncryptedToSubAgent(
                   sa,
                   event.thinkingEncryptedContent,
@@ -2073,7 +2078,7 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_tool_use_streaming_start': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 upsertToolUseBlockInSubAgent(sa, {
                   type: 'tool_use',
                   id: event.toolCallId,
@@ -2088,22 +2093,24 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_tool_use_args_delta': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) updateToolUseInputInSubAgent(sa, event.toolCallId, event.partialInput)
+              if (sa?.isRunning) {
+                updateToolUseInputInSubAgent(sa, event.toolCallId, event.partialInput)
+              }
               break
             }
             case 'sub_agent_tool_use_generated': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) upsertToolUseBlockInSubAgent(sa, event.toolUseBlock)
+              if (sa?.isRunning) upsertToolUseBlockInSubAgent(sa, event.toolUseBlock)
               break
             }
             case 'sub_agent_image_generated': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) appendBlockToSubAgent(sa, event.imageBlock)
+              if (sa?.isRunning) appendBlockToSubAgent(sa, event.imageBlock)
               break
             }
             case 'sub_agent_image_error': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 appendBlockToSubAgent(sa, {
                   type: 'image_error',
                   code: event.imageError.code,
@@ -2114,7 +2121,7 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_message_end': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 finalizeAssistantMessage(
                   sa,
                   event.usage,
@@ -2122,6 +2129,7 @@ export const useAgentStore = create<AgentStore>()(
                   false,
                   event.requestModel
                 )
+                sa.requestModel = event.requestModel ?? sa.requestModel
                 if (event.usage) {
                   sa.usage = mergeMessageUsage(sa.usage, event.usage)
                 }
@@ -2130,7 +2138,7 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_tool_result_message': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 sa.transcript.push(event.message)
                 trimSubAgentTranscript(sa)
                 upsertSubAgentHistory(state.subAgentHistory, sa)
@@ -2140,7 +2148,7 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_user_message': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 finalizeAssistantMessage(sa)
                 sa.transcript.push(event.message)
                 trimSubAgentTranscript(sa)
@@ -2161,7 +2169,7 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_tool_call': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 const normalizedToolCall = normalizeToolCall(event.toolCall)
                 upsertToolUseBlockInSubAgent(sa, {
                   type: 'tool_use',
@@ -2186,7 +2194,7 @@ export const useAgentStore = create<AgentStore>()(
             }
             case 'sub_agent_text_delta': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa) {
+              if (sa?.isRunning) {
                 sa.streamingText = truncateText(
                   sa.streamingText + event.text,
                   MAX_STREAMING_TEXT_CHARS

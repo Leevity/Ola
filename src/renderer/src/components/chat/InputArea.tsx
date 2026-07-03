@@ -46,6 +46,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/compone
 import { useProviderStore, modelSupportsVision } from '@renderer/stores/provider-store'
 import type {
   AIModelConfig,
+  MessageRequestModelMeta,
   RequestTiming,
   SelectedFileReference,
   TokenUsage,
@@ -114,6 +115,7 @@ import {
 } from '@renderer/lib/select-file-editor'
 import { SkillsMenu } from './SkillsMenu'
 import { ModelSwitcher } from './ModelSwitcher'
+import { ModelIcon } from '@renderer/components/settings/provider-icons'
 import { FileAwareEditor, type FileAwareEditorHandle } from './FileAwareEditor'
 import { TokenCounter } from './TokenCounter'
 import { listCommands, type CommandCatalogItem } from '@renderer/lib/commands/command-loader'
@@ -172,6 +174,7 @@ import { IPC } from '@renderer/lib/ipc/channels'
 import { cn } from '@renderer/lib/utils'
 import { resolveProjectMemoryTextFile } from '@renderer/lib/agent/memory-files'
 import { isProjectSession, workspaceContextAvailable } from '@renderer/lib/session-scope'
+import { getDroppedLocalPaths } from '@renderer/lib/drag-folder'
 import { GoalSessionBar } from '@renderer/components/goal/GoalSessionControls'
 
 interface ContextRingProps {
@@ -1410,6 +1413,51 @@ function selectedFileItemToReference(file: SelectedFileItem): SelectedFileRefere
   }
 }
 
+function ReadOnlyModelBadge({
+  model
+}: {
+  model?: MessageRequestModelMeta | null
+}): React.JSX.Element {
+  const { t } = useTranslation('chat')
+  const modelName =
+    model?.modelName?.trim() ||
+    model?.modelId?.trim() ||
+    t('input.modelResolving', { defaultValue: 'Model pending' })
+  const providerName =
+    model?.providerName?.trim() ||
+    model?.providerBuiltinId?.trim() ||
+    model?.providerId?.trim() ||
+    ''
+  const title = providerName
+    ? t('input.readOnlyModelWithProvider', {
+        defaultValue: 'Sub-agent model: {{model}} · {{provider}}',
+        model: modelName,
+        provider: providerName
+      })
+    : t('input.readOnlyModel', {
+        defaultValue: 'Sub-agent model: {{model}}',
+        model: modelName
+      })
+
+  return (
+    <div
+      className="composer-control inline-flex h-8 max-w-[14rem] cursor-default items-center gap-2 rounded-lg border border-border/65 bg-muted/35 px-2 text-left text-foreground/85"
+      title={title}
+      aria-label={title}
+      aria-readonly="true"
+    >
+      <ModelIcon
+        icon={model?.modelIcon ?? undefined}
+        modelId={model?.modelId ?? undefined}
+        providerBuiltinId={model?.providerBuiltinId ?? undefined}
+        size={16}
+        className="shrink-0"
+      />
+      <span className="min-w-0 truncate text-xs font-medium">{modelName}</span>
+    </div>
+  )
+}
+
 interface InputAreaProps {
   sessionId?: string | null
   onSend: (text: string, images?: ImageAttachment[], options?: SendMessageOptions) => void
@@ -1426,6 +1474,7 @@ interface InputAreaProps {
   hideGoalSessionBar?: boolean
   hideModeSwitch?: boolean
   modelRoute?: 'main' | 'fast'
+  readOnlyModel?: MessageRequestModelMeta | null
   attachedFooter?: boolean
   fullWidth?: boolean
 }
@@ -1446,6 +1495,7 @@ export function InputArea({
   hideGoalSessionBar = false,
   hideModeSwitch = false,
   modelRoute = 'main',
+  readOnlyModel,
   attachedFooter = false,
   fullWidth = false
 }: InputAreaProps): React.JSX.Element {
@@ -3223,29 +3273,19 @@ export function InputArea({
   }, [])
 
   const handleDropFiles = React.useCallback(
-    (fileList: FileList | null) => {
-      if (!fileList || fileList.length === 0) return
-      const fileArr = Array.from(fileList)
-      const imageFiles = supportsVision
-        ? fileArr.filter((f) => ACCEPTED_IMAGE_TYPES.includes(f.type))
-        : []
-      const otherFiles = supportsVision
-        ? fileArr.filter((f) => !ACCEPTED_IMAGE_TYPES.includes(f.type))
-        : fileArr
-
-      if (imageFiles.length > 0) {
-        void addImages(imageFiles)
-      }
-
-      const paths = otherFiles
+    (dataTransfer: DataTransfer | null) => {
+      if (!dataTransfer || dataTransfer.files.length === 0) return
+      const paths = getDroppedLocalPaths(dataTransfer)
+      const fallbackPaths = Array.from(dataTransfer.files)
         .map((f) => (f as File & { path?: string }).path)
         .filter((filePath): filePath is string => Boolean(filePath))
+      const uniquePaths = Array.from(new Set([...paths, ...fallbackPaths]))
 
-      if (paths.length > 0) {
-        addFilesToEditor(paths)
+      if (uniquePaths.length > 0) {
+        addFilesToEditor(uniquePaths)
       }
     },
-    [addFilesToEditor, addImages, supportsVision]
+    [addFilesToEditor]
   )
 
   const [dragging, setDragging] = useLocalState(false)
@@ -3285,7 +3325,7 @@ export function InputArea({
         addFilesToEditor(draggedPaths)
         return
       }
-      handleDropFiles(e.dataTransfer?.files ?? null)
+      handleDropFiles(e.dataTransfer ?? null)
     },
     [addFilesToEditor, getDraggedFilePaths, handleDropFiles, setDragging]
   )
@@ -4377,7 +4417,11 @@ export function InputArea({
             <div className="flex w-full items-center justify-between gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-1 [scrollbar-width:none]">
                 <div className="shrink-0">
-                  <ModelSwitcher modelRoute={modelRoute} sessionId={draftSessionId} />
+                  {readOnlyModel !== undefined ? (
+                    <ReadOnlyModelBadge model={readOnlyModel} />
+                  ) : (
+                    <ModelSwitcher modelRoute={modelRoute} sessionId={draftSessionId} />
+                  )}
                 </div>
                 {webSearchToggleControl}
                 {skillsMenuControl}
