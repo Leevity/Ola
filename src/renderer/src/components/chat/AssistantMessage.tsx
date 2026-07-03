@@ -78,6 +78,7 @@ import {
 import { formatDurationMs } from '@renderer/lib/format-duration'
 import { useMemoizedTokens } from '@renderer/hooks/use-estimated-tokens'
 import { getLastDebugInfo, getRequestTraceInfo } from '@renderer/lib/debug-store'
+import { readSidecarDebugBody } from '@renderer/lib/ipc/agent-bridge'
 import { MONO_FONT } from '@renderer/lib/constants'
 import {
   getLiveOutputComponentClass,
@@ -110,6 +111,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { useTranslateStore } from '@renderer/stores/translate-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useStreamingRenderPool } from '@renderer/hooks/use-typewriter'
+import { useStreamingMarkdownBlocks } from '@renderer/hooks/use-streaming-markdown-blocks'
 import {
   MARKDOWN_REHYPE_PLUGINS,
   MARKDOWN_REMARK_PLUGINS,
@@ -720,16 +722,71 @@ function DebugToggleButton({
   toolResults?: Map<string, { content: ToolResultContent; isError?: boolean }>
 }): React.JSX.Element {
   const [show, setShow] = useState(false)
+  const [bodyText, setBodyText] = useState<string | null>(null)
+  const [bodyLoading, setBodyLoading] = useState(false)
+  const [bodyLoadError, setBodyLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!show) {
+      setBodyText(null)
+      setBodyLoading(false)
+      setBodyLoadError(null)
+      return
+    }
+
+    let cancelled = false
+    setBodyLoadError(null)
+
+    if (debugInfo.body) {
+      setBodyText(debugInfo.body)
+      setBodyLoading(false)
+      return
+    }
+
+    setBodyText(null)
+    if (!debugInfo.bodyRef) {
+      setBodyLoading(false)
+      return
+    }
+
+    setBodyLoading(true)
+    readSidecarDebugBody(debugInfo.bodyRef)
+      .then((body) => {
+        if (!cancelled) {
+          setBodyText(body)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setBodyLoadError(error instanceof Error ? error.message : 'Debug body is unavailable')
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setBodyLoading(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [debugInfo.body, debugInfo.bodyRef, show])
+
   const bodyFormatted = (() => {
-    if (!debugInfo.body) return null
+    if (!bodyText) return null
     try {
-      return JSON.stringify(JSON.parse(debugInfo.body), null, 2)
+      return JSON.stringify(JSON.parse(bodyText), null, 2)
     } catch {
-      return debugInfo.body
+      return bodyText
     }
   })()
   const toolCalls = show ? collectDebugToolCalls(content, toolResults) : []
   const cacheShapeRows = [
+    { label: 'Prompt cache key hash', value: debugInfo.promptCacheKeyHash },
+    {
+      label: 'Request body bytes',
+      value: typeof debugInfo.bodyBytes === 'number' ? String(debugInfo.bodyBytes) : undefined
+    },
     { label: 'System hash', value: debugInfo.systemHash },
     { label: 'Tools hash', value: debugInfo.toolsHash },
     { label: 'Message prefix hash', value: debugInfo.messagePrefixHash },
@@ -807,31 +864,37 @@ function DebugToggleButton({
                 </div>
               </div>
             ) : null}
-            {bodyFormatted && (
+            {bodyFormatted || bodyLoading || bodyLoadError ? (
               <div>
                 <div className="flex items-center justify-between border-b bg-muted/20 px-4 py-1.5">
                   <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                    Request Body
+                    Last Request Body
                   </span>
-                  <CopyButton text={bodyFormatted} />
+                  {bodyFormatted ? <CopyButton text={bodyFormatted} /> : null}
                 </div>
-                <LazySyntaxHighlighter
-                  language="json"
-                  customStyle={{
-                    margin: 0,
-                    padding: '12px 16px',
-                    fontSize: '11px',
-                    fontFamily: MONO_FONT,
-                    background: 'transparent',
-                    wordBreak: 'break-all',
-                    whiteSpace: 'pre-wrap'
-                  }}
-                  codeTagProps={{ style: { fontFamily: MONO_FONT } }}
-                >
-                  {bodyFormatted}
-                </LazySyntaxHighlighter>
+                {bodyFormatted ? (
+                  <LazySyntaxHighlighter
+                    language="json"
+                    customStyle={{
+                      margin: 0,
+                      padding: '12px 16px',
+                      fontSize: '11px',
+                      fontFamily: MONO_FONT,
+                      background: 'transparent',
+                      wordBreak: 'break-all',
+                      whiteSpace: 'pre-wrap'
+                    }}
+                    codeTagProps={{ style: { fontFamily: MONO_FONT } }}
+                  >
+                    {bodyFormatted}
+                  </LazySyntaxHighlighter>
+                ) : (
+                  <div className="px-4 py-3 text-[11px] text-muted-foreground">
+                    {bodyLoading ? 'Loading request body...' : bodyLoadError}
+                  </div>
+                )}
               </div>
-            )}
+            ) : null}
             <div>
               <div className="flex items-center justify-between border-b bg-muted/20 px-4 py-1.5">
                 <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -1495,6 +1558,9 @@ function StreamingMarkdownContent({
 }): React.JSX.Element {
   const liveOutputAnimationStyle = useSettingsStore((s) => s.liveOutputAnimationStyle)
   const renderPool = useStreamingRenderPool(text, isStreaming, liveOutputAnimationStyle)
+  // Settled blocks keep stable strings so the memoized MarkdownContent skips
+  // re-parsing them; each render-pool tick only re-parses the small tail.
+  const blocks = useStreamingMarkdownBlocks(renderPool.text, isStreaming)
 
   if (!text.trim()) {
     return <div className="whitespace-pre-wrap break-words leading-relaxed">{text}</div>
@@ -1508,7 +1574,10 @@ function StreamingMarkdownContent({
         data-rendered-length={renderPool.renderedLength}
         data-target-length={renderPool.targetLength}
       >
-        <MarkdownContent text={renderPool.text} isStreaming={false} />
+        {blocks.settled.map((block, index) => (
+          <MarkdownContent key={index} text={block} isStreaming={false} />
+        ))}
+        {blocks.tail.trim() ? <MarkdownContent text={blocks.tail} isStreaming={false} /> : null}
       </div>
     )
   }

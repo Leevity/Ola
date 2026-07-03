@@ -810,6 +810,18 @@ export const FileAwareEditor = React.forwardRef<FileAwareEditorHandle, FileAware
             setSelectionFromPoint(event.currentTarget, event.clientX, event.clientY)
             scheduleSelectionSync()
           }}
+          onDragOver={(event) => {
+            if (disabled) return
+            if (setSelectionFromPoint(event.currentTarget, event.clientX, event.clientY)) {
+              syncSelection()
+            }
+          }}
+          onDrop={(event) => {
+            if (disabled) return
+            if (setSelectionFromPoint(event.currentTarget, event.clientX, event.clientY)) {
+              syncSelection()
+            }
+          }}
           onMouseUp={() => {
             scheduleSelectionSync()
           }}

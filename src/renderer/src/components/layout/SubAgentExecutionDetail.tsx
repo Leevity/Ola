@@ -2,11 +2,18 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { Bot } from 'lucide-react'
+import { InputArea } from '@renderer/components/chat/InputArea'
 import { TranscriptMessageList } from '@renderer/components/chat/TranscriptMessageList'
 import { useAgentStore, type SubAgentState } from '@renderer/stores/agent-store'
 import { useChatStore } from '@renderer/stores/chat-store'
-import type { ContentBlock, ToolResultContent, UnifiedMessage } from '@renderer/lib/api/types'
+import type {
+  ContentBlock,
+  MessageRequestModelMeta,
+  ToolResultContent,
+  UnifiedMessage
+} from '@renderer/lib/api/types'
 import { cn } from '@renderer/lib/utils'
+import { stopSessionStreaming, useChatActions } from '@renderer/hooks/use-chat-actions'
 import { parseSubAgentMeta } from '@renderer/lib/agent/sub-agents/create-tool'
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import {
@@ -31,6 +38,11 @@ function buildSubAgentDetailSignature(agent: SubAgentState | null): string {
     String(agent.toolCalls.length),
     String(agent.transcript.length),
     agent.currentAssistantMessageId ?? '',
+    agent.requestModel?.providerId ?? '',
+    agent.requestModel?.providerBuiltinId ?? '',
+    agent.requestModel?.modelId ?? '',
+    agent.requestModel?.modelName ?? '',
+    agent.requestModel?.modelIcon ?? '',
     String(currentAssistant?._revision ?? ''),
     lastMessage?.id ?? '',
     String(lastMessage?._revision ?? ''),
@@ -185,6 +197,16 @@ function buildFallbackTranscript({
   return messages
 }
 
+function getLatestTranscriptRequestModel(
+  transcript: UnifiedMessage[]
+): MessageRequestModelMeta | null {
+  for (let index = transcript.length - 1; index >= 0; index -= 1) {
+    const requestModel = transcript[index]?.meta?.requestModel
+    if (requestModel) return requestModel
+  }
+  return null
+}
+
 export function SubAgentExecutionDetail({
   toolUseId,
   inlineText,
@@ -200,8 +222,10 @@ export function SubAgentExecutionDetail({
   const { t } = useTranslation('layout')
   const activeSessionId = useChatStore((s) => s.activeSessionId)
   const resolvedSessionId = sessionId ?? activeSessionId
-  const sessionMessages = useChatStore((s) =>
-    resolvedSessionId ? s.getSessionMessages(resolvedSessionId) : EMPTY_SESSION_MESSAGES
+  const sessionWorkingFolder = useChatStore((s) =>
+    resolvedSessionId
+      ? (s.sessions.find((session) => session.id === resolvedSessionId)?.workingFolder ?? undefined)
+      : undefined
   )
   const agentDetail = useAgentStore(
     useShallow((s) => {
@@ -223,7 +247,23 @@ export function SubAgentExecutionDetail({
       }
     })
   )
+  // The message fallbacks are only consulted when there is no live agent
+  // record; subscribing to the messages array while an agent streams would
+  // re-render and rescan the whole session transcript on every delta flush.
+  const hasLiveAgent = Boolean(agentDetail.agent)
+  const sessionMessages = useChatStore((s) =>
+    !hasLiveAgent && resolvedSessionId
+      ? s.getSessionMessages(resolvedSessionId)
+      : EMPTY_SESSION_MESSAGES
+  )
   const executedToolCalls = useAgentStore((s) => s.executedToolCalls)
+  const isSessionStreaming = useAgentStore((s) => {
+    if (!resolvedSessionId) return false
+    const status = s.runningSessions[resolvedSessionId]
+    if (status === 'running' || status === 'retrying') return true
+    return s.runningSubAgentSessionIdsSig.split('\u0000').includes(resolvedSessionId)
+  })
+  const { sendMessage, manualCompressContext } = useChatActions()
   const agent = agentDetail.agent
 
   const fallbackReportText = React.useMemo(() => {
@@ -256,6 +296,7 @@ export function SubAgentExecutionDetail({
   )
 
   const transcript = agent?.transcript ?? fallbackTranscript
+  const subAgentRequestModel = agent?.requestModel ?? getLatestTranscriptRequestModel(transcript)
   const streamingMessageId = agent?.currentAssistantMessageId ?? null
   const transcriptRevisionKey = agent
     ? agentDetail.signature
@@ -265,6 +306,9 @@ export function SubAgentExecutionDetail({
     () => (toolCalls ? buildLiveToolCallMap(toolCalls) : null),
     [toolCalls]
   )
+  const composerDraftKey = resolvedSessionId
+    ? `subagent:${resolvedSessionId}:${toolUseId ?? 'overview'}`
+    : null
 
   if (!agent && transcript.length === 0) {
     return (
@@ -293,7 +337,32 @@ export function SubAgentExecutionDetail({
         revisionKey={transcriptRevisionKey}
         sessionId={resolvedSessionId}
         liveToolCallMap={liveToolCallMap}
+        autoScrollToBottom={Boolean(agent?.isRunning)}
       />
+      {resolvedSessionId ? (
+        <InputArea
+          sessionId={resolvedSessionId}
+          onSend={(text, images, options) =>
+            void sendMessage(
+              text,
+              images,
+              undefined,
+              resolvedSessionId,
+              undefined,
+              undefined,
+              options
+            )
+          }
+          onStop={() => stopSessionStreaming(resolvedSessionId)}
+          workingFolder={sessionWorkingFolder}
+          hideWorkingFolderIndicator
+          onCompressContext={manualCompressContext}
+          isStreaming={isSessionStreaming}
+          draftKeyOverride={composerDraftKey}
+          readOnlyModel={subAgentRequestModel}
+          fullWidth
+        />
+      ) : null}
     </div>
   )
 }

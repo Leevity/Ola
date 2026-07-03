@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
+import { existsSync } from 'node:fs'
 import { rm } from 'node:fs/promises'
+import { spawnSync } from 'node:child_process'
 import net from 'node:net'
 import path from 'node:path'
 import process from 'node:process'
@@ -48,8 +50,41 @@ async function ensurePortAvailable(port) {
   }
 }
 
+async function ensureNativeWorker(projectDir) {
+  const workerBin = path.join(projectDir, 'resources', 'native-worker', 'Ola.Native.Worker')
+
+  if (existsSync(workerBin)) {
+    return
+  }
+
+  console.log('[predev] Native worker not found, building it now (this may take a minute)...')
+
+  const result = spawnSync('npm', ['run', 'native:publish'], {
+    cwd: projectDir,
+    stdio: 'inherit',
+    shell: process.platform === 'win32'
+  })
+
+  if (result.status !== 0) {
+    console.error(
+      '[predev] Failed to build native worker. You can try manually: npm run native:publish'
+    )
+    process.exitCode = 1
+    return
+  }
+
+  if (!existsSync(workerBin)) {
+    console.error('[predev] Native worker build completed but binary not found at:', workerBin)
+    process.exitCode = 1
+    return
+  }
+
+  console.log('[predev] Native worker built successfully.')
+}
+
 async function main() {
   const projectDir = process.cwd()
+  await ensureNativeWorker(projectDir)
   await clearViteCache(projectDir)
 
   try {

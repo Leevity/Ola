@@ -677,7 +677,8 @@ export function GitPage(): React.JSX.Element {
       bundle.patch,
       lang,
       status?.branch,
-      undefined
+      undefined,
+      selectedRepoPath
     )
     setAiCommitLoading(false)
     if (!msg) {

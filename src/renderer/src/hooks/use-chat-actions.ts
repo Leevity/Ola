@@ -2867,6 +2867,11 @@ function stopSessionLocally(sessionId: string): void {
   abortTeamForSession(sessionId)
 }
 
+export function stopSessionStreaming(sessionId: string): void {
+  stopSessionLocally(sessionId)
+  emitSessionControlSync({ kind: 'stop_streaming', sessionId })
+}
+
 function abortSessionLocally(sessionId: string): void {
   finishStoppingSession(sessionId)
   abortTeamForSession(sessionId, true)
@@ -5789,8 +5794,7 @@ export function useChatActions(): {
     // Stop the active session's agent
     const activeId = useChatStore.getState().activeSessionId
     if (activeId) {
-      stopSessionLocally(activeId)
-      emitSessionControlSync({ kind: 'stop_streaming', sessionId: activeId })
+      stopSessionStreaming(activeId)
     }
   }, [])
 

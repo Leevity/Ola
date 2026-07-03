@@ -3027,7 +3027,24 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
 
         {/* Base URL */}
         <section className="space-y-2 mt-5">
-          <label className="text-sm font-medium">{t('provider.proxyUrl')}</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">{t('provider.proxyUrl')}</label>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              disabled={!builtinPreset || provider.baseUrl === builtinPreset.defaultBaseUrl}
+              onClick={() => {
+                if (!builtinPreset) return
+                updateProvider(provider.id, { baseUrl: builtinPreset.defaultBaseUrl })
+                toast.success(
+                  t('provider.resetToDefaultSuccess', { field: t('provider.proxyUrl') })
+                )
+              }}
+            >
+              {t('provider.resetToDefault', { defaultValue: '恢复默认' })}
+            </Button>
+          </div>
           <Input
             placeholder={builtinPreset?.defaultBaseUrl || 'https://api.example.com'}
             value={provider.baseUrl}
@@ -3039,9 +3056,27 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
 
         {/* User-Agent */}
         <section className="space-y-2 mt-5">
-          <label className="text-sm font-medium">
-            {t('provider.userAgent', { defaultValue: 'User-Agent' })}
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">
+              {t('provider.userAgent', { defaultValue: 'User-Agent' })}
+            </label>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-[11px]"
+              disabled={!provider.userAgent}
+              onClick={() => {
+                updateProvider(provider.id, { userAgent: undefined })
+                toast.success(
+                  t('provider.resetToDefaultSuccess', {
+                    field: t('provider.userAgent', { defaultValue: 'User-Agent' })
+                  })
+                )
+              }}
+            >
+              {t('provider.resetToDefault', { defaultValue: '恢复默认' })}
+            </Button>
+          </div>
           <Input
             placeholder={resolveProviderUserAgent(undefined)}
             value={provider.userAgent ?? ''}

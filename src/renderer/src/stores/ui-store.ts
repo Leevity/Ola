@@ -1110,12 +1110,15 @@ export const useUIStore = create<UIStore>()(
         }),
       ensureSubAgentTab: (toolUseId, inlineText, title, requestedSessionId) =>
         set((state) => {
-          const tabId = toolUseId ? `subagent:${toolUseId}` : 'subagent:overview'
           const sessionId =
             normalizeScopeId(requestedSessionId) ??
             state.activeScopedSessionId ??
             useChatStore.getState().activeSessionId ??
             null
+          const tabScopeId = sessionId ?? 'global'
+          const tabId = toolUseId
+            ? `subagent:${tabScopeId}:${toolUseId}`
+            : `subagent:${tabScopeId}:overview`
           const existing = state.rightPanelTabs.find((tab) => tab.id === tabId)
           const tab: RightPanelTabInstance = existing
             ? {

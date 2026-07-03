@@ -15,13 +15,13 @@ import { resolveCopilotApiBaseUrl, resolveCopilotModelId } from '../lib/auth/cop
 import { normalizeResponsesImageGenerationConfig } from '../lib/api/responses-image-generation'
 import { resolveProviderUserAgent } from '../lib/api/api-user-agent'
 import { configStorage } from '../lib/ipc/config-storage'
-import { useSettingsStore } from './settings-store'
+import { useSettingsStore, resolveReasoningEffortForModel } from './settings-store'
 
 export { builtinProviderPresets }
 export type { BuiltinProviderPreset }
 
 const DEFAULT_FAST_PROVIDER_BUILTIN_ID = 'deepseek'
-const DEFAULT_FAST_MODEL_ID = 'deepseek-chat'
+const DEFAULT_FAST_MODEL_ID = 'deepseek-v4-flash'
 // Kimi K2.7 Code rejects thinking.type values other than "enabled"; off means omitting it.
 const KIMI_ENABLED_ONLY_THINKING_MODEL_KEYS = new Set([
   'kimi-for-coding',
@@ -1232,7 +1232,16 @@ export const useProviderStore = create<ProviderStore>()(
           ...(accountId ? { accountId } : {}),
           ...(activeModel?.thinkingConfig ? { thinkingConfig: activeModel.thinkingConfig } : {}),
           ...(websocketUrl ? { websocketUrl } : {}),
-          ...(websocketMode ? { websocketMode } : {})
+          ...(websocketMode ? { websocketMode } : {}),
+          thinkingEnabled:
+            useSettingsStore.getState().thinkingEnabled === true && !!activeModel?.thinkingConfig,
+          reasoningEffort: resolveReasoningEffortForModel({
+            reasoningEffort: useSettingsStore.getState().reasoningEffort,
+            reasoningEffortByModel: useSettingsStore.getState().reasoningEffortByModel,
+            providerId: provider.id,
+            modelId: activeModelId,
+            thinkingConfig: activeModel?.thinkingConfig
+          })
         }
       },
 
@@ -1451,8 +1460,18 @@ export const useProviderStore = create<ProviderStore>()(
             ? { instructionsPrompt: provider.instructionsPrompt }
             : {}),
           ...(accountId ? { accountId } : {}),
+          ...(fastModel?.thinkingConfig ? { thinkingConfig: fastModel.thinkingConfig } : {}),
           ...(websocketUrl ? { websocketUrl } : {}),
-          ...(websocketMode ? { websocketMode } : {})
+          ...(websocketMode ? { websocketMode } : {}),
+          thinkingEnabled:
+            useSettingsStore.getState().thinkingEnabled === true && !!fastModel?.thinkingConfig,
+          reasoningEffort: resolveReasoningEffortForModel({
+            reasoningEffort: useSettingsStore.getState().reasoningEffort,
+            reasoningEffortByModel: useSettingsStore.getState().reasoningEffortByModel,
+            providerId: provider.id,
+            modelId: model,
+            thinkingConfig: fastModel?.thinkingConfig
+          })
         }
       },
 

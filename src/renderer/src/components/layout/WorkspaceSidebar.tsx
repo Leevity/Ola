@@ -32,6 +32,7 @@ import {
   Settings,
   Server,
   Sparkles,
+  SquareKanban,
   Trash2,
   Upload,
   Wand2
@@ -932,7 +933,15 @@ export function WorkspaceSidebar(): React.JSX.Element {
           return
         }
 
-        const result = await generateSessionTitle(titleInput, { maxInputChars: 6000 })
+        const result = await generateSessionTitle(titleInput, {
+          maxInputChars: 6000,
+          workspace: {
+            projectId: session.projectId,
+            workingFolder: session.workingFolder,
+            sshConnectionId: session.sshConnectionId,
+            target: session.sshConnectionId ? 'ssh' : 'local'
+          }
+        })
         const nextTitle = result?.title.trim()
         const nextIcon = result?.icon.trim()
         if (!nextTitle) {
@@ -1582,7 +1591,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
                       const projectToggleTitle = isCollapsed
                         ? t('rightPanel.expand')
                         : t('rightPanel.collapse')
-                      const ProjectIcon = project.sshConnectionId ? Server : FolderOpen
+                      const ProjectIcon = project.sshConnectionId ? Server : SquareKanban
                       const handleProjectRowKeyDown = (
                         event: React.KeyboardEvent<HTMLDivElement>
                       ): void => {
@@ -1975,8 +1984,9 @@ export function WorkspaceSidebar(): React.JSX.Element {
                                     <button
                                       type="button"
                                       className={cn(
-                                        'flex h-6 items-center gap-1 rounded-md border border-transparent px-1.5 text-[10px] text-muted-foreground transition-colors',
-                                        'hover:border-border/60 hover:bg-accent/80 hover:text-accent-foreground'
+                                        'flex w-full items-center gap-1.5 px-1.5 py-1 text-left text-[10px] transition-colors',
+                                        SIDEBAR_TREE_ROW_CLASS,
+                                        SIDEBAR_TREE_HOVER_CLASS
                                       )}
                                       onClick={() => toggleProjectExpansion(project.id)}
                                     >

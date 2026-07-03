@@ -26,6 +26,7 @@ interface AgentErrorCardProps {
 type Category =
   | 'tool'
   | 'runtime'
+  | 'runtimeUnavailable'
   | 'auth'
   | 'rateLimit'
   | 'quota'
@@ -53,6 +54,11 @@ const CATEGORY_VIEW: Record<Category, CategoryView> = {
     icon: AlertTriangle,
     titleKey: 'assistantMessage.agentError.titleRuntime',
     descKey: 'assistantMessage.agentError.descRuntime'
+  },
+  runtimeUnavailable: {
+    icon: ServerCrash,
+    titleKey: 'assistantMessage.agentError.titleRuntimeUnavailable',
+    descKey: 'assistantMessage.agentError.descRuntimeUnavailable'
   },
   auth: {
     icon: KeyRound,
@@ -111,6 +117,9 @@ function classify(code: AgentErrorCode, message: string, errorType?: string): Ca
   const httpMatch = haystack.match(/\b([45]\d{2})\b/)
   const status = httpMatch ? Number(httpMatch[1]) : undefined
 
+  if (/sidecar|native worker|native runtime|local agent runtime/.test(haystack)) {
+    return 'runtimeUnavailable'
+  }
   if (/abort|cancel/.test(haystack)) return 'aborted'
   if (/timeout|timed out|etimedout/.test(haystack)) return 'timeout'
   if (/rate ?limit|too many requests|429/.test(haystack)) return 'rateLimit'

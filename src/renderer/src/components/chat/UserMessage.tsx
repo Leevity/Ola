@@ -159,7 +159,20 @@ function UserSelectedFileReadsView({
       </div>
       <div className="space-y-1">
         {files.map((file, index) => {
-          const status = file.error
+          const skipped = file.skipped === true
+          const skippedDescription =
+            skipped && file.skipReason === 'pdf'
+              ? t('userMessage.selectedFileReadSkippedPdf', {
+                  defaultValue: 'PDF path reference; file was not read directly'
+                })
+              : skipped
+                ? t('userMessage.selectedFileReadSkippedNonText', {
+                    defaultValue: 'Path reference; binary or document file was not read directly'
+                  })
+                : ''
+          const status = skipped
+            ? t('userMessage.selectedFileReadSkipped', { defaultValue: 'Path reference' })
+            : file.error
             ? t('userMessage.selectedFileReadFailed', { defaultValue: 'Read failed' })
             : file.truncated
               ? t('userMessage.selectedFileReadTruncated', {
@@ -176,10 +189,12 @@ function UserSelectedFileReadsView({
             <div
               key={`${file.path}-${index}`}
               className="flex min-w-0 items-center gap-2 rounded-md border border-border/50 bg-background/45 px-2 py-1.5"
-              title={file.error || file.readPath || file.path}
+              title={file.error || skippedDescription || file.readPath || file.path}
             >
               {file.error ? (
                 <AlertCircle className="size-3.5 shrink-0 text-amber-500" />
+              ) : skipped ? (
+                <FileText className="size-3.5 shrink-0 text-blue-500" />
               ) : (
                 <FileText className="size-3.5 shrink-0 text-muted-foreground" />
               )}
@@ -194,7 +209,9 @@ function UserSelectedFileReadsView({
               <span
                 className={cn(
                   'shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium tabular-nums',
-                  file.error
+                  skipped
+                    ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                    : file.error
                     ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
                     : file.truncated
                       ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'

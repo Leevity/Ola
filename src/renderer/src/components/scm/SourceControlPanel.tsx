@@ -327,7 +327,8 @@ export function SourceControlPanel({
         bundle.patch,
         normalizeLanguageCode(i18n.language),
         status?.branch,
-        undefined
+        undefined,
+        repoPath
       )
       if (!message) {
         toast.error(t('layout:scmGenerateFailed', { defaultValue: 'Generation failed' }))
