@@ -16,3 +16,8 @@ sidecars/*/bin/
 sidecars/*/obj/
 *.dSYM/
 .claude\worktrees/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/

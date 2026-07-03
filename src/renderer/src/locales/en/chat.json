@@ -899,6 +899,9 @@
     "selectedFileReadsTitle": "Read files",
     "selectedFileReadLines": "Read {{count}} lines",
     "selectedFileReadTruncated": "Read first {{count}} lines",
+    "selectedFileReadSkipped": "Path reference",
+    "selectedFileReadSkippedPdf": "PDF path reference; file was not read directly",
+    "selectedFileReadSkippedNonText": "Path reference; binary or document file was not read directly",
     "selectedFileReadFailed": "Read failed"
   },
   "assistantMessage": {
@@ -958,6 +961,7 @@
     "agentError": {
       "titleTool": "Tool execution failed",
       "titleRuntime": "Runtime error",
+      "titleRuntimeUnavailable": "Local runtime unavailable",
       "titleAuth": "Authentication failed",
       "titleRateLimit": "Rate limited",
       "titleQuota": "Quota or balance exhausted",
@@ -970,6 +974,7 @@
       "titleUnknown": "Execution error",
       "descTool": "The tool call failed. You can retry or inspect the details below.",
       "descRuntime": "The agent runtime raised an exception. You can try regenerating.",
+      "descRuntimeUnavailable": "Ola could not reach the local Native Worker. It has already tried to restart it; retry the message or rebuild the native worker if this repeats.",
       "descAuth": "Check your API key, organization, or permission settings.",
       "descRateLimit": "You have been rate limited. Retry later or reduce concurrency.",
       "descQuota": "Your account quota or balance is insufficient. Review billing.",
@@ -982,6 +987,7 @@
       "descUnknown": "An unknown error occurred. See details below.",
       "details": "View technical details",
       "errorType": "Error type",
+      "sidecarUnavailableMessage": "The local agent runtime is temporarily unavailable. Ola tried to restart it; retry this message. If it keeps happening in development, run `npm run native:publish` and restart Ola.",
       "circuitOpenWithSeconds": "Repeated upstream failures temporarily paused retries. Requests should recover automatically in about {{seconds}} seconds.",
       "circuitOpenWithoutSeconds": "Repeated upstream failures temporarily paused retries. Requests should recover automatically soon.",
       "lastErrorLabel": "Last error",

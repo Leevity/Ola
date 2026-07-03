@@ -946,6 +946,8 @@
     "addedProvider": "已添加服务商: {{name}}",
     "proxyUrl": "API 代理地址",
     "proxyUrlHint": "自定义端点，用于代理或第三方兼容服务",
+    "resetToDefault": "恢复默认",
+    "resetToDefaultSuccess": "{{field}} 已恢复为默认值",
     "userAgent": "客户端名称",
     "userAgentHint": "留空将使用 {{defaultUserAgent}}。填写后会模拟该客户端标识。",
     "connectionCheck": "连通性检查",

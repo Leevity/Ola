@@ -899,6 +899,9 @@
     "selectedFileReadsTitle": "已读文件",
     "selectedFileReadLines": "已读 {{count}} 行",
     "selectedFileReadTruncated": "已读前 {{count}} 行",
+    "selectedFileReadSkipped": "路径引用",
+    "selectedFileReadSkippedPdf": "PDF 已作为路径引用插入，未直接读取文件内容",
+    "selectedFileReadSkippedNonText": "已作为路径引用插入，未直接读取二进制或文档文件内容",
     "selectedFileReadFailed": "读取失败"
   },
   "assistantMessage": {
@@ -958,6 +961,7 @@
     "agentError": {
       "titleTool": "工具执行失败",
       "titleRuntime": "运行失败",
+      "titleRuntimeUnavailable": "本地运行时不可用",
       "titleAuth": "认证失败",
       "titleRateLimit": "请求过于频繁",
       "titleQuota": "额度或余额不足",
@@ -970,6 +974,7 @@
       "titleUnknown": "执行异常",
       "descTool": "工具调用过程中出错，可尝试重试或查看下方详情。",
       "descRuntime": "模型运行时出现异常，可尝试重新生成。",
+      "descRuntimeUnavailable": "Ola 暂时无法连接本地 Native Worker，已尝试自动重启。可直接重试；如果开发环境中反复出现，请运行 `npm run native:publish` 后重启 Ola。",
       "descAuth": "请检查 API Key、组织或权限配置是否正确。",
       "descRateLimit": "已触发限流，请稍后再试或降低并发。",
       "descQuota": "当前账户额度或余额不足，请检查计费配置。",
@@ -982,6 +987,7 @@
       "descUnknown": "发生未知错误，请查看详情。",
       "details": "查看技术详情",
       "errorType": "错误类型",
+      "sidecarUnavailableMessage": "本地 Agent 运行时暂时不可用。Ola 已尝试自动重启，请重试这条消息；如果开发环境中持续出现，请运行 `npm run native:publish` 后重启 Ola。",
       "circuitOpenWithSeconds": "上游连接连续失败，当前暂缓重试，约 {{seconds}} 秒后自动恢复。",
       "circuitOpenWithoutSeconds": "上游连接连续失败，当前暂缓重试，稍后会自动恢复。",
       "lastErrorLabel": "最近一次错误",
