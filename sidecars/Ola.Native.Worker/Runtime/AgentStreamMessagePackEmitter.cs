@@ -278,6 +278,13 @@ internal static class AgentStreamMessagePackEmitter
         WriteOptionalString(writer, "model", debugInfo.Model);
         WriteOptionalString(writer, "executionPath", debugInfo.ExecutionPath);
         WriteOptionalString(writer, "transport", debugInfo.Transport);
+        WriteOptionalString(writer, "promptCacheKeyHash", debugInfo.PromptCacheKeyHash);
+        WriteOptionalString(writer, "bodyRef", debugInfo.BodyRef);
+        if (debugInfo.BodyBytes.HasValue)
+        {
+            writer.WriteString("bodyBytes");
+            writer.WriteInt64(debugInfo.BodyBytes.Value);
+        }
     }
 
     private static int CountDebugInfoProperties(AgentRuntimeRequestDebugInfo debugInfo)
@@ -289,6 +296,9 @@ internal static class AgentStreamMessagePackEmitter
         if (debugInfo.Model is not null) count++;
         if (debugInfo.ExecutionPath is not null) count++;
         if (debugInfo.Transport is not null) count++;
+        if (debugInfo.PromptCacheKeyHash is not null) count++;
+        if (debugInfo.BodyRef is not null) count++;
+        if (debugInfo.BodyBytes.HasValue) count++;
         return count;
     }
 
