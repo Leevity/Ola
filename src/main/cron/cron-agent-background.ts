@@ -1731,6 +1731,42 @@ async function runCronAgentInternal(
     emitRunProgress(jobId, runId, progress)
   }
 
+  // Persisting the transcript replaces every row for the run, so writing on
+  // each streamed delta is O(transcript²). Deltas only mark it dirty and a
+  // trailing timer flushes; tool/message boundaries and run end flush inline.
+  const TRANSCRIPT_FLUSH_MS = 800
+  let transcriptDirty = false
+  let transcriptFlushTimer: NodeJS.Timeout | null = null
+  let transcriptPersistChain: Promise<void> = Promise.resolve()
+  const persistTranscript = (): Promise<void> => {
+    if (transcriptFlushTimer) {
+      clearTimeout(transcriptFlushTimer)
+      transcriptFlushTimer = null
+    }
+    if (!transcriptDirty) return transcriptPersistChain
+    transcriptDirty = false
+    const snapshot = toPersistedMessages(transcriptMessages)
+    transcriptPersistChain = transcriptPersistChain
+      .then(() => replaceRunMessages(runId, snapshot))
+      .catch((err) => {
+        console.error('[cron] failed to persist run transcript:', err)
+      })
+    return transcriptPersistChain
+  }
+  const markTranscriptDirty = (): void => {
+    transcriptDirty = true
+    if (!transcriptFlushTimer) {
+      transcriptFlushTimer = setTimeout(() => {
+        transcriptFlushTimer = null
+        void persistTranscript()
+      }, TRANSCRIPT_FLUSH_MS)
+    }
+  }
+  const flushTranscript = (): Promise<void> => {
+    transcriptDirty = true
+    return persistTranscript()
+  }
+
   await appendLog('start', prompt.slice(0, 400))
   setProgress({ iteration: 0, toolCalls: 0, currentStep: 'initializing' })
 
@@ -1754,14 +1790,14 @@ async function runCronAgentInternal(
           break
         case 'thinking_delta':
           appendThinking(transcriptMessages, event.thinking)
-          await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+          markTranscriptDirty()
           break
         case 'thinking_encrypted':
           break
         case 'text_delta':
           output += event.text
           appendText(transcriptMessages, event.text)
-          await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+          markTranscriptDirty()
           break
         case 'tool_use_streaming_start':
           appendToolUse(transcriptMessages, {
@@ -1771,7 +1807,7 @@ async function runCronAgentInternal(
             input: {},
             ...(event.toolCallExtraContent ? { extraContent: event.toolCallExtraContent } : {})
           })
-          await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+          await flushTranscript()
           await appendLog('tool_call', `${event.toolName}(...streaming)`)
           setProgress({
             iteration: iterationCount,
@@ -1798,7 +1834,7 @@ async function runCronAgentInternal(
               }
             }
           }
-          await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+          await flushTranscript()
           break
         }
         case 'tool_call_result':
@@ -1809,7 +1845,7 @@ async function runCronAgentInternal(
             event.toolCall.error ? event.toolCall.error : (event.toolCall.output ?? 'ok'),
             Boolean(event.toolCall.error)
           )
-          await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+          await flushTranscript()
           await appendLog(
             'tool_result',
             `${event.toolCall.name}: ${event.toolCall.error ?? (event.toolCall.output ?? 'ok').slice(0, 300)}`
@@ -1831,7 +1867,7 @@ async function runCronAgentInternal(
               last.providerResponseId = event.providerResponseId
             }
           }
-          await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+          await flushTranscript()
           break
         }
         case 'error':
@@ -1866,7 +1902,7 @@ async function runCronAgentInternal(
     outputSummary: outputSummary || null,
     error: error ?? null
   })
-  await replaceRunMessages(runId, toPersistedMessages(transcriptMessages))
+  await flushTranscript()
   await emitRunFinished({
     jobId,
     runId,

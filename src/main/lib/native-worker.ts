@@ -61,7 +61,9 @@ class NativeWorkerManager {
   private events = new EventEmitter()
   private rawEvents = new EventEmitter()
   private pending = new Map<number, PendingRequest>()
-  private readBuffer = Buffer.alloc(0)
+  private readChunks: Buffer[] = []
+  private readBufferedBytes = 0
+  private pendingFrameLength = -1
   private nextId = 1
   private startPromise: Promise<void> | null = null
   private stopping = false
@@ -264,25 +266,60 @@ class NativeWorkerManager {
     })
   }
 
+  // Chunks are queued as-is and only joined once a full frame has arrived;
+  // concatenating the whole backlog on every socket chunk is O(n²) for large
+  // frames and blocks the main thread.
   private handleSocketData(chunk: Buffer): void {
-    this.readBuffer = Buffer.concat([this.readBuffer, chunk])
+    this.readChunks.push(chunk)
+    this.readBufferedBytes += chunk.length
 
-    while (this.readBuffer.length >= FRAME_HEADER_BYTES) {
-      const length = this.readBuffer.readUInt32BE(0)
-      if (length <= 0 || length > MAX_FRAME_BYTES) {
-        this.closeWorker(new Error(`Invalid native worker frame length: ${length}`))
-        return
+    while (true) {
+      if (this.pendingFrameLength < 0) {
+        if (this.readBufferedBytes < FRAME_HEADER_BYTES) return
+        const header = this.consumeBufferedBytes(FRAME_HEADER_BYTES)
+        const length = header.readUInt32BE(0)
+        if (length <= 0 || length > MAX_FRAME_BYTES) {
+          this.closeWorker(new Error(`Invalid native worker frame length: ${length}`))
+          return
+        }
+        this.pendingFrameLength = length
       }
 
-      const frameLength = FRAME_HEADER_BYTES + length
-      if (this.readBuffer.length < frameLength) {
-        return
-      }
-
-      const payload = this.readBuffer.subarray(FRAME_HEADER_BYTES, frameLength)
-      this.readBuffer = this.readBuffer.subarray(frameLength)
+      if (this.readBufferedBytes < this.pendingFrameLength) return
+      const payload = this.consumeBufferedBytes(this.pendingFrameLength)
+      this.pendingFrameLength = -1
       this.handleResponseFrame(payload)
     }
+  }
+
+  private consumeBufferedBytes(count: number): Buffer {
+    const first = this.readChunks[0]
+    if (first.length >= count) {
+      const out = first.subarray(0, count)
+      if (first.length === count) {
+        this.readChunks.shift()
+      } else {
+        this.readChunks[0] = first.subarray(count)
+      }
+      this.readBufferedBytes -= count
+      return out
+    }
+
+    const out = Buffer.allocUnsafe(count)
+    let offset = 0
+    while (offset < count) {
+      const chunk = this.readChunks[0]
+      const take = Math.min(chunk.length, count - offset)
+      chunk.copy(out, offset, 0, take)
+      if (take === chunk.length) {
+        this.readChunks.shift()
+      } else {
+        this.readChunks[0] = chunk.subarray(take)
+      }
+      offset += take
+    }
+    this.readBufferedBytes -= count
+    return out
   }
 
   private handleResponseFrame(payload: Buffer): void {
@@ -390,7 +427,9 @@ class NativeWorkerManager {
     this.child = null
     this.socket = null
     this.endpoint = null
-    this.readBuffer = Buffer.alloc(0)
+    this.readChunks = []
+    this.readBufferedBytes = 0
+    this.pendingFrameLength = -1
 
     if (child || socket || this.pending.size > 0) {
       const level = this.stopping ? console.log : console.warn

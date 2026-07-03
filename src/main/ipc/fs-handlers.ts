@@ -134,6 +134,25 @@ type FileStatResult = {
   error?: string | null
 }
 
+function isMissingFileErrorMessage(error: string): boolean {
+  return (
+    /ENOENT/i.test(error) ||
+    /No such file/i.test(error) ||
+    /Could not find (?:file|a part of the path)/i.test(error) ||
+    /(?:system )?cannot find (?:the )?(?:file|path)(?: specified)?/i.test(error) ||
+    /file not found/i.test(error)
+  )
+}
+
+function getParentDirectoryForWrite(filePath: string): string | null {
+  const trimmed = filePath.trim()
+  if (!trimmed) return null
+
+  const pathApi = /^[a-zA-Z]:[\\/]|^\\\\/.test(trimmed) ? path.win32 : path
+  const parent = pathApi.dirname(trimmed)
+  return parent && parent !== '.' && parent !== trimmed ? parent : null
+}
+
 async function nativeToolRequest<T>(
   method: string,
   params: Record<string, unknown>,
@@ -609,8 +628,8 @@ async function handleFsReadTextFileLines(args: FsReadTextFileLinesArgs): Promise
 async function handleFsWriteFile(args: FsWriteFileArgs): Promise<unknown> {
   try {
     const stat = await nativeToolRequest<FileStatResult>('fs/stat-path', { path: args.path })
-    if (stat.error) return { error: stat.error }
-    const beforeExists = stat.exists
+    if (stat.error && !isMissingFileErrorMessage(stat.error)) return { error: stat.error }
+    const beforeExists = !stat.error && Boolean(stat.exists)
     let beforeText: string | undefined
     if (beforeExists) {
       try {
@@ -625,6 +644,17 @@ async function handleFsWriteFile(args: FsWriteFileArgs): Promise<unknown> {
         }
       } catch {
         // best-effort: skip diff if read fails
+      }
+    }
+    if (!beforeExists) {
+      const parentDirectory = getParentDirectoryForWrite(args.path)
+      if (parentDirectory) {
+        const mkdirResult = await nativeToolRequest<FileMutationResult>('fs/mkdir', {
+          path: parentDirectory
+        })
+        if (!mkdirResult.success) {
+          return { error: mkdirResult.error ?? 'Native parent directory creation failed' }
+        }
       }
     }
     if (typeof args.beforeContent === 'string' && beforeText !== args.beforeContent) {

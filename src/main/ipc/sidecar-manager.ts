@@ -1,4 +1,7 @@
 import { ipcMain, BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { safePostMessageToWindow } from '../window-ipc'
 import {
   AGENT_STREAM_MSGPACK_CHANNEL,
@@ -47,6 +50,7 @@ import { executeMcpToolFromMain, readMcpResourceFromMain } from './mcp-handlers'
 import { executeJsExtensionToolInMain } from './extension-js-runtime'
 
 const SIDECAR_RENDERER_REQUEST_TIMEOUT_MS = 10 * 60_000
+const DEBUG_BODY_TEMP_DIR = join(tmpdir(), 'ola-request-debug-bodies')
 
 const CHANNEL_SPECIFIC_PLUGIN_INVOKE_CHANNELS = new Set([
   'plugin:weixin:send-image',
@@ -440,6 +444,7 @@ function rememberRendererOrigin(
  * Renderer sends requests to sidecar via main process.
  */
 export function registerSidecarHandlers(): void {
+  cleanupDebugBodyTempFiles()
   const manager = getSidecarManager()
   const pendingApprovalRequests = new Map<string, PendingRendererApprovalRequest>()
   const pendingRendererToolRequests = new Map<string, PendingRendererToolRequest>()
@@ -495,6 +500,13 @@ export function registerSidecarHandlers(): void {
       return
     }
 
+    // Fully decoding every frame just to have observeEvent no-op on untracked
+    // runs blocks the main thread on large payloads; gate on the runId that
+    // the cheap route scan already extracted.
+    if (!getGoalRuntimeService().hasRun(frame.runId)) {
+      return
+    }
+
     const runId = frame.runId
     const previous = goalRuntimeObservationChains.get(runId) ?? Promise.resolve()
     const next = previous
@@ -515,24 +527,98 @@ export function registerSidecarHandlers(): void {
     })
   }
 
+  // Forwarding one IPC message per provider delta floods the renderer with
+  // 60-200 postMessage calls/sec. Frames are buffered per run for a short
+  // window and concatenated on flush — MessagePack envelopes are
+  // self-delimiting, so the renderer splits them back out with decodeMulti.
+  // Arrival order within a run is preserved; terminal events flush inline.
+  const STREAM_BATCH_FLUSH_MS = 33
+  const STREAM_BATCH_MAX_BYTES = 256 * 1024
+  interface PendingStreamBatch {
+    frames: Buffer[]
+    byteLength: number
+    timer: NodeJS.Timeout | null
+    runId: string
+    sessionId: string
+  }
+  const pendingStreamBatches = new Map<string, PendingStreamBatch>()
+
+  const flushStreamBatch = (runId: string): void => {
+    const batch = pendingStreamBatches.get(runId)
+    if (!batch) return
+    pendingStreamBatches.delete(runId)
+    if (batch.timer !== null) clearTimeout(batch.timer)
+
+    const targetWindow = resolveRendererTargetWindow(
+      { runId: batch.runId, sessionId: batch.sessionId },
+      runWindowIds,
+      sessionWindowIds,
+      { allowFallback: false }
+    )
+    if (!targetWindow) return
+
+    const bytes = batch.frames.length === 1 ? batch.frames[0] : Buffer.concat(batch.frames)
+    sendAgentStreamBytes(targetWindow, bytes, {
+      source: 'native-raw',
+      runId: batch.runId,
+      sessionId: batch.sessionId,
+      frames: batch.frames.length
+    })
+  }
+
+  const flushAllStreamBatches = (): void => {
+    for (const runId of Array.from(pendingStreamBatches.keys())) {
+      flushStreamBatch(runId)
+    }
+  }
+
   manager.setRawEventHandler((frame) => {
     queueGoalRuntimeObservation(frame)
 
-    const targetWindow = resolveRendererTargetWindow(frame, runWindowIds, sessionWindowIds, {
-      allowFallback: false
-    })
-    if (targetWindow) {
-      sendAgentStreamBytes(targetWindow, frame.bytes, {
-        source: 'native-raw',
-        runId: frame.runId,
-        sessionId: frame.sessionId,
-        seq: frame.seq
+    if (!frame.runId || !frame.sessionId) {
+      const targetWindow = resolveRendererTargetWindow(frame, runWindowIds, sessionWindowIds, {
+        allowFallback: false
       })
+      if (targetWindow) {
+        sendAgentStreamBytes(targetWindow, frame.bytes, {
+          source: 'native-raw',
+          runId: frame.runId,
+          sessionId: frame.sessionId,
+          seq: frame.seq
+        })
+      }
+      return
     }
-    if (frame.runId) cleanupAgentRunIfTerminal(frame.runId, frame.hasTerminalEvent === true)
+
+    const runId = frame.runId
+    let batch = pendingStreamBatches.get(runId)
+    if (!batch) {
+      batch = {
+        frames: [],
+        byteLength: 0,
+        timer: null,
+        runId,
+        sessionId: frame.sessionId
+      }
+      pendingStreamBatches.set(runId, batch)
+    }
+    batch.frames.push(Buffer.isBuffer(frame.bytes) ? frame.bytes : Buffer.from(frame.bytes))
+    batch.byteLength += frame.byteLength
+
+    const terminal = frame.hasTerminalEvent === true
+    if (terminal || batch.byteLength >= STREAM_BATCH_MAX_BYTES) {
+      flushStreamBatch(runId)
+    } else if (batch.timer === null) {
+      batch.timer = setTimeout(() => flushStreamBatch(runId), STREAM_BATCH_FLUSH_MS)
+    }
+
+    if (terminal) cleanupAgentRunIfTerminal(runId, true)
   })
 
   manager.setRequestHandler(async (_id, method, params) => {
+    // Reverse requests (approvals, renderer tool execution) must not overtake
+    // stream events that were emitted before them.
+    flushAllStreamBatches()
     switch (method) {
       case 'approval/request': {
         const requestId = `sidecar-approval-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
@@ -742,8 +828,20 @@ export function registerSidecarHandlers(): void {
   }>('sidecar:request', async (_event, { method, params, timeoutMs }) => {
     console.log(`[Sidecar] request start: ${method}`)
     if (!manager.isRunning) {
-      console.warn(`[Sidecar] request rejected, not running: ${method}`)
-      throw new Error('SIDECAR_UNAVAILABLE')
+      console.warn(`[Sidecar] request starting sidecar because it is not running: ${method}`)
+      try {
+        const ready = await manager.ensureStarted()
+        if (!ready) {
+          throw new Error('SIDECAR_UNAVAILABLE')
+        }
+      } catch (error) {
+        console.warn(
+          `[Sidecar] request failed to start sidecar: ${method}: ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        )
+        throw new Error('SIDECAR_UNAVAILABLE')
+      }
     }
     try {
       const result = await manager.request(method, params, timeoutMs)
@@ -924,4 +1022,16 @@ export function registerSidecarHandlers(): void {
       return false
     }
   })
+}
+
+function cleanupDebugBodyTempFiles(): void {
+  try {
+    rmSync(DEBUG_BODY_TEMP_DIR, { recursive: true, force: true })
+  } catch (error) {
+    console.warn(
+      `[Sidecar] failed to clean debug body temp files: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    )
+  }
 }

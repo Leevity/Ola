@@ -1,4 +1,4 @@
-import { decode, encode } from '@msgpack/msgpack'
+import { decode, decodeMulti, encode } from '@msgpack/msgpack'
 import { AGENT_STREAM_PROTOCOL_VERSION, type AgentStreamEnvelope } from '../agent-stream-protocol'
 
 export const AGENT_STREAM_MSGPACK_CHANNEL = 'agent:stream:msgpack'
@@ -27,6 +27,22 @@ export function decodeAgentStreamEnvelope(
     throw new Error('Invalid agent stream MessagePack envelope')
   }
   return envelope
+}
+
+// The main process may concatenate several envelopes into one IPC message;
+// MessagePack values are self-delimiting, so decodeMulti splits them back out.
+export function decodeAgentStreamEnvelopes(
+  bytes: ArrayBuffer | ArrayBufferView
+): AgentStreamEnvelope[] {
+  const envelopes: AgentStreamEnvelope[] = []
+  for (const decoded of decodeMulti(toUint8Array(bytes))) {
+    const envelope = normalizeAgentStreamEnvelope(decoded)
+    if (!envelope) {
+      throw new Error('Invalid agent stream MessagePack envelope')
+    }
+    envelopes.push(envelope)
+  }
+  return envelopes
 }
 
 export function isAgentStreamEnvelope(value: unknown): value is AgentStreamEnvelope {

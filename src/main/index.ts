@@ -138,6 +138,12 @@ let isQuiting = false
 const detachedSessionWindows = new Map<string, BrowserWindow>()
 const visibleSessionWindowIds = new Map<string, Set<number>>()
 
+function ensureGlobalMemoryHome(): string {
+  const rootPath = join(homedir(), '.ola')
+  mkdirSync(join(rootPath, 'memory'), { recursive: true })
+  return rootPath
+}
+
 const GENERATED_IMAGES_DIR = 'ola'
 const GENERATED_IMAGES_SUBDIR = 'image'
 const MACOS_SHELL_ENV_TIMEOUT_MS = 4000
@@ -1282,9 +1288,7 @@ if (gotSingleInstanceLock) {
 
     registerMessagePackHandler<void>('app:homedir', () => homedir())
     registerMessagePackHandler<void>('app:global-memory-home', () => {
-      const rootPath = join(homedir(), '.ola')
-      mkdirSync(join(rootPath, 'memory'), { recursive: true })
-      return rootPath
+      return ensureGlobalMemoryHome()
     })
     registerMessagePackHandler<void>('app:system-info', () => ({
       machineName: hostname(),
