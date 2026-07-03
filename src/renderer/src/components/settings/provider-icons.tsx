@@ -4,7 +4,8 @@ import { useTheme } from 'next-themes'
 const ICON_BASE = 'https://unpkg.com/@lobehub/icons-static-png@1.83.0'
 
 const iconUrlMap: Record<string, string> = {
-  'copilot-oauth': 'https://github.githubassets.com/favicons/favicon.png'
+  'copilot-oauth': 'https://github.githubassets.com/favicons/favicon.png',
+  whalecloud: '/ola-app-icon.png'
 }
 
 const providerIconSlugMap: Record<string, string> = {

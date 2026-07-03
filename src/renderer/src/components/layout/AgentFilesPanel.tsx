@@ -70,7 +70,6 @@ import {
 } from '@renderer/components/chat/file-change-utils'
 import { cn } from '@renderer/lib/utils'
 import { generateCommitMessageFromStagedDiff } from '@renderer/lib/git/generate-commit-message'
-import type { UnifiedMessage } from '@renderer/lib/api/types'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useGitStore, type GitBranchItem, type GitStatusFile } from '@renderer/stores/git-store'
@@ -111,7 +110,6 @@ interface AgentChangeRow {
 
 type ChangeRow = GitChangeRow | AgentChangeRow
 
-const EMPTY_SESSION_MESSAGES: UnifiedMessage[] = []
 const EMPTY_DIFF_BY_KEY: Record<string, string> = {}
 const MAX_PRELOAD_DIFFS = 12
 const DIFF_PRELOAD_BATCH_SIZE = 2
@@ -554,12 +552,24 @@ export function AgentFilesPanel({
         ? state.projects.find((item) => item.id === currentSession.projectId)
         : undefined
 
+      // Selecting the messages array itself would re-render the whole panel on
+      // every streaming delta flush; a joined-id signature only changes when
+      // an assistant message is added or removed.
+      let assistantMessageIdsSignature = ''
+      if (currentSession?.messages) {
+        for (const message of currentSession.messages) {
+          if (message.role === 'assistant') {
+            assistantMessageIdsSignature += message.id + '\n'
+          }
+        }
+      }
+
       return {
         sessionId: resolvedSessionId,
         projectId: currentSession?.projectId ?? currentProject?.id ?? null,
         workingFolder: currentSession?.workingFolder ?? currentProject?.workingFolder ?? null,
         sshConnectionId: currentSession?.sshConnectionId ?? currentProject?.sshConnectionId ?? null,
-        messages: currentSession?.messages ?? EMPTY_SESSION_MESSAGES
+        assistantMessageIdsSignature
       }
     })
   )
@@ -629,11 +639,11 @@ export function AgentFilesPanel({
 
   const assistantMessageIds = React.useMemo(() => {
     const ids = new Set<string>()
-    for (const message of sessionView.messages) {
-      if (message.role === 'assistant') ids.add(message.id)
+    for (const id of sessionView.assistantMessageIdsSignature.split('\n')) {
+      if (id) ids.add(id)
     }
     return ids
-  }, [sessionView.messages])
+  }, [sessionView.assistantMessageIdsSignature])
 
   const sessionChangeSets = React.useMemo(() => {
     const seen = new Set<string>()
@@ -971,7 +981,8 @@ export function AgentFilesPanel({
         bundle.patch,
         normalizeLanguageCode(i18n.language),
         status?.branch,
-        undefined
+        undefined,
+        selectedRepoPath
       )
       if (!message) {
         toast.error(

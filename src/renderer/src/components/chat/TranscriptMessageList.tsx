@@ -15,6 +15,7 @@ interface TranscriptMessageListProps {
   revisionKey?: string
   sessionId?: string | null
   liveToolCallMap?: Map<string, ToolCallState> | null
+  autoScrollToBottom?: boolean
 }
 
 type ToolResultsLookup = Map<string, { content: ToolResultContent; isError?: boolean }>
@@ -62,8 +63,10 @@ function TranscriptMessageListInner({
   className,
   revisionKey,
   sessionId = null,
-  liveToolCallMap = null
+  liveToolCallMap = null,
+  autoScrollToBottom = false
 }: TranscriptMessageListProps): React.JSX.Element {
+  const scrollRef = React.useRef<HTMLDivElement>(null)
   const transcriptAnalysis = React.useMemo(
     () => buildTranscriptStaticAnalysis(messages),
     [messages, revisionKey]
@@ -74,12 +77,26 @@ function TranscriptMessageListInner({
     [streamingMessageId, transcriptAnalysis]
   )
 
+  React.useEffect(() => {
+    if (!autoScrollToBottom) return
+    const node = scrollRef.current
+    if (!node) return
+
+    const frame = window.requestAnimationFrame(() => {
+      node.scrollTop = node.scrollHeight
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [autoScrollToBottom, renderableMeta.length, revisionKey, streamingMessageId])
+
   if (renderableMeta.length === 0) {
     return <div className="text-sm text-muted-foreground/70">No playback available</div>
   }
 
   return (
-    <div className={cn('not-prose h-[min(60vh,40rem)] min-h-[20rem] overflow-y-auto', className)}>
+    <div
+      ref={scrollRef}
+      className={cn('not-prose h-[min(60vh,40rem)] min-h-[20rem] overflow-y-auto', className)}
+    >
       {renderableMeta.map((meta) => {
         const message = messageLookup.get(meta.messageId)
 
@@ -114,7 +131,8 @@ function areTranscriptMessageListPropsEqual(
     prev.className === next.className &&
     prev.revisionKey === next.revisionKey &&
     prev.sessionId === next.sessionId &&
-    prev.liveToolCallMap === next.liveToolCallMap
+    prev.liveToolCallMap === next.liveToolCallMap &&
+    prev.autoScrollToBottom === next.autoScrollToBottom
   )
 }
 

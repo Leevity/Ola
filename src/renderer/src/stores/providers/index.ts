@@ -20,6 +20,7 @@ import { xiaomiCodingPreset, xiaomiPreset } from './xiaomi'
 import { bigmodelCodingPreset, bigmodelPreset } from './bigmodel'
 import { volcenginePreset } from './volcengine'
 import { xaiPreset } from './x-ai'
+import { whalecloudPreset } from './whalecloud'
 import type { BuiltinProviderPreset } from './types'
 
 export const builtinProviderPresets: BuiltinProviderPreset[] = [
@@ -48,5 +49,6 @@ export const builtinProviderPresets: BuiltinProviderPreset[] = [
   bigmodelCodingPreset,
   bigmodelPreset,
   volcenginePreset,
-  xaiPreset
+  xaiPreset,
+  whalecloudPreset
 ]

@@ -25,6 +25,7 @@ import { isStreamingPerfEnabled, recordStreamingReactCommit } from '@renderer/li
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { selectSessionScopedAgentState } from '@renderer/lib/agent/session-scoped-agent-state'
 import { resolveActiveCompactArtifacts } from '@renderer/lib/agent/context-compression'
+import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import { DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL } from '../../../../shared/messagepack/binary-ipc'
 
 const modeHints = {
@@ -86,6 +87,75 @@ function getMessageToolUseIds(message: UnifiedMessage): string[] {
     })
     .map((block) => block.id)
     .filter(Boolean)
+}
+
+function toolResultContentToText(content: ToolResultContent | undefined): string {
+  if (!content) return ''
+  if (typeof content === 'string') return content
+  return content
+    .filter((block) => block.type === 'text')
+    .map((block) => (block.type === 'text' ? block.text : ''))
+    .join('\n')
+}
+
+function getPlanReviewPlanId(content: ToolResultContent | undefined): string | null {
+  const text = toolResultContentToText(content)
+  if (!text.trim()) return null
+  const parsed = decodeStructuredToolResult(text)
+  if (!parsed || Array.isArray(parsed)) return null
+  const planId = typeof parsed.plan_id === 'string' ? parsed.plan_id.trim() : ''
+  return planId || null
+}
+
+function collectDuplicatePlanReviewToolUseIds(
+  messages: UnifiedMessage[],
+  toolResultsLookup: Map<string, ToolResultsLookup>
+): Set<string> {
+  const latestByPlanId = new Map<string, { toolUseId: string; order: number }>()
+  const occurrences: Array<{ planId: string; toolUseId: string; order: number }> = []
+  let order = 0
+
+  for (const message of messages) {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) {
+      order += 1
+      continue
+    }
+
+    const toolResults = toolResultsLookup.get(message.id)
+    for (const block of message.content) {
+      if (block.type !== 'tool_use') continue
+      if (block.name !== 'ExitPlanMode') continue
+
+      const planId = getPlanReviewPlanId(toolResults?.get(block.id)?.content)
+      if (!planId) {
+        order += 1
+        continue
+      }
+
+      const occurrence = { planId, toolUseId: block.id, order }
+      occurrences.push(occurrence)
+      const previous = latestByPlanId.get(planId)
+      if (!previous || occurrence.order > previous.order) {
+        latestByPlanId.set(planId, occurrence)
+      }
+      order += 1
+    }
+  }
+
+  const hidden = new Set<string>()
+  for (const occurrence of occurrences) {
+    const latest = latestByPlanId.get(occurrence.planId)
+    if (latest && latest.toolUseId !== occurrence.toolUseId) {
+      hidden.add(occurrence.toolUseId)
+    }
+  }
+  return hidden
+}
+
+function mergeHiddenToolUseIds(first?: Set<string>, second?: Set<string>): Set<string> | undefined {
+  if (!first || first.size === 0) return second && second.size > 0 ? second : undefined
+  if (!second || second.size === 0) return first
+  return new Set([...first, ...second])
 }
 
 function hasCompleteTailToolExecutionResults(state: TailToolExecutionState | null): boolean {
@@ -622,7 +692,7 @@ function UserMessageLocator({
     previewItemIndex >= 0 ? getCompactLocatorMarkerTop(previewItemIndex, items.length) : '50%'
 
   return (
-    <div className="absolute right-2 top-1/2 z-20 hidden -translate-y-1/2 md:block">
+    <div className="pointer-events-none absolute right-2 top-1/2 z-20 hidden -translate-y-1/2 md:block">
       <div className="pointer-events-none relative h-[min(52vh,24rem)] w-[min(324px,calc(100vw-3rem))]">
         {previewItem && previewCopy ? (
           <>
@@ -768,6 +838,10 @@ export function StaticMessageTranscript({
     [messages]
   )
   const { messageLookup, toolResultsLookup } = transcriptAnalysis
+  const duplicatePlanReviewToolUseIds = React.useMemo(
+    () => collectDuplicatePlanReviewToolUseIds(messages, toolResultsLookup),
+    [messages, toolResultsLookup]
+  )
   const renderableMessages = React.useMemo(
     () => buildChatRenderableMessageMetaFromAnalysis(transcriptAnalysis, null, null),
     [transcriptAnalysis]
@@ -872,7 +946,10 @@ export function StaticMessageTranscript({
               orchestrationRun={
                 orchestrationState.byMessageId.get(row.messageId)?.primaryRun ?? null
               }
-              hiddenToolUseIds={orchestrationState.byMessageId.get(row.messageId)?.hiddenToolUseIds}
+              hiddenToolUseIds={mergeHiddenToolUseIds(
+                orchestrationState.byMessageId.get(row.messageId)?.hiddenToolUseIds,
+                duplicatePlanReviewToolUseIds
+              )}
               anchorMessageId={null}
               highlightMessageId={null}
               renderMode="transcript"
@@ -966,6 +1043,10 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     tailToolExecutionState,
     orchestrationBindingSignature: orchestrationMessageBindingSignature
   } = transcriptAnalysis
+  const duplicatePlanReviewToolUseIds = React.useMemo(
+    () => collectDuplicatePlanReviewToolUseIds(messages, toolResultsLookup),
+    [messages, toolResultsLookup]
+  )
   const [orchestrationMessageSnapshot, setOrchestrationMessageSnapshot] = React.useState<{
     messages: UnifiedMessage[]
     bindingSignature: string
@@ -1098,9 +1179,11 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     [assistantChangeTargets]
   )
 
-  const userLocatorItems = React.useMemo<UserMessageLocatorItem[]>(() => {
+  // Parsing the DB rows is keyed on the rows alone — re-running the
+  // JSON.parse of every user row on each streaming messages-array flush is
+  // needless churn; rows only change when the session (re)loads.
+  const userLocatorRowSources = React.useMemo(() => {
     const sourcesById = new Map<string, UserMessageLocatorSource>()
-
     for (const row of userLocatorRows) {
       if (row.role !== 'user') continue
       sourcesById.set(row.id, {
@@ -1111,6 +1194,11 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         sortOrder: row.sort_order
       })
     }
+    return sourcesById
+  }, [userLocatorRows])
+
+  const userLocatorItems = React.useMemo<UserMessageLocatorItem[]>(() => {
+    const sourcesById = new Map(userLocatorRowSources)
 
     messages.forEach((message, messageIndex) => {
       if (message.role !== 'user') return
@@ -1125,13 +1213,13 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       })
     })
 
-    return [...sourcesById.values()]
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .reduce<UserMessageLocatorItem[]>((items, source) => {
-        const item = buildUserLocatorItem(source, items.length + 1, activeSessionMessageCount, t)
-        return item ? [...items, item] : items
-      }, [])
-  }, [activeSessionMessageCount, loadedRangeStart, messages, t, userLocatorRows])
+    const items: UserMessageLocatorItem[] = []
+    for (const source of [...sourcesById.values()].sort((a, b) => a.sortOrder - b.sortOrder)) {
+      const item = buildUserLocatorItem(source, items.length + 1, activeSessionMessageCount, t)
+      if (item) items.push(item)
+    }
+    return items
+  }, [activeSessionMessageCount, loadedRangeStart, messages, t, userLocatorRowSources])
 
   React.useEffect(() => {
     let cancelled = false
@@ -1693,9 +1781,10 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
                 orchestrationRun={
                   orchestrationState.byMessageId.get(row.messageId)?.primaryRun ?? null
                 }
-                hiddenToolUseIds={
-                  orchestrationState.byMessageId.get(row.messageId)?.hiddenToolUseIds
-                }
+                hiddenToolUseIds={mergeHiddenToolUseIds(
+                  orchestrationState.byMessageId.get(row.messageId)?.hiddenToolUseIds,
+                  duplicatePlanReviewToolUseIds
+                )}
                 anchorMessageId={null}
                 highlightMessageId={null}
                 requestRetryState={
@@ -1797,9 +1886,10 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
                         orchestrationRun={
                           orchestrationState.byMessageId.get(messageId)?.primaryRun ?? null
                         }
-                        hiddenToolUseIds={
-                          orchestrationState.byMessageId.get(messageId)?.hiddenToolUseIds
-                        }
+                        hiddenToolUseIds={mergeHiddenToolUseIds(
+                          orchestrationState.byMessageId.get(messageId)?.hiddenToolUseIds,
+                          duplicatePlanReviewToolUseIds
+                        )}
                         anchorMessageId={null}
                         highlightMessageId={highlightedMessageId}
                         renderMode={rowRenderMode}
