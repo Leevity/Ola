@@ -181,6 +181,13 @@ function canRenderInlineSubAgentRun(
   sourceMessage: UnifiedMessage | undefined
 ): boolean {
   if (agents.length <= 1) return true
+  const names = new Set<string>()
+  for (const agent of agents) {
+    const name = (agent.displayName ?? agent.name).trim()
+    if (!name) continue
+    if (names.has(name)) return false
+    names.add(name)
+  }
   if (!sourceMessage || !Array.isArray(sourceMessage.content)) return true
 
   const agentToolUseIds = new Set(agents.map((agent) => agent.toolUseId))
@@ -281,6 +288,7 @@ function mapSubAgentToMember(agent: SubAgentState): OrchestrationMember {
     name: agent.displayName ?? agent.name,
     role: 'worker',
     agentName: agent.name,
+    model: agent.requestModel?.modelName ?? agent.requestModel?.modelId ?? undefined,
     status,
     isRunning: agent.isRunning,
     iteration: agent.iteration,

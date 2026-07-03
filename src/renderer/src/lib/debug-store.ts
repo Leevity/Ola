@@ -29,20 +29,9 @@ function evictOldest(): void {
   }
 }
 
-export function shouldKeepFullDebugBody(): boolean {
-  try {
-    return localStorage.getItem('openCowork.debugFullRequestBody') === '1'
-  } catch {
-    return false
-  }
-}
-
-function stripLargeBody(info: RequestDebugInfo): RequestDebugInfo {
-  if (!info.body || info.body.length <= MAX_DEBUG_BODY_CHARS) return info
-  return {
-    ...info,
-    body: `${info.body.slice(0, MAX_DEBUG_BODY_CHARS)}\n... [truncated, ${info.body.length} chars total]`
-  }
+function stripBodyFields(info: RequestDebugInfo): RequestDebugInfo {
+  const { body: _body, bodyRef: _bodyRef, bodyBytes: _bodyBytes, ...rest } = info
+  return rest
 }
 
 function truncateDebugText(value: string | undefined, max: number): string | undefined {
@@ -68,7 +57,7 @@ export function createResidentRequestDebugInfo(info: RequestDebugInfo): RequestD
 
 /** Shrink request payloads before persisting to usage DB — full bodies are UI-only in dev mode. */
 export function truncateRequestDebugForPersistence(info: RequestDebugInfo): RequestDebugInfo {
-  return truncateRequestDebugPayload(info, MAX_PERSISTED_DEBUG_BODY_CHARS)
+  return stripBodyFields(truncateRequestDebugPayload(info, MAX_PERSISTED_DEBUG_BODY_CHARS))
 }
 
 export function getRequestDebugStoreStats(): {
@@ -106,6 +95,12 @@ export function compactRequestDebugStore(maxChars = MAX_DEBUG_BODY_CHARS): void 
   }
 }
 
+export function shouldKeepFullDebugBody(): boolean {
+  if (!useSettingsStore.getState().devMode) return false
+  const stats = getRequestDebugStoreStats()
+  return stats.bodyChars + stats.contextWindowChars < MAX_PERSISTED_DEBUG_BODY_CHARS
+}
+
 function mergeTraceIntoDebugInfo(msgId: string, info: RequestDebugInfo): RequestDebugInfo {
   const trace = _store.get(msgId)
   return {
@@ -117,14 +112,16 @@ function mergeTraceIntoDebugInfo(msgId: string, info: RequestDebugInfo): Request
   }
 }
 
-/** In dev mode only one message should retain request body for the debug panel. */
-function stripDebugInfoFromOtherMessages(keepMsgId: string): void {
+/** In dev mode only one message should retain a request body reference for the debug panel. */
+function stripDebugBodyFromOtherMessages(keepMsgId: string): void {
   for (const id of _insertionOrder) {
     if (id === keepMsgId) continue
     const t = _store.get(id)
     if (!t?.debugInfo) continue
-    const { debugInfo: _d, ...rest } = t
-    _store.set(id, rest)
+    _store.set(id, {
+      ...t,
+      debugInfo: stripBodyFields(t.debugInfo)
+    })
   }
 }
 
@@ -143,11 +140,21 @@ export function getRequestTraceInfo(msgId: string): RequestTraceInfo | undefined
 }
 
 export function setLastDebugInfo(msgId: string, info: RequestDebugInfo): void {
-  const keepFullDebugBody = useSettingsStore.getState().devMode && shouldKeepFullDebugBody()
+  const current = _store.get(msgId)?.debugInfo
+  if (
+    current &&
+    Number.isFinite(current.timestamp) &&
+    Number.isFinite(info.timestamp) &&
+    info.timestamp < current.timestamp
+  ) {
+    return
+  }
+
+  const devMode = useSettingsStore.getState().devMode
   const merged = mergeTraceIntoDebugInfo(msgId, info)
-  const debugInfo = keepFullDebugBody ? merged : stripLargeBody(merged)
-  if (keepFullDebugBody) {
-    stripDebugInfoFromOtherMessages(msgId)
+  const debugInfo = devMode ? merged : stripBodyFields(merged)
+  if (devMode) {
+    stripDebugBodyFromOtherMessages(msgId)
   }
   setRequestTraceInfo(msgId, {
     debugInfo,
