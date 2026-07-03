@@ -264,6 +264,10 @@ export class GoalRuntimeService {
   private blockedAuditBySession = new Map<string, BlockedAuditState>()
   private pendingPromptsBySession = new Map<string, string[]>()
 
+  hasRun(runId: string): boolean {
+    return this.activeRuns.has(runId)
+  }
+
   canMarkGoalBlocked(sessionId: string, goalId?: string | null): boolean {
     const audit = this.blockedAuditBySession.get(sessionId)
     if (!audit) return false
