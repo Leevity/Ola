@@ -159,7 +159,7 @@ internal static partial class AgentRuntimeAnthropicMessagesProvider
                 buffer.Arguments.Append(partialJson);
             }
             if (AgentRuntimeToolArgumentStreaming.TryGetInputForDelta(
-                buffer.Arguments.ToString(),
+                buffer.Arguments,
                 buffer.ArgumentStream,
                 out var partialInput))
             {

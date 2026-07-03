@@ -15,6 +15,12 @@ internal static class OpenAIChatRuntime
     private const int DefaultContextCompressionReservedOutputTokens = 20_000;
     private const int ContextCompressionAutoBufferTokens = 13_000;
     private const int ContextSourceHeadMessageLimit = 12;
+    private const string PlanModeTurnContextText =
+        "<turn-context>\n" +
+        "<plan-mode>enabled; inspect and write plans only unless implementation is explicitly approved for this turn.</plan-mode>\n" +
+        "</turn-context>";
+    private const string PlanRevisionInstruction =
+        "Please revise the current plan file accordingly with Write/Edit, then call ExitPlanMode.";
     private static readonly HttpClient Http = WorkerHttpClientFactory.Create();
     private static readonly JsonWriterOptions WriterOptions = new()
     {
@@ -35,7 +41,7 @@ internal static class OpenAIChatRuntime
 
         ValidateProvider(provider);
 
-        var wireConversation = ReadWireConversation(parameters);
+        var wireConversation = ApplyRequestContexts(ReadWireConversation(parameters), parameters);
         var conversation = ReadConversation(wireConversation);
         var runtimeParameters = CreateRuntimeParametersWithoutMessages(parameters);
         state.ReplaceParameters(runtimeParameters);
@@ -49,6 +55,7 @@ internal static class OpenAIChatRuntime
         var captureFinalMessages = JsonHelpers.GetBool(parameters, "captureFinalMessages", false);
         var completed = false;
         var fullCompressionApplied = false;
+        var runtimePlanModeContextInjected = wireConversation.Any(MessageHasPlanModeContext);
 
         WorkerLog.Debug(
             $"agent loop start provider={providerType} maxIterations=" +
@@ -203,6 +210,13 @@ internal static class OpenAIChatRuntime
 
             conversation.Add(AgentRuntimeChatMessage.UserToolResults(toolResults));
             wireConversation.Add(CreateToolResultsWireMessage(toolResults));
+            if (!runtimePlanModeContextInjected &&
+                AgentRuntimePlanExecutor.IsPlanModeActiveForRun(state.RunId, parameters))
+            {
+                conversation.Add(new AgentRuntimeChatMessage("user", PlanModeTurnContextText, [], []));
+                wireConversation.Add(CreateUserTextWireMessage(PlanModeTurnContextText));
+                runtimePlanModeContextInjected = true;
+            }
             await AgentRuntimeTools.EmitAsync(
                 state,
                 context,
@@ -257,7 +271,12 @@ internal static class OpenAIChatRuntime
             writer.WriteStartObject();
             foreach (var property in parameters.EnumerateObject())
             {
-                if (property.NameEquals("messages") || property.NameEquals("liveOverlayMessages"))
+                if (property.NameEquals("messages") ||
+                    property.NameEquals("liveOverlayMessages") ||
+                    property.NameEquals("requestContextTexts") ||
+                    property.NameEquals("slashCommand") ||
+                    property.NameEquals("systemCommand") ||
+                    property.NameEquals("pluginChannelContext"))
                 {
                     continue;
                 }
@@ -485,6 +504,7 @@ internal static class OpenAIChatRuntime
         var url = $"{baseUrl}/chat/completions";
         var body = BuildRequestBody(parameters, provider, conversation);
         var debugHeaders = BuildDebugHeaders(provider);
+        var debugBody = AgentRuntimeDebugPayload.PrepareBodyFile(body, parameters);
 
         await AgentRuntimeTools.EmitAsync(
             state,
@@ -499,7 +519,9 @@ internal static class OpenAIChatRuntime
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     JsonHelpers.GetString(provider, "providerId"),
                     JsonHelpers.GetString(provider, "providerBuiltinId"),
-                    model)));
+                    model,
+                    BodyRef: debugBody?.Ref,
+                    BodyBytes: debugBody?.Bytes)));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Content = new StringContent(body, Encoding.UTF8, "application/json");
@@ -663,6 +685,7 @@ internal static class OpenAIChatRuntime
         using var document = JsonDocument.Parse(data);
         var root = document.RootElement;
         if (root.TryGetProperty("usage", out var usageElement) &&
+            usageElement.ValueKind == JsonValueKind.Object &&
             TryReadUsage(usageElement, out var usage))
         {
             setUsage(usage);
@@ -746,6 +769,7 @@ internal static class OpenAIChatRuntime
         using var document = JsonDocument.Parse(payload);
         var root = document.RootElement;
         if (root.TryGetProperty("usage", out var usageElement) &&
+            usageElement.ValueKind == JsonValueKind.Object &&
             TryReadUsage(usageElement, out var usage))
         {
             setUsage(usage);
@@ -845,7 +869,7 @@ internal static class OpenAIChatRuntime
 
         if (buffer.Started &&
             AgentRuntimeToolArgumentStreaming.TryGetInputForDelta(
-                buffer.Arguments.ToString(),
+                buffer.Arguments,
                 buffer.ArgumentStream,
                 out var partialInput))
         {
@@ -1060,6 +1084,17 @@ internal static class OpenAIChatRuntime
                 writer.WriteEndObject();
             }
             writer.WriteEndArray();
+            writer.WriteNumber("createdAt", NowMs());
+        });
+    }
+
+    private static JsonElement CreateUserTextWireMessage(string text)
+    {
+        return CreateObjectElement(writer =>
+        {
+            writer.WriteString("id", NewMessageId());
+            writer.WriteString("role", "user");
+            writer.WriteString("content", text);
             writer.WriteNumber("createdAt", NowMs());
         });
     }
@@ -1688,6 +1723,421 @@ internal static class OpenAIChatRuntime
         return MergeOverlayMessages(contextMessages, overlayMessages);
     }
 
+    private static List<JsonElement> ApplyRequestContexts(List<JsonElement> messages, JsonElement parameters)
+    {
+        if (messages.Count == 0)
+        {
+            return messages;
+        }
+
+        var lastUserIndex = -1;
+        for (var index = 0; index < messages.Count; index++)
+        {
+            if (JsonHelpers.GetString(messages[index], "role") == "user")
+            {
+                lastUserIndex = index;
+            }
+        }
+
+        if (lastUserIndex < 0)
+        {
+            return messages;
+        }
+
+        var contextTexts = BuildRequestContextTexts(parameters, messages[lastUserIndex]);
+        if (contextTexts.Count == 0)
+        {
+            return messages;
+        }
+
+        var result = messages.Select(message => message.Clone()).ToList();
+        result[lastUserIndex] = PrependTextToWireMessage(
+            result[lastUserIndex],
+            string.Join("\n\n", contextTexts));
+        return result;
+    }
+
+    private static List<string> BuildRequestContextTexts(JsonElement parameters, JsonElement userMessage)
+    {
+        var result = new List<string>();
+        if (JsonHelpers.GetBool(parameters, "planMode", false) && !MessageHasPlanModeContext(userMessage))
+        {
+            result.Add(PlanModeTurnContextText);
+        }
+
+        var revisionText = BuildPlanRevisionText(parameters, userMessage);
+        if (!string.IsNullOrWhiteSpace(revisionText))
+        {
+            result.Add(revisionText);
+        }
+
+        var executionText = BuildPlanExecutionText(parameters, userMessage);
+        if (!string.IsNullOrWhiteSpace(executionText))
+        {
+            result.Add(executionText);
+        }
+
+        var pluginChannelText = BuildPluginChannelText(parameters, userMessage);
+        if (!string.IsNullOrWhiteSpace(pluginChannelText))
+        {
+            result.Add(pluginChannelText);
+        }
+
+        AppendRequestContextTexts(result, parameters);
+
+        var slashCommandText = BuildSlashCommandText(parameters, userMessage);
+        if (!string.IsNullOrWhiteSpace(slashCommandText))
+        {
+            result.Add(slashCommandText);
+        }
+
+        var systemCommandText = BuildSystemCommandText(parameters, userMessage);
+        if (!string.IsNullOrWhiteSpace(systemCommandText))
+        {
+            result.Add(systemCommandText);
+        }
+
+        return result;
+    }
+
+    private static void AppendRequestContextTexts(List<string> result, JsonElement parameters)
+    {
+        if (parameters.ValueKind != JsonValueKind.Object ||
+            !parameters.TryGetProperty("requestContextTexts", out var contexts) ||
+            contexts.ValueKind != JsonValueKind.Array)
+        {
+            return;
+        }
+
+        foreach (var context in contexts.EnumerateArray())
+        {
+            if (context.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            var text = context.GetString()?.Trim();
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                result.Add(text);
+            }
+        }
+    }
+
+    private static bool MessageHasPlanModeContext(JsonElement message)
+    {
+        return MessageTextContains(message, "<plan-mode>");
+    }
+
+    private static string? BuildPlanRevisionText(JsonElement parameters, JsonElement userMessage)
+    {
+        if (MessageTextContains(userMessage, PlanRevisionInstruction) ||
+            parameters.ValueKind != JsonValueKind.Object ||
+            !parameters.TryGetProperty("planRevision", out var revision) ||
+            revision.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var title = JsonHelpers.GetString(revision, "title")?.Trim();
+        if (string.IsNullOrWhiteSpace(title))
+        {
+            return null;
+        }
+
+        var lines = new List<string>
+        {
+            $"The plan **{title}** was rejected."
+        };
+
+        var filePath = JsonHelpers.GetString(revision, "filePath")?.Trim();
+        if (!string.IsNullOrWhiteSpace(filePath))
+        {
+            lines.Add($"Plan file: {filePath}");
+        }
+
+        var feedback = JsonHelpers.GetString(revision, "feedback")?.Trim();
+        lines.Add(string.IsNullOrWhiteSpace(feedback)
+            ? "Feedback:\nNo additional feedback provided."
+            : $"Feedback:\n{feedback}");
+        lines.Add(string.Empty);
+        lines.Add(PlanRevisionInstruction);
+        return string.Join('\n', lines);
+    }
+
+    private static string? BuildPlanExecutionText(JsonElement parameters, JsonElement userMessage)
+    {
+        if (MessageTextContains(userMessage, "Stay in ACP mode. Do not directly edit files") ||
+            parameters.ValueKind != JsonValueKind.Object ||
+            !parameters.TryGetProperty("planExecution", out var execution) ||
+            execution.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var filePath = JsonHelpers.GetString(execution, "filePath")?.Trim();
+        var lines = new List<string>
+        {
+            string.IsNullOrWhiteSpace(filePath)
+                ? "Execute the approved plan"
+                : $"Execute the approved plan from this file:\n{filePath}"
+        };
+
+        if (JsonHelpers.GetBool(execution, "acp", false))
+        {
+            lines.Add("Stay in ACP mode. Do not directly edit files or run implementation commands yourself.");
+            lines.Add("Break the plan into concrete tasks, keep task tracking up to date, and delegate implementation through Task / sub-agents / teammates.");
+            lines.Add("Review sub-agent outputs, continue delegation until the approved plan is completed, and report progress plus remaining risks after each wave.");
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string? BuildPluginChannelText(JsonElement parameters, JsonElement userMessage)
+    {
+        const string marker = "## Channel Auto-Reply Context";
+        if (MessageTextContains(userMessage, marker) ||
+            parameters.ValueKind != JsonValueKind.Object ||
+            !parameters.TryGetProperty("pluginChannelContext", out var channelContext) ||
+            channelContext.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var channelId = JsonHelpers.GetString(channelContext, "channelId")?.Trim();
+        if (string.IsNullOrWhiteSpace(channelId))
+        {
+            return null;
+        }
+
+        var channelName = JsonHelpers.GetString(channelContext, "channelName")?.Trim();
+        var chatId = JsonHelpers.GetString(channelContext, "chatId")?.Trim();
+        var chatType = JsonHelpers.GetString(channelContext, "chatType")?.Trim();
+        var senderId = JsonHelpers.GetString(channelContext, "senderId")?.Trim();
+        var senderName = JsonHelpers.GetString(channelContext, "senderName")?.Trim();
+        var senderLabel = string.IsNullOrWhiteSpace(senderName) ? senderId : senderName;
+        var senderIdText = string.IsNullOrWhiteSpace(senderId) ? "unknown" : senderId;
+        var senderLabelText = string.IsNullOrWhiteSpace(senderLabel) ? "unknown" : senderLabel;
+        var availableTools = ReadStringArray(channelContext, "availableTools");
+        var autoReply = JsonHelpers.GetBool(channelContext, "autoReply", false);
+
+        var lines = new List<string>
+        {
+            "<system-reminder>",
+            marker,
+            $"Channel: {(string.IsNullOrWhiteSpace(channelName) ? channelId : channelName)} (channel_id: `{channelId}`)"
+        };
+        if (!string.IsNullOrWhiteSpace(chatId))
+        {
+            lines.Add($"Chat ID: `{chatId}`");
+        }
+        lines.Add($"Chat Type: {(string.IsNullOrWhiteSpace(chatType) ? "unknown" : chatType)}");
+        lines.Add($"Sender: {senderLabelText} (id: {senderIdText})");
+        if (availableTools.Count > 0)
+        {
+            lines.Add($"Available channel tools: {string.Join(", ", availableTools)}");
+        }
+        lines.Add(autoReply
+            ? "Reply directly to this incoming message in a natural way."
+            : "Reply naturally in this channel conversation.");
+        lines.Add(string.IsNullOrWhiteSpace(chatId)
+            ? $"If you need channel tools, use plugin_id=\"{channelId}\"."
+            : $"If you need channel tools, use plugin_id=\"{channelId}\" and chat_id=\"{chatId}\".");
+        lines.Add("</system-reminder>");
+        return string.Join('\n', lines);
+    }
+
+    private static List<string> ReadStringArray(JsonElement value, string propertyName)
+    {
+        var result = new List<string>();
+        if (value.ValueKind != JsonValueKind.Object ||
+            !value.TryGetProperty(propertyName, out var array) ||
+            array.ValueKind != JsonValueKind.Array)
+        {
+            return result;
+        }
+
+        foreach (var item in array.EnumerateArray())
+        {
+            var text = item.ValueKind == JsonValueKind.String ? item.GetString()?.Trim() : null;
+            if (!string.IsNullOrWhiteSpace(text) && !result.Contains(text))
+            {
+                result.Add(text);
+            }
+        }
+        return result;
+    }
+
+    private static string? BuildSlashCommandText(JsonElement parameters, JsonElement userMessage)
+    {
+        const string marker = "The user invoked slash command /";
+        if (MessageTextContains(userMessage, marker) ||
+            parameters.ValueKind != JsonValueKind.Object ||
+            !parameters.TryGetProperty("slashCommand", out var command) ||
+            command.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var commandName = JsonHelpers.GetString(command, "commandName")?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(commandName))
+        {
+            return null;
+        }
+
+        var rawArguments = JsonHelpers.GetString(command, "rawArguments")?.Trim() ?? string.Empty;
+        var parsedArguments = "[]";
+        var hasParsedArguments = false;
+        if (command.TryGetProperty("parsedArguments", out var parsed) &&
+            parsed.ValueKind == JsonValueKind.Array)
+        {
+            parsedArguments = parsed.GetRawText();
+            hasParsedArguments = parsed.GetArrayLength() > 0;
+        }
+
+        if (string.IsNullOrWhiteSpace(rawArguments) && !hasParsedArguments)
+        {
+            return null;
+        }
+
+        return
+            "<system-reminder>\n" +
+            $"The user invoked slash command /{commandName} with explicit arguments.\n" +
+            $"Raw arguments: {rawArguments}\n" +
+            $"Parsed arguments: {parsedArguments}\n" +
+            "Treat these values as slash-command parameters.\n" +
+            "</system-reminder>";
+    }
+
+    private static string? BuildSystemCommandText(JsonElement parameters, JsonElement userMessage)
+    {
+        if (MessageTextContains(userMessage, "<system-command") ||
+            parameters.ValueKind != JsonValueKind.Object ||
+            !parameters.TryGetProperty("systemCommand", out var command) ||
+            command.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var name = JsonHelpers.GetString(command, "name")?.Trim();
+        var content = JsonHelpers.GetString(command, "content")?.Trim();
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(content))
+        {
+            return null;
+        }
+
+        return $"<system-command name=\"{EncodeXmlAttribute(name)}\">{content}</system-command>";
+    }
+
+    private static string EncodeXmlAttribute(string value)
+    {
+        return value
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("\"", "&quot;", StringComparison.Ordinal)
+            .Replace("'", "&#39;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+    }
+
+    private static bool MessageTextContains(JsonElement message, string marker)
+    {
+        if (message.ValueKind != JsonValueKind.Object ||
+            !message.TryGetProperty("content", out var content))
+        {
+            return false;
+        }
+
+        if (content.ValueKind == JsonValueKind.String)
+        {
+            return ContentContains(content.GetString(), marker);
+        }
+
+        if (content.ValueKind != JsonValueKind.Array)
+        {
+            return false;
+        }
+
+        foreach (var block in content.EnumerateArray())
+        {
+            if (block.ValueKind != JsonValueKind.Object ||
+                JsonHelpers.GetString(block, "type") != "text")
+            {
+                continue;
+            }
+
+            if (ContentContains(JsonHelpers.GetString(block, "text"), marker))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContentContains(string? value, string marker)
+    {
+        return value?.Contains(marker, StringComparison.Ordinal) == true;
+    }
+
+    private static JsonElement PrependTextToWireMessage(JsonElement message, string contextText)
+    {
+        if (message.ValueKind != JsonValueKind.Object)
+        {
+            return message.Clone();
+        }
+
+        var wroteContent = false;
+        return CreateObjectElement(writer =>
+        {
+            foreach (var property in message.EnumerateObject())
+            {
+                if (property.NameEquals("content"))
+                {
+                    wroteContent = true;
+                    writer.WritePropertyName(property.Name);
+                    WriteContentWithPrependedText(writer, property.Value, contextText);
+                    continue;
+                }
+
+                property.WriteTo(writer);
+            }
+
+            if (!wroteContent)
+            {
+                writer.WriteString("content", contextText);
+            }
+        });
+    }
+
+    private static void WriteContentWithPrependedText(
+        Utf8JsonWriter writer,
+        JsonElement content,
+        string contextText)
+    {
+        if (content.ValueKind == JsonValueKind.String)
+        {
+            writer.WriteStringValue($"{contextText}\n\n{content.GetString() ?? string.Empty}");
+            return;
+        }
+
+        if (content.ValueKind != JsonValueKind.Array)
+        {
+            writer.WriteStringValue(contextText);
+            return;
+        }
+
+        writer.WriteStartArray();
+        writer.WriteStartObject();
+        writer.WriteString("type", "text");
+        writer.WriteString("text", contextText);
+        writer.WriteEndObject();
+        foreach (var block in content.EnumerateArray())
+        {
+            block.WriteTo(writer);
+        }
+        writer.WriteEndArray();
+    }
+
     private static List<JsonElement> ReadMessageArrayProperty(JsonElement parameters, string propertyName)
     {
         var result = new List<JsonElement>();
@@ -2079,7 +2529,7 @@ internal static class OpenAIChatRuntime
 
     private static List<AgentRuntimeChatMessage> ReadConversation(JsonElement parameters)
     {
-        return ReadConversation(ReadWireConversation(parameters));
+        return ReadConversation(ApplyRequestContexts(ReadWireConversation(parameters), parameters));
     }
 
     private static List<AgentRuntimeChatMessage> ReadConversation(IReadOnlyList<JsonElement> messages)

@@ -7,7 +7,7 @@ using System.Text.Json;
 internal sealed class AgentRuntimeToolArgumentStreamState
 {
     public string LastInputSignature { get; set; } = string.Empty;
-    public long LastInputEmitTimestamp { get; set; }
+    public long LastInputAttemptTimestamp { get; set; }
 }
 
 internal static class AgentRuntimeToolArgumentStreaming
@@ -18,20 +18,33 @@ internal static class AgentRuntimeToolArgumentStreaming
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
+    // Takes the StringBuilder directly so the accumulated arguments are only
+    // materialized after the emit-interval gate passes; a per-delta ToString()
+    // here is O(n²) over the full argument stream.
     public static bool TryGetInputForDelta(
-        string arguments,
+        StringBuilder arguments,
         AgentRuntimeToolArgumentStreamState state,
         out JsonElement input)
     {
         var now = Stopwatch.GetTimestamp();
-        if (state.LastInputEmitTimestamp != 0 &&
-            Stopwatch.GetElapsedTime(state.LastInputEmitTimestamp, now).TotalMilliseconds < PartialInputEmitIntervalMs)
+        if (state.LastInputAttemptTimestamp != 0 &&
+            Stopwatch.GetElapsedTime(state.LastInputAttemptTimestamp, now).TotalMilliseconds < PartialInputEmitIntervalMs)
         {
             input = default;
             return false;
         }
 
-        if (!TryParseStreamingObject(arguments, out input))
+        if (arguments.Length == 0)
+        {
+            input = default;
+            return false;
+        }
+
+        // Throttle by attempt (not emit) so failed parses and unchanged
+        // signatures cannot re-run the full-string parse on every delta.
+        state.LastInputAttemptTimestamp = now;
+
+        if (!TryParseStreamingObject(arguments.ToString(), out input))
         {
             return false;
         }
@@ -43,7 +56,6 @@ internal static class AgentRuntimeToolArgumentStreaming
         }
 
         state.LastInputSignature = signature;
-        state.LastInputEmitTimestamp = now;
         return true;
     }
 

@@ -186,7 +186,7 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
             buffer.Arguments.Append(delta);
         }
         if (AgentRuntimeToolArgumentStreaming.TryGetInputForDelta(
-            buffer.Arguments.ToString(),
+            buffer.Arguments,
             buffer.ArgumentStream,
             out var partialInput))
         {

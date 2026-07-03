@@ -75,10 +75,10 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
         catch (InvalidOperationException ex) when (
             useWebSocket &&
             websocketUrl is not null &&
-            IsMissingToolOutputError(ex))
+            IsRecoverablePreviousResponseReplayError(ex))
         {
             WorkerLog.Warn(
-                "responses previous_response_id replay failed due to missing tool output; " +
+                "responses previous_response_id replay failed with a recoverable error; " +
                 "retrying with full sanitized input");
             body = BuildRequestBody(
                 parameters,
@@ -148,6 +148,8 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
         string model,
         string transport)
     {
+        var debugBody = AgentRuntimeDebugPayload.PrepareBodyFile(body, parameters);
+
         await AgentRuntimeTools.EmitAsync(
             state,
             context,
@@ -163,7 +165,15 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
                     JsonHelpers.GetString(provider, "providerBuiltinId"),
                     model,
                     ExecutionPath: "sidecar",
-                    Transport: transport)));
+                    Transport: transport,
+                    PromptCacheKeyHash: ResolvePromptCacheKeyHash(provider),
+                    BodyRef: debugBody?.Ref,
+                    BodyBytes: debugBody?.Bytes)));
+    }
+
+    private static bool IsRecoverablePreviousResponseReplayError(Exception ex)
+    {
+        return IsMissingToolOutputError(ex) || IsPreviousResponseNotFoundError(ex);
     }
 
     private static bool IsMissingToolOutputError(Exception ex)
@@ -171,6 +181,14 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
         return ex.Message.Contains(
             "No tool output found for function call",
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsPreviousResponseNotFoundError(Exception ex)
+    {
+        var message = ex.Message;
+        return message.Contains("previous_response_not_found", StringComparison.OrdinalIgnoreCase) ||
+            (message.Contains("previous_response_id", StringComparison.OrdinalIgnoreCase) &&
+                message.Contains("not found", StringComparison.OrdinalIgnoreCase));
     }
 
 }

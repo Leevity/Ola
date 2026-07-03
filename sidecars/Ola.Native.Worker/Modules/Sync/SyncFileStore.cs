@@ -8,6 +8,7 @@ internal static class SyncFileStore
 {
     private const string FileDomain = "file";
     private const string DataDirectoryName = ".ola";
+    private const string PromptCacheInstallIdConfigKey = "ola-prompt-cache-install-id";
 
     private static readonly string[] DataFileIncludes =
     [
@@ -20,6 +21,7 @@ internal static class SyncFileStore
     ];
 
     private static readonly string[] DataDirectoryIncludes = ["agents", "commands", "prompts", "memory"];
+    private static readonly string[] LocalOnlyConfigKeys = [PromptCacheInstallIdConfigKey];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -113,6 +115,22 @@ internal static class SyncFileStore
                     continue;
                 }
 
+                if (string.Equals(relativePath, "config.json", StringComparison.Ordinal))
+                {
+                    var localOnlyRoot = BuildLocalOnlyConfigRoot();
+                    if (localOnlyRoot.Count > 0)
+                    {
+                        ConfigStore.ReplaceRootFromSync(localOnlyRoot);
+                    }
+                    else if (ResolveDataRelativePath(relativePath) is { } configPath &&
+                        File.Exists(configPath))
+                    {
+                        File.Delete(configPath);
+                    }
+                    changed += 1;
+                    continue;
+                }
+
                 var targetPath = ResolveDataRelativePath(relativePath);
                 if (targetPath is null || !File.Exists(targetPath))
                 {
@@ -152,7 +170,7 @@ internal static class SyncFileStore
                 continue;
             }
 
-            var data = Convert.ToBase64String(await File.ReadAllBytesAsync(filePath));
+            var data = Convert.ToBase64String(await ReadFileBytesForSyncAsync(relativePath, filePath));
             var value = new JsonObject
             {
                 ["path"] = relativePath,
@@ -204,7 +222,7 @@ internal static class SyncFileStore
                 throw new InvalidOperationException("Invalid config sync file");
             }
 
-            PreserveLocalSyncDeviceId(configRoot);
+            PreserveLocalConfigValues(configRoot);
             ConfigStore.ReplaceRootFromSync(configRoot);
             return;
         }
@@ -226,18 +244,69 @@ internal static class SyncFileStore
         File.Move(tempPath, targetPath, true);
     }
 
-    private static void PreserveLocalSyncDeviceId(JsonObject nextConfig)
+    private static async Task<byte[]> ReadFileBytesForSyncAsync(string relativePath, string filePath)
+    {
+        var bytes = await File.ReadAllBytesAsync(filePath);
+        if (!string.Equals(relativePath, "config.json", StringComparison.Ordinal))
+        {
+            return bytes;
+        }
+
+        if (JsonNode.Parse(Encoding.UTF8.GetString(bytes)) is not JsonObject configRoot)
+        {
+            throw new InvalidOperationException("Invalid config sync file");
+        }
+
+        RemoveLocalOnlyConfigValues(configRoot);
+        return Encoding.UTF8.GetBytes(configRoot.ToJsonString(JsonOptions));
+    }
+
+    private static void PreserveLocalConfigValues(JsonObject nextConfig)
+    {
+        var localConfig = ConfigStore.ReadRootSnapshot();
+        PreserveLocalSyncDeviceId(nextConfig, localConfig);
+
+        RemoveLocalOnlyConfigValues(nextConfig);
+        CopyLocalOnlyConfigValues(localConfig, nextConfig);
+    }
+
+    private static void PreserveLocalSyncDeviceId(JsonObject nextConfig, JsonObject localConfig)
     {
         if (nextConfig["sync"] is not JsonObject nextSync)
         {
             return;
         }
 
-        var localConfig = ConfigStore.ReadRootSnapshot();
         var localDeviceId = ReadNodeString(localConfig["sync"] as JsonObject, "deviceId");
         nextSync["deviceId"] = string.IsNullOrWhiteSpace(localDeviceId)
             ? Guid.NewGuid().ToString()
             : localDeviceId;
+    }
+
+    private static JsonObject BuildLocalOnlyConfigRoot()
+    {
+        var root = new JsonObject();
+        CopyLocalOnlyConfigValues(ConfigStore.ReadRootSnapshot(), root);
+        return root;
+    }
+
+    private static void RemoveLocalOnlyConfigValues(JsonObject config)
+    {
+        foreach (var key in LocalOnlyConfigKeys)
+        {
+            config.Remove(key);
+        }
+    }
+
+    private static void CopyLocalOnlyConfigValues(JsonObject source, JsonObject target)
+    {
+        foreach (var key in LocalOnlyConfigKeys)
+        {
+            if (source.TryGetPropertyValue(key, out var value) && value is not null)
+            {
+                target[key] = value.DeepClone();
+            }
+        }
     }
 
     private static IEnumerable<string> WalkFiles(string rootPath)

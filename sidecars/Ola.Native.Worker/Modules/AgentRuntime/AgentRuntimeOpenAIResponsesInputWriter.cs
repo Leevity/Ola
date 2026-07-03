@@ -1,9 +1,12 @@
 using System.Buffers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
 internal static partial class AgentRuntimeOpenAIResponsesProvider
 {
+    private const int OpenAIPromptCacheKeyMaxLength = 64;
+
     private static string BuildRequestBody(
         JsonElement parameters,
         JsonElement provider,
@@ -78,6 +81,7 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
             if (!omitted.Contains("prompt_cache_key"))
             {
                 WritePromptCacheKey(writer, provider);
+                omitted.Add("prompt_cache_key");
             }
             AgentRuntimeProviderSupport.WriteBodyOverrides(writer, provider, omitted);
             writer.WriteEndObject();
@@ -461,25 +465,65 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
 
     private static void WritePromptCacheKey(Utf8JsonWriter writer, JsonElement provider)
     {
+        if (ResolvePromptCacheKey(provider) is { Length: > 0 } value)
+        {
+            writer.WriteString("prompt_cache_key", value);
+        }
+    }
+
+    private static string? ResolvePromptCacheKey(JsonElement provider)
+    {
         if (provider.TryGetProperty("requestOverrides", out var overrides) &&
             overrides.ValueKind == JsonValueKind.Object &&
             overrides.TryGetProperty("body", out var body) &&
             body.ValueKind == JsonValueKind.Object &&
             body.TryGetProperty("prompt_cache_key", out var promptCacheKey) &&
             promptCacheKey.ValueKind == JsonValueKind.String &&
-            !string.IsNullOrWhiteSpace(promptCacheKey.GetString()))
+            promptCacheKey.GetString() is { } overrideValue &&
+            !string.IsNullOrWhiteSpace(overrideValue))
         {
-            return;
+            return ClampOpenAIPromptCacheKey(overrideValue);
         }
 
         var configured = JsonHelpers.GetString(provider, "promptCacheKey");
-        var sessionId = JsonHelpers.GetString(provider, "sessionId");
         var value = !string.IsNullOrWhiteSpace(configured)
             ? configured
-            : !string.IsNullOrWhiteSpace(sessionId)
-                ? $"ola-{sessionId}"
-                : NativeGlobalPromptCacheKey.Value;
-        writer.WriteString("prompt_cache_key", value);
+            : NativeGlobalPromptCacheKey.Value;
+        return ClampOpenAIPromptCacheKey(value);
+    }
+
+    private static string? ResolvePromptCacheKeyHash(JsonElement provider)
+    {
+        var value = ResolvePromptCacheKey(provider);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(hash).ToLowerInvariant()[..16];
+    }
+
+    private static string? ClampOpenAIPromptCacheKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+        var builder = new StringBuilder();
+        var count = 0;
+        foreach (var rune in trimmed.EnumerateRunes())
+        {
+            if (count >= OpenAIPromptCacheKeyMaxLength)
+            {
+                break;
+            }
+            builder.Append(rune.ToString());
+            count++;
+        }
+        return builder.ToString();
     }
 
     private static AgentRuntimeChatToolUse? ReadToolUse(JsonElement block)

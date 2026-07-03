@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -13,7 +14,23 @@ internal static partial class AgentRuntimeSubAgentExecutor
     private const string CustomSubAgentType = "custom";
 
     private static readonly string[] DefaultTools = ["Read", "Glob", "Grep", "LS", "Skill"];
-    private static readonly string[] MandatoryDisallowedTools = ["Task", "AskUserQuestion"];
+    private static readonly HashSet<string> PlanModeInvestigationTools = new(StringComparer.Ordinal)
+    {
+        "Read",
+        "Glob",
+        "Grep",
+        "LS",
+        "Skill",
+        "WebSearch",
+        "WebFetch"
+    };
+    private static readonly string[] MandatoryDisallowedTools =
+    [
+        "Task",
+        "AskUserQuestion",
+        "EnterPlanMode",
+        "ExitPlanMode"
+    ];
     private static readonly JsonWriterOptions WriterOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -33,6 +50,12 @@ internal static partial class AgentRuntimeSubAgentExecutor
     {
         return IsTaskTool(toolName) ||
             (IsSubmitReportTool(toolName) && JsonHelpers.GetBool(parameters, "submitReportEnabled", false));
+    }
+
+    public static bool IsSubAgentRun(JsonElement parameters)
+    {
+        return JsonHelpers.GetBool(parameters, "submitReportEnabled", false) &&
+            !string.IsNullOrWhiteSpace(JsonHelpers.GetString(parameters, "callerAgent"));
     }
 
     public static bool RequiresApproval(string toolName, JsonElement input)
@@ -105,9 +128,23 @@ internal static partial class AgentRuntimeSubAgentExecutor
             return ErrorResult($"Unknown subagent_type \"{subAgentType}\".");
         }
 
+        var dedupKey = BuildTaskDedupKey(call.Input);
+        if (!string.IsNullOrWhiteSpace(parentState.SessionId) &&
+            parentState.TryGetDuplicateTaskInvocation(
+                dedupKey,
+                call.Id,
+                out var duplicateInvocation) &&
+            duplicateInvocation is not null)
+        {
+            return DuplicateTaskResult(subAgentType, duplicateInvocation.Output);
+        }
+
         var promptMessage = BuildPromptMessage(call.Input, definition.InitialPrompt);
         var parentTools = ReadToolDefinitions(parameters);
-        var innerTools = ResolveTools(definition, parentTools);
+        var innerTools = ResolveTools(
+            definition,
+            parentTools,
+            JsonHelpers.GetBool(parameters, "planMode", false));
         innerTools.Add(BuildSubmitReportToolDefinition());
 
         var provider = BuildProvider(parameters, definition);
@@ -186,6 +223,11 @@ internal static partial class AgentRuntimeSubAgentExecutor
                 SubAgentName: definition.Name,
                 ToolUseId: call.Id,
                 Result: result.ToJson()));
+
+        if (result.Success && !string.IsNullOrWhiteSpace(parentState.SessionId))
+        {
+            parentState.RememberTaskInvocation(dedupKey, result.Output, call.Id);
+        }
 
         return result.Success
             ? new RendererToolResult(StringElement(result.Output), false, null)
@@ -368,6 +410,27 @@ internal static partial class AgentRuntimeSubAgentExecutor
         return string.Join('\n', parts);
     }
 
+    private static string BuildTaskDedupKey(JsonElement input)
+    {
+        var subType = JsonHelpers.GetString(input, "subagent_type")?.Trim() ?? string.Empty;
+        var prompt =
+            NormalizeTaskPrompt(JsonHelpers.GetString(input, "prompt")) ??
+            NormalizeTaskPrompt(JsonHelpers.GetString(input, "query")) ??
+            NormalizeTaskPrompt(JsonHelpers.GetString(input, "task")) ??
+            NormalizeTaskPrompt(JsonHelpers.GetString(input, "target")) ??
+            string.Empty;
+        return $"{subType}::{prompt}";
+    }
+
+    private static string? NormalizeTaskPrompt(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+        return WhitespaceRegex().Replace(value.Trim(), " ");
+    }
+
     private static JsonElement BuildProvider(
         JsonElement parameters,
         SubAgentDefinitionNative definition,
@@ -384,11 +447,20 @@ internal static partial class AgentRuntimeSubAgentExecutor
             {
                 if (property.NameEquals("systemPrompt") ||
                     property.NameEquals("temperature") ||
-                    property.NameEquals("model"))
+                    property.NameEquals("model") ||
+                    property.NameEquals("promptCacheKey"))
                 {
                     continue;
                 }
                 property.WriteTo(writer);
+            }
+
+            if (ShouldSetSubAgentPromptCacheKey(parentProvider) &&
+                JsonHelpers.GetString(parentProvider, "promptCacheKey") is { Length: > 0 } parentPromptCacheKey)
+            {
+                writer.WriteString(
+                    "promptCacheKey",
+                    BuildSubAgentPromptCacheKey(parentPromptCacheKey, definition.Name));
             }
 
             writer.WriteString("systemPrompt", definition.SystemPrompt);
@@ -416,6 +488,66 @@ internal static partial class AgentRuntimeSubAgentExecutor
         });
     }
 
+    private static bool ShouldSetSubAgentPromptCacheKey(JsonElement provider)
+    {
+        if (JsonHelpers.GetString(provider, "type") != "openai-responses")
+        {
+            return false;
+        }
+
+        return !provider.TryGetProperty("requestOverrides", out var overrides) ||
+            overrides.ValueKind != JsonValueKind.Object ||
+            !overrides.TryGetProperty("body", out var body) ||
+            body.ValueKind != JsonValueKind.Object ||
+            !body.TryGetProperty("prompt_cache_key", out var promptCacheKey) ||
+            promptCacheKey.ValueKind != JsonValueKind.String ||
+            string.IsNullOrWhiteSpace(promptCacheKey.GetString());
+    }
+
+    private static string BuildSubAgentPromptCacheKey(string parentPromptCacheKey, string agentName)
+    {
+        var parent = ClampPromptCacheKey(parentPromptCacheKey);
+        var agentHash = ShortHash(agentName, 8);
+        var candidate = $"{parent}-sa-{agentHash}";
+        if (CountRunes(candidate) <= 64)
+        {
+            return candidate;
+        }
+        return $"ola-sa-{ShortHash(parent, 16)}-{agentHash}";
+    }
+
+    private static string ClampPromptCacheKey(string value)
+    {
+        var builder = new StringBuilder();
+        var count = 0;
+        foreach (var rune in value.Trim().EnumerateRunes())
+        {
+            if (count >= 64)
+            {
+                break;
+            }
+            builder.Append(rune.ToString());
+            count++;
+        }
+        return builder.ToString();
+    }
+
+    private static int CountRunes(string value)
+    {
+        var count = 0;
+        foreach (var _ in value.EnumerateRunes())
+        {
+            count++;
+        }
+        return count;
+    }
+
+    private static string ShortHash(string value, int length)
+    {
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(value));
+        return Convert.ToHexString(hash).ToLowerInvariant()[..length];
+    }
+
     private static JsonElement BuildChildParameters(
         JsonElement parentParameters,
         JsonElement provider,
@@ -436,7 +568,11 @@ internal static partial class AgentRuntimeSubAgentExecutor
             "forceApproval",
             "callerAgent",
             "captureFinalMessages",
-            "submitReportEnabled"
+            "submitReportEnabled",
+            "planMode",
+            "planModeAllowedTools",
+            "planRevision",
+            "planExecution"
         };
         if (!string.IsNullOrWhiteSpace(activeTeamName))
         {
@@ -503,7 +639,8 @@ internal static partial class AgentRuntimeSubAgentExecutor
 
     private static List<JsonElement> ResolveTools(
         SubAgentDefinitionNative definition,
-        IReadOnlyList<JsonElement> allTools)
+        IReadOnlyList<JsonElement> allTools,
+        bool restrictToPlanModeInvestigation = false)
     {
         var requested = definition.Tools.Count > 0 ? definition.Tools : DefaultTools;
         var requestedSet = new HashSet<string>(requested, StringComparer.Ordinal);
@@ -518,7 +655,13 @@ internal static partial class AgentRuntimeSubAgentExecutor
         foreach (var tool in allTools)
         {
             var name = JsonHelpers.GetString(tool, "name");
-            if (string.IsNullOrWhiteSpace(name) || disallowedSet.Contains(name))
+            if (string.IsNullOrWhiteSpace(name) ||
+                disallowedSet.Contains(name) ||
+                AgentRuntimePlanExecutor.IsPlanTool(name))
+            {
+                continue;
+            }
+            if (restrictToPlanModeInvestigation && !PlanModeInvestigationTools.Contains(name))
             {
                 continue;
             }
@@ -564,7 +707,8 @@ internal static partial class AgentRuntimeSubAgentExecutor
         builder.AppendLine("You are a specialized Ola sub-agent dispatched by a parent agent.");
         builder.AppendLine("Complete exactly one focused task. You do not see the earlier conversation.");
         builder.AppendLine("Use available tools decisively, verify your work, and keep changes scoped to the delegated task.");
-        builder.AppendLine("You have broad tool access except Task and AskUserQuestion.");
+        builder.AppendLine("You have broad tool access except Task, AskUserQuestion, and plan-mode tools.");
+        builder.AppendLine("Do not create, finalize, approve, or execute plans; report plan suggestions to the parent agent.");
         if (!string.IsNullOrWhiteSpace(workingFolder))
         {
             builder.AppendLine($"Working folder: {workingFolder}");
@@ -620,6 +764,22 @@ internal static partial class AgentRuntimeSubAgentExecutor
         return new RendererToolResult(StringElement(EncodeError(message)), true, message);
     }
 
+    private static RendererToolResult DuplicateTaskResult(string subAgentType, string previousReport)
+    {
+        var content = CreateObject(writer =>
+        {
+            writer.WriteString(
+                "error",
+                $"Duplicate Task call blocked: the previous Task invocation to \"{subAgentType}\" " +
+                "used an identical prompt and already returned a report. Do NOT re-launch the " +
+                "same sub-agent with the same prompt. Use the previous report below to continue " +
+                "your work, or call Task with a different sub-agent or a materially different " +
+                "prompt if you need new information.");
+            writer.WriteString("previous_report", previousReport);
+        }).GetRawText();
+        return new RendererToolResult(StringElement(content), false, null);
+    }
+
     private static string EncodeError(string message)
     {
         return CreateObject(writer => writer.WriteString("error", message)).GetRawText();
@@ -650,6 +810,9 @@ internal static partial class AgentRuntimeSubAgentExecutor
 
     [GeneratedRegex("^---\\s*\\r?\\n([\\s\\S]*?)\\r?\\n---\\s*(?:\\r?\\n)?")]
     private static partial Regex FrontmatterRegex();
+
+    [GeneratedRegex("\\s+")]
+    private static partial Regex WhitespaceRegex();
 
     private sealed record SubAgentDefinitionNative(
         string Name,

@@ -333,6 +333,8 @@ internal static class AgentRuntimeTools
 
         public string? SubmittedReport { get; private set; }
 
+        public AgentRuntimeTaskInvocation? LastTaskInvocation { get; private set; }
+
         public bool SuppressTransportEvents { get; set; }
 
         public Func<AgentRuntimeStreamEvent[], ValueTask>? EventObserver { get; set; }
@@ -415,9 +417,27 @@ internal static class AgentRuntimeTools
             return true;
         }
 
+        public bool TryGetDuplicateTaskInvocation(
+            string key,
+            string toolUseId,
+            out AgentRuntimeTaskInvocation? invocation)
+        {
+            invocation = LastTaskInvocation;
+            return invocation is not null &&
+                invocation.Key == key &&
+                invocation.ToolUseId != toolUseId;
+        }
+
+        public void RememberTaskInvocation(string key, string output, string toolUseId)
+        {
+            LastTaskInvocation = new AgentRuntimeTaskInvocation(key, output, toolUseId);
+        }
+
         public void Dispose()
         {
             cancellation.Dispose();
         }
     }
+
+    internal sealed record AgentRuntimeTaskInvocation(string Key, string Output, string ToolUseId);
 }

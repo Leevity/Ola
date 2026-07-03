@@ -23,6 +23,7 @@ internal static class AgentRuntimeGeminiProvider
         var model = JsonHelpers.GetString(provider, "model") ?? string.Empty;
         var url = BuildApiUrl(providerType, JsonHelpers.GetString(provider, "baseUrl"), model, stream: true);
         var body = BuildRequestBody(parameters, provider, conversation);
+        var debugBody = AgentRuntimeDebugPayload.PrepareBodyFile(body, parameters);
 
         await AgentRuntimeTools.EmitAsync(
             state,
@@ -37,7 +38,9 @@ internal static class AgentRuntimeGeminiProvider
                     DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
                     JsonHelpers.GetString(provider, "providerId"),
                     JsonHelpers.GetString(provider, "providerBuiltinId"),
-                    model)));
+                    model,
+                    BodyRef: debugBody?.Ref,
+                    BodyBytes: debugBody?.Bytes)));
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
         request.Content = new StringContent(body, Encoding.UTF8, "application/json");
