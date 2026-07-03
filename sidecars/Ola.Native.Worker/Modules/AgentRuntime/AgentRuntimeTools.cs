@@ -212,7 +212,8 @@ internal static class AgentRuntimeTools
         }
         catch (Exception ex)
         {
-            WorkerLog.Warn($"agent run failed runId={state.RunId} error={ex.GetType().Name}: {ex.Message}");
+            WorkerLog.Warn(
+                $"agent run failed runId={state.RunId} error={ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
             await EmitAsync(
                 state,
                 context,
