@@ -167,6 +167,39 @@ export interface SidecarContextSource {
   compressionMode?: 'none' | 'auto' | 'force'
 }
 
+export interface SidecarPlanRevisionContext {
+  title: string
+  filePath?: string
+  feedback?: string
+}
+
+export interface SidecarPlanExecutionContext {
+  filePath?: string
+  acp?: boolean
+}
+
+export interface SidecarSlashCommandContext {
+  commandName: string
+  rawArguments?: string
+  parsedArguments?: string[]
+}
+
+export interface SidecarSystemCommandContext {
+  name: string
+  content: string
+}
+
+export interface SidecarPluginChannelContext {
+  channelName?: string
+  channelId: string
+  chatId?: string
+  chatType?: 'p2p' | 'group'
+  senderId?: string
+  senderName?: string
+  availableTools?: string[]
+  autoReply?: boolean
+}
+
 export interface SidecarAgentRunRequest {
   messages: SidecarUnifiedMessage[]
   contextSource?: SidecarContextSource
@@ -185,6 +218,12 @@ export interface SidecarAgentRunRequest {
   sessionMode?: 'agent' | 'chat'
   planMode?: boolean
   planModeAllowedTools?: string[]
+  planRevision?: SidecarPlanRevisionContext
+  planExecution?: SidecarPlanExecutionContext
+  slashCommand?: SidecarSlashCommandContext
+  systemCommand?: SidecarSystemCommandContext
+  pluginChannelContext?: SidecarPluginChannelContext
+  requestContextTexts?: string[]
   teamToolsActive?: boolean
   activeTeamName?: string
   goalRunSource?: 'user_turn' | 'continue'
@@ -228,6 +267,89 @@ function sanitizeSidecarToolInput(name: string, rawInput: unknown): Record<strin
 function normalizeMaxParallelTools(value: number | undefined): number | undefined {
   if (value === undefined || !Number.isFinite(value)) return undefined
   return Math.min(16, Math.max(1, Math.floor(value)))
+}
+
+function normalizePlanRevision(
+  value: SidecarPlanRevisionContext | null | undefined
+): SidecarPlanRevisionContext | undefined {
+  if (!value) return undefined
+  const title = value.title.trim()
+  if (!title) return undefined
+  const filePath = value.filePath?.trim()
+  const feedback = value.feedback?.trim()
+  return {
+    title,
+    ...(filePath ? { filePath } : {}),
+    ...(feedback ? { feedback } : {})
+  }
+}
+
+function normalizePlanExecution(
+  value: SidecarPlanExecutionContext | null | undefined
+): SidecarPlanExecutionContext | undefined {
+  if (!value) return undefined
+  const filePath = value.filePath?.trim()
+  return {
+    ...(filePath ? { filePath } : {}),
+    ...(value.acp ? { acp: true } : {})
+  }
+}
+
+function normalizeSlashCommand(
+  value: SidecarSlashCommandContext | null | undefined
+): SidecarSlashCommandContext | undefined {
+  if (!value) return undefined
+  const commandName = value.commandName.trim().toLowerCase()
+  if (!commandName) return undefined
+  const rawArguments = value.rawArguments?.trim()
+  const parsedArguments = (value.parsedArguments ?? []).map((item) => item.trim())
+  if (!rawArguments && parsedArguments.length === 0) return undefined
+  return {
+    commandName,
+    ...(rawArguments ? { rawArguments } : {}),
+    parsedArguments
+  }
+}
+
+function normalizeSystemCommand(
+  value: SidecarSystemCommandContext | null | undefined
+): SidecarSystemCommandContext | undefined {
+  if (!value) return undefined
+  const name = value.name.trim()
+  const content = value.content.trim()
+  if (!name || !content) return undefined
+  return { name, content }
+}
+
+function normalizePluginChannelContext(
+  value: SidecarPluginChannelContext | null | undefined
+): SidecarPluginChannelContext | undefined {
+  if (!value) return undefined
+  const channelId = value.channelId.trim()
+  if (!channelId) return undefined
+
+  const channelName = value.channelName?.trim()
+  const chatId = value.chatId?.trim()
+  const senderId = value.senderId?.trim()
+  const senderName = value.senderName?.trim()
+  const availableTools = Array.from(
+    new Set((value.availableTools ?? []).map((item) => item.trim()).filter(Boolean))
+  )
+  return {
+    ...(channelName ? { channelName } : {}),
+    channelId,
+    ...(chatId ? { chatId } : {}),
+    ...(value.chatType ? { chatType: value.chatType } : {}),
+    ...(senderId ? { senderId } : {}),
+    ...(senderName ? { senderName } : {}),
+    ...(availableTools.length > 0 ? { availableTools } : {}),
+    ...(value.autoReply ? { autoReply: true } : {})
+  }
+}
+
+function normalizeRequestContextTexts(value: readonly string[] | null | undefined): string[] {
+  if (!value) return []
+  return value.map((item) => item.trim()).filter(Boolean)
 }
 
 export function isNativeSidecarProviderConfig(provider: ProviderConfig): boolean {
@@ -440,6 +562,12 @@ export function buildSidecarAgentRunRequest(args: {
   sessionMode?: 'agent' | 'chat'
   planMode?: boolean
   planModeAllowedTools?: readonly string[]
+  planRevision?: SidecarPlanRevisionContext | null
+  planExecution?: SidecarPlanExecutionContext | null
+  slashCommand?: SidecarSlashCommandContext | null
+  systemCommand?: SidecarSystemCommandContext | null
+  pluginChannelContext?: SidecarPluginChannelContext | null
+  requestContextTexts?: readonly string[] | null
   teamToolsActive?: boolean
   activeTeamName?: string
   goalRunSource?: 'user_turn' | 'continue'
@@ -471,6 +599,12 @@ export function buildSidecarAgentRunRequest(args: {
   const imagePluginProvider = args.imagePluginProvider
     ? mapSidecarProvider(args.imagePluginProvider)
     : null
+  const planRevision = normalizePlanRevision(args.planRevision)
+  const planExecution = normalizePlanExecution(args.planExecution)
+  const slashCommand = normalizeSlashCommand(args.slashCommand)
+  const systemCommand = normalizeSystemCommand(args.systemCommand)
+  const pluginChannelContext = normalizePluginChannelContext(args.pluginChannelContext)
+  const requestContextTexts = normalizeRequestContextTexts(args.requestContextTexts)
   const liveOverlayMessages: SidecarUnifiedMessage[] = []
   for (const message of args.liveOverlayMessages ?? []) {
     const mapped = mapSidecarMessage(message)
@@ -498,6 +632,12 @@ export function buildSidecarAgentRunRequest(args: {
     ...(args.planModeAllowedTools && args.planModeAllowedTools.length > 0
       ? { planModeAllowedTools: [...args.planModeAllowedTools] }
       : {}),
+    ...(planRevision ? { planRevision } : {}),
+    ...(planExecution ? { planExecution } : {}),
+    ...(slashCommand ? { slashCommand } : {}),
+    ...(systemCommand ? { systemCommand } : {}),
+    ...(pluginChannelContext ? { pluginChannelContext } : {}),
+    ...(requestContextTexts.length > 0 ? { requestContextTexts } : {}),
     ...(args.teamToolsActive ? { teamToolsActive: true } : {}),
     ...(args.activeTeamName ? { activeTeamName: args.activeTeamName } : {}),
     ...(args.goalRunSource ? { goalRunSource: args.goalRunSource } : {}),

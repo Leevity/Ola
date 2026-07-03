@@ -15,7 +15,7 @@ const FILE_CONTEXT_BUDGET_MAX_TOKENS = 24_000
 const FILE_CONTEXT_FALLBACK_TOKENS = 12_000
 
 /**
- * Build a runtime reminder injected into the last user message.
+ * Build a runtime reminder passed to the Native Worker as request context.
  * Includes lightweight session state and selected file contents.
  */
 export async function buildRuntimeReminder(options: {

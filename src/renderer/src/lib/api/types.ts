@@ -162,6 +162,8 @@ export interface RequestDebugInfo {
   method: string
   headers: Record<string, string>
   body?: string
+  bodyRef?: string
+  bodyBytes?: number
   contextWindowBody?: string
   timestamp: number
   providerId?: string
@@ -174,6 +176,7 @@ export interface RequestDebugInfo {
   websocketRequestKind?: 'warmup' | 'full' | 'incremental'
   websocketIncrementalReason?: string
   previousResponseId?: string
+  promptCacheKeyHash?: string
   systemHash?: string
   toolsHash?: string
   messagePrefixHash?: string
@@ -237,6 +240,8 @@ export interface SelectedFileReadItemMeta {
   lineCount: number
   maxLines: number
   truncated: boolean
+  skipped?: boolean
+  skipReason?: string
   error?: string
 }
 
@@ -680,7 +685,7 @@ export interface ProviderConfig {
   responsesImageGeneration?: ResponsesImageGenerationConfig
   /** Request-scoped image streaming preview control for drawing flows. */
   imageGenerationStream?: ImageGenerationStreamConfig
-  /** OpenAI Responses: enable prompt caching with session-based key */
+  /** OpenAI Responses: enable prompt caching with a stable workspace-scoped key */
   enablePromptCache?: boolean
   /** OpenAI Responses: explicit prompt cache key for this request */
   promptCacheKey?: string
