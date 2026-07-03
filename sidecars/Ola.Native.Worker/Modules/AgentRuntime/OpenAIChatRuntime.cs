@@ -698,7 +698,8 @@ internal static class OpenAIChatRuntime
         }
 
         var choiceValue = choice.Value;
-        if (choiceValue.TryGetProperty("delta", out var delta))
+        if (choiceValue.TryGetProperty("delta", out var delta) &&
+            delta.ValueKind == JsonValueKind.Object)
         {
             var reasoning = ReadString(delta, "reasoning_content") ??
                 ReadString(delta, "reasoning");
@@ -2761,7 +2762,8 @@ internal static class OpenAIChatRuntime
     {
         if (!root.TryGetProperty("choices", out var choices) ||
             choices.ValueKind != JsonValueKind.Array ||
-            choices.GetArrayLength() == 0)
+            choices.GetArrayLength() == 0 ||
+            choices[0].ValueKind != JsonValueKind.Object)
         {
             return null;
         }
