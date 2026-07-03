@@ -104,6 +104,8 @@ export interface RequestDebugInfoWire {
   method: string
   headers: Record<string, string>
   body?: string
+  bodyRef?: string
+  bodyBytes?: number
   contextWindowBody?: string
   timestamp: number
   providerId?: string
@@ -115,6 +117,7 @@ export interface RequestDebugInfoWire {
   websocketRequestKind?: 'warmup' | 'full' | 'incremental'
   websocketIncrementalReason?: string
   previousResponseId?: string
+  promptCacheKeyHash?: string
   executionPath?: 'sidecar'
   systemHash?: string
   toolsHash?: string
