@@ -17,8 +17,8 @@ const enterPlanModeHandler: ToolHandler = {
     name: 'EnterPlanMode',
     description:
       'Enter Plan Mode to explore the codebase and create a detailed implementation plan before writing code. ' +
-      'In plan mode, use read/search tools for investigation and Write/Edit only for the current plan file returned by this tool. ' +
-      'Do not make other file changes or run implementation commands.',
+      'In plan mode, prioritize read/search tools for investigation and write the plan into the current plan file returned by this tool. ' +
+      'Write operations remain available when the planning work needs them.',
     inputSchema: {
       type: 'object',
       properties: {
