@@ -22,6 +22,7 @@ import {
   type Pet,
   type PetActionName
 } from '@renderer/stores/pets-store'
+import { usePetWalletStore } from '@renderer/stores/pet-wallet-store'
 import { CapybaraSprite, type PetActivity } from './CapybaraSprite'
 
 const PET_WIDTH = 132
@@ -56,6 +57,7 @@ function DesktopPet({
 }): React.JSX.Element {
   const { t } = useTranslation('pet')
   const actOnPet = usePetsStore((s) => s.actOnPet)
+  const coins = usePetWalletStore((s) => s.coins)
   const [hover, setHover] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [activity, setActivity] = useState<PetActivity>(pet.sleeping ? 'sleep' : 'idle')
@@ -114,7 +116,7 @@ function DesktopPet({
         <div className="absolute bottom-[118px] left-1/2 z-10 flex -translate-x-1/2 gap-1 rounded-full border border-border/60 bg-background/95 p-1 shadow-lg backdrop-blur">
           <QuickAction
             title={t('action.feed')}
-            disabled={pet.hunger >= 95 || pet.coins < FEED_COST || pet.sleeping || !!pet.awayTask}
+            disabled={pet.hunger >= 95 || coins < FEED_COST || pet.sleeping || !!pet.awayTask}
             onClick={(e) => {
               e.stopPropagation()
               run('feed', 'eat')
@@ -124,9 +126,7 @@ function DesktopPet({
           </QuickAction>
           <QuickAction
             title={t('action.bathe')}
-            disabled={
-              pet.cleanliness >= 95 || pet.coins < BATHE_COST || pet.sleeping || !!pet.awayTask
-            }
+            disabled={pet.cleanliness >= 95 || coins < BATHE_COST || pet.sleeping || !!pet.awayTask}
             onClick={(e) => {
               e.stopPropagation()
               run('bathe', 'bathe')
@@ -158,7 +158,7 @@ function DesktopPet({
       ) : null}
       {hover ? (
         <div className="absolute bottom-[92px] left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-background/90 px-2 py-1 text-[11px] shadow">
-          {pet.name} · {Math.floor(pet.coins)} 🪙
+          {pet.name} · {Math.floor(coins)} 🪙
         </div>
       ) : null}
       {menuOpen ? (
@@ -166,23 +166,19 @@ function DesktopPet({
           <MenuAction
             icon={<Utensils className="size-3.5" />}
             label={t('menu.feed')}
-            disabled={pet.hunger >= 95 || pet.coins < FEED_COST || pet.sleeping || !!pet.awayTask}
+            disabled={pet.hunger >= 95 || coins < FEED_COST || pet.sleeping || !!pet.awayTask}
             onClick={() => run('feed', 'eat')}
           />
           <MenuAction
             icon={<Bath className="size-3.5" />}
             label={t('menu.bathe')}
-            disabled={
-              pet.cleanliness >= 95 || pet.coins < BATHE_COST || pet.sleeping || !!pet.awayTask
-            }
+            disabled={pet.cleanliness >= 95 || coins < BATHE_COST || pet.sleeping || !!pet.awayTask}
             onClick={() => run('bathe', 'bathe')}
           />
           <MenuAction
             icon={<Sparkles className="size-3.5" />}
             label={t('menu.soak')}
-            disabled={
-              pet.cleanliness >= 95 || pet.coins < SOAK_COST || pet.sleeping || !!pet.awayTask
-            }
+            disabled={pet.cleanliness >= 95 || coins < SOAK_COST || pet.sleeping || !!pet.awayTask}
             onClick={() => run('soak', 'soak')}
           />
           <MenuAction
@@ -206,7 +202,7 @@ function DesktopPet({
           <MenuAction
             icon={<GraduationCap className="size-3.5" />}
             label={t('menu.study')}
-            disabled={pet.hunger < 20 || pet.coins < STUDY_COST || pet.sleeping || !!pet.awayTask}
+            disabled={pet.hunger < 20 || coins < STUDY_COST || pet.sleeping || !!pet.awayTask}
             onClick={() => run('startStudy', 'play')}
           />
           <MenuAction

@@ -4,24 +4,29 @@ import { Sparkles, Lock } from 'lucide-react'
 import { motion } from 'motion/react'
 import { Button } from '@renderer/components/ui/button'
 import { CapybaraSprite, type PetActivity } from '@renderer/components/pet/CapybaraSprite'
-import type { Pet } from '@renderer/stores/pets-store'
+import { PET_POSE_KEYS, type PetPoseKey } from '@renderer/lib/pet/pet-pose-prompts'
+import { getCombinedGrowth, getPetLevel, type Pet } from '@renderer/stores/pets-store'
+import { PET_POSE_STANDARDS } from '@renderer/lib/pet/pet-standards'
 
 interface SkinSectionProps {
   pet: Pet
 }
 
 interface PosePreview {
-  id: PetActivity
-  labelKey: 'preview.idle' | 'preview.eat' | 'preview.bathe' | 'preview.play' | 'preview.sleep'
+  id: PetPoseKey
+  activity: PetActivity
+  unlockLevel: number
 }
 
-const PREVIEW_POSES: PosePreview[] = [
-  { id: 'idle', labelKey: 'preview.idle' },
-  { id: 'eat', labelKey: 'preview.eat' },
-  { id: 'bathe', labelKey: 'preview.bathe' },
-  { id: 'play', labelKey: 'preview.play' },
-  { id: 'sleep', labelKey: 'preview.sleep' }
-]
+const POSE_ORDER = new Map(PET_POSE_KEYS.map((key, index) => [key, index]))
+const PREVIEW_POSES: PosePreview[] = PET_POSE_STANDARDS.map((standard) => ({
+  id: standard.key,
+  activity: (standard.key === 'held' ? 'held' : standard.key) as PetActivity,
+  unlockLevel: standard.unlockLevel
+})).sort(
+  (a, b) =>
+    a.unlockLevel - b.unlockLevel || (POSE_ORDER.get(a.id) ?? 0) - (POSE_ORDER.get(b.id) ?? 0)
+)
 
 /**
  * "Skin" tab is now an action preview for the current pet. Users can scrub
@@ -31,9 +36,10 @@ const PREVIEW_POSES: PosePreview[] = [
  */
 export function SkinSection({ pet }: SkinSectionProps): React.JSX.Element {
   const { t } = useTranslation('pet')
-  const [active, setActive] = useState<PetActivity>('idle')
+  const [active, setActive] = useState<PosePreview>(PREVIEW_POSES[0])
 
   const disabled = useMemo(() => pet.isDefault, [pet.isDefault])
+  const level = getPetLevel(getCombinedGrowth(pet))
 
   return (
     <div className="space-y-4 pt-4">
@@ -46,29 +52,33 @@ export function SkinSection({ pet }: SkinSectionProps): React.JSX.Element {
             transition={{ duration: 0.25 }}
           >
             <CapybaraSprite
-              activity={active}
+              activity={active.activity}
               facing="right"
               mood={pet.mood}
               cleanliness={pet.cleanliness}
               width={140}
+              skinId={pet.skinId}
             />
           </motion.div>
         </div>
         <p className="mt-2 text-center text-xs text-muted-foreground">
-          {t(`skin.preview.${active}`)}
+          {t(`skin.preview.${active.id}`)}
         </p>
       </section>
 
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
         {PREVIEW_POSES.map((pose) => (
           <Button
             key={pose.id}
-            variant={active === pose.id ? 'default' : 'outline'}
+            variant={active.id === pose.id ? 'default' : 'outline'}
             size="sm"
-            className="h-8 text-xs"
-            onClick={() => setActive(pose.id)}
+            className={`h-auto min-h-8 min-w-0 whitespace-normal px-2 py-1 text-center text-xs leading-tight ${
+              pose.unlockLevel > level ? 'opacity-55' : ''
+            }`}
+            onClick={() => setActive(pose)}
           >
-            {t(`skin.${pose.labelKey}`)}
+            <span className="block">{t(`poses.${pose.id}`)}</span>
+            <span className="block text-[9px] opacity-70">Lv.{pose.unlockLevel}</span>
           </Button>
         ))}
       </div>
@@ -85,20 +95,14 @@ export function SkinSection({ pet }: SkinSectionProps): React.JSX.Element {
               {disabled ? t('skin.aiStudio.lockedTitle') : t('skin.aiStudio.title')}
             </p>
             <p className="mt-0.5 text-[10px] text-muted-foreground">
-              {disabled
-                ? t('skin.aiStudio.lockedDesc')
-                : t('skin.aiStudio.desc')}
+              {disabled ? t('skin.aiStudio.lockedDesc') : t('skin.aiStudio.desc')}
             </p>
             <Button
               variant="outline"
               size="sm"
-              className="mt-2 h-7 text-xs"
+              className="mt-2 h-auto min-h-7 max-w-full whitespace-normal px-3 py-1.5 text-xs leading-tight"
               disabled
-              title={
-                disabled
-                  ? t('skin.aiStudio.lockedTitle')
-                  : t('skin.aiStudio.comingSoon')
-              }
+              title={disabled ? t('skin.aiStudio.lockedTitle') : t('skin.aiStudio.comingSoon')}
             >
               {disabled ? t('skin.aiStudio.lockedCta') : t('skin.aiStudio.cta')}
             </Button>

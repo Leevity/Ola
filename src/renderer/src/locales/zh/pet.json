@@ -35,6 +35,11 @@
     "delete": "删除这条记忆"
   },
   "stats": {
+    "totalExp": "宠物总 XP",
+    "totalTokens": "累计 tokens",
+    "coinsEarned": "通用金币",
+    "poolExp": "待分配 XP",
+    "allocatable": "可分配",
     "condition": "状态",
     "growthTitle": "等级与经验",
     "growthValue": "{{current}} / {{next}} 经验",
@@ -92,6 +97,9 @@
     "voiceDefault": "默认音色",
     "voiceCustomOption": "自定义…",
     "voiceCustomPlaceholder": "输入音色 ID",
+    "voiceMode": "接口模式",
+    "voiceTag": "语音标签",
+    "voiceInstruction": "风格指令",
     "voiceTest": "试听",
     "voiceTestSample": "你好呀，我是{{name}}，今天也要加油哦！",
     "voiceTagPlaceholder": "语音标签（仅 MiMo，可选）：方言/语气，如 粤语、撒娇、耳语，可写多个",
@@ -260,11 +268,24 @@
     "created": "Ola 小伙伴已认领",
     "claim": {
       "generate": "系统生成",
-      "import": "导入文件夹",
+      "import": "本地导入",
       "description": "描述 / 人设",
       "descriptionPlaceholder": "描述这位小伙伴的外观、性格和陪伴方式。系统会生成一张透明形象，并写入约 200 字人设。",
       "importDescriptionPlaceholder": "可选：补充这位小伙伴的性格和陪伴方式。为空时会使用 pet.json 里的 subject。",
-      "importHint": "请选择一个标准小伙伴文件夹，至少包含 pet.json 和一个 PNG 动作图，例如 idle.png。导入时会复制到 Ola 数据目录，不会移动原文件。",
+      "optimize": "AI 优化",
+      "optimizing": "优化中…",
+      "optimized": "已优化名字、描述和人设",
+      "importHint": "请选择一个标准小伙伴文件夹，至少包含 pet.json 和一个 PNG 动作图，例如 idle.png。可以先下载默认 Aniya 配置，参考它替换动作图和元数据后再本地导入。",
+      "referenceHint": "可选上传一张参考图。上传后系统会走图生图，尽量保留参考图的角色外观，再生成桌面小伙伴透明形象。",
+      "referenceFallback": "参考图生成失败，已改用描述生成。",
+      "referenceCta": "上传参考图",
+      "referenceReplace": "更换参考图",
+      "templateCta": "下载 Aniya 配置",
+      "templateExporting": "导出中…",
+      "templateExported": "Aniya 配置已导出。",
+      "standardTitle": "成长与动作标准",
+      "standardDesc": "小伙伴最高 Lv.{{maxLevel}}。普通对话和宠物对话都会兑换 XP 与金币；动作形象按统一标准维护，并随等级逐步解锁。",
+      "cancel": "取消",
       "generateConfirm": "生成并认领",
       "importConfirm": "选择文件夹并认领",
       "generating": "生成中…",
@@ -273,6 +294,8 @@
       "errors": {
         "cooldown": "生成太频繁，请稍后再试。",
         "empty": "请先填写描述。",
+        "no-chat-provider": "没有可用的对话模型，无法 AI 优化。",
+        "optimize-failed": "AI 优化失败。",
         "no-image-provider": "没有可用的图片生成模型，请先配置图片模型。",
         "model-error": "图片生成失败，请检查模型配置。",
         "no-image": "模型没有返回图片。",
@@ -281,6 +304,8 @@
         "missing-meta": "文件夹内缺少 pet.json。",
         "missing-pose": "文件夹内至少需要一个 PNG 动作图。",
         "import-error": "导入失败。",
+        "missing-template": "默认 Aniya 配置不存在，请检查应用资源。",
+        "export-error": "导出 Aniya 配置失败。",
         "unknown": "操作失败，请稍后再试。"
       }
     },
@@ -291,6 +316,17 @@
     "tooManyEnabled": "桌面宠物太多，先隐藏一只。",
     "defaultBadge": "默认",
     "list": "Ola 小伙伴",
+    "copyName": "{{name}} 副本",
+    "copiedToast": "已复制「{{name}}」",
+    "pool": {
+      "title": "经验资源池",
+      "hint": "普通对话产生的 XP 会先进入资源池，可分配给任意小伙伴，也可兑换为通用金币。",
+      "assignToActive": "喂给当前小伙伴",
+      "assignExp": "分配池中 XP",
+      "assignedExp": "已把资源池 XP 分配给「{{name}}」",
+      "convertCoins": "兑换通用金币",
+      "convertedCoins": "已兑换为通用金币"
+    },
     "deletedToast": "已删除「{{name}}」",
     "delete": {
       "title": "删除这只小伙伴？",
@@ -304,6 +340,7 @@
       "off": "已关",
       "startOnDesktop": "放到桌面",
       "stopOnDesktop": "从桌面隐藏",
+      "copy": "复制",
       "delete": "删除"
     },
     "setOnDesktop": "{{name}} 已放到桌面"
@@ -380,13 +417,17 @@
     "custom": "自定义",
     "preview": {
       "idle": "待机——静静呼吸，慢慢眨眼睛。",
+      "walk": "走路——桌面巡游时使用。",
+      "beg": "讨食——饥饿或需要关注时使用。",
       "eat": "正在吃东西——恢复饥饿。",
+      "munch": "正在吃零食——吃饭动作的变化帧。",
       "bathe": "正在洗澡——恢复清洁。",
+      "soak": "泡温泉——高等级清洁和心情恢复动作。",
+      "swim": "游泳——闲逛变化动作。",
+      "zen": "禅定——安静休息变化动作。",
       "play": "正在玩耍——心情提升，消耗一些体力。",
       "sleep": "正在睡觉——恢复更快。",
-      "walk": "四处溜达",
-      "soak": "泡温泉",
-      "zen": "禅定模式"
+      "held": "被拎起——拖拽宠物时使用。"
     },
     "preview-idle": "待机",
     "preview-eat": "吃东西",

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, powerMonitor, screen } from 'electron'
+import { app, BrowserWindow, dialog, powerMonitor, screen } from 'electron'
 import { basename, join } from 'path'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
@@ -7,7 +7,6 @@ import { registerMessagePackHandler } from './messagepack-handler'
 import { safeSendMessagePackToAllWindows } from '../window-ipc'
 import { decodePersistedStoreState, readSettings, setSettingsValue } from './settings-handlers'
 
-const PET_WINDOW_WIDTH = 480
 const PET_WINDOW_HEIGHT = 380
 const PET_ENABLED_SETTINGS_KEY = 'petDesktopEnabled'
 const PET_EXP_SETTINGS_KEY = 'ola-pet-exp'
@@ -44,7 +43,9 @@ type PetExpAddArgs = {
   at: number
   model: string
   tokens: number
+  premium?: boolean
   exp: number
+  mirrorLegacyExp?: boolean
 }
 
 type PetWindowDeps = {
@@ -64,6 +65,13 @@ type PetTtsStreamArgs = {
   voice?: string
   instruction?: string
   chatStyle?: string
+}
+
+type PetImageProviderArgs = {
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  requestOverrides?: { headers?: Record<string, string>; body?: Record<string, unknown> }
 }
 
 const petTtsStreams = new Map<string, AbortController>()
@@ -169,6 +177,55 @@ async function persistPetEnabled(enabled: boolean): Promise<void> {
   }
 }
 
+async function appendLegacyExp(args: PetExpAddArgs): Promise<number> {
+  const persisted =
+    decodePersistedStoreState<{
+      totalExp?: number
+      totalTokens?: number
+      log?: PetExpAddArgs[]
+    }>(readSettings()[PET_EXP_SETTINGS_KEY]) ?? {}
+  const totalExp = Math.round(((persisted.totalExp ?? 0) + args.exp) * 100) / 100
+  const totalTokens = (persisted.totalTokens ?? 0) + (args.tokens > 0 ? args.tokens : 0)
+  const log = [args, ...(Array.isArray(persisted.log) ? persisted.log : [])].slice(
+    0,
+    PET_EXP_LOG_LIMIT
+  )
+  await setSettingsValue(
+    PET_EXP_SETTINGS_KEY,
+    JSON.stringify({ state: { totalExp, totalTokens, log }, version: 0 })
+  )
+  return totalExp
+}
+
+export async function markPetClosedForAppQuit(): Promise<void> {
+  await persistPetEnabled(false)
+
+  const raw = readSettings()['ola-pets-v1']
+  const persisted = decodePersistedStoreState<{
+    pets?: Array<Record<string, unknown>>
+    enabledIds?: string[]
+    activePetId?: string | null
+    activeOnDesktopId?: string | null
+  }>(raw)
+  if (!persisted || !Array.isArray(persisted.pets)) return
+
+  const pets = persisted.pets.map((pet) =>
+    pet.archivedAt === null || pet.archivedAt === undefined ? { ...pet, enabled: false } : pet
+  )
+  await setSettingsValue(
+    'ola-pets-v1',
+    JSON.stringify({
+      state: {
+        ...persisted,
+        pets,
+        enabledIds: [],
+        activeOnDesktopId: null
+      },
+      version: 1
+    })
+  )
+}
+
 export async function openPetWindow(): Promise<void> {
   if (!deps || opening) return
 
@@ -180,29 +237,25 @@ export async function openPetWindow(): Promise<void> {
   opening = true
   const workArea = screen.getPrimaryDisplay().workArea
   const height = Math.min(PET_WINDOW_HEIGHT, workArea.height)
-  const width = Math.min(PET_WINDOW_WIDTH, workArea.width)
 
   const window = new BrowserWindow({
-    x: workArea.x + Math.max(0, Math.floor((workArea.width - width) / 2)),
+    x: workArea.x,
     y: workArea.y + workArea.height - height,
-    width,
+    width: workArea.width,
     height,
-    show: true,
-    transparent: false,
-    backgroundColor: '#f8fafc',
-    frame: true,
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 12 },
+    show: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    frame: false,
     alwaysOnTop: true,
-    resizable: true,
-    movable: true,
-    minimizable: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
     maximizable: false,
     fullscreenable: false,
-    skipTaskbar: false,
-    hasShadow: true,
-    focusable: true,
-    title: 'Ola Desktop Companion',
+    skipTaskbar: true,
+    hasShadow: false,
+    focusable: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -214,12 +267,14 @@ export async function openPetWindow(): Promise<void> {
   if (process.platform === 'darwin') {
     window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
   }
+  // Click-through by default; the renderer re-enables mouse events while the
+  // pointer is over the pet, its menu or HUD.
+  window.setIgnoreMouseEvents(true, { forward: true })
 
   window.on('ready-to-show', () => {
-    if (!window.isDestroyed()) {
-      window.show()
-      window.focus()
-    }
+    // Re-apply on macOS: ignore state set before the first paint can be lost.
+    window.setIgnoreMouseEvents(true, { forward: true })
+    window.showInactive()
   })
 
   window.on('closed', () => {
@@ -231,6 +286,9 @@ export async function openPetWindow(): Promise<void> {
 
   try {
     await deps.loadRendererWindow(window, new URLSearchParams({ appView: 'pet' }))
+    if (!window.isDestroyed()) {
+      window.setIgnoreMouseEvents(true, { forward: true })
+    }
     broadcastPetWindowChanged()
   } catch (error) {
     petWindow = null
@@ -261,12 +319,6 @@ export async function togglePetWindow(): Promise<void> {
   await persistPetEnabled(true)
 }
 
-export async function openPetWindowOnStartupIfEnabled(): Promise<void> {
-  if (isPetEnabled()) {
-    await openPetWindow()
-  }
-}
-
 function getBundledPetDirCandidates(): string[] {
   if (!app.isPackaged) {
     return [join(app.getAppPath(), 'resources', 'pets')]
@@ -275,6 +327,31 @@ function getBundledPetDirCandidates(): string[] {
     join(process.resourcesPath, 'app.asar.unpacked', 'resources', 'pets'),
     join(process.resourcesPath, 'resources', 'pets')
   ]
+}
+
+async function resolveBundledAniyaDir(): Promise<string | null> {
+  for (const candidate of getBundledPetDirCandidates()) {
+    const dir = join(candidate, 'aniya')
+    try {
+      if ((await stat(dir)).isDirectory()) return dir
+    } catch {
+      // Keep probing packaged/unpackaged resource layouts.
+    }
+  }
+  return null
+}
+
+async function resolveAvailableTemplateTarget(parentDir: string): Promise<string> {
+  const base = join(parentDir, 'Aniya-template')
+  for (let index = 1; index < 100; index++) {
+    const candidate = index === 1 ? base : `${base}-${index}`
+    try {
+      await stat(candidate)
+    } catch {
+      return candidate
+    }
+  }
+  return `${base}-${Date.now()}`
 }
 
 /**
@@ -339,14 +416,14 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
   deps = petDeps
 
   registerMessagePackHandler<void>('pet-window:open', async () => {
-    console.log('[Pet] pet-window:open invoked, opening pet window')
     await openPetWindow()
+    await persistPetEnabled(true)
     return { open: isPetWindowOpen() }
   })
 
   registerMessagePackHandler<void>('pet-window:close', async () => {
-    console.log('[Pet] pet-window:close invoked, closing pet window')
     closePetWindow()
+    await persistPetEnabled(false)
     return { open: false }
   })
 
@@ -463,26 +540,14 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
           PET_EXP_LOG_LIMIT
         )
         await safeWriteJson(path, { state: { totalExp, totalTokens, log }, version: 0 })
+        if (args.mirrorLegacyExp) {
+          await appendLegacyExp(args)
+        }
         safeSendMessagePackToAllWindows('pet:sync-event', { kind: 'exp', petId: args.petId })
         return { success: true, totalExp }
       }
 
-      const persisted =
-        decodePersistedStoreState<{
-          totalExp?: number
-          totalTokens?: number
-          log?: PetExpAddArgs[]
-        }>(readSettings()[PET_EXP_SETTINGS_KEY]) ?? {}
-      const totalExp = Math.round(((persisted.totalExp ?? 0) + args.exp) * 100) / 100
-      const totalTokens = (persisted.totalTokens ?? 0) + (args.tokens > 0 ? args.tokens : 0)
-      const log = [args, ...(Array.isArray(persisted.log) ? persisted.log : [])].slice(
-        0,
-        PET_EXP_LOG_LIMIT
-      )
-      await setSettingsValue(
-        PET_EXP_SETTINGS_KEY,
-        JSON.stringify({ state: { totalExp, totalTokens, log }, version: 0 })
-      )
+      const totalExp = await appendLegacyExp(args)
       safeSendMessagePackToAllWindows('pet:sync-event', { kind: 'exp' })
       return { success: true, totalExp }
     }
@@ -567,6 +632,27 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
     }
   )
 
+  registerMessagePackHandler<void>('pet:export-aniya-template', async () => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win) return { canceled: true }
+    const source = await resolveBundledAniyaDir()
+    if (!source) return { ok: false, reason: 'missing-template' }
+
+    const picked = await dialog.showOpenDialog(win, {
+      properties: ['openDirectory', 'createDirectory'],
+      defaultPath: app.getPath('downloads')
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return { canceled: true }
+
+    const target = await resolveAvailableTemplateTarget(picked.filePaths[0])
+    try {
+      await cp(source, target, { recursive: true })
+      return { ok: true, path: target }
+    } catch (error) {
+      return { ok: false, reason: 'export-error', message: String(error) }
+    }
+  })
+
   // Pull the latest persisted pets collection straight from the main
   // process. Renderer windows cache their own copy in zustand, but two
   // windows (settings + pet) can race against each other and one may
@@ -589,8 +675,8 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
   registerMessagePackHandler<{
     prompt: string
     name: string
-    providerId?: string
-    modelId?: string
+    provider?: PetImageProviderArgs
+    referenceImagePath?: string
   }>('pet:ai-generate-sprite', async (args) => {
     const now = Date.now()
     if (now - lastAiGenAt < AI_GEN_COOLDOWN_MS) {
@@ -604,14 +690,11 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
     const name = (args?.name ?? '').trim().slice(0, 40) || 'AI Pet'
     if (!prompt) return { ok: false, reason: 'empty' }
 
-    // Resolve provider + api key from the provider store. The renderer keeps
-    // the master list; here we read it back so the user doesn't have to
-    // configure anything twice.
-    const providerInfo = await resolveImageProviderConfig(args?.providerId, args?.modelId)
+    const providerInfo = resolveImageProviderConfig(args?.provider)
     if (!providerInfo) {
       return { ok: false, reason: 'no-image-provider' }
     }
-    const { baseUrl, apiKey, model } = providerInfo
+    const { baseUrl, apiKey, model, requestOverrides } = providerInfo
 
     // Build a transparent-background-friendly prompt and call the images API
     // directly. Two reasons for bypassing the sidecar stream:
@@ -623,21 +706,59 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
 
     let base64: string | null = null
     try {
-      const response = await fetch(`${baseUrl.replace(/\/+$/, '')}/images/generations`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model,
-          prompt: fullPrompt,
-          n: 1,
-          size: '1024x1024',
-          response_format: 'b64_json',
-          background: 'transparent'
+      const trimmedReferencePath = args?.referenceImagePath?.trim()
+      let response: Response
+      if (trimmedReferencePath) {
+        const imageBuffer = await readFile(trimmedReferencePath)
+        const ext = trimmedReferencePath.toLowerCase().split('.').pop()
+        const mediaType =
+          ext === 'jpg' || ext === 'jpeg'
+            ? 'image/jpeg'
+            : ext === 'webp'
+              ? 'image/webp'
+              : 'image/png'
+        const form = new FormData()
+        form.append('model', model)
+        form.append('prompt', fullPrompt)
+        form.append('n', '1')
+        form.append('size', '1024x1024')
+        form.append('response_format', 'b64_json')
+        form.append('background', 'transparent')
+        for (const [key, value] of Object.entries(requestOverrides?.body ?? {})) {
+          if (value !== undefined && value !== null) form.append(key, String(value))
+        }
+        form.append(
+          'image',
+          new Blob([imageBuffer], { type: mediaType }),
+          basename(trimmedReferencePath)
+        )
+        response = await fetch(`${baseUrl.replace(/\/+$/, '')}/images/edits`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            ...(requestOverrides?.headers ?? {})
+          },
+          body: form
         })
-      })
+      } else {
+        response = await fetch(`${baseUrl.replace(/\/+$/, '')}/images/generations`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+            ...(requestOverrides?.headers ?? {})
+          },
+          body: JSON.stringify({
+            model,
+            prompt: fullPrompt,
+            n: 1,
+            size: '1024x1024',
+            response_format: 'b64_json',
+            background: 'transparent',
+            ...(requestOverrides?.body ?? {})
+          })
+        })
+      }
       if (!response.ok) {
         const text = await response.text().catch(() => '')
         // Best-effort cleanup: rollback the cooldown so the user can retry
@@ -695,38 +816,62 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
       name
     }
   })
+
+  registerMessagePackHandler<{
+    name?: string
+    prompt?: string
+    base64?: string
+    mediaType?: string
+  }>('pet:save-generated-sprite', async (args) => {
+    const base64 = args?.base64?.trim()
+    if (!base64) return { ok: false, reason: 'no-image' }
+    const now = Date.now()
+    const name = (args?.name ?? '').trim().slice(0, 40) || 'AI Pet'
+    const prompt = (args?.prompt ?? '').trim().slice(0, AI_GEN_PROMPT_MAX)
+    const skinId = `user-${randomUUID().slice(0, 8)}`
+    const dir = `${await getPetsDirMain()}/${skinId}`
+    await safeMkdir(dir)
+    const pngPath = `${dir}/idle.png`
+    await writeFile(pngPath, Buffer.from(base64, 'base64'))
+    const meta = {
+      name,
+      createdAt: now,
+      builtin: false,
+      kind: 'capy',
+      prompt,
+      mediaType: args?.mediaType ?? 'image/png',
+      poses: { idle: pngPath }
+    }
+    await writeFile(`${dir}/pet.json`, JSON.stringify(meta, null, 2), 'utf8')
+
+    safeSendMessagePackToAllWindows('pet:sync-event', {
+      kind: 'skin',
+      payload: { skinId, builtin: false, name, createdAt: now }
+    })
+
+    return {
+      ok: true,
+      skinId,
+      path: pngPath,
+      data: base64,
+      mediaType: args?.mediaType ?? 'image/png',
+      name
+    }
+  })
 }
 
-/**
- * Look up the OpenAI-style image endpoint, base URL, API key and model id.
- * Reads from settings.json so the renderer doesn't have to ship secrets
- * across IPC.
- */
-async function resolveImageProviderConfig(
-  preferredProviderId?: string,
-  preferredModelId?: string
-): Promise<{ baseUrl: string; apiKey: string; model: string } | null> {
-  const all = readSettings()
-  const providers = (all.providers ?? []) as Array<{
-    id: string
-    enabled?: boolean
-    apiKey?: string
-    baseUrl?: string
-    models?: Array<{ id: string; enabled?: boolean; category?: string }>
-  }>
-  const candidates = providers.filter((p) => p.enabled !== false)
-  const provider = preferredProviderId
-    ? candidates.find((p) => p.id === preferredProviderId)
-    : candidates[0]
-  if (!provider) return null
-  const models = (provider.models ?? []).filter((m) => m.enabled !== false)
-  const model = preferredModelId
-    ? models.find((m) => m.id === preferredModelId)
-    : (models.find((m) => (m.category ?? 'image') === 'image') ?? models[0])
+function resolveImageProviderConfig(
+  provider?: PetImageProviderArgs
+):
+  | (Required<Pick<PetImageProviderArgs, 'baseUrl' | 'apiKey' | 'model'>> &
+      Pick<PetImageProviderArgs, 'requestOverrides'>)
+  | null {
+  const model = provider?.model?.trim()
   if (!model) return null
   return {
-    baseUrl: provider.baseUrl ?? 'https://api.openai.com/v1',
-    apiKey: provider.apiKey ?? '',
-    model: model.id
+    baseUrl: provider?.baseUrl?.trim() || 'https://api.openai.com/v1',
+    apiKey: provider?.apiKey ?? '',
+    model,
+    requestOverrides: provider?.requestOverrides
   }
 }

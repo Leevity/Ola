@@ -1,6 +1,8 @@
 import { nanoid } from 'nanoid'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { usePetsStore } from '@renderer/stores/pets-store'
+import { usePetExpStore } from '@renderer/stores/pet-exp-store'
+import { usePetResourcePoolStore } from '@renderer/stores/pet-resource-pool-store'
 
 /**
  * One XP per 1000 tokens — applies to every model, no premium multiplier.
@@ -47,15 +49,38 @@ export async function accruePetExpFromUsage(args: AccruePetExpArgs): Promise<voi
     at: Date.now(),
     model: args.modelName ?? args.modelId ?? 'unknown',
     tokens: Math.round(args.tokens),
+    premium: false,
     exp
   }
   try {
+    const isDefault =
+      usePetsStore.getState().pets.find((pet) => pet.id === petId)?.isDefault === true
     // Optimistic local update so the pet reacts immediately even before the
     // main-process ledger writes. The main process is still the source of
     // truth and broadcasts `pet:sync-event { kind: 'exp' }` to reconcile.
     usePetsStore.getState().recordExp(petId, entry)
-    await ipcClient.invoke('pet:exp-add', { petId, ...entry })
+    if (isDefault) {
+      usePetExpStore.setState((state) => ({
+        totalExp: Math.round((state.totalExp + exp) * 100) / 100,
+        totalTokens: state.totalTokens + (entry.tokens > 0 ? entry.tokens : 0),
+        log: [entry, ...state.log].slice(0, 100)
+      }))
+    }
+    await ipcClient.invoke('pet:exp-add', { petId, mirrorLegacyExp: isDefault, ...entry })
   } catch {
     // Experience accrual must never break usage recording.
   }
+}
+
+export function accruePetResourcePoolFromAmbientUsage(args: Omit<AccruePetExpArgs, 'petId'>): void {
+  const exp = computePetExp(args.tokens)
+  if (exp <= 0) return
+  usePetResourcePoolStore.getState().addAmbientUsage({
+    id: nanoid(),
+    at: Date.now(),
+    model: args.modelName ?? args.modelId ?? 'unknown',
+    tokens: Math.round(args.tokens),
+    exp,
+    source: 'ambient-chat'
+  })
 }
