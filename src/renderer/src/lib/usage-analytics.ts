@@ -71,6 +71,20 @@ function toNullableNumber(value: number | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function hasUsageTokens(usage: TokenUsage | undefined): usage is TokenUsage {
+  if (!usage) return false
+  return [
+    usage.inputTokens,
+    usage.outputTokens,
+    usage.billableInputTokens,
+    usage.cacheCreationTokens,
+    usage.cacheCreation5mTokens,
+    usage.cacheCreation1hTokens,
+    usage.cacheReadTokens,
+    usage.reasoningTokens
+  ].some((value) => typeof value === 'number' && Number.isFinite(value) && value > 0)
+}
+
 function resolveProviderAndModel(
   providers: AIProvider[],
   input: {
@@ -191,7 +205,7 @@ export async function recordUsageEvent(input: {
   meta?: Record<string, unknown>
   createdAt?: number
 }): Promise<void> {
-  if (!input.usage && !input.timing) return
+  if (!hasUsageTokens(input.usage)) return
 
   const chatStore = useChatStore.getState()
   const providerStore = useProviderStore.getState()
@@ -210,10 +224,7 @@ export async function recordUsageEvent(input: {
     sessionProviderId: session?.providerId,
     sessionModelId: session?.modelId
   })
-  const usage = input.usage ?? {
-    inputTokens: 0,
-    outputTokens: 0
-  }
+  const usage = input.usage
   const normalizedUsage: TokenUsage = {
     ...usage,
     billableInputTokens:

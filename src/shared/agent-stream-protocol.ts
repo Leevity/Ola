@@ -360,6 +360,6 @@ export interface SubAgentResultWire {
   reportSubmitted?: boolean
   toolCallCount: number
   iterations: number
-  usage: TokenUsageWire
+  usage?: TokenUsageWire
   error?: string
 }

@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text;
@@ -6,6 +7,19 @@ using System.Text.Json;
 
 internal static partial class AgentRuntimeOpenAIResponsesProvider
 {
+    private const int WebSocketConnectTimeoutMs = 15_000;
+    private const int WebSocketFirstMessageTimeoutMs = 30_000;
+    private static readonly ConcurrentDictionary<string, byte> UnavailableWebSocketUrls =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private sealed class ResponsesWebSocketUnavailableException : Exception
+    {
+        public ResponsesWebSocketUnavailableException(string message, Exception? inner = null)
+            : base(message, inner)
+        {
+        }
+    }
+
     private static async Task ExecuteHttpSseAsync(
         string url,
         string body,
@@ -80,7 +94,20 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
     {
         using var socket = new ClientWebSocket();
         ApplyOpenAIWebSocketHeaders(socket, provider);
-        await socket.ConnectAsync(new Uri(websocketUrl), state.CancellationToken);
+        using (var connectCts = CancellationTokenSource.CreateLinkedTokenSource(state.CancellationToken))
+        {
+            connectCts.CancelAfter(WebSocketConnectTimeoutMs);
+            try
+            {
+                await socket.ConnectAsync(new Uri(websocketUrl), connectCts.Token);
+            }
+            catch (OperationCanceledException ex) when (!state.IsCancellationRequested)
+            {
+                throw new ResponsesWebSocketUnavailableException(
+                    $"WebSocket connect timed out after {WebSocketConnectTimeoutMs}ms url={websocketUrl}",
+                    ex);
+            }
+        }
 
         var payload = BuildWebSocketCreatePayload(body);
         var payloadBytes = Encoding.UTF8.GetBytes(payload);
@@ -90,6 +117,9 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
             WebSocketMessageFlags.EndOfMessage,
             state.CancellationToken);
 
+        using var firstMessageCts = CancellationTokenSource.CreateLinkedTokenSource(state.CancellationToken);
+        firstMessageCts.CancelAfter(WebSocketFirstMessageTimeoutMs);
+
         var buffer = new byte[64 * 1024];
         while (socket.State == WebSocketState.Open && !state.CancellationToken.IsCancellationRequested)
         {
@@ -97,10 +127,29 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
             WebSocketReceiveResult result;
             do
             {
-                result = await socket.ReceiveAsync(buffer, state.CancellationToken);
+                var receiveToken = parseState.ReceivedAnyMessage
+                    ? state.CancellationToken
+                    : firstMessageCts.Token;
+                try
+                {
+                    result = await socket.ReceiveAsync(buffer, receiveToken);
+                }
+                catch (OperationCanceledException ex) when (
+                    !state.IsCancellationRequested &&
+                    !parseState.ReceivedAnyMessage)
+                {
+                    throw new ResponsesWebSocketUnavailableException(
+                        $"WebSocket produced no events within {WebSocketFirstMessageTimeoutMs}ms url={websocketUrl}",
+                        ex);
+                }
                 if (result.MessageType == WebSocketMessageType.Close)
                 {
                     await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "done", CancellationToken.None);
+                    if (!parseState.ReceivedAnyMessage)
+                    {
+                        throw new ResponsesWebSocketUnavailableException(
+                            $"WebSocket closed before any event was received url={websocketUrl}");
+                    }
                     return;
                 }
                 message.Write(buffer, 0, result.Count);
@@ -113,6 +162,7 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
             }
 
             var data = Encoding.UTF8.GetString(message.ToArray());
+            parseState.ReceivedAnyMessage = true;
             var shouldStop = await ProcessJsonEventAsync(null, data, parseState, state, context, startedAt);
             if (shouldStop)
             {
@@ -120,12 +170,19 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
                 return;
             }
         }
+
+        if (!parseState.ReceivedAnyMessage && !state.IsCancellationRequested)
+        {
+            throw new ResponsesWebSocketUnavailableException(
+                $"WebSocket ended before any event was received url={websocketUrl}");
+        }
     }
 
 
     private static string? ResolveWebSocketUrl(JsonElement provider, string baseUrl)
     {
-        if (JsonHelpers.GetString(provider, "websocketMode") == "disabled")
+        var mode = JsonHelpers.GetString(provider, "websocketMode");
+        if (mode is not ("auto" or "enabled"))
         {
             return null;
         }
@@ -133,12 +190,17 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
         {
             return null;
         }
-        if (JsonHelpers.GetString(provider, "websocketUrl") is { Length: > 0 } explicitUrl &&
-            IsValidWebSocketUrl(explicitUrl))
+        var url = JsonHelpers.GetString(provider, "websocketUrl") is { Length: > 0 } explicitUrl &&
+            IsValidWebSocketUrl(explicitUrl)
+                ? explicitUrl
+                : DeriveResponsesWebSocketUrl(baseUrl);
+        if (url is not null && UnavailableWebSocketUrls.ContainsKey(url))
         {
-            return explicitUrl;
+            WorkerLog.Debug(
+                $"responses websocket skipped url={url} (marked unavailable after transport failure)");
+            return null;
         }
-        return DeriveResponsesWebSocketUrl(baseUrl);
+        return url;
     }
 
     private static bool ShouldEnableResponsesWebSocketForScope(JsonElement provider)

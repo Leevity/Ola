@@ -258,7 +258,26 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'team-runtime:manifest:update',
   'team-runtime:messages:consume',
   'update:check',
-  'update:download'
+  'update:download',
+  'update:status',
+  'update:install',
+  'pet-window:open',
+  'pet-window:close',
+  'pet-window:status',
+  'pet-window:set-ignore-mouse',
+  'pet-window:set-focusable',
+  'pet-window:idle-seconds',
+  'pet:tts-stream',
+  'pet:tts-cancel',
+  'pet:sync',
+  'pet:open-studio',
+  'pet:exp-add',
+  'pet:create',
+  'pet:update',
+  'pet:archive',
+  'pet:import-companion-folder',
+  'pet:collection:get',
+  'pet:ai-generate-sprite'
 ])
 
 const MESSAGEPACK_SEND_CHANNELS = new Set<string>([
@@ -317,7 +336,10 @@ const MESSAGEPACK_EVENT_CHANNELS = new Set<string>([
   'update:available',
   'update:download-progress',
   'update:downloaded',
-  'update:error'
+  'update:error',
+  'pet-window:changed',
+  'pet:tts-stream-event',
+  'pet:sync-event'
 ])
 
 export function shouldUseMessagePackInvoke(channel: string, argCount: number): boolean {

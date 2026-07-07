@@ -63,41 +63,73 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
 
         try
         {
-            if (useWebSocket && websocketUrl is not null)
+            try
             {
+                if (useWebSocket && websocketUrl is not null)
+                {
+                    await ExecuteWebSocketAsync(websocketUrl, body, provider, parseState, state, context, startedAt);
+                }
+                else
+                {
+                    await ExecuteHttpSseAsync(httpUrl, body, provider, parseState, state, context, startedAt);
+                }
+            }
+            catch (InvalidOperationException ex) when (
+                useWebSocket &&
+                websocketUrl is not null &&
+                IsRecoverablePreviousResponseReplayError(ex))
+            {
+                WorkerLog.Warn(
+                    "responses previous_response_id replay failed with a recoverable error; " +
+                    "retrying with full sanitized input");
+                body = BuildRequestBody(
+                    parameters,
+                    provider,
+                    conversation,
+                    allowPreviousResponseId: false);
+                await EmitRequestDebugAsync(
+                    parameters,
+                    provider,
+                    state,
+                    context,
+                    requestUrl,
+                    useWebSocket,
+                    body,
+                    model,
+                    transport);
+                startedAt = Stopwatch.GetTimestamp();
+                parseState = new ResponsesParseState();
                 await ExecuteWebSocketAsync(websocketUrl, body, provider, parseState, state, context, startedAt);
             }
-            else
-            {
-                await ExecuteHttpSseAsync(httpUrl, body, provider, parseState, state, context, startedAt);
-            }
         }
-        catch (InvalidOperationException ex) when (
+        catch (Exception ex) when (
             useWebSocket &&
             websocketUrl is not null &&
-            IsRecoverablePreviousResponseReplayError(ex))
+            ShouldFallBackToHttpTransport(ex, parseState, state))
         {
+            UnavailableWebSocketUrls.TryAdd(websocketUrl, 0);
             WorkerLog.Warn(
-                "responses previous_response_id replay failed with a recoverable error; " +
-                "retrying with full sanitized input");
+                "responses websocket transport failed before any event; falling back to HTTP SSE " +
+                $"url={websocketUrl} error={ex.GetType().Name}: {ex.Message}");
             body = BuildRequestBody(
                 parameters,
                 provider,
                 conversation,
                 allowPreviousResponseId: false);
+            transport = "http";
+            parseState = new ResponsesParseState();
             await EmitRequestDebugAsync(
                 parameters,
                 provider,
                 state,
                 context,
-                requestUrl,
-                useWebSocket,
+                httpUrl,
+                useWebSocket: false,
                 body,
                 model,
                 transport);
             startedAt = Stopwatch.GetTimestamp();
-            parseState = new ResponsesParseState();
-            await ExecuteWebSocketAsync(websocketUrl, body, provider, parseState, state, context, startedAt);
+            await ExecuteHttpSseAsync(httpUrl, body, provider, parseState, state, context, startedAt);
         }
 
         FlushPendingToolCalls(parseState);
@@ -174,6 +206,18 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
     private static bool IsRecoverablePreviousResponseReplayError(Exception ex)
     {
         return IsMissingToolOutputError(ex) || IsPreviousResponseNotFoundError(ex);
+    }
+
+    private static bool ShouldFallBackToHttpTransport(
+        Exception ex,
+        ResponsesParseState parseState,
+        AgentRuntimeTools.AgentRuntimeRunState state)
+    {
+        if (state.IsCancellationRequested || parseState.ReceivedAnyMessage)
+        {
+            return false;
+        }
+        return ex is WebSocketException or ResponsesWebSocketUnavailableException;
     }
 
     private static bool IsMissingToolOutputError(Exception ex)

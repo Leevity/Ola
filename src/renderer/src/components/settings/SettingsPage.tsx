@@ -25,7 +25,8 @@ import {
   MessageSquareQuote,
   Users,
   Code2,
-  Network
+  Network,
+  PawPrint
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { AnimatePresence } from 'motion/react'
@@ -85,6 +86,7 @@ import { AnalyticsOverview } from './AnalyticsOverview'
 import { ProfilePanel } from './ProfilePanel'
 import { ModelIcon, ProviderIcon } from './provider-icons'
 import { AutoMemoryPanel } from '@renderer/components/memory/AutoMemoryPanel'
+import { PetPanel } from './PetPanel'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import {
@@ -408,6 +410,12 @@ const menuGroupDefs: Array<{
         icon: <BarChart3 className="size-4" />,
         labelKey: 'analytics.title',
         descKey: 'analytics.subtitle'
+      },
+      {
+        id: 'pet',
+        icon: <PawPrint className="size-4" />,
+        labelKey: 'pet.title',
+        descKey: 'pet.subtitle'
       }
     ]
   },
@@ -506,6 +514,7 @@ function GeneralPanel(): React.JSX.Element {
   const [downloadingUpdate, setDownloadingUpdate] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null)
   const [downloadedVersion, setDownloadedVersion] = useState<string | null>(null)
+  const [installingUpdate, setInstallingUpdate] = useState(false)
   const sessions = useChatStore((s) => s.sessions)
   const clearAllSessions = useChatStore((s) => s.clearAllSessions)
   const effectiveProjectDirectory =
@@ -596,6 +605,7 @@ function GeneralPanel(): React.JSX.Element {
 
     const offProgress = ipcClient.on(IPC.UPDATE_DOWNLOAD_PROGRESS, (data: unknown) => {
       const d = data as { percent: number }
+      setDownloadedVersion(null)
       setDownloadingUpdate(true)
       setDownloadProgress(typeof d.percent === 'number' ? d.percent : null)
     })
@@ -604,15 +614,26 @@ function GeneralPanel(): React.JSX.Element {
       const d = data as { version: string }
       setDownloadingUpdate(false)
       setDownloadProgress(null)
-      setDownloadedVersion(d.version)
+      setInstallingUpdate(false)
+      setDownloadedVersion(normalizeVersion(d.version) || d.version)
     })
 
     const offError = ipcClient.on(IPC.UPDATE_ERROR, (data: unknown) => {
       const d = data as { error: string }
       setDownloadingUpdate(false)
       setDownloadProgress(null)
+      setInstallingUpdate(false)
       setUpdateError(d.error)
     })
+
+    void (async () => {
+      const result = (await ipcClient.invoke(IPC.UPDATE_STATUS)) as
+        | { success: true; downloadedVersion: string | null }
+        | { success: false; error: string }
+      if (result.success && result.downloadedVersion) {
+        setDownloadedVersion(normalizeVersion(result.downloadedVersion) || result.downloadedVersion)
+      }
+    })()
 
     return () => {
       offAvailable()
@@ -627,6 +648,7 @@ function GeneralPanel(): React.JSX.Element {
     setDownloadingUpdate(true)
     setDownloadProgress(null)
     setDownloadedVersion(null)
+    setInstallingUpdate(false)
 
     const result = (await ipcClient.invoke(IPC.UPDATE_DOWNLOAD)) as
       | { success: true }
@@ -637,6 +659,21 @@ function GeneralPanel(): React.JSX.Element {
       setUpdateError(result.error)
     }
   }, [])
+
+  const handleInstallDownloadedUpdate = useCallback(async () => {
+    if (!downloadedVersion || installingUpdate) return
+    setInstallingUpdate(true)
+    setUpdateError(null)
+
+    const result = (await ipcClient.invoke(IPC.UPDATE_INSTALL)) as
+      | { success: true }
+      | { success: false; error: string }
+
+    if (!result.success) {
+      setInstallingUpdate(false)
+      setUpdateError(result.error)
+    }
+  }, [downloadedVersion, installingUpdate])
 
   const handleBackupSessions = useCallback(async () => {
     if (sessions.length === 0) {
@@ -757,7 +794,7 @@ function GeneralPanel(): React.JSX.Element {
             {checkingUpdate && <Loader2 className="mr-1 size-3 animate-spin" />}
             {checkingUpdate ? t('general.update.checking') : t('general.update.checkForUpdates')}
           </Button>
-          {updateAvailable && (
+          {updateAvailable && !downloadedVersion && (
             <Button
               size="sm"
               className="h-7 text-xs"
@@ -766,6 +803,17 @@ function GeneralPanel(): React.JSX.Element {
             >
               {downloadingUpdate && <Loader2 className="mr-1 size-3 animate-spin" />}
               {downloadingUpdate ? t('general.update.updating') : t('general.update.updateNow')}
+            </Button>
+          )}
+          {downloadedVersion && (
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => void handleInstallDownloadedUpdate()}
+              disabled={installingUpdate}
+            >
+              {installingUpdate && <Loader2 className="mr-1 size-3 animate-spin" />}
+              {installingUpdate ? t('general.update.installing') : t('general.update.installNow')}
             </Button>
           )}
         </div>
@@ -779,7 +827,7 @@ function GeneralPanel(): React.JSX.Element {
             {t('general.update.upToDate')}
           </p>
         )}
-        {updateAvailable && !downloadingUpdate && (
+        {updateAvailable && !downloadingUpdate && !downloadedVersion && (
           <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
             {t('general.update.newVersionAvailable', { version: latestVersion })}
           </p>
@@ -795,7 +843,7 @@ function GeneralPanel(): React.JSX.Element {
         )}
         {downloadedVersion && (
           <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500">
-            {t('general.update.downloadedRestarting', { version: downloadedVersion })}
+            {t('general.update.downloadedReady', { version: downloadedVersion })}
           </p>
         )}
       </section>
@@ -3557,6 +3605,7 @@ const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   model: ModelPanel,
   websearch: WebSearchPanel,
   skillsmarket: SkillsMarketPanel,
+  pet: PetPanel,
   about: AboutPanel
 }
 

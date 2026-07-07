@@ -906,7 +906,7 @@ function mapToStreamEvent(raw: Record<string, unknown>): AgentStreamEvent | null
             : {}),
           toolCallCount: num(result.toolCallCount),
           iterations: num(result.iterations),
-          usage: (result.usage as TokenUsageWire) ?? { inputTokens: 0, outputTokens: 0 },
+          ...(result.usage ? { usage: result.usage as TokenUsageWire } : {}),
           ...(typeof result.error === 'string' ? { error: result.error } : {})
         }
       }

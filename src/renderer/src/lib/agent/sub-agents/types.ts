@@ -77,7 +77,7 @@ export interface SubAgentResult {
   /** Number of LLM iterations */
   iterations: number
   /** Aggregated token usage */
-  usage: TokenUsage
+  usage?: TokenUsage
   /** Error message if failed */
   error?: string
 }

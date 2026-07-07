@@ -7,8 +7,9 @@ internal sealed record AgentRuntimeDebugBodyFile(string Ref, long Bytes);
 internal static class AgentRuntimeDebugPayload
 {
     private const string DebugBodyDirectoryName = "ola-request-debug-bodies";
-    private const int MaxDebugBodyFiles = 8;
+    private const int MaxDebugBodyFiles = 80;
     private const long MaxDebugBodyBytes = 64L * 1024 * 1024;
+    private static readonly UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
     private static readonly object Sync = new();
     private static readonly string TempDirectory = Path.Combine(Path.GetTempPath(), DebugBodyDirectoryName);
     private static readonly Dictionary<string, DebugBodyEntry> BodyFiles = new(StringComparer.Ordinal);
@@ -32,12 +33,13 @@ internal static class AgentRuntimeDebugPayload
         var bodyRef = Guid.NewGuid().ToString("N");
         var filePath = Path.Combine(TempDirectory, $"{bodyRef}.json");
         var bytes = Encoding.UTF8.GetByteCount(redacted);
+        var sessionId = JsonHelpers.GetString(parameters, "sessionId");
 
         lock (Sync)
         {
             Directory.CreateDirectory(TempDirectory);
-            File.WriteAllText(filePath, redacted, Encoding.UTF8);
-            BodyFiles[bodyRef] = new DebugBodyEntry(bodyRef, filePath, bytes);
+            File.WriteAllText(filePath, redacted, Utf8NoBom);
+            BodyFiles[bodyRef] = new DebugBodyEntry(bodyRef, filePath, bytes, sessionId);
             BodyFileOrder.Enqueue(bodyRef);
             TotalBodyBytes += bytes;
             PruneBodyFilesLocked();
@@ -49,14 +51,37 @@ internal static class AgentRuntimeDebugPayload
     public static WorkerResponse ReadBody(JsonElement parameters)
     {
         var bodyRef = JsonHelpers.GetString(parameters, "bodyRef");
-        if (string.IsNullOrWhiteSpace(bodyRef))
+        var sessionId = JsonHelpers.GetString(parameters, "sessionId");
+        if (string.IsNullOrWhiteSpace(bodyRef) && string.IsNullOrWhiteSpace(sessionId))
         {
             return ToResponse(Mutation(false, null, null, "Missing debug body reference"));
         }
 
         lock (Sync)
         {
-            if (!BodyFiles.TryGetValue(bodyRef, out var entry) || !File.Exists(entry.Path))
+            DebugBodyEntry? entry = null;
+            if (!string.IsNullOrWhiteSpace(bodyRef) &&
+                BodyFiles.TryGetValue(bodyRef, out var byRef) &&
+                File.Exists(byRef.Path))
+            {
+                entry = byRef;
+            }
+
+            if (entry is null && !string.IsNullOrWhiteSpace(sessionId))
+            {
+                foreach (var candidateRef in BodyFileOrder.Reverse())
+                {
+                    if (BodyFiles.TryGetValue(candidateRef, out var candidate) &&
+                        string.Equals(candidate.SessionId, sessionId, StringComparison.Ordinal) &&
+                        File.Exists(candidate.Path))
+                    {
+                        entry = candidate;
+                        break;
+                    }
+                }
+            }
+
+            if (entry is null)
             {
                 return ToResponse(Mutation(false, null, null, "Debug body is no longer available"));
             }
@@ -199,5 +224,5 @@ internal static class AgentRuntimeDebugPayload
         return WorkerResponse.RawJson(node.ToJsonString());
     }
 
-    private sealed record DebugBodyEntry(string Ref, string Path, long Bytes);
+    private sealed record DebugBodyEntry(string Ref, string Path, long Bytes, string? SessionId);
 }

@@ -51,32 +51,6 @@ internal static class AgentRuntimePlanExecutor
         };
     }
 
-    public static string? ValidatePlanFileMutation(
-        string toolName,
-        JsonElement input,
-        JsonElement parameters,
-        string runId)
-    {
-        if (toolName is not ("Write" or "Edit") || !IsPlanModeActive(runId, parameters))
-        {
-            return null;
-        }
-
-        var planFilePath = GetCurrentPlanFilePath(runId, parameters);
-        if (string.IsNullOrWhiteSpace(planFilePath))
-        {
-            return "No active plan file for this session. Call EnterPlanMode first.";
-        }
-
-        var resolvedPath = ResolvePlanToolPath(JsonHelpers.GetString(input, "file_path"), JsonHelpers.GetString(parameters, "workingFolder"));
-        if (!PathsEqual(resolvedPath, planFilePath))
-        {
-            return $"In plan mode, {toolName} is restricted to the current plan file: {planFilePath}";
-        }
-
-        return null;
-    }
-
     public static void ClearRun(string runId)
     {
         RunStates.TryRemove(runId, out _);
@@ -275,24 +249,6 @@ internal static class AgentRuntimePlanExecutor
         return JsonHelpers.GetBool(parameters, "planMode", false);
     }
 
-    private static string? GetCurrentPlanFilePath(string runId, JsonElement parameters)
-    {
-        if (RunStates.TryGetValue(runId, out var state) &&
-            !string.IsNullOrWhiteSpace(state.PlanFilePath))
-        {
-            return state.PlanFilePath;
-        }
-
-        var sessionId = GetSessionId(parameters);
-        if (sessionId.Length == 0)
-        {
-            return null;
-        }
-
-        using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-        return LoadPlanBySession(connection, null, sessionId)?.FilePath;
-    }
-
     private static async Task NotifyPlanUiAsync(
         string action,
         PlanRow plan,
@@ -472,48 +428,6 @@ internal static class AgentRuntimePlanExecutor
         }
 
         return left.TrimEnd('/') + "/" + right.TrimStart('/');
-    }
-
-    private static string ResolvePlanToolPath(string? inputPath, string? workingFolder)
-    {
-        var raw = inputPath?.Trim() ?? string.Empty;
-        var basePath = workingFolder?.Trim() ?? string.Empty;
-        if (raw.Length == 0 || raw == ".")
-        {
-            return basePath.Length > 0 ? basePath : ".";
-        }
-
-        if (IsAbsolutePath(raw))
-        {
-            return raw;
-        }
-
-        return basePath.Length > 0 ? JoinPath(basePath, raw) : raw;
-    }
-
-    private static bool IsAbsolutePath(string path)
-    {
-        return path.StartsWith("/", StringComparison.Ordinal) ||
-            path.StartsWith('\\') ||
-            (path.Length >= 3 && char.IsLetter(path[0]) && path[1] == ':' && (path[2] == '\\' || path[2] == '/'));
-    }
-
-    private static bool PathsEqual(string left, string right)
-    {
-        return string.Equals(NormalizePath(left), NormalizePath(right), StringComparison.Ordinal);
-    }
-
-    private static string NormalizePath(string path)
-    {
-        var normalized = path.Replace('\\', '/');
-        while (normalized.Contains("//", StringComparison.Ordinal))
-        {
-            normalized = normalized.Replace("//", "/", StringComparison.Ordinal);
-        }
-        normalized = normalized.TrimEnd('/');
-        return normalized.Length >= 2 && char.IsLetter(normalized[0]) && normalized[1] == ':'
-            ? normalized.ToLowerInvariant()
-            : normalized;
     }
 
     private static bool IsDraftPlanStatus(string status)

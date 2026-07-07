@@ -524,16 +524,6 @@ internal static class AgentRuntimeNativeToolExecutor
                 return new RendererToolResult(CreateStringElement(webSearchContent), false, null);
             }
 
-            var planGuardError = AgentRuntimePlanExecutor.ValidatePlanFileMutation(
-                call.Name,
-                call.Input,
-                parameters,
-                state.RunId);
-            if (planGuardError is not null)
-            {
-                return new RendererToolResult(CreateStringElement(EncodeError(planGuardError)), false, null);
-            }
-
             if (AgentRuntimeSshToolExecutor.ShouldRoute(parameters) &&
                 AgentRuntimeSshToolExecutor.IsSshTool(call.Name))
             {

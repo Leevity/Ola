@@ -249,6 +249,8 @@
       "availableDescription": "Click \"Update now\" to start downloading",
       "buttonLabel": "Update v{{version}}",
       "buttonTooltip": "A new version is available. Click to view release notes.",
+      "readyShort": "Install v{{version}}",
+      "readyTooltip": "Update downloaded. Click to install.",
       "currentVersion": "Current v{{version}}",
       "latestVersion": "Latest v{{version}}",
       "releaseNotes": "Release notes",
@@ -256,14 +258,20 @@
       "downloading": "Downloading update...",
       "downloadingShort": "{{progress}}%",
       "downloadingProgress": "Downloading update {{progress}}%",
+      "installing": "Installing…",
       "actions": {
         "updateNow": "Update now",
-        "remindLater": "Remind me later"
+        "remindLater": "Remind me later",
+        "installNow": "Install now",
+        "updateLater": "Install later"
       },
+      "readyTitle": "Update v{{version}} is ready to install",
+      "readyDescription": "The update has finished downloading. Ola will quit and install it after confirmation.",
       "downloadFailed": "Download failed",
+      "installFailed": "Install failed",
       "delayed": "Update postponed",
       "downloadedTitle": "Update downloaded",
-      "downloadedDescription": "Version {{version}} will install after restart",
+      "downloadedDescription": "Version {{version}} is ready to install after confirmation",
       "failed": "Update failed"
     },
     "errors": {

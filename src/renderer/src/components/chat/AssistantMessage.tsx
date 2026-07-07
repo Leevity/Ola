@@ -518,6 +518,20 @@ function formatTokenMetric(value: number): string {
   return `${(safeValue / 1_000_000).toFixed(safeValue < 10_000_000 ? 2 : 1)}M`
 }
 
+function hasAccountingUsage(usage: TokenUsage | undefined): usage is TokenUsage {
+  if (!usage) return false
+  return [
+    usage.inputTokens,
+    usage.outputTokens,
+    usage.billableInputTokens,
+    usage.cacheCreationTokens,
+    usage.cacheCreation5mTokens,
+    usage.cacheCreation1hTokens,
+    usage.cacheReadTokens,
+    usage.reasoningTokens
+  ].some((value) => typeof value === 'number' && Number.isFinite(value) && value > 0)
+}
+
 function formatPreciseDurationMs(ms: number): string {
   if (!Number.isFinite(ms) || ms <= 0) return '0s'
   if (ms < 10_000) return `${(ms / 1000).toFixed(2)}s`
@@ -2869,7 +2883,7 @@ export function AssistantMessage({
 
   const requestTrace = msgId ? getRequestTraceInfo(msgId) : undefined
   const completionSummary = useMemo<CompletionSummaryData | null>(() => {
-    if (!usage) {
+    if (!hasAccountingUsage(usage)) {
       if (fallbackTokens <= 0) return null
       return {
         totalTokens: fallbackTokens,
