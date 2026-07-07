@@ -230,8 +230,8 @@ export function updateRuntimeMessage(
 function buildMergedRuntimeUsage(
   currentUsage: UnifiedMessage['usage'],
   patch: Partial<TokenUsage>
-): TokenUsage {
-  return mergeUsageSnapshot(currentUsage, patch) ?? { inputTokens: 0, outputTokens: 0 }
+): TokenUsage | undefined {
+  return mergeUsageSnapshot(currentUsage, patch)
 }
 
 export function mergeRuntimeMessageUsage(

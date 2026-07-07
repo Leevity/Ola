@@ -206,7 +206,7 @@ internal static class AgentRuntimeTools
 
             await OpenAIChatRuntime.ExecuteLoopAsync(state.Parameters, state, context);
         }
-        catch (OperationCanceledException)
+        catch (OperationCanceledException) when (state.IsCancellationRequested)
         {
             await EmitAsync(state, context, new AgentRuntimeStreamEvent("loop_end", Reason: "aborted"));
         }

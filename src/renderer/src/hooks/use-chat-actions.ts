@@ -1013,7 +1013,7 @@ function reconcileSubAgentCompletionFromTaskToolCall(
         reportSubmitted: !!report.trim(),
         toolCallCount: meta?.toolCalls.length ?? tracked.toolCalls.length,
         iterations: meta?.iterations ?? tracked.iteration,
-        usage: meta?.usage ?? { inputTokens: 0, outputTokens: 0 },
+        ...(meta?.usage ? { usage: meta.usage } : {}),
         ...(error ? { error } : {})
       }
     },

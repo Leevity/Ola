@@ -249,6 +249,8 @@
       "availableDescription": "点击“立即更新”开始下载",
       "buttonLabel": "更新 v{{version}}",
       "buttonTooltip": "发现新版本，点击查看更新内容",
+      "readyShort": "安装 v{{version}}",
+      "readyTooltip": "更新已下载，点击安装",
       "currentVersion": "当前版本 v{{version}}",
       "latestVersion": "最新版本 v{{version}}",
       "releaseNotes": "更新说明",
@@ -256,14 +258,20 @@
       "downloading": "开始下载更新...",
       "downloadingShort": "下载中 {{progress}}%",
       "downloadingProgress": "正在下载更新 {{progress}}%",
+      "installing": "正在安装…",
       "actions": {
         "updateNow": "立即更新",
-        "remindLater": "稍后提醒"
+        "remindLater": "稍后提醒",
+        "installNow": "立即安装",
+        "updateLater": "稍后安装"
       },
+      "readyTitle": "更新 v{{version}} 已准备安装",
+      "readyDescription": "更新已下载完成。点击立即安装后，Ola 将退出并完成安装。",
       "downloadFailed": "下载失败",
+      "installFailed": "安装失败",
       "delayed": "已推迟更新",
       "downloadedTitle": "更新已下载",
-      "downloadedDescription": "版本 {{version}} 将在重启后安装",
+      "downloadedDescription": "版本 {{version}} 已准备好，确认后即可安装",
       "failed": "更新失败"
     },
     "errors": {

@@ -170,7 +170,7 @@
     "autoApprove": "Auto-approve tool calls",
     "autoApproveDesc": "Skip permission confirmation for all tool calls",
     "autoUpdate": "Automatically check and update the app",
-    "autoUpdateDesc": "Enabled by default. Checks for updates on startup and automatically downloads and installs newer versions. When disabled, updates stay manual.",
+    "autoUpdateDesc": "Enabled by default. Checks for updates on startup and automatically downloads newer versions; installation waits for your confirmation. When disabled, updates stay manual.",
     "update": {
       "status": "Update status",
       "currentVersion": "Current v{{version}}",
@@ -179,12 +179,15 @@
       "checkForUpdates": "Check for updates",
       "updating": "Updating…",
       "updateNow": "Update now",
+      "installNow": "Install now",
+      "installing": "Installing…",
       "failedToCheck": "Failed to check updates: {{error}}",
       "upToDate": "You are up to date.",
       "newVersionAvailable": "A newer version (v{{version}}) is available.",
       "downloading": "Downloading update…",
       "downloadingWithProgress": "Downloading update… {{progress}}%",
-      "downloadedRestarting": "Update v{{version}} downloaded. Restarting to install…"
+      "downloadedRestarting": "Update v{{version}} downloaded. Restarting to install…",
+      "downloadedReady": "Update v{{version}} downloaded and waiting for installation confirmation."
     },
     "projectDefaultDirectory": {
       "title": "Default project directory",
@@ -791,6 +794,10 @@
       "mcp": "MCP Servers",
       "instructions": "Instructions / MEMORY"
     }
+  },
+  "pet": {
+    "title": "Desktop Pet",
+    "subtitle": "Manage your capybara pet, skins, experience & agent"
   },
   "about": {
     "title": "About",
