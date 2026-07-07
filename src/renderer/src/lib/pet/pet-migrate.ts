@@ -108,6 +108,11 @@ function normalizeSkinId(id?: string | null): string | null {
   return id === 'anya' ? 'aniya' : id
 }
 
+function normalizeDefaultName(name?: string | null): string {
+  const trimmed = name?.trim() ?? ''
+  return trimmed === '' || trimmed === 'Kapi' || trimmed === '阿尼娅' ? 'Aniya' : trimmed
+}
+
 function defaultAgent(): PetAgentConfig {
   return {
     providerId: null,
@@ -181,13 +186,20 @@ export async function runPetMigration(): Promise<MigrationResult> {
         await ipcStorage.removeItem(MIGRATION_MARKER)
         // fall through to the regular path
       } else {
-        // Heal legacy shapes: rename the default pet to "阿尼娅" and make
-        // sure the kind / isDefault flags match the current schema. Older
-        // migration runs left the user's old Kapi name in place; we now
-        // settle on "阿尼娅" as the canonical default name.
+        // Heal legacy shapes, but preserve user-controlled state such as
+        // name and enabled. This function runs on settings mount; forcing
+        // enabled=false here would immediately undo the user's switch.
         const sourcePets = persisted.pets
         const cleaned = sourcePets.map((pet) =>
-          pet.isDefault ? { ...pet, name: '阿尼娅', kind: 'aniya' as const, enabled: false } : pet
+          pet.isDefault
+            ? {
+                ...pet,
+                name: normalizeDefaultName(pet.name),
+                kind: 'aniya' as const,
+                isDefault: true,
+                skinId: pet.skinId ?? 'aniya'
+              }
+            : pet
         )
         const dirty = cleaned.some((pet, i) => pet !== sourcePets[i])
         if (dirty) {
@@ -244,7 +256,7 @@ export async function runPetMigration(): Promise<MigrationResult> {
   if (!legacyPet) {
     const seed: Pet = {
       id: crypto.randomUUID(),
-      name: '阿尼娅',
+      name: 'Aniya',
       kind: 'aniya',
       isDefault: true,
       createdAt: now,
@@ -308,11 +320,11 @@ export async function runPetMigration(): Promise<MigrationResult> {
   // Old legacy single-pet data always becomes the built-in Aniya — even if the
   // user named it "Kapi" or whatever, we keep their custom name (so they don't
   // lose renaming work) but flag it as the default pet so they can't delete it.
-  // Migrations land the user back in the same state a fresh install
-  // sees: Aniya is on the desktop by default.
+  // Migrations land the user back in the same state a fresh install sees:
+  // Aniya exists in settings, and the user manually enables her desktop view.
   const migrated: Pet = {
     id: petId,
-    name: legacyPet.name ?? '阿尼娅',
+    name: normalizeDefaultName(legacyPet.name),
     kind: 'aniya',
     isDefault: true,
     createdAt: legacyPet.adoptedAt ?? now,

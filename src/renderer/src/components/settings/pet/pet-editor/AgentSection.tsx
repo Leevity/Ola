@@ -22,6 +22,7 @@ import { useChatStore } from '@renderer/stores/chat-store'
 import { BUILTIN_PET_PROMPT } from '@renderer/lib/pet/pet-agent'
 import { PET_VOICE_PRESETS, playPetVoice } from '@renderer/lib/pet/pet-voice'
 import type { PetVoiceMode } from '@renderer/stores/pet-agent-store'
+import { isDefaultPet, updateDefaultPetAgent } from '@renderer/lib/pet/default-pet-sync'
 
 const PROJECT_NONE = '__none__'
 const VOICE_DEFAULT = '__default__'
@@ -77,7 +78,9 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
   // dialog body stays mounted for typing perf, but the underlying data
   // changes when a different card is opened.
   useEffect(() => {
-    setSelection(agent.providerId && agent.modelId ? toOptionValue(agent.providerId, agent.modelId) : '')
+    setSelection(
+      agent.providerId && agent.modelId ? toOptionValue(agent.providerId, agent.modelId) : ''
+    )
     setPromptDraft(agent.systemPrompt)
     setProjectDraft(agent.projectId ?? PROJECT_NONE)
     setProactiveDraft(agent.proactive)
@@ -161,7 +164,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
     const [nextVoiceProviderId, nextVoiceModelId] = fromOptionValue(voiceSelection)
     const project =
       projectDraft === PROJECT_NONE ? null : (projects.find((p) => p.id === projectDraft) ?? null)
-    setPetAgent(pet.id, {
+    const nextAgent = {
       providerId: nextProviderId || null,
       modelId: nextModelId || null,
       systemPrompt: promptDraft.trim() === BUILTIN_PET_PROMPT.trim() ? '' : promptDraft,
@@ -179,8 +182,13 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
       voiceMode: voiceModeDraft,
       voiceInstruction: voiceInstructionDraft.trim(),
       voiceTag: voiceTagDraft.trim()
-    })
-    void ipcClient.invoke('pet:sync', { kind: 'agent-config', payload: { petId: pet.id } })
+    }
+    if (isDefaultPet(pet.id)) {
+      updateDefaultPetAgent(nextAgent)
+    } else {
+      setPetAgent(pet.id, nextAgent)
+      void ipcClient.invoke('pet:sync', { kind: 'agent-config', payload: { petId: pet.id } })
+    }
     toast.success(t('agent.saved'))
   }
 
@@ -327,32 +335,38 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
             <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceModel')}</p>
-            <Select value={voiceSelection} onValueChange={setVoiceSelection}>
-              <SelectTrigger className="h-8 w-full text-xs">
-                <SelectValue placeholder={t('agent.voiceModelPlaceholder')} />
-              </SelectTrigger>
-              <SelectContent>
-                {voiceModelGroups.map((group) => (
-                  <SelectGroup key={group.provider.id}>
-                    <SelectLabel className="text-[11px] font-normal text-muted-foreground">
-                      {group.provider.name}
-                    </SelectLabel>
-                    {group.models.map((model) => (
-                      <SelectItem
-                        key={toOptionValue(group.provider.id, model.id)}
-                        value={toOptionValue(group.provider.id, model.id)}
-                        className="pl-6 text-xs"
-                      >
-                        {model.name}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
+            {voiceModelGroups.length === 0 ? (
+              <p className="rounded-md border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">
+                {t('agent.noVoiceModels')}
+              </p>
+            ) : (
+              <Select value={voiceSelection} onValueChange={setVoiceSelection}>
+                <SelectTrigger className="h-8 w-full text-xs">
+                  <SelectValue placeholder={t('agent.voiceModelPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {voiceModelGroups.map((group) => (
+                    <SelectGroup key={group.provider.id}>
+                      <SelectLabel className="text-[11px] font-normal text-muted-foreground">
+                        {group.provider.name}
+                      </SelectLabel>
+                      {group.models.map((model) => (
+                        <SelectItem
+                          key={toOptionValue(group.provider.id, model.id)}
+                          value={toOptionValue(group.provider.id, model.id)}
+                          className="pl-6 text-xs"
+                        >
+                          {model.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div>
-            <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceId')}</p>
+            <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceName')}</p>
             <Select
               value={voiceCustom ? VOICE_CUSTOM : voiceDraft || VOICE_DEFAULT}
               onValueChange={(v) => {
@@ -374,7 +388,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
                     {v}
                   </SelectItem>
                 ))}
-                <SelectItem value={VOICE_CUSTOM}>{t('agent.voiceCustom')}</SelectItem>
+                <SelectItem value={VOICE_CUSTOM}>{t('agent.voiceCustomOption')}</SelectItem>
               </SelectContent>
             </Select>
             {voiceCustom ? (
@@ -399,13 +413,13 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="auto" className="text-xs">
-                  {t('agent.voiceModeAuto')}
+                  {t('agent.voiceModes.auto')}
                 </SelectItem>
                 <SelectItem value="speech" className="text-xs">
-                  {t('agent.voiceModeSpeech')}
+                  {t('agent.voiceModes.speech')}
                 </SelectItem>
                 <SelectItem value="chat" className="text-xs">
-                  {t('agent.voiceModeChat')}
+                  {t('agent.voiceModes.chat')}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -415,7 +429,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             <Input
               value={voiceTagDraft}
               onChange={(e) => setVoiceTagDraft(e.target.value)}
-              placeholder="粤语 / 撒娇"
+              placeholder={t('agent.voiceTagPlaceholder')}
               className="h-8 text-xs"
             />
           </div>
@@ -429,6 +443,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             className="h-8 text-xs"
           />
         </div>
+        <p className="text-[10px] leading-relaxed text-muted-foreground">{t('agent.voiceHint')}</p>
         <div className="flex justify-end">
           <Button
             size="sm"

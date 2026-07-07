@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next'
-import { Coins, Sparkles, Coins as TokensIcon } from 'lucide-react'
+import { Sparkles, Coins as TokensIcon } from 'lucide-react'
 import type { Pet } from '@renderer/stores/pets-store'
 
 interface ExpSectionProps {
@@ -12,7 +12,7 @@ export function ExpSection({ pet }: ExpSectionProps): React.JSX.Element {
 
   return (
     <div className="space-y-5 pt-4">
-      <section className="grid grid-cols-3 gap-3 rounded-lg border border-border/60 bg-muted/30 p-4">
+      <section className="grid grid-cols-2 gap-3 rounded-lg border border-border/60 bg-muted/30 p-4">
         <Tile
           icon={<Sparkles className="size-3.5 text-amber-500" />}
           label={t('exp.totalExp')}
@@ -24,12 +24,6 @@ export function ExpSection({ pet }: ExpSectionProps): React.JSX.Element {
           label={t('exp.totalTokens')}
           value={totalTokens.toLocaleString()}
           unit="tokens"
-        />
-        <Tile
-          icon={<Coins className="size-3.5 text-amber-500" />}
-          label={t('exp.coinsEarned')}
-          value={Math.floor(pet.coins).toString()}
-          unit="🪙"
         />
       </section>
 
@@ -49,10 +43,7 @@ export function ExpSection({ pet }: ExpSectionProps): React.JSX.Element {
         ) : (
           <ul className="divide-y divide-border/60">
             {log.slice(0, 12).map((entry) => (
-              <li
-                key={entry.id}
-                className="flex items-center justify-between gap-3 py-1.5 text-xs"
-              >
+              <li key={entry.id} className="flex items-center justify-between gap-3 py-1.5 text-xs">
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{entry.model}</p>
                 </div>

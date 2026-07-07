@@ -60,6 +60,7 @@ import { registerInputHandlers } from './ipc/input-handlers'
 import { registerNotifyHandlers } from './ipc/notify-handlers'
 import {
   installBuiltinPets,
+  markPetClosedForAppQuit,
   registerPetHandlers,
   togglePetWindow
 } from './ipc/pet-handlers'
@@ -1206,11 +1207,30 @@ app.on('child-process-gone', (_event, details) => {
   recordCrash('app_child_process_gone', { details })
 })
 
-app.on('before-quit', () => {
+let quitStateFlushed = false
+let quitStateFlushStarted = false
+app.on('before-quit', (event) => {
   isQuiting = true
-  flushBuiltInBrowserStorage()
-  void flushSettingsSync()
-  void stopNativeWorker()
+  if (quitStateFlushed) {
+    flushBuiltInBrowserStorage()
+    void flushSettingsSync()
+    void stopNativeWorker()
+    return
+  }
+
+  event.preventDefault()
+  if (quitStateFlushStarted) return
+  quitStateFlushStarted = true
+  void (async () => {
+    await markPetClosedForAppQuit().catch((error) => {
+      console.error('[Pet] Failed to mark desktop pet closed before quit:', error)
+    })
+    quitStateFlushed = true
+    flushBuiltInBrowserStorage()
+    void flushSettingsSync()
+    void stopNativeWorker()
+    app.quit()
+  })()
 })
 
 startNativeCrashReporter()
@@ -1267,6 +1287,7 @@ if (gotSingleInstanceLock) {
         }`
       )
     }
+    await runLoggedStartupStepAsync('reset_pet_desktop_state', markPetClosedForAppQuit)
     await runLoggedStartupStepAsync('configure_system_proxy', configureSystemProxy)
     const browserEmulationStatus = runLoggedStartupStep(
       'configure_builtin_browser_session',

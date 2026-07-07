@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { ipcStorage } from '@renderer/lib/ipc/ipc-storage'
 import { usePetExpStore } from '@renderer/stores/pet-exp-store'
+import { PET_ACTION_STANDARDS, getPetLevel } from '@renderer/lib/pet/pet-standards'
+import { usePetWalletStore } from './pet-wallet-store'
+export { getGrowthForLevel, getLevelProgress, getPetLevel } from '@renderer/lib/pet/pet-standards'
 
 export type PetAwayKind = 'work' | 'study'
 
@@ -83,9 +86,9 @@ export function getProactiveCountToday(state: {
 
 export const PET_TICK_MS = 30_000
 
-export const WORK_MIN_LEVEL = 4
-export const STUDY_MIN_LEVEL = 6
-export const SOAK_MIN_LEVEL = 2
+export const WORK_MIN_LEVEL = PET_ACTION_STANDARDS.work.unlockLevel
+export const STUDY_MIN_LEVEL = PET_ACTION_STANDARDS.study.unlockLevel
+export const SOAK_MIN_LEVEL = PET_ACTION_STANDARDS.soak.unlockLevel
 export const WORK_DURATION_MS = 30 * 60_000
 export const STUDY_DURATION_MS = 20 * 60_000
 export const WORK_REWARD_COINS = 60
@@ -98,26 +101,6 @@ export const STUDY_COST = 20
 export const DAILY_BONUS_COINS = 20
 /** Cap for the one-time retroactive coin grant when upgrading mid-progress. */
 const RETRO_COIN_CAP = 200
-
-// Cumulative growth required to reach a level: 5000 * (level - 1)^2.
-// Deliberately steep — XP comes from token usage (1 XP ≈ 1k base-model
-// tokens), so Lv.2 ≈ 5M tokens and levels are a long-term progression.
-const LEVEL_GROWTH_COEFFICIENT = 5000
-
-export function getPetLevel(growth: number): number {
-  return Math.floor(Math.sqrt(Math.max(0, growth) / LEVEL_GROWTH_COEFFICIENT)) + 1
-}
-
-export function getGrowthForLevel(level: number): number {
-  return LEVEL_GROWTH_COEFFICIENT * Math.max(0, level - 1) ** 2
-}
-
-export function getLevelProgress(growth: number): number {
-  const level = getPetLevel(growth)
-  const current = getGrowthForLevel(level)
-  const next = getGrowthForLevel(level + 1)
-  return Math.min(1, Math.max(0, (growth - current) / (next - current)))
-}
 
 function clamp(value: number, min = 0, max = 100): number {
   return Math.min(max, Math.max(min, value))
@@ -147,7 +130,7 @@ export function getCombinedGrowth(rewardGrowth: number): number {
 }
 
 const initialData = (): PetData => ({
-  name: 'Kapi',
+  name: 'Aniya',
   hunger: 80,
   cleanliness: 80,
   mood: 70,
@@ -182,9 +165,9 @@ export const usePetStore = create<PetStore>()(
         if (state.awayTask) return { ok: false, reason: 'busy' }
         if (state.sleeping) return { ok: false, reason: 'sleeping' }
         if (state.hunger >= 95) return { ok: false, reason: 'full' }
-        if (state.coins < FEED_COST) return { ok: false, reason: 'coins' }
+        if (!usePetWalletStore.getState().spendCoins(FEED_COST))
+          return { ok: false, reason: 'coins' }
         set({
-          coins: state.coins - FEED_COST,
           hunger: clamp(state.hunger + 35),
           mood: clamp(state.mood + 2)
         })
@@ -196,9 +179,9 @@ export const usePetStore = create<PetStore>()(
         if (state.awayTask) return { ok: false, reason: 'busy' }
         if (state.sleeping) return { ok: false, reason: 'sleeping' }
         if (state.cleanliness >= 95) return { ok: false, reason: 'clean' }
-        if (state.coins < BATHE_COST) return { ok: false, reason: 'coins' }
+        if (!usePetWalletStore.getState().spendCoins(BATHE_COST))
+          return { ok: false, reason: 'coins' }
         set({
-          coins: state.coins - BATHE_COST,
           cleanliness: clamp(state.cleanliness + 45),
           mood: clamp(state.mood + 1)
         })
@@ -212,9 +195,9 @@ export const usePetStore = create<PetStore>()(
         if (state.sleeping) return { ok: false, reason: 'sleeping' }
         if (getPetLevel(getCombinedGrowth(state.growth)) < SOAK_MIN_LEVEL)
           return { ok: false, reason: 'level' }
-        if (state.coins < SOAK_COST) return { ok: false, reason: 'coins' }
+        if (!usePetWalletStore.getState().spendCoins(SOAK_COST))
+          return { ok: false, reason: 'coins' }
         set({
-          coins: state.coins - SOAK_COST,
           cleanliness: clamp(state.cleanliness + 30),
           mood: clamp(state.mood + 28)
         })
@@ -260,12 +243,12 @@ export const usePetStore = create<PetStore>()(
         if (state.awayTask) return { ok: false, reason: 'busy' }
         if (getPetLevel(getCombinedGrowth(state.growth)) < STUDY_MIN_LEVEL)
           return { ok: false, reason: 'level' }
-        if (state.coins < STUDY_COST) return { ok: false, reason: 'coins' }
+        if (!usePetWalletStore.getState().spendCoins(STUDY_COST))
+          return { ok: false, reason: 'coins' }
         if (state.hunger < 20) return { ok: false, reason: 'hungry' }
         const now = Date.now()
         set({
           sleeping: false,
-          coins: state.coins - STUDY_COST,
           awayTask: { kind: 'study', startedAt: now, endsAt: now + STUDY_DURATION_MS }
         })
         return { ok: true }
@@ -280,10 +263,10 @@ export const usePetStore = create<PetStore>()(
           task.kind === 'work'
             ? { kind: 'work', coins: WORK_REWARD_COINS, growth: WORK_REWARD_GROWTH }
             : { kind: 'study', coins: 0, growth: STUDY_REWARD_GROWTH }
+        usePetWalletStore.getState().addCoins(reward.coins)
 
         set({
           awayTask: null,
-          coins: state.coins + reward.coins,
           growth: state.growth + reward.growth,
           hunger: clamp(state.hunger - 10),
           cleanliness: clamp(state.cleanliness - 8)
@@ -319,7 +302,8 @@ export const usePetStore = create<PetStore>()(
         // First conversion grandfathers pre-existing XP with a capped grant,
         // so long-time users don't get a coin fortune that kills the economy.
         const credit = state.coinCreditedExp === 0 ? Math.min(delta, RETRO_COIN_CAP) : delta
-        set({ coins: state.coins + credit, coinCreditedExp: totalExp })
+        usePetWalletStore.getState().addCoins(credit)
+        set({ coinCreditedExp: totalExp })
         return credit
       },
 
@@ -327,13 +311,14 @@ export const usePetStore = create<PetStore>()(
         const today = localDateKey()
         const state = get()
         if (state.lastDailyBonusDate === today) return null
-        set({ lastDailyBonusDate: today, coins: state.coins + DAILY_BONUS_COINS })
+        usePetWalletStore.getState().addCoins(DAILY_BONUS_COINS)
+        set({ lastDailyBonusDate: today })
         return DAILY_BONUS_COINS
       },
 
       addCoins: (amount) => {
         if (amount <= 0) return
-        set({ coins: get().coins + amount })
+        usePetWalletStore.getState().addCoins(amount)
       }
     }),
     {

@@ -10,6 +10,9 @@ import {
   type PetActionName
 } from '@renderer/stores/pets-store'
 import { Button } from '@renderer/components/ui/button'
+import { actOnDefaultPet, isDefaultPet } from '@renderer/lib/pet/default-pet-sync'
+import { getNextLevelGrowth, PET_ACTION_STANDARDS } from '@renderer/lib/pet/pet-standards'
+import { usePetWalletStore } from '@renderer/stores/pet-wallet-store'
 
 interface OverviewSectionProps {
   pet: Pet
@@ -23,9 +26,11 @@ export function OverviewSection({ pet }: OverviewSectionProps): React.JSX.Elemen
 
   const disabledAction = pet.archivedAt !== null || pet.awayTask !== null || pet.sleeping
   const actOnPet = usePetsStore((s) => s.actOnPet)
+  const coins = usePetWalletStore((s) => s.coins)
 
   const runAction = (action: PetActionName): void => {
-    const result = actOnPet(pet.id, action)
+    const result = isDefaultPet(pet.id) ? actOnDefaultPet(action) : actOnPet(pet.id, action)
+    if (!result) return
     if (result.ok) {
       toast.success(t('action.done', { defaultValue: 'Done' }))
       return
@@ -42,12 +47,12 @@ export function OverviewSection({ pet }: OverviewSectionProps): React.JSX.Elemen
         <StatRow label={t('hud.hunger')} value={pet.hunger} barClass="bg-amber-400" />
         <StatRow label={t('hud.clean')} value={pet.cleanliness} barClass="bg-sky-400" />
         <StatRow label={t('hud.mood')} value={pet.mood} barClass="bg-pink-400" />
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>{t('overview.levelProgress')}</span>
-          <span>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 text-xs text-muted-foreground">
+          <span className="min-w-0 truncate">{t('overview.levelProgress')}</span>
+          <span className="shrink-0 whitespace-nowrap text-right tabular-nums">
             {t('overview.growthValue', {
               current: Math.round(combinedGrowth),
-              next: Math.round(5000 * level ** 2)
+              next: Math.round(getNextLevelGrowth(combinedGrowth))
             })}
           </span>
         </div>
@@ -63,31 +68,36 @@ export function OverviewSection({ pet }: OverviewSectionProps): React.JSX.Elemen
             icon={<Utensils className="size-4" />}
             label={t('action.feed')}
             cost={10}
-            coins={Math.floor(pet.coins)}
-            disabled={disabledAction || pet.hunger >= 95 || pet.coins < 10}
+            coins={Math.floor(coins)}
+            disabled={disabledAction || pet.hunger >= 95 || coins < 10}
             onClick={() => runAction('feed')}
           />
           <ActionButton
             icon={<Bath className="size-4" />}
             label={t('action.bathe')}
             cost={6}
-            coins={Math.floor(pet.coins)}
-            disabled={disabledAction || pet.cleanliness >= 95 || pet.coins < 6}
+            coins={Math.floor(coins)}
+            disabled={disabledAction || pet.cleanliness >= 95 || coins < 6}
             onClick={() => runAction('bathe')}
           />
           <ActionButton
             icon={<Sparkles className="size-4" />}
             label={t('action.soak')}
             cost={15}
-            coins={Math.floor(pet.coins)}
-            disabled={disabledAction || level < 2 || pet.cleanliness >= 95 || pet.coins < 15}
+            coins={Math.floor(coins)}
+            disabled={
+              disabledAction ||
+              level < PET_ACTION_STANDARDS.soak.unlockLevel ||
+              pet.cleanliness >= 95 ||
+              coins < 15
+            }
             onClick={() => runAction('soak')}
           />
           <ActionButton
             icon={<Play className="size-4" />}
             label={t('action.play')}
             cost={0}
-            coins={Math.floor(pet.coins)}
+            coins={Math.floor(coins)}
             disabled={disabledAction || pet.hunger < 10}
             onClick={() => runAction('play')}
           />
@@ -95,7 +105,7 @@ export function OverviewSection({ pet }: OverviewSectionProps): React.JSX.Elemen
             icon={<Moon className="size-4" />}
             label={pet.sleeping ? t('action.wakeUp') : t('action.sleep')}
             cost={0}
-            coins={Math.floor(pet.coins)}
+            coins={Math.floor(coins)}
             disabled={pet.archivedAt !== null || pet.awayTask !== null}
             onClick={() => runAction('toggleSleep')}
           />
@@ -103,22 +113,29 @@ export function OverviewSection({ pet }: OverviewSectionProps): React.JSX.Elemen
             icon={<Briefcase className="size-4" />}
             label={t('action.work')}
             cost={0}
-            coins={Math.floor(pet.coins)}
-            disabled={disabledAction || level < 4 || pet.hunger < 20}
+            coins={Math.floor(coins)}
+            disabled={
+              disabledAction || level < PET_ACTION_STANDARDS.work.unlockLevel || pet.hunger < 20
+            }
             onClick={() => runAction('startWork')}
           />
           <ActionButton
             icon={<GraduationCap className="size-4" />}
             label={t('action.study')}
             cost={20}
-            coins={Math.floor(pet.coins)}
-            disabled={disabledAction || level < 6 || pet.coins < 20 || pet.hunger < 20}
+            coins={Math.floor(coins)}
+            disabled={
+              disabledAction ||
+              level < PET_ACTION_STANDARDS.study.unlockLevel ||
+              coins < 20 ||
+              pet.hunger < 20
+            }
             onClick={() => runAction('startStudy')}
           />
         </div>
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <Coins className="size-3 text-amber-500" />
-          {t('overview.coins', { coins: Math.floor(pet.coins) })}
+          {t('overview.coins', { coins: Math.floor(coins) })}
         </p>
         {pet.awayTask ? (
           <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">

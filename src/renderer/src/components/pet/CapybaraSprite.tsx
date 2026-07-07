@@ -2,30 +2,32 @@ import { useEffect, useState } from 'react'
 import { motion } from 'motion/react'
 import { usePetSkinImages } from './use-pet-skin-images'
 import type { PetPoseKey } from '@renderer/lib/pet/pet-pose-prompts'
-import idleImg from '@renderer/assets/pet/capy-idle.png'
-import walkImg from '@renderer/assets/pet/capy-walk.png'
-import sleepImg from '@renderer/assets/pet/capy-sleep.png'
-import begImg from '@renderer/assets/pet/capy-beg.png'
-import eatImg from '@renderer/assets/pet/capy-eat.png'
-import munchImg from '@renderer/assets/pet/capy-munch.png'
-import batheImg from '@renderer/assets/pet/capy-bathe.png'
-import soakImg from '@renderer/assets/pet/capy-soak.png'
-import swimImg from '@renderer/assets/pet/capy-swim.png'
-import zenImg from '@renderer/assets/pet/capy-zen.png'
-import playImg from '@renderer/assets/pet/capy-play.png'
-import heldImg from '@renderer/assets/pet/capy-held.png'
+import idleImg from '../../../../../resources/pets/aniya/idle.png'
+import walkImg from '../../../../../resources/pets/aniya/walk.png'
+import sleepImg from '../../../../../resources/pets/aniya/sleep.png'
+import begImg from '../../../../../resources/pets/aniya/beg.png'
+import eatImg from '../../../../../resources/pets/aniya/eat.png'
+import munchImg from '../../../../../resources/pets/aniya/munch.png'
+import batheImg from '../../../../../resources/pets/aniya/bathe.png'
+import soakImg from '../../../../../resources/pets/aniya/soak.png'
+import swimImg from '../../../../../resources/pets/aniya/swim.png'
+import zenImg from '../../../../../resources/pets/aniya/zen.png'
+import playImg from '../../../../../resources/pets/aniya/play.png'
+import heldImg from '../../../../../resources/pets/aniya/held.png'
 
 export type PetActivity =
   | 'idle'
   | 'walk'
   | 'sleep'
   | 'eat'
+  | 'munch'
   | 'bathe'
   | 'soak'
   | 'swim'
   | 'zen'
   | 'play'
   | 'drag'
+  | 'held'
   | 'beg'
 
 export interface CapybaraSpriteProps {
@@ -45,12 +47,14 @@ const ACTIVITY_IMAGE: Record<PetActivity, string> = {
   walk: walkImg,
   sleep: sleepImg,
   eat: eatImg,
+  munch: munchImg,
   bathe: batheImg,
   soak: soakImg,
   swim: swimImg,
   zen: zenImg,
   play: playImg,
   drag: heldImg,
+  held: heldImg,
   beg: begImg
 }
 
@@ -61,12 +65,14 @@ const POSE_HEIGHT: Record<PetActivity, number> = {
   walk: 98,
   sleep: 74,
   eat: 102,
+  munch: 102,
   bathe: 108,
   soak: 110,
   swim: 80,
   zen: 112,
   play: 110,
   drag: 126,
+  held: 126,
   beg: 118
 }
 
@@ -78,12 +84,14 @@ const ACTIVITY_POSE: Record<PetActivity, PetPoseKey> = {
   walk: 'walk',
   sleep: 'sleep',
   eat: 'eat',
+  munch: 'munch',
   bathe: 'bathe',
   soak: 'soak',
   swim: 'swim',
   zen: 'zen',
   play: 'play',
   drag: 'held',
+  held: 'held',
   beg: 'beg'
 }
 
@@ -105,12 +113,14 @@ const BODY_MOTION = {
   walk: { animate: { y: [0, -3, 0], rotate: 0, scaleY: 1 }, transition: loop(0.34) },
   sleep: { animate: { scaleY: [0.97, 1], y: 0, rotate: 0 }, transition: mirror(2) },
   eat: { animate: { rotate: [0, 2.5, 0], y: [0, 1.5, 0], scaleY: 1 }, transition: loop(0.6) },
+  munch: { animate: { rotate: [0, 2.5, 0], y: [0, 1.5, 0], scaleY: 1 }, transition: loop(0.6) },
   bathe: { animate: { y: [0, -2, 0], rotate: 0, scaleY: 1 }, transition: loop(1.2) },
   soak: { animate: { scaleY: [0.99, 1.015], y: 0, rotate: 0 }, transition: mirror(1.9) },
   swim: { animate: { y: [0, -2.5, 0], rotate: [0, 1.5, 0], scaleY: 1 }, transition: loop(1.1) },
   zen: { animate: { scaleY: [1, 1.012], y: 0, rotate: 0 }, transition: mirror(2.6) },
   play: { animate: { y: [0, -16, 0], rotate: 0, scaleY: 1 }, transition: loop(0.55, 'easeOut') },
   drag: { animate: { rotate: [-3, 3], y: 0, scaleY: 1 }, transition: mirror(0.8) },
+  held: { animate: { rotate: [-3, 3], y: 0, scaleY: 1 }, transition: mirror(0.8) },
   beg: { animate: { y: [0, -6, 0], rotate: 0, scaleY: 1 }, transition: loop(0.7) }
 } satisfies Record<PetActivity, { animate: object; transition: object }>
 

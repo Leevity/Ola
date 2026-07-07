@@ -2,6 +2,10 @@ import { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PetListTab } from './pet/PetListTab'
 import { runPetMigration } from '@renderer/lib/pet/pet-migrate'
+import {
+  installDefaultPetSync,
+  syncLegacyPetToDefaultPet
+} from '@renderer/lib/pet/default-pet-sync'
 import { usePetsStore } from '@renderer/stores/pets-store'
 
 /**
@@ -19,8 +23,9 @@ export function PetPanel(): React.JSX.Element {
   useEffect(() => {
     void runPetMigration()
       .catch(() => undefined)
-      .then(() => {
-        usePetsStore.persist.rehydrate()
+      .then(async () => {
+        await Promise.resolve(usePetsStore.persist.rehydrate())
+        syncLegacyPetToDefaultPet()
         // Heal stale focus (see PetWindow mount for the same logic).
         const s = usePetsStore.getState()
         if (s.activeOnDesktopId && !s.enabledIds.includes(s.activeOnDesktopId)) {
@@ -28,6 +33,8 @@ export function PetPanel(): React.JSX.Element {
         }
       })
   }, [])
+
+  useEffect(() => installDefaultPetSync(), [])
 
   return (
     <div className="space-y-5">

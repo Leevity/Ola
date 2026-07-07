@@ -276,8 +276,10 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'pet:update',
   'pet:archive',
   'pet:import-companion-folder',
+  'pet:export-aniya-template',
   'pet:collection:get',
-  'pet:ai-generate-sprite'
+  'pet:ai-generate-sprite',
+  'pet:save-generated-sprite'
 ])
 
 const MESSAGEPACK_SEND_CHANNELS = new Set<string>([

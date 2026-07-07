@@ -358,6 +358,16 @@ function App(): React.JSX.Element {
     []
   )
 
+  // Navigate to the pet studio when requested from the pet window's menu.
+  useEffect(() => {
+    if (sessionWindowView || sshWindowView) return
+    return ipcClient.on('pet:sync-event', (payload) => {
+      if ((payload as { kind?: string } | null)?.kind === 'open-studio') {
+        useUIStore.getState().openSettingsPage('pet')
+      }
+    })
+  }, [sessionWindowView, sshWindowView])
+
   useEffect(() => {
     const offSessionUpdated = ipcClient.on(IPC.CHAT_SESSION_UPDATED, (data: unknown) => {
       const payload = data as {
@@ -971,7 +981,7 @@ function App(): React.JSX.Element {
                     : t('app.update.downloading')
                   : downloadedUpdateVersion
                     ? t('app.update.readyDescription')
-                  : t('app.update.availableDescription')}
+                    : t('app.update.availableDescription')}
               </div>
               <div className="flex flex-col-reverse gap-2 sm:flex-row">
                 <Button

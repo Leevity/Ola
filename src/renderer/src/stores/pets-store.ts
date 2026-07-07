@@ -2,6 +2,9 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { ipcStorage } from '@renderer/lib/ipc/ipc-storage'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { PET_ACTION_STANDARDS, getPetLevel } from '@renderer/lib/pet/pet-standards'
+import { usePetWalletStore } from './pet-wallet-store'
+export { getGrowthForLevel, getLevelProgress, getPetLevel } from '@renderer/lib/pet/pet-standards'
 
 /**
  * Visual archetype — controls which sprite set CapybaraSprite falls back to
@@ -176,9 +179,9 @@ export const PET_DESKTOP_LIMIT = 3
 
 export const PET_TICK_MS = 30_000
 
-export const WORK_MIN_LEVEL = 4
-export const STUDY_MIN_LEVEL = 6
-export const SOAK_MIN_LEVEL = 2
+export const WORK_MIN_LEVEL = PET_ACTION_STANDARDS.work.unlockLevel
+export const STUDY_MIN_LEVEL = PET_ACTION_STANDARDS.study.unlockLevel
+export const SOAK_MIN_LEVEL = PET_ACTION_STANDARDS.soak.unlockLevel
 export const WORK_DURATION_MS = 30 * 60_000
 export const STUDY_DURATION_MS = 20 * 60_000
 export const WORK_REWARD_COINS = 60
@@ -191,26 +194,6 @@ export const STUDY_COST = 20
 export const DAILY_BONUS_COINS = 20
 /** Cap for the one-time retroactive coin grant when upgrading mid-progress. */
 export const RETRO_COIN_CAP = 200
-
-// Cumulative growth required to reach a level: 5000 * (level - 1)^2.
-// Deliberately steep — XP comes from token usage (1 XP ≈ 1k base-model
-// tokens), so Lv.2 ≈ 5M tokens and levels are a long-term progression.
-export const LEVEL_GROWTH_COEFFICIENT = 5000
-
-export function getPetLevel(growth: number): number {
-  return Math.floor(Math.sqrt(Math.max(0, growth) / LEVEL_GROWTH_COEFFICIENT)) + 1
-}
-
-export function getGrowthForLevel(level: number): number {
-  return LEVEL_GROWTH_COEFFICIENT * Math.max(0, level - 1) ** 2
-}
-
-export function getLevelProgress(growth: number): number {
-  const level = getPetLevel(growth)
-  const current = getGrowthForLevel(level)
-  const next = getGrowthForLevel(level + 1)
-  return Math.min(1, Math.max(0, (growth - current) / (next - current)))
-}
 
 /** Reward growth + token exp — the value levels derive from. */
 export function getCombinedGrowth(pet: Pick<Pet, 'growth' | 'exp'>): number {
@@ -290,8 +273,24 @@ export interface CreatePetInput {
   persona?: string
   kind?: PetKind
   skinId?: string | null
+  /** New pets stay off the desktop unless the caller explicitly enables them. */
+  enabled?: boolean
   /** True for the built-in companion (Aniya). Defaults to false. */
   isDefault?: boolean
+  /** Optional initial values used by "copy pet"; exp and away tasks are intentionally separate. */
+  initialState?: Partial<
+    Pick<
+      Pet,
+      | 'hunger'
+      | 'cleanliness'
+      | 'mood'
+      | 'growth'
+      | 'coins'
+      | 'sleeping'
+      | 'coinCreditedExp'
+      | 'lastDailyBonusDate'
+    >
+  >
   /** Optional pre-seeded agent config (used by migration). */
   agent?: Partial<PetAgentConfig>
   /** Optional pre-seeded exp state (used by migration). */
@@ -307,14 +306,14 @@ function freshPet(input: CreatePetInput, now: number): Pet {
     isDefault: input.isDefault === true,
     createdAt: now,
     archivedAt: null,
-    enabled: true,
+    enabled: input.enabled === true,
 
-    hunger: 80,
-    cleanliness: 80,
-    mood: 70,
-    growth: 0,
-    coins: 120,
-    sleeping: false,
+    hunger: input.initialState?.hunger ?? 80,
+    cleanliness: input.initialState?.cleanliness ?? 80,
+    mood: input.initialState?.mood ?? 70,
+    growth: input.initialState?.growth ?? 0,
+    coins: input.initialState?.coins ?? 120,
+    sleeping: input.initialState?.sleeping ?? false,
     awayTask: null,
     lastTickAt: now,
     adoptedAt: now,
@@ -322,8 +321,8 @@ function freshPet(input: CreatePetInput, now: number): Pet {
     proactiveDate: '',
     proactiveCount: 0,
     lastProactiveAt: 0,
-    coinCreditedExp: 0,
-    lastDailyBonusDate: '',
+    coinCreditedExp: input.initialState?.coinCreditedExp ?? 0,
+    lastDailyBonusDate: input.initialState?.lastDailyBonusDate ?? '',
 
     position: null,
     skinId: input.skinId ?? null,
@@ -354,7 +353,7 @@ interface PetsCollectionState {
 interface PetsCollectionActions {
   /** Replace the entire collection (used by migration). */
   hydrate: (pets: Pet[]) => void
-  /** Insert a new pet. The new pet is auto-enabled (subject to the desktop limit). */
+  /** Insert a new pet. Pets are desktop-disabled unless input.enabled is true. */
   createPet: (input: CreatePetInput) => Pet
   /** Mutate a single pet; no-op if the id is unknown. */
   updatePet: (id: string, patch: Partial<Pet>) => void
@@ -453,11 +452,11 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
       if (pet.awayTask) return { pet, result: { ok: false, reason: 'busy' } }
       if (pet.sleeping) return { pet, result: { ok: false, reason: 'sleeping' } }
       if (pet.hunger >= 95) return { pet, result: { ok: false, reason: 'full' } }
-      if (pet.coins < FEED_COST) return { pet, result: { ok: false, reason: 'coins' } }
+      if (!usePetWalletStore.getState().spendCoins(FEED_COST))
+        return { pet, result: { ok: false, reason: 'coins' } }
       return {
         pet: {
           ...pet,
-          coins: pet.coins - FEED_COST,
           hunger: clamp(pet.hunger + 35),
           mood: clamp(pet.mood + 2)
         },
@@ -469,11 +468,11 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
       if (pet.awayTask) return { pet, result: { ok: false, reason: 'busy' } }
       if (pet.sleeping) return { pet, result: { ok: false, reason: 'sleeping' } }
       if (pet.cleanliness >= 95) return { pet, result: { ok: false, reason: 'clean' } }
-      if (pet.coins < BATHE_COST) return { pet, result: { ok: false, reason: 'coins' } }
+      if (!usePetWalletStore.getState().spendCoins(BATHE_COST))
+        return { pet, result: { ok: false, reason: 'coins' } }
       return {
         pet: {
           ...pet,
-          coins: pet.coins - BATHE_COST,
           cleanliness: clamp(pet.cleanliness + 45),
           mood: clamp(pet.mood + 1)
         },
@@ -486,11 +485,11 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
       if (pet.sleeping) return { pet, result: { ok: false, reason: 'sleeping' } }
       if (getPetLevel(getCombinedGrowth(pet)) < SOAK_MIN_LEVEL)
         return { pet, result: { ok: false, reason: 'level' } }
-      if (pet.coins < SOAK_COST) return { pet, result: { ok: false, reason: 'coins' } }
+      if (!usePetWalletStore.getState().spendCoins(SOAK_COST))
+        return { pet, result: { ok: false, reason: 'coins' } }
       return {
         pet: {
           ...pet,
-          coins: pet.coins - SOAK_COST,
           cleanliness: clamp(pet.cleanliness + 30),
           mood: clamp(pet.mood + 28)
         },
@@ -537,13 +536,13 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
       if (pet.awayTask) return { pet, result: { ok: false, reason: 'busy' } }
       if (getPetLevel(getCombinedGrowth(pet)) < STUDY_MIN_LEVEL)
         return { pet, result: { ok: false, reason: 'level' } }
-      if (pet.coins < STUDY_COST) return { pet, result: { ok: false, reason: 'coins' } }
+      if (!usePetWalletStore.getState().spendCoins(STUDY_COST))
+        return { pet, result: { ok: false, reason: 'coins' } }
       if (pet.hunger < 20) return { pet, result: { ok: false, reason: 'hungry' } }
       return {
         pet: {
           ...pet,
           sleeping: false,
-          coins: pet.coins - STUDY_COST,
           awayTask: { kind: 'study', startedAt: now, endsAt: now + STUDY_DURATION_MS }
         },
         result: { ok: true }
@@ -556,11 +555,11 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
         pet.awayTask.kind === 'work'
           ? { kind: 'work', coins: WORK_REWARD_COINS, growth: WORK_REWARD_GROWTH }
           : { kind: 'study', coins: 0, growth: STUDY_REWARD_GROWTH }
+      usePetWalletStore.getState().addCoins(reward.coins)
       return {
         pet: {
           ...pet,
           awayTask: null,
-          coins: pet.coins + reward.coins,
           growth: pet.growth + reward.growth,
           hunger: clamp(pet.hunger - 10),
           cleanliness: clamp(pet.cleanliness - 8)
@@ -593,10 +592,10 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
       if (total <= pet.coinCreditedExp) return { pet, result: { ok: false, reason: 'full' } }
       const delta = total - pet.coinCreditedExp
       const credit = pet.coinCreditedExp === 0 ? Math.min(delta, RETRO_COIN_CAP) : delta
+      usePetWalletStore.getState().addCoins(credit)
       return {
         pet: {
           ...pet,
-          coins: pet.coins + credit,
           coinCreditedExp: total
         },
         result: { ok: true }
@@ -605,11 +604,11 @@ function act(pet: Pet, action: PetActionName, now: number): { pet: Pet; result: 
     case 'claimDailyBonus': {
       const today = localDateKey(now)
       if (pet.lastDailyBonusDate === today) return { pet, result: { ok: false, reason: 'full' } }
+      usePetWalletStore.getState().addCoins(DAILY_BONUS_COINS)
       return {
         pet: {
           ...pet,
-          lastDailyBonusDate: today,
-          coins: pet.coins + DAILY_BONUS_COINS
+          lastDailyBonusDate: today
         },
         result: { ok: true }
       }
@@ -643,20 +642,14 @@ export const usePetsStore = create<PetsStore>()(
       createPet: (input) => {
         const pet = freshPet(input, Date.now())
         set((state) => {
-          const enabledCount = state.enabledIds.length
-          const enabled = enabledCount < PET_DESKTOP_LIMIT
+          const enabled = pet.enabled && state.enabledIds.length < PET_DESKTOP_LIMIT
           const nextEnabledIds = enabled ? [...state.enabledIds, pet.id] : state.enabledIds
           return {
             pets: [...state.pets, pet],
             enabledIds: nextEnabledIds,
             activePetId: pet.id,
-            // First enabled pet on an empty desktop takes the desk.
             activeOnDesktopId:
               state.activeOnDesktopId === null && enabled ? pet.id : state.activeOnDesktopId
-            // The new pet is born with enabled=true in `pets`, but the desktop
-            // window only consults `enabledIds`. If we are at the cap, leave the
-            // user with a disabled pet they can toggle on after retiring one.
-            // (No mutation of `pet.enabled` here — it stays true as a default.)
           }
         })
         void ipcClient.invoke('pet:create', { pet }).catch((err) => {
@@ -804,7 +797,6 @@ export const usePetsStore = create<PetsStore>()(
             const totalExp = Math.round((pet.exp.totalExp + gainedExp) * 100) / 100
             return {
               ...pet,
-              coins: pet.coins + gainedExp,
               coinCreditedExp: pet.coinCreditedExp + gainedExp,
               exp: {
                 totalExp,
