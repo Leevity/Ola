@@ -27,7 +27,6 @@ import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import {
   BATHE_COST,
   FEED_COST,
-  PET_TICK_MS,
   SOAK_COST,
   SOAK_MIN_LEVEL,
   STUDY_COST,
@@ -36,11 +35,21 @@ import {
   getLevelProgress,
   getPetLevel,
   usePetStore,
-  type PetActionResult,
   type PetAwayReward
 } from '@renderer/stores/pet-store'
+import {
+  PET_TICK_MS,
+  STUDY_REWARD_GROWTH,
+  WORK_REWARD_COINS,
+  WORK_REWARD_GROWTH,
+  usePetsStore,
+  type PetActionResult,
+  type PetActionName,
+  type Pet as DesktopPet
+} from '@renderer/stores/pets-store'
 import { usePetExpStore } from '@renderer/stores/pet-exp-store'
 import { usePetAgentStore } from '@renderer/stores/pet-agent-store'
+import { usePetWalletStore } from '@renderer/stores/pet-wallet-store'
 import { modelSupportsVision, useProviderStore } from '@renderer/stores/provider-store'
 import { buildPetSystemPrompt, runPetChat, type PetChatImage } from '@renderer/lib/pet/pet-agent'
 import {
@@ -55,6 +64,8 @@ import {
   loadPetMemories,
   stripMemoryDirectives
 } from '@renderer/lib/pet/pet-memory'
+import { getDefaultPetId } from '@renderer/lib/pet/default-pet-sync'
+import { PET_ACTION_STANDARDS, type PetStandardAction } from '@renderer/lib/pet/pet-standards'
 import {
   createPetSpeechSession,
   isVoiceInputConfigured,
@@ -83,6 +94,19 @@ function replyBubbleMs(text: string): number {
 }
 
 type ViewActivity = PetActivity | 'away'
+
+interface DesktopMenuItem {
+  kind: PetStandardAction
+  icon: React.ReactNode
+  label: string
+  cost?: number
+  lockedLevel?: number
+  onClick: () => void
+}
+
+function desktopMenuItem(item: DesktopMenuItem): DesktopMenuItem {
+  return item
+}
 
 interface BubbleState {
   id: number
@@ -160,16 +184,36 @@ export function PetView(): React.JSX.Element | null {
   const [awayRemaining, setAwayRemaining] = useState(0)
   const [dozing, setDozing] = useState(false)
 
-  const hunger = usePetStore((s) => s.hunger)
-  const cleanliness = usePetStore((s) => s.cleanliness)
-  const mood = usePetStore((s) => s.mood)
-  const growth = usePetStore((s) => s.growth)
-  const coins = usePetStore((s) => s.coins)
-  const sleeping = usePetStore((s) => s.sleeping)
-  const awayTask = usePetStore((s) => s.awayTask)
-  const petName = usePetStore((s) => s.name)
-  const totalExp = usePetExpStore((s) => s.totalExp)
-  const expLog = usePetExpStore((s) => s.log)
+  const pets = usePetsStore((s) => s.pets)
+  const enabledIds = usePetsStore((s) => s.enabledIds)
+  const activeOnDesktopId = usePetsStore((s) => s.activeOnDesktopId)
+  const desktopPet = useMemo<DesktopPet | null>(() => {
+    const active =
+      (activeOnDesktopId ? pets.find((pet) => pet.id === activeOnDesktopId) : null) ??
+      pets.find((pet) => enabledIds.includes(pet.id)) ??
+      null
+    return active?.archivedAt === null ? active : null
+  }, [activeOnDesktopId, enabledIds, pets])
+  const legacyHunger = usePetStore((s) => s.hunger)
+  const legacyCleanliness = usePetStore((s) => s.cleanliness)
+  const legacyMood = usePetStore((s) => s.mood)
+  const legacyGrowth = usePetStore((s) => s.growth)
+  const coins = usePetWalletStore((s) => s.coins)
+  const legacySleeping = usePetStore((s) => s.sleeping)
+  const legacyAwayTask = usePetStore((s) => s.awayTask)
+  const legacyPetName = usePetStore((s) => s.name)
+  const legacyTotalExp = usePetExpStore((s) => s.totalExp)
+  const legacyExpLog = usePetExpStore((s) => s.log)
+  const hunger = desktopPet?.hunger ?? legacyHunger
+  const cleanliness = desktopPet?.cleanliness ?? legacyCleanliness
+  const mood = desktopPet?.mood ?? legacyMood
+  const growth = desktopPet?.growth ?? legacyGrowth
+  const sleeping = desktopPet?.sleeping ?? legacySleeping
+  const awayTask = desktopPet?.awayTask ?? legacyAwayTask
+  const petName = desktopPet?.name ?? legacyPetName
+  const totalExp = desktopPet?.exp.totalExp ?? legacyTotalExp
+  const expLog = desktopPet?.exp.log ?? legacyExpLog
+  const desktopPetId = desktopPet?.id ?? null
 
   const combinedGrowth = growth + totalExp
   const level = getPetLevel(combinedGrowth)
@@ -351,13 +395,6 @@ export function PetView(): React.JSX.Element | null {
     return () => document.removeEventListener('mousemove', onMove)
   }, [x])
 
-  // Tokens feed the wallet too: new XP converts into coins 1:1, so the coin
-  // economy works long before the work task unlocks at Lv.4.
-  useEffect(() => {
-    if (!hydrated || !usePetExpStore.persist.hasHydrated()) return
-    usePetStore.getState().creditExpCoins()
-  }, [hydrated, totalExp])
-
   // One huge usage event = a feast: munch happily and comment on it.
   useEffect(() => {
     if (!hydrated) return
@@ -377,8 +414,16 @@ export function PetView(): React.JSX.Element | null {
     })
   }, [hydrated, expLog, celebrate, showBubble, showProactiveBubble, t])
 
-  const agentProviderId = usePetAgentStore((s) => s.providerId)
-  const agentModelId = usePetAgentStore((s) => s.modelId)
+  const legacyAgentProviderId = usePetAgentStore((s) => s.providerId)
+  const legacyAgentModelId = usePetAgentStore((s) => s.modelId)
+  const legacyAgentSystemPrompt = usePetAgentStore((s) => s.systemPrompt)
+  const legacyAgentProjectName = usePetAgentStore((s) => s.projectName)
+  const legacyAgentProjectFolder = usePetAgentStore((s) => s.projectFolder)
+  const agentProviderId = desktopPet?.agent.providerId ?? legacyAgentProviderId
+  const agentModelId = desktopPet?.agent.modelId ?? legacyAgentModelId
+  const agentSystemPrompt = desktopPet?.agent.systemPrompt ?? legacyAgentSystemPrompt
+  const agentProjectName = desktopPet?.agent.projectName ?? legacyAgentProjectName
+  const agentProjectFolder = desktopPet?.agent.projectFolder ?? legacyAgentProjectFolder
   const chatVisionSupported = useMemo(() => {
     const provider = useProviderStore
       .getState()
@@ -578,7 +623,15 @@ export function PetView(): React.JSX.Element | null {
       const remaining = awayTask.endsAt - Date.now()
       setAwayRemaining(remaining)
       if (remaining <= 0) {
-        const reward = usePetStore.getState().resolveAwayTask()
+        const reward = desktopPetId
+          ? usePetsStore.getState().actOnPet(desktopPetId, 'resolveAwayTask').ok
+            ? {
+                kind: awayTask.kind,
+                coins: awayTask.kind === 'work' ? WORK_REWARD_COINS : 0,
+                growth: awayTask.kind === 'work' ? WORK_REWARD_GROWTH : STUDY_REWARD_GROWTH
+              }
+            : null
+          : usePetStore.getState().resolveAwayTask()
         if (reward) {
           setActivity('idle')
           notifyAwayReward(reward)
@@ -586,7 +639,7 @@ export function PetView(): React.JSX.Element | null {
       }
     }, 1000)
     return () => window.clearInterval(timer)
-  }, [hydrated, awayTask, stopWalk, notifyAwayReward])
+  }, [hydrated, awayTask, desktopPetId, stopWalk, notifyAwayReward])
 
   useEffect(() => {
     if (!hydrated || awayTask) return
@@ -632,7 +685,7 @@ export function PetView(): React.JSX.Element | null {
         // Lucky find: a few coins on the ground while pottering about.
         lastCoinPickupAtRef.current = Date.now()
         const amount = 1 + Math.floor(Math.random() * 5)
-        store.addCoins(amount)
+        usePetWalletStore.getState().addCoins(amount)
         playTransient('play', 2200)
         showBubble(t('bubbles.foundCoins', { coins: amount }))
       } else {
@@ -723,8 +776,7 @@ export function PetView(): React.JSX.Element | null {
     async (textOverride?: string) => {
       const text = (textOverride ?? chatInput).trim()
       if (!text || chatBusy) return
-      const agentConfig = usePetAgentStore.getState()
-      if (!agentConfig.providerId || !agentConfig.modelId) {
+      if (!agentProviderId || !agentModelId) {
         setChatError(t('chat.notConfigured'))
         return
       }
@@ -739,26 +791,26 @@ export function PetView(): React.JSX.Element | null {
       // instead of one full synthesis round-trip after it.
       const speech = createPetSpeechSession()
       try {
-        const store = usePetStore.getState()
         const memorySection = buildMemorySection(await loadPetMemories())
-        const persona = buildPetSystemPrompt(agentConfig.systemPrompt, {
-          petName: store.name,
-          hunger: store.hunger,
-          cleanliness: store.cleanliness,
-          mood: store.mood,
-          level: getPetLevel(store.growth + usePetExpStore.getState().totalExp),
-          projectName: agentConfig.projectName,
-          projectFolder: agentConfig.projectFolder,
+        const persona = buildPetSystemPrompt(agentSystemPrompt, {
+          petName,
+          hunger,
+          cleanliness,
+          mood,
+          level,
+          projectName: agentProjectName,
+          projectFolder: agentProjectFolder,
           memorySection
         })
         const rawReply = await runPetChat({
-          providerId: agentConfig.providerId,
-          modelId: agentConfig.modelId,
+          providerId: agentProviderId,
+          modelId: agentModelId,
           persona,
           userText: text,
+          petId: desktopPetId ?? getDefaultPetId(),
           image: image ? { data: image.data, mediaType: image.mediaType } : null,
           history: chatHistoryRef.current,
-          workingFolder: agentConfig.projectFolder,
+          workingFolder: agentProjectFolder,
           onDelta: (partial) => {
             const clean = stripMemoryDirectives(partial)
             if (clean) {
@@ -789,7 +841,8 @@ export function PetView(): React.JSX.Element | null {
           createdAt: Date.now()
         }
         chatHistoryRef.current = [...chatHistoryRef.current, userTurn, assistantTurn].slice(-12)
-        store.petted()
+        if (desktopPetId) usePetsStore.getState().actOnPet(desktopPetId, 'petted')
+        else usePetStore.getState().petted()
       } catch (error) {
         speech?.cancel()
         setBubble(null)
@@ -798,7 +851,24 @@ export function PetView(): React.JSX.Element | null {
         setChatBusy(false)
       }
     },
-    [chatBusy, chatImage, chatInput, showBubble, t]
+    [
+      agentModelId,
+      agentProjectFolder,
+      agentProjectName,
+      agentProviderId,
+      agentSystemPrompt,
+      chatBusy,
+      chatImage,
+      chatInput,
+      cleanliness,
+      desktopPetId,
+      hunger,
+      level,
+      mood,
+      petName,
+      showBubble,
+      t
+    ]
   )
 
   // Voice input: record → transcribe with the app's speech recognition
@@ -885,7 +955,9 @@ export function PetView(): React.JSX.Element | null {
         hungry: 'refuseHungry',
         busy: 'refuseBusy',
         sleeping: 'refuseSleeping',
-        level: 'refuseLevel'
+        level: 'refuseLevel',
+        archived: 'refuseBusy',
+        max: 'refuseBusy'
       }
       showBubble(pickBubble(reasonKey[result.reason] ?? 'refuseBusy'))
     },
@@ -894,49 +966,77 @@ export function PetView(): React.JSX.Element | null {
 
   const runMenuAction = useCallback(
     (kind: 'feed' | 'bathe' | 'soak' | 'play' | 'sleep' | 'work' | 'study' | 'hide') => {
-      const store = usePetStore.getState()
+      const activePetId = desktopPetId
+      const actOnPet = (action: PetActionName): PetActionResult => {
+        if (activePetId) return usePetsStore.getState().actOnPet(activePetId, action)
+        const store = usePetStore.getState()
+        switch (action) {
+          case 'feed':
+            return store.feed()
+          case 'bathe':
+            return store.bathe()
+          case 'soak':
+            return store.soak()
+          case 'play':
+            return store.play()
+          case 'toggleSleep':
+            store.toggleSleep()
+            return { ok: true }
+          case 'startWork':
+            return store.startWork()
+          case 'startStudy':
+            return store.startStudy()
+          case 'petted':
+            store.petted()
+            return { ok: true }
+          default:
+            return { ok: false, reason: 'busy' }
+        }
+      }
       closeMenu()
       switch (kind) {
         case 'feed':
-          handleActionResult(store.feed(), () => {
+          handleActionResult(actOnPet('feed'), () => {
             playTransient('eat', 2800)
             showBubble(pickBubble('fed'))
           })
           break
         case 'bathe':
-          handleActionResult(store.bathe(), () => {
+          handleActionResult(actOnPet('bathe'), () => {
             playTransient('bathe', 2800)
             showBubble(pickBubble('bathed'))
           })
           break
         case 'soak':
-          handleActionResult(store.soak(), () => {
+          handleActionResult(actOnPet('soak'), () => {
             playTransient('soak', 6000)
             showBubble(pickBubble('soaked'))
           })
           break
         case 'play':
-          handleActionResult(store.play(), () => {
+          handleActionResult(actOnPet('play'), () => {
             playTransient('play', 2600)
             showBubble(pickBubble('played'))
           })
           break
         case 'sleep':
-          store.toggleSleep()
-          showBubble(pickBubble(store.sleeping ? 'wake' : 'sleepy'))
+          handleActionResult(actOnPet('toggleSleep'), () => {
+            showBubble(pickBubble(sleeping ? 'wake' : 'sleepy'))
+          })
           break
         case 'work':
-          handleActionResult(store.startWork(), () => showBubble(pickBubble('workStart')))
+          handleActionResult(actOnPet('startWork'), () => showBubble(pickBubble('workStart')))
           break
         case 'study':
-          handleActionResult(store.startStudy(), () => showBubble(pickBubble('studyStart')))
+          handleActionResult(actOnPet('startStudy'), () => showBubble(pickBubble('studyStart')))
           break
         case 'hide':
+          if (activePetId) usePetsStore.getState().setEnabled(activePetId, false)
           void ipcClient.invoke('pet-window:close')
           break
       }
     },
-    [closeMenu, handleActionResult, playTransient, showBubble, pickBubble]
+    [closeMenu, desktopPetId, handleActionResult, playTransient, showBubble, pickBubble, sleeping]
   )
 
   // Drag / click handling on the pet hitbox
@@ -992,12 +1092,15 @@ export function PetView(): React.JSX.Element | null {
 
       if (!drag.moved) {
         // simple click: a little affection — doubly effective mid-zen
-        const store = usePetStore.getState()
-        store.petted()
+        const petStore = usePetsStore.getState()
+        const legacyStore = usePetStore.getState()
+        if (desktopPetId) petStore.actOnPet(desktopPetId, 'petted')
+        else legacyStore.petted()
         setSquashing(true)
         window.setTimeout(() => setSquashing(false), 450)
         if (activityRef.current === 'zen') {
-          store.petted()
+          if (desktopPetId) petStore.actOnPet(desktopPetId, 'petted')
+          else legacyStore.petted()
           showBubble(pickBubble('zenPet'))
         } else if (!bubble) {
           showBubble(pickBubble('happy'))
@@ -1015,7 +1118,7 @@ export function PetView(): React.JSX.Element | null {
         }
       })
     },
-    [bubble, lift, pickBubble, showBubble]
+    [bubble, desktopPetId, lift, pickBubble, showBubble]
   )
 
   useEffect(() => {
@@ -1032,52 +1135,98 @@ export function PetView(): React.JSX.Element | null {
   const spriteActivity: PetActivity = activity === 'away' ? 'idle' : activity
   const menuBottom = GROUND_PADDING
 
-  const menuItems: Array<{
-    kind: 'feed' | 'bathe' | 'soak' | 'play' | 'sleep' | 'work' | 'study'
-    icon: React.ReactNode
-    label: string
-    cost?: number
-    lockedLevel?: number
-  }> = [
-    {
+  const menuOrder: PetStandardAction[] = [
+    'feed',
+    'bathe',
+    'play',
+    'sleep',
+    'chat',
+    'hide',
+    'studio',
+    'soak',
+    'work',
+    'study'
+  ]
+  const menuOrderIndex = new Map(menuOrder.map((kind, index) => [kind, index]))
+  const menuItems = [
+    desktopMenuItem({
       kind: 'feed',
       icon: <Utensils className="size-3.5" />,
       label: t('menu.feed'),
-      cost: FEED_COST
-    },
-    {
+      cost: FEED_COST,
+      onClick: () => runMenuAction('feed')
+    }),
+    desktopMenuItem({
       kind: 'bathe',
       icon: <Bath className="size-3.5" />,
       label: t('menu.bathe'),
-      cost: BATHE_COST
-    },
-    {
+      cost: BATHE_COST,
+      onClick: () => runMenuAction('bathe')
+    }),
+    desktopMenuItem({
       kind: 'soak',
       icon: <Waves className="size-3.5" />,
       label: t('menu.soak'),
       cost: SOAK_COST,
-      lockedLevel: level < SOAK_MIN_LEVEL ? SOAK_MIN_LEVEL : undefined
-    },
-    { kind: 'play', icon: <Gamepad2 className="size-3.5" />, label: t('menu.play') },
-    {
+      lockedLevel: level < SOAK_MIN_LEVEL ? SOAK_MIN_LEVEL : undefined,
+      onClick: () => runMenuAction('soak')
+    }),
+    desktopMenuItem({
+      kind: 'play',
+      icon: <Gamepad2 className="size-3.5" />,
+      label: t('menu.play'),
+      onClick: () => runMenuAction('play')
+    }),
+    desktopMenuItem({
       kind: 'sleep',
       icon: sleeping ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />,
-      label: sleeping ? t('menu.wake') : t('menu.sleep')
-    },
-    {
+      label: sleeping ? t('menu.wake') : t('menu.sleep'),
+      onClick: () => runMenuAction('sleep')
+    }),
+    desktopMenuItem({
+      kind: 'chat',
+      icon: <MessageCircle className="size-3.5" />,
+      label: t('menu.chat'),
+      onClick: () => {
+        closeMenu()
+        openChat()
+      }
+    }),
+    desktopMenuItem({
+      kind: 'hide',
+      icon: <EyeOff className="size-3.5" />,
+      label: t('menu.hide'),
+      onClick: () => runMenuAction('hide')
+    }),
+    desktopMenuItem({
+      kind: 'studio',
+      icon: <Wand2 className="size-3.5" />,
+      label: t('menu.studio'),
+      onClick: () => {
+        closeMenu()
+        void ipcClient.invoke('pet:open-studio')
+      }
+    }),
+    desktopMenuItem({
       kind: 'work',
       icon: <Briefcase className="size-3.5" />,
       label: t('menu.work'),
-      lockedLevel: level < WORK_MIN_LEVEL ? WORK_MIN_LEVEL : undefined
-    },
-    {
+      lockedLevel: level < WORK_MIN_LEVEL ? WORK_MIN_LEVEL : undefined,
+      onClick: () => runMenuAction('work')
+    }),
+    desktopMenuItem({
       kind: 'study',
       icon: <GraduationCap className="size-3.5" />,
       label: t('menu.study'),
       cost: STUDY_COST,
-      lockedLevel: level < STUDY_MIN_LEVEL ? STUDY_MIN_LEVEL : undefined
-    }
-  ]
+      lockedLevel: level < STUDY_MIN_LEVEL ? STUDY_MIN_LEVEL : undefined,
+      onClick: () => runMenuAction('study')
+    })
+  ].sort((a, b) => {
+    const aLevel = PET_ACTION_STANDARDS[a.kind]?.unlockLevel ?? 1
+    const bLevel = PET_ACTION_STANDARDS[b.kind]?.unlockLevel ?? 1
+    return aLevel - bLevel || (menuOrderIndex.get(a.kind) ?? 0) - (menuOrderIndex.get(b.kind) ?? 0)
+  })
 
   return (
     <div className="pointer-events-none relative h-screen w-screen select-none overflow-hidden bg-transparent">
@@ -1126,8 +1275,12 @@ export function PetView(): React.JSX.Element | null {
             >
               {bubble.text}
             </motion.div>
-          ) : hoveringPet && !menuOpen ? (
-            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-40 -translate-x-1/2 space-y-1 rounded-xl border border-border bg-popover/95 p-2 shadow-lg backdrop-blur">
+          ) : (hoveringPet || hoveringUi) && !menuOpen ? (
+            <div
+              className="pointer-events-auto absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 space-y-2 rounded-xl border border-border bg-popover/95 p-2 shadow-lg backdrop-blur"
+              onMouseEnter={() => setHoveringUi(true)}
+              onMouseLeave={() => setHoveringUi(false)}
+            >
               <div className="flex items-center justify-between text-[11px] font-medium text-popover-foreground">
                 <span>
                   {petName} · {t('hud.level', { level })}
@@ -1137,9 +1290,61 @@ export function PetView(): React.JSX.Element | null {
                   {Math.floor(coins)}
                 </span>
               </div>
+              <div className="flex items-center gap-2 text-[11px]">
+                <Sparkles className="size-3 shrink-0 text-violet-400" />
+                <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-violet-400 transition-all"
+                    style={{ width: `${Math.round(getLevelProgress(combinedGrowth) * 100)}%` }}
+                  />
+                </div>
+                <span className="w-16 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                  {totalExp.toFixed(1)} XP
+                </span>
+              </div>
               <StatBar label={t('hud.hunger')} value={hunger} barClass="bg-amber-400" />
               <StatBar label={t('hud.clean')} value={cleanliness} barClass="bg-sky-400" />
               <StatBar label={t('hud.mood')} value={mood} barClass="bg-pink-400" />
+              <div className="grid grid-cols-5 gap-1 border-t border-border/60 pt-2">
+                <button
+                  className="flex h-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                  title={t('menu.feed')}
+                  onClick={() => runMenuAction('feed')}
+                >
+                  <Utensils className="size-3.5" />
+                </button>
+                <button
+                  className="flex h-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                  title={t('menu.bathe')}
+                  onClick={() => runMenuAction('bathe')}
+                >
+                  <Bath className="size-3.5" />
+                </button>
+                <button
+                  className="flex h-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                  title={t('menu.play')}
+                  onClick={() => runMenuAction('play')}
+                >
+                  <Gamepad2 className="size-3.5" />
+                </button>
+                <button
+                  className="flex h-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                  title={sleeping ? t('menu.wake') : t('menu.sleep')}
+                  onClick={() => runMenuAction('sleep')}
+                >
+                  {sleeping ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+                </button>
+                <button
+                  className="flex h-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+                  title={t('menu.chat')}
+                  onClick={() => {
+                    setHoveringUi(false)
+                    openChat()
+                  }}
+                >
+                  <MessageCircle className="size-3.5" />
+                </button>
+              </div>
             </div>
           ) : null}
 
@@ -1171,6 +1376,7 @@ export function PetView(): React.JSX.Element | null {
                 mood={mood}
                 cleanliness={cleanliness}
                 width={PET_WIDTH}
+                skinId={desktopPet?.skinId ?? null}
               />
             </div>
           </motion.div>
@@ -1218,7 +1424,7 @@ export function PetView(): React.JSX.Element | null {
               <button
                 key={item.kind}
                 disabled={!!item.lockedLevel}
-                onClick={() => runMenuAction(item.kind)}
+                onClick={item.onClick}
                 className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground disabled:cursor-not-allowed disabled:opacity-45"
               >
                 <span className="shrink-0 text-muted-foreground">{item.icon}</span>
@@ -1233,33 +1439,6 @@ export function PetView(): React.JSX.Element | null {
                 ) : null}
               </button>
             ))}
-            <button
-              onClick={() => {
-                closeMenu()
-                openChat()
-              }}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <MessageCircle className="size-3.5 shrink-0 text-muted-foreground" />
-              <span>{t('menu.chat')}</span>
-            </button>
-            <button
-              onClick={() => {
-                closeMenu()
-                void ipcClient.invoke('pet:open-studio')
-              }}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <Wand2 className="size-3.5 shrink-0" />
-              <span>{t('menu.studio')}</span>
-            </button>
-            <button
-              onClick={() => runMenuAction('hide')}
-              className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            >
-              <EyeOff className="size-3.5 shrink-0" />
-              <span>{t('menu.hide')}</span>
-            </button>
           </div>
         </div>
       ) : null}

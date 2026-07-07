@@ -7,6 +7,7 @@ import { Input } from '@renderer/components/ui/input'
 import { Button } from '@renderer/components/ui/button'
 import { CapybaraSprite } from '@renderer/components/pet/CapybaraSprite'
 import { getCombinedGrowth, getPetLevel, usePetsStore, type Pet } from '@renderer/stores/pets-store'
+import { isDefaultPet, renameDefaultPet } from '@renderer/lib/pet/default-pet-sync'
 import { OverviewSection } from './pet-editor/OverviewSection'
 import { SkinSection } from './pet-editor/SkinSection'
 import { AgentSection } from './pet-editor/AgentSection'
@@ -44,7 +45,7 @@ export function PetEditorDialog({
       cleanliness: pet.cleanliness,
       mood: pet.mood
     }
-  }, [pet?.growth, pet?.exp.totalExp, pet?.hunger, pet?.cleanliness, pet?.mood, pet])
+  }, [pet])
 
   if (!pet) {
     return (
@@ -82,7 +83,11 @@ export function PetEditorDialog({
               setEditingName(false)
               return
             }
-            renamePet(pet.id, next)
+            if (isDefaultPet(pet.id)) {
+              renameDefaultPet(next)
+            } else {
+              renamePet(pet.id, next)
+            }
             toast.success(t('basic.saved'))
             setEditingName(false)
           }}
@@ -133,6 +138,7 @@ function Header({
           mood={headerStats?.mood ?? 80}
           cleanliness={headerStats?.cleanliness ?? 80}
           width={88}
+          skinId={pet.skinId}
         />
       </div>
       <div className="min-w-0 flex-1">

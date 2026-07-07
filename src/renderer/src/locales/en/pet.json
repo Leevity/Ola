@@ -35,9 +35,11 @@
     "delete": "Delete this memory"
   },
   "stats": {
-    "totalExp": "Total XP",
-    "totalTokens": "Tokens eaten",
-    "coinsEarned": "Coins"
+    "totalExp": "Pet XP",
+    "totalTokens": "Total tokens",
+    "coinsEarned": "Shared coins",
+    "poolExp": "Unassigned XP",
+    "allocatable": "available"
   },
   "agent": {
     "desc": "The pet is an agent: give it a chat model, a personality prompt, and optionally bind it to a project. Double-click the pet (or use its menu) to talk.",
@@ -77,6 +79,9 @@
     "voiceDefault": "Endpoint default",
     "voiceCustomOption": "Custom…",
     "voiceCustomPlaceholder": "Voice ID",
+    "voiceMode": "API mode",
+    "voiceTag": "Voice tag",
+    "voiceInstruction": "Style instruction",
     "voiceTest": "Preview",
     "voiceTestSample": "Hi there, I'm {{name}} — let's have a great day!",
     "voiceTagPlaceholder": "Voice tag (MiMo only, optional): dialect/emotion, e.g. Cantonese, whisper — multiple allowed",
@@ -249,11 +254,24 @@
     "created": "Ola companion claimed",
     "claim": {
       "generate": "Generate",
-      "import": "Import folder",
+      "import": "Local import",
       "description": "Description / persona",
       "descriptionPlaceholder": "Describe this companion's look, personality and how it should accompany you. Ola will generate a transparent appearance and a persona prompt.",
       "importDescriptionPlaceholder": "Optional: add personality and companionship notes. Empty means using subject from pet.json.",
-      "importHint": "Choose a standard companion folder with pet.json and at least one PNG pose such as idle.png. Import copies it into Ola data and does not move the original folder.",
+      "optimize": "AI refine",
+      "optimizing": "Refining…",
+      "optimized": "Name, description, and persona refined",
+      "importHint": "Choose a standard companion folder with pet.json and at least one PNG pose such as idle.png. You can download the default Aniya config first, then replace its pose images and metadata before local import.",
+      "referenceHint": "Optional: upload a reference image. Ola will use image-to-image generation to keep the reference character design while creating a transparent desktop companion sprite.",
+      "referenceFallback": "Reference-image generation failed, so Ola generated from the description instead.",
+      "referenceCta": "Upload reference",
+      "referenceReplace": "Replace reference",
+      "templateCta": "Download Aniya config",
+      "templateExporting": "Exporting…",
+      "templateExported": "Aniya config exported.",
+      "standardTitle": "Growth and pose standard",
+      "standardDesc": "Companions cap at Lv.{{maxLevel}}. Normal chats and pet chats convert tokens into XP and coins; poses follow one standard and unlock by level.",
+      "cancel": "Cancel",
       "generateConfirm": "Generate & claim",
       "importConfirm": "Choose folder & claim",
       "generating": "Generating…",
@@ -262,6 +280,8 @@
       "errors": {
         "cooldown": "Generation is cooling down. Try again later.",
         "empty": "Add a description first.",
+        "no-chat-provider": "No chat model is available for AI refinement.",
+        "optimize-failed": "AI refinement failed.",
         "no-image-provider": "No image generation model is available. Configure an image model first.",
         "model-error": "Image generation failed. Check the model configuration.",
         "no-image": "The model did not return an image.",
@@ -270,6 +290,8 @@
         "missing-meta": "pet.json is missing from the folder.",
         "missing-pose": "The folder needs at least one PNG pose.",
         "import-error": "Import failed.",
+        "missing-template": "The default Aniya config was not found in app resources.",
+        "export-error": "Failed to export the Aniya config.",
         "unknown": "Operation failed. Try again later."
       }
     },
@@ -278,12 +300,24 @@
     "archived": "Archived",
     "archivedToast": "Pet archived",
     "tooManyEnabled": "Too many pets on desktop. Hide one first.",
+    "copyName": "{{name}} copy",
+    "copiedToast": "{{name}} copied",
+    "pool": {
+      "title": "XP resource pool",
+      "hint": "XP from normal chats goes into a shared pool first. Assign it to any companion, or convert it into shared coins.",
+      "assignToActive": "Feed current companion",
+      "assignExp": "Assign pooled XP",
+      "assignedExp": "Assigned pooled XP to {{name}}",
+      "convertCoins": "Convert to coins",
+      "convertedCoins": "Converted to shared coins"
+    },
     "menu": {
       "edit": "Edit",
       "on": "On",
       "off": "Off",
       "startOnDesktop": "Show on desktop",
       "stopOnDesktop": "Hide from desktop",
+      "copy": "Copy",
       "delete": "Delete"
     },
     "setOnDesktop": "{{name}} is now on your desktop"
@@ -360,13 +394,17 @@
     "custom": "Custom",
     "preview": {
       "idle": "Idle — at rest, breathing slowly.",
+      "walk": "Walk — used while roaming the desktop.",
+      "beg": "Beg — used when hungry or asking for attention.",
       "eat": "Eating — restores hunger.",
+      "munch": "Snack — alternate eating frame.",
       "bathe": "Bathing — restores cleanliness.",
+      "soak": "Hot spring — higher-level clean and mood recovery.",
+      "swim": "Swim — roaming variation.",
+      "zen": "Zen — calm idle variation.",
       "play": "Playing — lifts mood, burns some energy.",
       "sleep": "Sleeping — recovers faster.",
-      "walk": "Walking around",
-      "soak": "Soaking in the hot spring",
-      "zen": "Zen mode"
+      "held": "Held — used while dragging the pet."
     },
     "preview-idle": "Idle",
     "preview-eat": "Eat",

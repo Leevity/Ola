@@ -15,6 +15,7 @@ import {
   resolveCacheCreationCost
 } from '@renderer/lib/format-tokens'
 import { truncateRequestDebugForPersistence } from '@renderer/lib/debug-store'
+import { accruePetResourcePoolFromAmbientUsage } from '@renderer/lib/pet/pet-exp'
 import {
   USAGE_ACTIVITY_BY_MODEL_MSGPACK_CHANNEL,
   USAGE_ACTIVITY_BY_PROVIDER_MSGPACK_CHANNEL,
@@ -83,6 +84,21 @@ function hasUsageTokens(usage: TokenUsage | undefined): usage is TokenUsage {
     usage.cacheReadTokens,
     usage.reasoningTokens
   ].some((value) => typeof value === 'number' && Number.isFinite(value) && value > 0)
+}
+
+function shouldAccrueAmbientPetExp(sourceKind: string): boolean {
+  return sourceKind === 'chat' || sourceKind === 'agent'
+}
+
+function usageTokensForPetExp(usage: TokenUsage): number {
+  return (
+    (usage.inputTokens ?? 0) +
+    (usage.outputTokens ?? 0) +
+    (usage.cacheReadTokens ?? 0) +
+    (usage.cacheCreationTokens ?? 0) +
+    (usage.cacheCreation5mTokens ?? 0) +
+    (usage.cacheCreation1hTokens ?? 0)
+  )
 }
 
 function resolveProviderAndModel(
@@ -280,6 +296,17 @@ export async function recordUsageEvent(input: {
     usage_raw_json: input.usage ? JSON.stringify(input.usage) : null,
     meta_json: input.meta ? JSON.stringify(input.meta) : null
   })
+
+  if (shouldAccrueAmbientPetExp(input.sourceKind)) {
+    const tokens = usageTokensForPetExp(normalizedUsage)
+    if (tokens > 0) {
+      accruePetResourcePoolFromAmbientUsage({
+        modelId: resolvedModelId,
+        modelName: model?.name ?? resolvedModelId ?? null,
+        tokens
+      })
+    }
+  }
 }
 
 export function getUsageOverview(query: UsageAnalyticsQuery): Promise<UsageAnalyticsOverview> {
