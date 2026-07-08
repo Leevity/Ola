@@ -20,11 +20,15 @@ if (!process.env.DOTNET_ROOT && isPosix) {
   }
 }
 
-const child = spawn(
-  'npx',
-  ['--no-install', 'electron-vite', 'dev'],
-  { stdio: 'inherit', env: process.env }
-)
+const isWin = process.platform === 'win32'
+const command = isWin ? 'node_modules\\.bin\\electron-vite.cmd' : 'node_modules/.bin/electron-vite'
+const args = ['dev']
+
+const child = spawn(command, args, {
+  stdio: 'inherit',
+  env: process.env,
+  shell: isWin
+})
 
 child.on('exit', (code, signal) => {
   if (signal) {
