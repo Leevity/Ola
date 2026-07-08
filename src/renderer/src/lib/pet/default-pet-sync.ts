@@ -33,15 +33,22 @@ function buildDefaultPetPatch(): Partial<Pet> {
   if (name !== pet.name) {
     usePetStore.setState({ name })
   }
+  // NOTE: the legacy → multi-pet sync intentionally only carries
+  // profile-shaped fields (name, skinId, exp ledger, scheduling metadata).
+  // We deliberately do NOT forward hunger/cleanliness/mood/growth/sleeping
+  // /awayTask from the legacy store, because:
+  //   1. multi-pet owns those state fields once the desktop pet window
+  //      is up — every `actOnPet` call writes them through
+  //      `usePetsStore.setState`, and feeding the legacy value back over
+  //      those writes clobbers the user-visible stats.
+  //   2. The legacy `tick()` decay runs every PET_TICK_MS and unconditionally
+  //      calls `set`, which fires the `usePetStore.subscribe(sync)` we
+  //      install below. Without this carve-out, the legacy 30s tick would
+  //      overwrite the multi-pet stat bars with the legacy decay snapshot
+  //      on every beat. The user reported the stat numbers snapping back
+  //      to "0" after every feed/bathe action — that was the symptom.
   return {
     name,
-    hunger: pet.hunger,
-    cleanliness: pet.cleanliness,
-    mood: pet.mood,
-    growth: pet.growth,
-    sleeping: pet.sleeping,
-    awayTask: pet.awayTask,
-    lastTickAt: pet.lastTickAt,
     adoptedAt: pet.adoptedAt,
     lastMilestoneDays: pet.lastMilestoneDays,
     proactiveDate: pet.proactiveDate,
