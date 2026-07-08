@@ -448,11 +448,16 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
     const focusable = args?.focusable === true
     if (focusable) {
       window.setFocusable(true)
-      // show() (not showInactive) is what makes a previously non-focusable
-      // window become the key window on macOS; re-assert always-on-top after
-      // the focusable toggle.
-      window.show()
-      window.focus()
+      // macOS only: a previously non-focusable window needs `show()` (not
+      // `showInactive`) to take keyboard focus. Calling `focus()` on Windows
+      // here activates the pet window in the OS task switcher — the user
+      // sees a new Ola taskbar entry and the main window is sent to the
+      // background. Skip the explicit show+focus on other platforms; the
+      // renderer can still grab keyboard focus via DOM once focusable.
+      if (process.platform === 'darwin') {
+        window.show()
+        window.focus()
+      }
       window.setAlwaysOnTop(true, 'floating')
     } else {
       // Hand key status back before the toggle; setFocusable resets the
@@ -461,8 +466,15 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
       window.blur()
       window.setFocusable(false)
       window.setAlwaysOnTop(true, 'floating')
-      window.showInactive()
+      if (process.platform === 'darwin') {
+        window.showInactive()
+      }
     }
+    // Re-assert skipTaskbar: on Windows, switching a always-on-top floating
+    // window between focusable and non-focusable can briefly re-add a
+    // taskbar entry even when the window was created with skipTaskbar=true.
+    // The pet should never own a taskbar slot — it's a desktop overlay.
+    window.setSkipTaskbar(true)
   })
 
   // Seconds since the last user input, for the pet's doze/welcome-back
@@ -570,11 +582,45 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
   registerMessagePackHandler<{ id: string; patch: Record<string, unknown> }>(
     'pet:update',
     async (args) => {
-      if (!args?.id) return { ok: false, reason: 'invalid' }
+      if (!args?.id || !args.patch) return { ok: false, reason: 'invalid' }
+      // Patch must survive the broadcast round-trip: when the pet window
+      // receives its own broadcast back, its `usePetsStore.persist.rehydrate()`
+      // pulls from settings.json. Without first writing the patch here, the
+      // rehydrate would race with the renderer-side persist write and the
+      // in-memory store would snap back to the pre-update snapshot. Merge
+      // patch into the cached collection on disk, then broadcast.
+      const settings = readSettings()
+      const current = decodePersistedStoreState<{
+        pets?: Array<Record<string, unknown>>
+        enabledIds?: string[]
+        activePetId?: string | null
+        activeOnDesktopId?: string | null
+      }>(settings['ola-pets-v1'])
+      if (current && Array.isArray(current.pets)) {
+        let dirty = false
+        const pets = current.pets.map((pet) => {
+          if (pet.id !== args.id) return pet
+          dirty = true
+          return { ...pet, ...args.patch }
+        })
+        if (dirty) {
+          await setSettingsValue(
+            'ola-pets-v1',
+            JSON.stringify({
+              state: {
+                ...current,
+                pets
+              },
+              version: 1
+            })
+          )
+        }
+      }
       safeSendMessagePackToAllWindows('pet:sync-event', {
         kind: 'pets',
         action: 'update',
-        id: args.id
+        id: args.id,
+        patch: args.patch
       })
       return { ok: true }
     }
