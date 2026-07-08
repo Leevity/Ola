@@ -7,7 +7,6 @@ import { registerMessagePackHandler } from './messagepack-handler'
 import { safeSendMessagePackToAllWindows } from '../window-ipc'
 import { decodePersistedStoreState, readSettings, setSettingsValue } from './settings-handlers'
 
-const PET_WINDOW_HEIGHT = 380
 const PET_ENABLED_SETTINGS_KEY = 'petDesktopEnabled'
 const PET_EXP_SETTINGS_KEY = 'ola-pet-exp'
 const PET_EXP_LOG_LIMIT = 100
@@ -236,11 +235,14 @@ export async function openPetWindow(): Promise<void> {
 
   opening = true
   const workArea = screen.getPrimaryDisplay().workArea
-  const height = Math.min(PET_WINDOW_HEIGHT, workArea.height)
+  // Span the full work area so the pet has the whole screen to walk around
+  // in, instead of being confined to the bottom 380px strip. Multi-monitor
+  // setups can request a different display later via a follow-up setting.
+  const height = workArea.height
 
   const window = new BrowserWindow({
     x: workArea.x,
-    y: workArea.y + workArea.height - height,
+    y: workArea.y,
     width: workArea.width,
     height,
     show: false,

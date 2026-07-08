@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { animate, motion, useMotionValue, type AnimationPlaybackControls } from 'motion/react'
+import { animate, motion, useMotionValue, useTransform, type AnimationPlaybackControls } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import {
   Bath,
@@ -80,7 +80,12 @@ const PET_WIDTH = 132
 const SPRITE_HEIGHT = 120
 const GROUND_PADDING = 12
 const EDGE_MARGIN = 28
+// Walk speed in pixels/sec when slanting from (x,y) to (targetX,targetY).
+// Distance is Euclidean so the visual speed stays roughly constant regardless
+// of direction.
 const WALK_SPEED = 55
+const SWIM_SPEED = 38
+const DASH_SPEED = 170
 const MENU_WIDTH = 236
 const CHAT_WIDTH = 292
 const BUBBLE_MS = 3800
@@ -219,9 +224,26 @@ export function PetView(): React.JSX.Element | null {
   const level = getPetLevel(combinedGrowth)
 
   const x = useMotionValue(Math.max(EDGE_MARGIN, window.innerWidth / 2 - PET_WIDTH / 2))
+  // Vertical position is now freely walkable across the screen. Initial y is
+  // randomized so the pet doesn't always start at the bottom; the clampY
+  // helper recomputed on each call keeps the sprite inside the window even
+  // after a window resize / DPI change.
+  const y = useMotionValue(EDGE_MARGIN)
+  // Vertical lift on drag: negative moves the sprite upward (chosen at drag
+  // time, decays back to the persistent y position when released).
   const lift = useMotionValue(0)
+  // The DOM y attribute combines the persistent walk position with the
+  // transient drag lift so a single motion value drives both effects.
+  const yOffset = useTransform(
+    [y, lift],
+    ([latestY, latestLift]: number[]) => latestY + latestLift
+  )
 
   const walkAnimRef = useRef<AnimationPlaybackControls | null>(null)
+  // Scratch number used as the single progress carrier for the 2D walk so
+  // framer-motion's animate() can drive a pair of motion values without an
+  // object overload.
+  const walkProgressRef = useRef<number>(EDGE_MARGIN)
   const chatInputRef = useRef<HTMLInputElement | null>(null)
   const chatFileRef = useRef<HTMLInputElement | null>(null)
   const chatHistoryRef = useRef<UnifiedMessage[]>([])
@@ -314,6 +336,164 @@ export function PetView(): React.JSX.Element | null {
     return () => document.removeEventListener('mouseout', onDocMouseOut)
   }, [])
 
+  // Windows click-through rescue: while the window is set to ignore mouse
+  // events, `onMouseEnter` never fires, so the first pointerdown on the pet
+  // slips through to the underlying app. Catch it globally, test against the
+  // pet's DOM rect (which is laid out in window-screen coords because the
+  // window covers the full display), and force the window interactive before
+  // the click can be swallowed by whatever app is below.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const root = document.getElementById('root')
+    if (!root) return
+
+    let suppressNextClick = false
+
+    const isOverPet = (clientX: number, clientY: number): boolean => {
+      const rect = root.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return false
+      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
+    }
+
+    const onPointerDown = (e: PointerEvent): void => {
+      if (e.button !== 0) return
+      if (!isOverPet(e.clientX, e.clientY)) return
+      // Window may currently be transparent to mouse (Windows quirk). Flip it
+      // back synchronously so this very same gesture reaches the renderer
+      // instead of the app underneath.
+      suppressNextClick = true
+      void ipcClient.invoke('pet-window:set-ignore-mouse', { ignore: false })
+      // Mirror the hover-equivalent state so the rest of the UI pieces (HUD,
+      // menu close timer) behave as if the cursor entered the pet.
+      setHoveringPet(true)
+    }
+
+    const onClickCapture = (e: MouseEvent): void => {
+      if (!suppressNextClick) return
+      // Only swallow the click when it actually landed on the pet region.
+      if (isOverPet(e.clientX, e.clientY)) {
+        e.stopPropagation()
+        e.preventDefault()
+      }
+      suppressNextClick = false
+    }
+
+    // Capture phase so we get the event before any element handler (and
+    // before Electron forwards it to the underlying app on Windows).
+    window.addEventListener('pointerdown', onPointerDown, true)
+    window.addEventListener('click', onClickCapture, true)
+    return () => {
+      window.removeEventListener('pointerdown', onPointerDown, true)
+      window.removeEventListener('click', onClickCapture, true)
+    }
+  }, [])
+
+  // Pick a random initial vertical position once after mount (we can't read
+  // window.innerHeight inside useMotionValue's initializer without also
+  // defeating SSR), and clamp back to bounds whenever the window resizes.
+  useEffect(() => {
+    const place = (): void => {
+      const maxY = Math.max(
+        EDGE_MARGIN,
+        window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
+      )
+      y.set(EDGE_MARGIN + Math.random() * (maxY - EDGE_MARGIN))
+    }
+    place()
+    window.addEventListener('resize', place)
+    return () => window.removeEventListener('resize', place)
+  }, [y])
+
+  // Active hit-testing root cause fix. The renderer keeps a continuous reading
+  // of whether the cursor is currently over the pet rectangle, derived from
+  // mousemove / mouseleave. While the window is set to ignore mouse events,
+  // these listeners also stop firing on Windows — so we additionally tap into
+  // pointermove (which Electron forwards regardless of WS_EX_TRANSPARENT) so
+  // the first move into the pet region still wins. The boolean is held in a
+  // ref so 60Hz mousemove never rerenders React; we only fire the IPC on
+  // transitions and throttle it to once per 200ms to keep `SetWindowLongPtr`
+  // calls bounded. Fall-back `mouseleave` on `document` clears the state when
+  // the cursor exits the OS window entirely.
+  const cursorOverPetRef = useRef(false)
+  const lastIpcAtRef = useRef(0)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const root = document.getElementById('root')
+    if (!root) return
+
+    const hitTest = (clientX: number, clientY: number): boolean => {
+      const rect = root.getBoundingClientRect()
+      if (rect.width === 0 || rect.height === 0) return false
+      return (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      )
+    }
+
+    const setInteractive = (next: boolean): void => {
+      if (cursorOverPetRef.current === next) return
+      cursorOverPetRef.current = next
+      const now =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now()
+      if (now - lastIpcAtRef.current < 200) return
+      lastIpcAtRef.current = now
+      // Only the cursor state needs to reach main — keep React state in sync
+      // so HUD/menu code paths see the same truth via `interactive`.
+      void ipcClient.invoke('pet-window:set-ignore-mouse', { ignore: !next })
+      if (next) {
+        setHoveringPet(true)
+      }
+    }
+
+    let rafId = 0
+    let pendingX = 0
+    let pendingY = 0
+    let pendingDirty = false
+    const schedule = (clientX: number, clientY: number): void => {
+      pendingX = clientX
+      pendingY = clientY
+      pendingDirty = true
+      if (rafId) return
+      rafId = window.requestAnimationFrame(() => {
+        rafId = 0
+        if (!pendingDirty) return
+        pendingDirty = false
+        setInteractive(hitTest(pendingX, pendingY))
+      })
+    }
+
+    const onMouseMove = (e: MouseEvent): void => {
+      schedule(e.clientX, e.clientY)
+    }
+    const onPointerMove = (e: PointerEvent): void => {
+      // `pointermove` still fires on Windows even when the window is click-
+      // through, so the very first move into the pet rect triggers the
+      // interactive flip without waiting for a click.
+      schedule(e.clientX, e.clientY)
+    }
+    const onMouseLeave = (e: MouseEvent): void => {
+      if (!e.relatedTarget) setInteractive(false)
+    }
+    const onWindowBlur = (): void => setInteractive(false)
+
+    window.addEventListener('mousemove', onMouseMove, true)
+    window.addEventListener('pointermove', onPointerMove, true)
+    document.addEventListener('mouseleave', onMouseLeave)
+    window.addEventListener('blur', onWindowBlur)
+
+    return () => {
+      if (rafId) window.cancelAnimationFrame(rafId)
+      window.removeEventListener('mousemove', onMouseMove, true)
+      window.removeEventListener('pointermove', onPointerMove, true)
+      document.removeEventListener('mouseleave', onMouseLeave)
+      window.removeEventListener('blur', onWindowBlur)
+    }
+  }, [])
+
   const stopWalk = useCallback(() => {
     walkAnimRef.current?.stop()
     walkAnimRef.current = null
@@ -343,57 +523,129 @@ export function PetView(): React.JSX.Element | null {
     (swim = false) => {
       const minX = EDGE_MARGIN
       const maxX = Math.max(minX, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
-      const target = minX + Math.random() * (maxX - minX)
-      const from = x.get()
-      if (Math.abs(target - from) < 48) return
-      setFacing(target > from ? 'right' : 'left')
+      const minY = EDGE_MARGIN
+      const maxY = Math.max(minY, window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN)
+      const targetX = minX + Math.random() * (maxX - minX)
+      const targetY = minY + Math.random() * (maxY - minY)
+      const fromX = x.get()
+      const fromY = y.get()
+      const dx = targetX - fromX
+      const dy = targetY - fromY
+      const distance = Math.hypot(dx, dy)
+      if (distance < 48) return
+      setFacing(dx >= 0 ? 'right' : 'left')
       setActivity(swim ? 'swim' : 'walk')
-      walkAnimRef.current = animate(x, target, {
-        duration: Math.abs(target - from) / (swim ? 38 : WALK_SPEED),
+      const speed = swim ? SWIM_SPEED : WALK_SPEED
+      const duration = distance / speed
+      walkAnimRef.current?.stop()
+      // Animate a single progress value 0→1 and derive (x,y) through a
+      // useTransform pipeline — this is the framer-motion blessed way to
+      // move a pair of motion values in lock-step while keeping the call
+      // cancellable via .stop().
+      walkProgressRef.current = EDGE_MARGIN
+      const progressTarget = distance
+      walkAnimRef.current = animate(walkProgressRef.current, progressTarget, {
+        duration,
         ease: 'linear',
+        onUpdate: (latestDistance) => {
+          // Constrain by current bounds at every tick so a screen resize
+          // mid-walk doesn't sling the pet off-screen.
+          const curMaxY = Math.max(
+            EDGE_MARGIN,
+            window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
+          )
+          const curMaxX = Math.max(
+            EDGE_MARGIN,
+            window.innerWidth - EDGE_MARGIN - PET_WIDTH
+          )
+          const tx = Math.max(EDGE_MARGIN, Math.min(curMaxX, targetX))
+          const ty = Math.max(EDGE_MARGIN, Math.min(curMaxY, targetY))
+          const fx = Math.max(EDGE_MARGIN, Math.min(curMaxX, fromX))
+          const fy = Math.max(EDGE_MARGIN, Math.min(curMaxY, fromY))
+          const t = progressTarget === 0 ? 1 : Math.min(1, latestDistance / progressTarget)
+          x.set(fx + (tx - fx) * t)
+          y.set(fy + (ty - fy) * t)
+          // Keep the rotation aligned with the live direction so a long
+          // diagonal walk doesn't end up looking confused.
+          const liveDx = (tx - fx) * t
+          if (Math.abs(liveDx) > 4) setFacing(liveDx >= 0 ? 'right' : 'left')
+        },
         onComplete: () => {
           walkAnimRef.current = null
           setActivity((current) => (current === 'walk' || current === 'swim' ? 'idle' : current))
         }
       })
     },
-    [x]
+    [x, y]
   )
 
   // A sudden burst of zoomies: the same walk cycle, much faster.
   const startDash = useCallback(() => {
     const minX = EDGE_MARGIN
     const maxX = Math.max(minX, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
-    const target = minX + Math.random() * (maxX - minX)
-    const from = x.get()
-    if (Math.abs(target - from) < 160) {
+    const minY = EDGE_MARGIN
+    const maxY = Math.max(minY, window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN)
+    const targetX = minX + Math.random() * (maxX - minX)
+    const targetY = minY + Math.random() * (maxY - minY)
+    const fromX = x.get()
+    const fromY = y.get()
+    const dx = targetX - fromX
+    const dy = targetY - fromY
+    const distance = Math.hypot(dx, dy)
+    if (distance < 160) {
       startWalk()
       return
     }
-    setFacing(target > from ? 'right' : 'left')
+    setFacing(dx >= 0 ? 'right' : 'left')
     setActivity('walk')
-    walkAnimRef.current = animate(x, target, {
-      duration: Math.abs(target - from) / 170,
+    walkAnimRef.current?.stop()
+    walkProgressRef.current = EDGE_MARGIN
+    walkAnimRef.current = animate(walkProgressRef.current, distance, {
+      duration: distance / DASH_SPEED,
       ease: 'easeOut',
+      onUpdate: (latestDistance) => {
+        const curMaxY = Math.max(
+          EDGE_MARGIN,
+          window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
+        )
+        const curMaxX = Math.max(
+          EDGE_MARGIN,
+          window.innerWidth - EDGE_MARGIN - PET_WIDTH
+        )
+        const tx = Math.max(EDGE_MARGIN, Math.min(curMaxX, targetX))
+        const ty = Math.max(EDGE_MARGIN, Math.min(curMaxY, targetY))
+        const fx = Math.max(EDGE_MARGIN, Math.min(curMaxX, fromX))
+        const fy = Math.max(EDGE_MARGIN, Math.min(curMaxY, fromY))
+        const t = distance === 0 ? 1 : Math.min(1, latestDistance / distance)
+        x.set(fx + (tx - fx) * t)
+        y.set(fy + (ty - fy) * t)
+      },
       onComplete: () => {
         walkAnimRef.current = null
         setActivity((current) => (current === 'walk' ? 'idle' : current))
       }
     })
-  }, [startWalk, x])
+  }, [startWalk, x, y])
 
   // Face the cursor when it wanders past nearby — a small "alive" detail.
   useEffect(() => {
     const onMove = (e: MouseEvent): void => {
       if (dozingRef.current) return
       if (activityRef.current !== 'idle' && activityRef.current !== 'zen') return
-      const center = x.get() + PET_WIDTH / 2
-      const dx = e.clientX - center
+      const centerX = x.get() + PET_WIDTH / 2
+      const centerY = y.get() + SPRITE_HEIGHT / 2
+      const dx = e.clientX - centerX
+      const dy = e.clientY - centerY
+      // Only react to cursor wander if it's roughly at the pet's height
+      // (within ~80px) — without this, the cursor crossing the upper half
+      // of the screen while the pet sits low would flip facing on every
+      // single mousemove.
+      if (Math.abs(dy) > 80) return
       if (Math.abs(dx) > 60 && Math.abs(dx) < 280) setFacing(dx > 0 ? 'right' : 'left')
     }
     document.addEventListener('mousemove', onMove)
     return () => document.removeEventListener('mousemove', onMove)
-  }, [x])
+  }, [x, y])
 
   // One huge usage event = a feast: munch happily and comment on it.
   useEffect(() => {
@@ -1077,6 +1329,9 @@ export function PetView(): React.JSX.Element | null {
       const minX = 0
       const maxX = window.innerWidth - PET_WIDTH
       x.set(Math.min(maxX, Math.max(minX, drag.petX + dx)))
+      // Drag is intentionally 1D: only x moves. The y dimension is simulated
+      // by a transient lift on top of the persistent walk position so the
+      // pet can still be flicked up the screen for feedback.
       const minLift = -(window.innerHeight - GROUND_PADDING - SPRITE_HEIGHT)
       lift.set(Math.min(0, Math.max(minLift, dy)))
     },
@@ -1250,7 +1505,14 @@ export function PetView(): React.JSX.Element | null {
       ) : (
         <motion.div
           className="absolute left-0"
-          style={{ x, y: lift, bottom: GROUND_PADDING, width: PET_WIDTH }}
+          style={{
+            x,
+            // Persistent vertical walk position (animated by startWalk);
+            // drag's negative lift overlays on top during a drag gesture.
+            y: yOffset,
+            top: 0,
+            width: PET_WIDTH
+          }}
         >
           {bubble ? (
             <motion.div
