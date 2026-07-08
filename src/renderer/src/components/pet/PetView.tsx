@@ -78,7 +78,6 @@ import { CapybaraSprite, type PetActivity } from './CapybaraSprite'
 
 const PET_WIDTH = 132
 const SPRITE_HEIGHT = 120
-const GROUND_PADDING = 12
 const EDGE_MARGIN = 28
 // Walk speed in pixels/sec when slanting from (x,y) to (targetX,targetY).
 // Distance is Euclidean so the visual speed stays roughly constant regardless
@@ -322,6 +321,7 @@ export function PetView(): React.JSX.Element | null {
     startX: number
     startY: number
     petX: number
+    petY: number
     moved: boolean
   } | null>(null)
   const activityRef = useRef<ViewActivity>('idle')
@@ -417,21 +417,30 @@ export function PetView(): React.JSX.Element | null {
     return () => document.removeEventListener('mouseout', onDocMouseOut)
   }, [hideHud])
 
-  // Pick a random initial vertical position once after mount (we can't read
-  // window.innerHeight inside useMotionValue's initializer without also
-  // defeating SSR), and clamp back to bounds whenever the window resizes.
+  // Pick a position once after mount: prefer the persisted `pet.position`
+  // (x, y) so the user reopens the window where they left it; fall back
+  // to a centered-x, randomized-y default. Clamp back to bounds whenever
+  // the window resizes.
   useEffect(() => {
     const place = (): void => {
+      const maxX = Math.max(EDGE_MARGIN, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
       const maxY = Math.max(
         EDGE_MARGIN,
         window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
       )
-      y.set(EDGE_MARGIN + Math.random() * (maxY - EDGE_MARGIN))
+      const saved = desktopPet?.position
+      if (saved) {
+        x.set(Math.max(EDGE_MARGIN, Math.min(maxX, saved.x)))
+        y.set(Math.max(EDGE_MARGIN, Math.min(maxY, saved.y)))
+      } else {
+        x.set(EDGE_MARGIN)
+        y.set(EDGE_MARGIN + Math.random() * (maxY - EDGE_MARGIN))
+      }
     }
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [y])
+  }, [y, desktopPet])
 
   // Active hit-testing root cause fix. The renderer keeps a continuous reading
   // of whether the cursor is currently over the pet rectangle, derived from
@@ -630,8 +639,7 @@ export function PetView(): React.JSX.Element | null {
   // desync from the stored state. Bubbles are still fine to show.
   const celebrate = useCallback(
     (pose: PetActivity, duration: number) => {
-      const store = usePetStore.getState()
-      if (store.sleeping || store.awayTask || dozingRef.current) return
+      if (sleeping || awayTask || dozingRef.current) return
       playTransient(pose, duration)
     },
     [playTransient]
@@ -893,7 +901,15 @@ export function PetView(): React.JSX.Element | null {
   // Stat decay tick
   useEffect(() => {
     if (!hydrated) return
-    const timer = window.setInterval(() => usePetStore.getState().tick(), PET_TICK_MS)
+    const timer = window.setInterval(() => {
+      // Multi-pet owns the world once a desktop pet exists; only fall back
+      // to the legacy single-pet tick when no multi-pet has been adopted.
+      if (desktopPetId) {
+        usePetsStore.getState().tickAll()
+      } else {
+        usePetStore.getState().tick()
+      }
+    }, PET_TICK_MS)
     return () => window.clearInterval(timer)
   }, [hydrated])
 
@@ -904,11 +920,10 @@ export function PetView(): React.JSX.Element | null {
     const timer = window.setInterval(() => {
       void ipcClient.invoke('pet-window:idle-seconds').then((value) => {
         const idleSeconds = typeof value === 'number' ? value : 0
-        const store = usePetStore.getState()
         if (dozingRef.current) {
           if (idleSeconds < 5) {
             setDozing(false)
-            if (!store.awayTask) {
+            if (!awayTask) {
               playTransient('play', 1400)
               showBubble(pickBubble('welcomeBack'))
             }
@@ -917,8 +932,8 @@ export function PetView(): React.JSX.Element | null {
         }
         if (
           idleSeconds >= 300 &&
-          !store.sleeping &&
-          !store.awayTask &&
+          !sleeping &&
+          !awayTask &&
           !chatOpenRef.current &&
           !menuOpenRef.current &&
           !dragRef.current
@@ -963,8 +978,7 @@ export function PetView(): React.JSX.Element | null {
     if (!hydrated) return
     const timer = window.setInterval(() => {
       if (dozingRef.current || chatOpenRef.current || menuOpenRef.current) return
-      const store = usePetStore.getState()
-      if (store.sleeping || store.awayTask) return
+      if (sleeping || awayTask) return
       if (Math.random() > 0.12) return
       void runTimedProactiveChat().then((remark) => {
         if (remark) showProactiveBubble(remark)
@@ -1031,12 +1045,13 @@ export function PetView(): React.JSX.Element | null {
     if (!hydrated || activity !== 'idle' || sleeping || awayTask || menuOpen || dozing) return
     const delay = 2500 + Math.random() * 4000
     const timer = window.setTimeout(() => {
-      const store = usePetStore.getState()
       const hour = new Date().getHours()
-      if (store.hunger < 30 && Math.random() < (store.hunger < 15 ? 0.75 : 0.55)) {
+      // Read the rendered stats (multi-pet state when available, legacy
+      // otherwise) so the bubble thresholds match what the HUD shows.
+      if (hunger < 30 && Math.random() < (hunger < 15 ? 0.75 : 0.55)) {
         playTransient('beg', 3000)
         showBubble(pickBubble('hungry'))
-      } else if (store.cleanliness < 30 && Math.random() < 0.45) {
+      } else if (cleanliness < 30 && Math.random() < 0.45) {
         playTransient('beg', 3000)
         showBubble(pickBubble('dirty'))
       } else if (
@@ -1048,7 +1063,7 @@ export function PetView(): React.JSX.Element | null {
         lastLateNightAtRef.current = Date.now()
         playTransient('sleep', 6000)
         showBubble(pickBubble('lateNight'))
-      } else if (store.mood < 20 && Math.random() < 0.3) {
+      } else if (mood < 20 && Math.random() < 0.3) {
         playTransient('zen', 6000)
         showBubble(pickBubble('gloomy'))
       } else if (Date.now() - lastCoinPickupAtRef.current > 45 * 60_000 && Math.random() < 0.08) {
@@ -1069,7 +1084,7 @@ export function PetView(): React.JSX.Element | null {
         } else if (roll < 0.26) {
           playTransient('eat', 2600)
           if (Math.random() < 0.6) showBubble(pickBubble('snack'))
-        } else if (roll < 0.34 && store.mood > 80) {
+        } else if (roll < 0.34 && mood > 80) {
           playTransient('play', 2200)
           if (Math.random() < 0.4) showBubble(pickBubble('happyIdle'))
         } else if (roll < 0.42) {
@@ -1453,11 +1468,12 @@ export function PetView(): React.JSX.Element | null {
         startX: e.clientX,
         startY: e.clientY,
         petX: x.get(),
+        petY: y.get(),
         moved: false
       }
       setDragging(true)
     },
-    [x]
+    [x, y]
   )
 
   const onPointerMove = useCallback(
@@ -1476,13 +1492,15 @@ export function PetView(): React.JSX.Element | null {
       const minX = 0
       const maxX = window.innerWidth - PET_WIDTH
       x.set(Math.min(maxX, Math.max(minX, drag.petX + dx)))
-      // Drag is intentionally 1D: only x moves. The y dimension is simulated
-      // by a transient lift on top of the persistent walk position so the
-      // pet can still be flicked up the screen for feedback.
-      const minLift = -(window.innerHeight - GROUND_PADDING - SPRITE_HEIGHT)
-      lift.set(Math.min(0, Math.max(minLift, dy)))
+      // Drag is 2D now: y moves with the cursor so the pet can be moved
+      // anywhere on screen. Lift is held at 0 during drag so the sprite
+      // tracks (x + dx, y + dy) directly without an extra offset.
+      const minY = EDGE_MARGIN
+      const maxY = Math.max(minY, window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN)
+      y.set(Math.min(maxY, Math.max(minY, drag.petY + dy)))
+      lift.set(0)
     },
-    [lift, stopWalk, x]
+    [lift, stopWalk, x, y]
   )
 
   const onPointerUp = useCallback(
@@ -1519,6 +1537,13 @@ export function PetView(): React.JSX.Element | null {
           setActivity((current) => (current === 'drag' ? 'idle' : current))
         }
       })
+
+      // Persist the new position so the pet reopens where the user left it.
+      if (desktopPetId) {
+        usePetsStore.getState().updatePet(desktopPetId, {
+          position: { x: x.get(), y: y.get() }
+        })
+      }
     },
     [bubble, desktopPetId, lift, pickBubble, showBubble]
   )
