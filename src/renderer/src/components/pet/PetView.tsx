@@ -1149,6 +1149,31 @@ export function PetView(): React.JSX.Element | null {
     setMenuOpen(false)
   }, [])
 
+  // When the menu is open, dismiss it on the very next pointerdown that
+  // lands outside the menu rect. This keeps the menu from feeling sticky:
+  // tapping the desktop behind the pet should drop the menu immediately
+  // rather than waiting for the 500ms hover-leave timer to fire. The
+  // listener is bound on `pointerdown` capture so it runs before the
+  // underlying app (or the sprite) handles the same gesture.
+  useEffect(() => {
+    if (!menuOpen) return
+    const onDocPointerDown = (e: PointerEvent): void => {
+      const menu = menuRef.current
+      if (!menu) return
+      const rect = menu.getBoundingClientRect()
+      const x = e.clientX
+      const y = e.clientY
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+        return
+      }
+      closeMenu()
+    }
+    document.addEventListener('pointerdown', onDocPointerDown, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDocPointerDown, true)
+    }
+  }, [menuOpen, closeMenu])
+
   const openChat = useCallback(() => {
     stopWalk()
     transientTokenRef.current += 1
