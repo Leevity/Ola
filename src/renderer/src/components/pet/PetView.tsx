@@ -89,6 +89,12 @@ const DASH_SPEED = 170
 const MENU_WIDTH = 236
 const CHAT_WIDTH = 292
 const BUBBLE_MS = 3800
+// HUD: summoned on sprite click, hides 3s after the cursor leaves the HUD.
+const HUD_AUTO_HIDE_MS = 3000
+// Click-vs-double-click discriminator: a second click within this many ms
+// is treated as a double-click → open chat panel instead of re-summoning
+// the HUD.
+const HUD_DOUBLE_CLICK_MS = 300
 const REPLY_BUBBLE_MIN_MS = 12_000
 const REPLY_BUBBLE_MAX_MS = 32_000
 
@@ -174,16 +180,16 @@ export function PetView(): React.JSX.Element | null {
   const [bubble, setBubble] = useState<BubbleState | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuLeft, setMenuLeft] = useState(0)
+  const [menuTop, setMenuTop] = useState(0)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatLeft, setChatLeft] = useState(0)
+  const [chatTop, setChatTop] = useState(0)
   const [chatInput, setChatInput] = useState('')
   const [chatBusy, setChatBusy] = useState(false)
   const [chatError, setChatError] = useState<string | null>(null)
   const [chatImage, setChatImage] = useState<(PetChatImage & { preview: string }) | null>(null)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
-  const [hoveringPet, setHoveringPet] = useState(false)
-  const [hoveringUi, setHoveringUi] = useState(false)
   const [dragging, setDragging] = useState(false)
   const [squashing, setSquashing] = useState(false)
   const [awayRemaining, setAwayRemaining] = useState(0)
@@ -250,6 +256,67 @@ export function PetView(): React.JSX.Element | null {
   const transientTokenRef = useRef(0)
   const bubbleTimerRef = useRef<number | null>(null)
   const menuCloseTimerRef = useRef<number | null>(null)
+  // HUD is summoned on click rather than hovered (the hover-driven model
+  // raced with proactive bubbles that raced with React commits and made
+  // the HUD flicker out the moment the user moved onto it). The HUD stays
+  // visible for HUD_AUTO_HIDE_MS after the last cursor interaction: while
+  // the cursor is on the HUD itself the timer pauses, so the user can take
+  // their time on the action buttons. Once the cursor leaves, the 3s
+  // auto-hide resumes.
+  const [hudVisible, setHudVisible] = useState(false)
+  const hudTimerRef = useRef<number | null>(null)
+  const hudCursorOverRef = useRef(false)
+  // Timestamp of the previous click on the sprite. A second click within
+  // `HUD_DOUBLE_CLICK_MS` is treated as a double-click (open chat) rather
+  // than a re-summon of the HUD. Single-click calls `summonHud`.
+  const lastClickAtRef = useRef(0)
+
+  // HUD summon / auto-hide. Declared up here so earlier useCallbacks (e.g.
+  // the away-task reward handler) can call `hideHud` without tripping a
+  // TDZ ReferenceError.
+  const summonHud = useCallback(() => {
+    setHudVisible(true)
+    if (hudTimerRef.current !== null) {
+      window.clearTimeout(hudTimerRef.current)
+      hudTimerRef.current = null
+    }
+    if (hudCursorOverRef.current) return
+    hudTimerRef.current = window.setTimeout(() => {
+      hudTimerRef.current = null
+      setHudVisible(false)
+    }, HUD_AUTO_HIDE_MS)
+  }, [])
+
+  const hideHud = useCallback(() => {
+    if (hudTimerRef.current !== null) {
+      window.clearTimeout(hudTimerRef.current)
+      hudTimerRef.current = null
+    }
+    setHudVisible(false)
+  }, [])
+
+  // When the cursor enters the HUD, clear the pending auto-hide timer.
+  // When it leaves, re-arm it (only if the HUD is still visible). This
+  // gives the user the full 3s after the cursor leaves the panel without
+  // punishing them for hovering on a button mid-click.
+  const onHudMouseEnter = useCallback(() => {
+    hudCursorOverRef.current = true
+    if (hudTimerRef.current !== null) {
+      window.clearTimeout(hudTimerRef.current)
+      hudTimerRef.current = null
+    }
+  }, [])
+  const onHudMouseLeave = useCallback(() => {
+    hudCursorOverRef.current = false
+    if (!hudVisible) return
+    if (hudTimerRef.current === null) {
+      hudTimerRef.current = window.setTimeout(() => {
+        hudTimerRef.current = null
+        setHudVisible(false)
+      }, HUD_AUTO_HIDE_MS)
+    }
+  }, [hudVisible])
+
   const dragRef = useRef<{
     pointerId: number
     startX: number
@@ -313,80 +380,42 @@ export function PetView(): React.JSX.Element | null {
     [showBubble]
   )
 
-  // The OS-level click-through state is derived from React state, so it can
-  // never get stuck when hovered elements unmount (away tasks, menu close).
-  // Deliberately hover-only: even with the menu open, the window must stay
-  // click-through wherever the pointer is not on an interactive element —
-  // forwarded mousemove events re-enable interception just in time.
-  const interactive = hoveringPet || hoveringUi || dragging
-  useEffect(() => {
-    void ipcClient.invoke('pet-window:set-ignore-mouse', { ignore: !interactive })
-  }, [interactive])
+  // Bridge: React hover flags / menu / chat opening should fire the same IPC
+  // that the hit-test effect uses. We expose flipInteractive / flipRelease
+  // on refs so the hit-test effect can publish them and we can call them
+  // here without entangling the two effects' cleanup lifecycles.
+  const flipInteractiveRef = useRef<(() => void) | null>(null)
+  const flipReleaseRef = useRef<(() => void) | null>(null)
 
-  // Safety net: if the cursor leaves the window without a mouseleave firing
-  // on the hovered element, drop back to click-through.
+  // React-side flags drive HUD / menu / chat visibility. The hit-test
+  // effect owns the OS-level click-through decisions; the React path
+  // here mirrors state and keeps the window interactive whenever a HUD /
+  // menu / chat panel is open even if the cursor has temporarily drifted
+  // away from the sprite.
+  const interactive = hudVisible || dragging || menuOpen || chatOpen
+  useEffect(() => {
+    cursorOverUiRef.current = hudVisible || menuOpen || chatOpen
+    hudOpenRef.current = hudVisible
+    menuOpenRef.current = menuOpen
+    chatOpenRef.current = chatOpen
+    if (interactive) {
+      flipInteractiveRef.current?.()
+    } else {
+      flipReleaseRef.current?.()
+    }
+  }, [interactive, hudVisible, menuOpen, chatOpen])
+
+  // Safety net: if the cursor leaves the window entirely, drop back to
+  // click-through by cancelling the HUD summon if any.
   useEffect(() => {
     const onDocMouseOut = (e: MouseEvent): void => {
       if (!e.relatedTarget) {
-        setHoveringPet(false)
-        setHoveringUi(false)
+        hideHud()
       }
     }
     document.addEventListener('mouseout', onDocMouseOut)
     return () => document.removeEventListener('mouseout', onDocMouseOut)
-  }, [])
-
-  // Windows click-through rescue: while the window is set to ignore mouse
-  // events, `onMouseEnter` never fires, so the first pointerdown on the pet
-  // slips through to the underlying app. Catch it globally, test against the
-  // pet's DOM rect (which is laid out in window-screen coords because the
-  // window covers the full display), and force the window interactive before
-  // the click can be swallowed by whatever app is below.
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const root = document.getElementById('root')
-    if (!root) return
-
-    let suppressNextClick = false
-
-    const isOverPet = (clientX: number, clientY: number): boolean => {
-      const rect = root.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) return false
-      return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
-    }
-
-    const onPointerDown = (e: PointerEvent): void => {
-      if (e.button !== 0) return
-      if (!isOverPet(e.clientX, e.clientY)) return
-      // Window may currently be transparent to mouse (Windows quirk). Flip it
-      // back synchronously so this very same gesture reaches the renderer
-      // instead of the app underneath.
-      suppressNextClick = true
-      void ipcClient.invoke('pet-window:set-ignore-mouse', { ignore: false })
-      // Mirror the hover-equivalent state so the rest of the UI pieces (HUD,
-      // menu close timer) behave as if the cursor entered the pet.
-      setHoveringPet(true)
-    }
-
-    const onClickCapture = (e: MouseEvent): void => {
-      if (!suppressNextClick) return
-      // Only swallow the click when it actually landed on the pet region.
-      if (isOverPet(e.clientX, e.clientY)) {
-        e.stopPropagation()
-        e.preventDefault()
-      }
-      suppressNextClick = false
-    }
-
-    // Capture phase so we get the event before any element handler (and
-    // before Electron forwards it to the underlying app on Windows).
-    window.addEventListener('pointerdown', onPointerDown, true)
-    window.addEventListener('click', onClickCapture, true)
-    return () => {
-      window.removeEventListener('pointerdown', onPointerDown, true)
-      window.removeEventListener('click', onClickCapture, true)
-    }
-  }, [])
+  }, [hideHud])
 
   // Pick a random initial vertical position once after mount (we can't read
   // window.innerHeight inside useMotionValue's initializer without also
@@ -415,39 +444,105 @@ export function PetView(): React.JSX.Element | null {
   // calls bounded. Fall-back `mouseleave` on `document` clears the state when
   // the cursor exits the OS window entirely.
   const cursorOverPetRef = useRef(false)
+  // Refs to the major interactive surfaces (HUD, context menu, chat panel).
+  // Hit-testing samples them in addition to the sprite rect: these elements
+  // are siblings of the sprite in the DOM (not children), so a cursor over
+  // chat / menu would otherwise leave the sprite rect and bounce the window
+  // back to click-through mid-gesture.
+  const hudRef = useRef<HTMLDivElement | null>(null)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+  const chatRef = useRef<HTMLDivElement | null>(null)
+  // HUD visibility has no pre-existing mirrored flag (chatOpen / menuOpen
+  // already have refs a few lines below); keep this in sync via the React
+  // effect that drives the IPC channel.
+  const hudOpenRef = useRef(false)
+  // Tracks whether the cursor is over HUD / context menu / chat panel. Lets
+  // us keep the window interactive for a short window after the cursor leaves
+  // the sprite, so dragging over to the HUD doesn't bounce the window back to
+  // click-through mid-gesture.
+  const cursorOverUiRef = useRef(false)
+  const petSpriteRef = useRef<HTMLDivElement | null>(null)
+  // Timer id for the grace period between "leaves pet sprite" and "drop back
+  // to click-through". Stored as a number (timer id) so the cleanup function
+  // can cancel it deterministically.
+  const releaseTimerRef = useRef<number | null>(null)
   const lastIpcAtRef = useRef(0)
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const root = document.getElementById('root')
-    if (!root) return
+
+    const pointInRect = (clientX: number, clientY: number, rect: DOMRect): boolean =>
+      clientX >= rect.left &&
+      clientX <= rect.right &&
+      clientY >= rect.top &&
+      clientY <= rect.bottom
 
     const hitTest = (clientX: number, clientY: number): boolean => {
-      const rect = root.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) return false
-      return (
-        clientX >= rect.left &&
-        clientX <= rect.right &&
-        clientY >= rect.top &&
-        clientY <= rect.bottom
-      )
+      const spriteRect = petSpriteRef.current?.getBoundingClientRect()
+      if (spriteRect && spriteRect.width > 0 && spriteRect.height > 0 &&
+          pointInRect(clientX, clientY, spriteRect)) {
+        return true
+      }
+      // HUD / context menu / chat panel are siblings of the sprite in the
+      // DOM tree, not children, so their rects extend well outside the
+      // sprite rect. Hit-test each of them too so the cursor never lands
+      // on a button that is rendered but click-through-blocked.
+      const uiRefs: Array<{ ref: React.RefObject<HTMLDivElement | null>; openRef: React.RefObject<boolean> }> = [
+        { ref: hudRef, openRef: hudOpenRef },
+        { ref: menuRef, openRef: menuOpenRef },
+        { ref: chatRef, openRef: chatOpenRef }
+      ]
+      for (const slot of uiRefs) {
+        if (!slot.openRef.current) continue
+        const rect = slot.ref.current?.getBoundingClientRect()
+        if (rect && rect.width > 0 && rect.height > 0 &&
+            pointInRect(clientX, clientY, rect)) {
+          return true
+        }
+      }
+      return false
     }
 
-    const setInteractive = (next: boolean): void => {
-      if (cursorOverPetRef.current === next) return
-      cursorOverPetRef.current = next
-      const now =
-        typeof performance !== 'undefined' && typeof performance.now === 'function'
-          ? performance.now()
-          : Date.now()
-      if (now - lastIpcAtRef.current < 200) return
-      lastIpcAtRef.current = now
-      // Only the cursor state needs to reach main — keep React state in sync
-      // so HUD/menu code paths see the same truth via `interactive`.
-      void ipcClient.invoke('pet-window:set-ignore-mouse', { ignore: !next })
-      if (next) {
-        setHoveringPet(true)
-      }
+    const nowMs = (): number =>
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now()
+
+    const sendIpc = (ignore: boolean): void => {
+      lastIpcAtRef.current = nowMs()
+      void ipcClient.invoke('pet-window:set-ignore-mouse', { ignore })
     }
+
+    const flipInteractive = (): void => {
+      if (releaseTimerRef.current !== null) {
+        window.clearTimeout(releaseTimerRef.current)
+        releaseTimerRef.current = null
+      }
+      if (cursorOverPetRef.current) return
+      cursorOverPetRef.current = true
+      if (nowMs() - lastIpcAtRef.current < 200) return
+      sendIpc(false)
+    }
+    // Publish to refs so the React-side effect can also drive the same
+    // IPC channel without depending on mousemove / pointermove firing.
+    flipInteractiveRef.current = flipInteractive
+
+    const scheduleRelease = (): void => {
+      if (releaseTimerRef.current !== null) return
+      releaseTimerRef.current = window.setTimeout(() => {
+        releaseTimerRef.current = null
+        // If the cursor slipped into the HUD in the meantime, hold
+        // interactive: cursorOverUiRef.current would have flipped true
+        // before this fires.
+        if (cursorOverUiRef.current) return
+        if (!cursorOverPetRef.current) return
+        cursorOverPetRef.current = false
+        sendIpc(true)
+      }, 180)
+    }
+    // Same publishing dance for scheduleRelease so the React effect can ask
+    // the hit-test pipeline to drop back to click-through when an interactive
+    // surface unmounts (e.g. chat close).
+    flipReleaseRef.current = scheduleRelease
 
     let rafId = 0
     let pendingX = 0
@@ -462,23 +557,40 @@ export function PetView(): React.JSX.Element | null {
         rafId = 0
         if (!pendingDirty) return
         pendingDirty = false
-        setInteractive(hitTest(pendingX, pendingY))
+        if (hitTest(pendingX, pendingY)) flipInteractive()
+        else scheduleRelease()
       })
     }
 
-    const onMouseMove = (e: MouseEvent): void => {
-      schedule(e.clientX, e.clientY)
-    }
+    const onMouseMove = (e: MouseEvent): void => schedule(e.clientX, e.clientY)
     const onPointerMove = (e: PointerEvent): void => {
       // `pointermove` still fires on Windows even when the window is click-
-      // through, so the very first move into the pet rect triggers the
-      // interactive flip without waiting for a click.
+      // through, so the very first move into the sprite rect wakes the
+      // window without waiting for a click.
       schedule(e.clientX, e.clientY)
     }
     const onMouseLeave = (e: MouseEvent): void => {
-      if (!e.relatedTarget) setInteractive(false)
+      // Cursor left the OS window entirely (no related target). Drop the
+      // interactive flag immediately, no grace period.
+      if (!e.relatedTarget) {
+        if (releaseTimerRef.current !== null) {
+          window.clearTimeout(releaseTimerRef.current)
+          releaseTimerRef.current = null
+        }
+        if (!cursorOverPetRef.current) return
+        cursorOverPetRef.current = false
+        sendIpc(true)
+      }
     }
-    const onWindowBlur = (): void => setInteractive(false)
+    const onWindowBlur = (): void => {
+      if (releaseTimerRef.current !== null) {
+        window.clearTimeout(releaseTimerRef.current)
+        releaseTimerRef.current = null
+      }
+      if (!cursorOverPetRef.current) return
+      cursorOverPetRef.current = false
+      sendIpc(true)
+    }
 
     window.addEventListener('mousemove', onMouseMove, true)
     window.addEventListener('pointermove', onPointerMove, true)
@@ -486,7 +598,13 @@ export function PetView(): React.JSX.Element | null {
     window.addEventListener('blur', onWindowBlur)
 
     return () => {
+      flipInteractiveRef.current = null
+      flipReleaseRef.current = null
       if (rafId) window.cancelAnimationFrame(rafId)
+      if (releaseTimerRef.current !== null) {
+        window.clearTimeout(releaseTimerRef.current)
+        releaseTimerRef.current = null
+      }
       window.removeEventListener('mousemove', onMouseMove, true)
       window.removeEventListener('pointermove', onPointerMove, true)
       document.removeEventListener('mouseleave', onMouseLeave)
@@ -862,9 +980,9 @@ export function PetView(): React.JSX.Element | null {
     stopWalk()
     transientTokenRef.current += 1
     setActivity('away')
-    // The pet element unmounts while away; clear any hover/drag state that
+    // The pet element unmounts while away; clear any HUD/drag state that
     // would otherwise keep the window intercepting mouse events.
-    setHoveringPet(false)
+    hideHud()
     setDragging(false)
     dragRef.current = null
     setMenuOpen(false)
@@ -981,18 +1099,26 @@ export function PetView(): React.JSX.Element | null {
     stopWalk()
     transientTokenRef.current += 1
     if (activityRef.current === 'walk' || activityRef.current === 'swim') setActivity('idle')
-    // Place the menu beside the pet, anchored to the ground, so it always
-    // fits inside the short pet window instead of clipping at the top.
+    // Place the menu adjacent to the pet sprite in both axes — the menu
+    // follows the pet wherever it walks, instead of being pinned to the
+    // bottom of the screen regardless of where the pet currently is.
     const petLeft = x.get()
+    const petTop = y.get()
     const preferRight = petLeft + PET_WIDTH + 16 + MENU_WIDTH <= window.innerWidth
     const left = preferRight ? petLeft + PET_WIDTH + 12 : petLeft - MENU_WIDTH - 12
     setMenuLeft(Math.min(Math.max(left, 8), window.innerWidth - MENU_WIDTH - 8))
+    // Keep the menu within the viewport in both axes so the pet can be
+    // anywhere on screen and the menu still stays reachable.
+    const top = Math.min(
+      Math.max(petTop, EDGE_MARGIN),
+      Math.max(EDGE_MARGIN, window.innerHeight - 220)
+    )
+    setMenuTop(top)
     setMenuOpen(true)
   }, [stopWalk, x])
 
   const closeMenu = useCallback(() => {
     setMenuOpen(false)
-    setHoveringUi(false)
   }, [])
 
   const openChat = useCallback(() => {
@@ -1000,15 +1126,35 @@ export function PetView(): React.JSX.Element | null {
     transientTokenRef.current += 1
     if (activityRef.current === 'walk' || activityRef.current === 'swim') setActivity('idle')
     const petLeft = x.get()
+    const petTop = y.get()
     const preferRight = petLeft + PET_WIDTH + 16 + CHAT_WIDTH <= window.innerWidth
     const left = preferRight ? petLeft + PET_WIDTH + 12 : petLeft - CHAT_WIDTH - 12
     setChatLeft(Math.min(Math.max(left, 8), window.innerWidth - CHAT_WIDTH - 8))
+    // Chat panel hugs the pet sprite vertically too. Cap at viewport edge
+    // so the panel never spills off the bottom.
+    const chatTop = Math.min(
+      Math.max(petTop, EDGE_MARGIN),
+      Math.max(EDGE_MARGIN, window.innerHeight - 220)
+    )
+    setChatTop(chatTop)
     setMenuOpen(false)
     setChatError(null)
     setChatOpen(true)
     void ipcClient.invoke('pet-window:set-focusable', { focusable: true }).then(() => {
       // Re-apply DOM focus once the window can actually take keyboard focus.
-      window.setTimeout(() => chatInputRef.current?.focus(), 80)
+      // macOS still needs a short wait because main has to call show()+focus()
+      // and the OS needs a tick to settle; on Windows the window is already
+      // a real focusable surface after setFocusable(true). We use
+      // navigator.platform rather than `process.platform` because the
+      // renderer has no Node globals — touching `process` here throws
+      // ReferenceError and silently kills the .then() body.
+      const isMac = /Mac/i.test(navigator.platform || navigator.userAgent || '')
+      const focusDelay = isMac ? 80 : 0
+      if (focusDelay > 0) {
+        window.setTimeout(() => chatInputRef.current?.focus(), focusDelay)
+      } else {
+        chatInputRef.current?.focus()
+      }
     })
   }, [stopWalk, x])
 
@@ -1020,7 +1166,6 @@ export function PetView(): React.JSX.Element | null {
     setChatOpen(false)
     setChatError(null)
     setChatImage(null)
-    setHoveringUi(false)
     void ipcClient.invoke('pet-window:set-focusable', { focusable: false })
   }, [])
 
@@ -1247,12 +1392,14 @@ export function PetView(): React.JSX.Element | null {
       }
       closeMenu()
       switch (kind) {
-        case 'feed':
-          handleActionResult(actOnPet('feed'), () => {
+        case 'feed': {
+          const result = actOnPet('feed')
+          handleActionResult(result, () => {
             playTransient('eat', 2800)
             showBubble(pickBubble('fed'))
           })
           break
+        }
         case 'bathe':
           handleActionResult(actOnPet('bathe'), () => {
             playTransient('bathe', 2800)
@@ -1388,7 +1535,6 @@ export function PetView(): React.JSX.Element | null {
 
   const away = !!awayTask
   const spriteActivity: PetActivity = activity === 'away' ? 'idle' : activity
-  const menuBottom = GROUND_PADDING
 
   const menuOrder: PetStandardAction[] = [
     'feed',
@@ -1487,8 +1633,6 @@ export function PetView(): React.JSX.Element | null {
     <div className="pointer-events-none relative h-screen w-screen select-none overflow-hidden bg-transparent">
       {away ? (
         <div
-          onMouseEnter={() => setHoveringUi(true)}
-          onMouseLeave={() => setHoveringUi(false)}
           className="pointer-events-auto absolute bottom-4 right-5 flex items-center gap-2 rounded-full border border-border bg-popover/95 px-3.5 py-2 text-xs text-popover-foreground shadow-lg backdrop-blur"
         >
           {awayTask?.kind === 'work' ? (
@@ -1504,6 +1648,8 @@ export function PetView(): React.JSX.Element | null {
         </div>
       ) : (
         <motion.div
+          ref={petSpriteRef}
+          data-pet-sprite="true"
           className="absolute left-0"
           style={{
             x,
@@ -1519,12 +1665,9 @@ export function PetView(): React.JSX.Element | null {
               key={bubble.id}
               initial={{ opacity: 0, y: 8, scale: 0.9 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
-              onMouseEnter={bubble.interactive ? () => setHoveringUi(true) : undefined}
-              onMouseLeave={bubble.interactive ? () => setHoveringUi(false) : undefined}
               onClick={
                 bubble.interactive
                   ? () => {
-                      setHoveringUi(false)
                       openChat()
                     }
                   : undefined
@@ -1537,11 +1680,21 @@ export function PetView(): React.JSX.Element | null {
             >
               {bubble.text}
             </motion.div>
-          ) : (hoveringPet || hoveringUi) && !menuOpen ? (
+          ) : null}
+
+          {/*
+            Click-driven HUD: appears when the user clicks the sprite,
+            hides after 3s of cursor inactivity. Cursor over the HUD
+            pauses the timer via `hudCursorOverRef`. Bubble above continues
+            to render in its own slot — it no longer tears the HUD down.
+          */}
+          {hudVisible && !menuOpen && !chatOpen ? (
             <div
-              className="pointer-events-auto absolute bottom-full left-1/2 mb-2 w-56 -translate-x-1/2 space-y-2 rounded-xl border border-border bg-popover/95 p-2 shadow-lg backdrop-blur"
-              onMouseEnter={() => setHoveringUi(true)}
-              onMouseLeave={() => setHoveringUi(false)}
+              ref={hudRef}
+              // mb-3 hugs the sprite head as requested.
+              className="pointer-events-auto absolute bottom-full left-1/2 mb-3 w-56 -translate-x-1/2 space-y-2 rounded-xl border border-border bg-popover/95 p-2 shadow-lg backdrop-blur"
+              onMouseEnter={onHudMouseEnter}
+              onMouseLeave={onHudMouseLeave}
             >
               <div className="flex items-center justify-between text-[11px] font-medium text-popover-foreground">
                 <span>
@@ -1600,7 +1753,7 @@ export function PetView(): React.JSX.Element | null {
                   className="flex h-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
                   title={t('menu.chat')}
                   onClick={() => {
-                    setHoveringUi(false)
+                    hideHud()
                     openChat()
                   }}
                 >
@@ -1616,15 +1769,31 @@ export function PetView(): React.JSX.Element | null {
             style={{ transformOrigin: 'center bottom' }}
           >
             <div
-              onMouseEnter={() => setHoveringPet(true)}
-              onMouseLeave={() => setHoveringPet(false)}
               className="pointer-events-auto cursor-grab active:cursor-grabbing"
               onPointerDown={onPointerDown}
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
-              onDoubleClick={() => {
-                if (chatOpen) closeChat()
-                else openChat()
+              onClick={() => {
+                // Drag is decided by onPointerUp: if the cursor moved more
+                // than a few pixels, `drag.moved` is true and the click never
+                // fires. So a click here always means a tap on the sprite.
+                if (chatOpen) {
+                  // Click while chat is open is a no-op — the user must
+                  // explicitly close chat from the panel itself.
+                  return
+                }
+                const now = performance.now()
+                const isDoubleClick = now - lastClickAtRef.current < HUD_DOUBLE_CLICK_MS
+                if (isDoubleClick) {
+                  // Second click within 300ms → open chat. Skip the HUD
+                  // summon entirely so the panel can claim the focus.
+                  lastClickAtRef.current = 0
+                  hideHud()
+                  openChat()
+                  return
+                }
+                lastClickAtRef.current = now
+                summonHud()
               }}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -1647,14 +1816,13 @@ export function PetView(): React.JSX.Element | null {
 
       {menuOpen && !away ? (
         <div
+          ref={menuRef}
           className="pointer-events-auto absolute rounded-xl border border-border bg-popover/95 p-2 text-popover-foreground shadow-xl backdrop-blur"
-          style={{ left: menuLeft, bottom: menuBottom, width: MENU_WIDTH }}
+          style={{ left: menuLeft, top: menuTop, width: MENU_WIDTH }}
           onMouseEnter={() => {
             cancelMenuClose()
-            setHoveringUi(true)
           }}
           onMouseLeave={() => {
-            setHoveringUi(false)
             scheduleMenuClose()
           }}
         >
@@ -1707,10 +1875,9 @@ export function PetView(): React.JSX.Element | null {
 
       {chatOpen && !away ? (
         <div
+          ref={chatRef}
           className="pointer-events-auto absolute rounded-xl border border-border bg-popover/95 p-2.5 text-popover-foreground shadow-xl backdrop-blur"
-          style={{ left: chatLeft, bottom: GROUND_PADDING, width: CHAT_WIDTH }}
-          onMouseEnter={() => setHoveringUi(true)}
-          onMouseLeave={() => setHoveringUi(false)}
+          style={{ left: chatLeft, top: chatTop, width: CHAT_WIDTH }}
         >
           {chatError ? (
             <p className="mb-1.5 rounded-md bg-red-400/10 px-2 py-1 text-[11px] leading-snug text-red-400">
