@@ -1287,6 +1287,7 @@ if (gotSingleInstanceLock) {
         }`
       )
     }
+    await runLoggedStartupStepAsync('reset_pet_desktop_state', markPetClosedForAppQuit)
     await runLoggedStartupStepAsync('configure_system_proxy', configureSystemProxy)
     const browserEmulationStatus = runLoggedStartupStep(
       'configure_builtin_browser_session',
