@@ -825,9 +825,33 @@ export const usePetsStore = create<PetsStore>()(
 // Cross-window rehydrate: when settings save, the main process broadcasts
 // `pet:sync-event { kind: 'pets' }` and we refresh from disk so a separately
 // loaded PetWindow stays in sync.
+//
+// Important: when we receive our own broadcast back from main (the `pet:update`
+// IPC fires synchronously after each `actOnPet` call), the in-memory state is
+// already correct. Rehydrating from disk at that point is a race: if the
+// renderer-side `ipcStorage.setItem` for `ola-pets-v1` is still in flight,
+// rehydrate pulls a stale snapshot and clobbers the freshly-written patch
+// back to 0. Instead, prefer the patch carried in the broadcast itself; only
+// fall back to rehydrate when no patch is supplied (e.g. create / archive
+// flows that involve a refetch).
 ipcClient.on('pet:sync-event', (payload) => {
-  const kind = (payload as { kind?: string } | null)?.kind
-  if (kind === 'pets' || kind === 'exp') {
+  const event = payload as { kind?: string; action?: string; id?: string; patch?: Record<string, unknown> } | null
+  if (!event) return
+  if (event.kind === 'exp') {
     void usePetsStore.persist.rehydrate()
+    return
+  }
+  if (event.kind === 'pets') {
+    if (event.action === 'update' && event.id && event.patch) {
+      // Merge the patch in place — this round-trips back the pet state the
+      // originator just wrote to disk, without forcing a rehydrate.
+      usePetsStore.setState((state) => ({
+        pets: state.pets.map((pet) =>
+          pet.id === event.id ? { ...pet, ...event.patch } : pet
+        )
+      }))
+    } else {
+      void usePetsStore.persist.rehydrate()
+    }
   }
 })
