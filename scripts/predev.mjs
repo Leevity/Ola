@@ -51,9 +51,11 @@ async function ensurePortAvailable(port) {
 }
 
 async function ensureNativeWorker(projectDir) {
-  const workerBin = path.join(projectDir, 'resources', 'native-worker', 'Ola.Native.Worker')
+  const workerDir = path.join(projectDir, 'resources', 'native-worker')
+  const workerExe = path.join(workerDir, 'Ola.Native.Worker.exe')
+  const workerBin = path.join(workerDir, 'Ola.Native.Worker')
 
-  if (existsSync(workerBin)) {
+  if (existsSync(workerBin) || (process.platform === 'win32' && existsSync(workerExe))) {
     return
   }
 
