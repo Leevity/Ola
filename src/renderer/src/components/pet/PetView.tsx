@@ -420,7 +420,12 @@ export function PetView(): React.JSX.Element | null {
   // Pick a position once after mount: prefer the persisted `pet.position`
   // (x, y) so the user reopens the window where they left it; fall back
   // to a centered-x, randomized-y default. Clamp back to bounds whenever
-  // the window resizes.
+  // the window resizes. Deliberately runs ONLY on mount + resize — not on
+  // desktopPet reference changes — because the desktopPet reference
+  // changes on every `actOnPet` / `updatePet` / `tickAll` call, and we
+  // don't want to yank the pet back to its saved start position every
+  // time some other field is updated mid-walk.
+  const placedRef = useRef(false)
   useEffect(() => {
     const place = (): void => {
       const maxX = Math.max(EDGE_MARGIN, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
@@ -428,19 +433,27 @@ export function PetView(): React.JSX.Element | null {
         EDGE_MARGIN,
         window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
       )
-      const saved = desktopPet?.position
-      if (saved) {
-        x.set(Math.max(EDGE_MARGIN, Math.min(maxX, saved.x)))
-        y.set(Math.max(EDGE_MARGIN, Math.min(maxY, saved.y)))
-      } else {
-        x.set(EDGE_MARGIN)
-        y.set(EDGE_MARGIN + Math.random() * (maxY - EDGE_MARGIN))
+      if (!placedRef.current) {
+        const saved = desktopPet?.position
+        if (saved) {
+          x.set(Math.max(EDGE_MARGIN, Math.min(maxX, saved.x)))
+          y.set(Math.max(EDGE_MARGIN, Math.min(maxY, saved.y)))
+        } else {
+          x.set(EDGE_MARGIN)
+          y.set(EDGE_MARGIN + Math.random() * (maxY - EDGE_MARGIN))
+        }
+        placedRef.current = true
+        return
       }
+      // Resize path: clamp current position to new bounds, no jump back.
+      x.set(Math.max(EDGE_MARGIN, Math.min(maxX, x.get())))
+      y.set(Math.max(EDGE_MARGIN, Math.min(maxY, y.get())))
     }
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [y, desktopPet])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
+  }, [])
 
   // Active hit-testing root cause fix. The renderer keeps a continuous reading
   // of whether the cursor is currently over the pet rectangle, derived from
