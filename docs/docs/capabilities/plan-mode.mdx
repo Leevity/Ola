@@ -28,11 +28,11 @@ flowchart TD
 
 ## 关键文件 / Key files
 
-| 位置 | 作用 |
-| --- | --- |
+| 位置                                      | 作用                                      |
+| ----------------------------------------- | ----------------------------------------- |
 | `src/renderer/src/lib/tools/plan-tool.ts` | `EnterPlanMode` / `ExitPlanMode` 工具实现 |
-| `src/renderer/src/stores/plan-store.ts` | 计划状态和本地缓存 |
-| `src/main/db/database.ts` | `plans` 表和计划持久化 |
+| `src/renderer/src/stores/plan-store.ts`   | 计划状态和本地缓存                        |
+| `src/main/db/database.ts`                 | `plans` 表和计划持久化                    |
 
 ## 计划文件放在哪里？ / Where is the plan file?
 
@@ -48,14 +48,14 @@ flowchart TD
 
 `PlanStore` 里可见的状态有：
 
-| 状态 | 含义 |
-| --- | --- |
-| `drafting` | 正在写计划 |
+| 状态              | 含义                     |
+| ----------------- | ------------------------ |
+| `drafting`        | 正在写计划               |
 | `awaiting_review` | 计划已完成，等待用户审阅 |
-| `approved` | 用户已批准 |
-| `implementing` | 正在执行实现 |
-| `completed` | 计划执行完成 |
-| `rejected` | 用户驳回 |
+| `approved`        | 用户已批准               |
+| `implementing`    | 正在执行实现             |
+| `completed`       | 计划执行完成             |
+| `rejected`        | 用户驳回                 |
 
 ## 工具行为 / Tool behavior
 

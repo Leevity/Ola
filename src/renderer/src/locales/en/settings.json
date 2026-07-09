@@ -1545,5 +1545,9 @@
     "copyConversation": "Copy conversation",
     "allowTool": "Allow tool execution",
     "denyTool": "Deny tool execution"
+  },
+  "credentials": {
+    "title": "Credentials",
+    "subtitle": "Manage the credentials the agent can use to log into sites"
   }
 }

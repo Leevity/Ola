@@ -402,7 +402,6 @@ function handleUpdateDownloaded(info: { version: string }, options: AutoUpdateOp
     const payload = { version: info.version }
     safeSendMessagePackToWindow(win, 'update:downloaded', payload)
   }
-
 }
 
 function installDownloadedUpdate(

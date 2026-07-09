@@ -534,49 +534,51 @@ export function registerCronHandlers(): void {
     return await handleCronDelete(args)
   })
 
-  registerCronMessagePackHandler<{ sessionId?: string | null; includeDeleted?: boolean } | undefined>(
-    'cron:list',
+  registerCronMessagePackHandler<
+    { sessionId?: string | null; includeDeleted?: boolean } | undefined
+  >('cron:list', async (args) => {
+    return await handleCronList(args)
+  })
+
+  registerCronMessagePackHandler<{ jobId: string; enabled: boolean }>(
+    'cron:toggle',
     async (args) => {
-      return await handleCronList(args)
+      if (!args.jobId) return { error: 'jobId is required' }
+
+      try {
+        const row = await getCronJob(args.jobId)
+        if (!row) return { error: `Job "${args.jobId}" not found` }
+        if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
+
+        const now = Date.now()
+        if (args.enabled) {
+          const schedErr = validateSchedule({
+            kind: row.schedule_kind,
+            at: row.schedule_at ?? undefined,
+            every: row.schedule_every ?? undefined,
+            expr: row.schedule_expr ?? undefined,
+            tz: row.schedule_tz
+          })
+          if (schedErr) return { error: schedErr }
+        }
+        await setCronJobEnabled(args.jobId, args.enabled, now)
+
+        if (args.enabled) {
+          const scheduled = scheduleJob({ ...row, enabled: 1, updated_at: now })
+          if (!scheduled) {
+            await setCronJobEnabled(args.jobId, false, Date.now())
+            return { error: `Failed to schedule job (kind=${row.schedule_kind})` }
+          }
+        } else {
+          cancelJob(args.jobId)
+        }
+
+        return { success: true, jobId: args.jobId, enabled: args.enabled }
+      } catch (err) {
+        return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
+      }
     }
   )
-
-  registerCronMessagePackHandler<{ jobId: string; enabled: boolean }>('cron:toggle', async (args) => {
-    if (!args.jobId) return { error: 'jobId is required' }
-
-    try {
-      const row = await getCronJob(args.jobId)
-      if (!row) return { error: `Job "${args.jobId}" not found` }
-      if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
-
-      const now = Date.now()
-      if (args.enabled) {
-        const schedErr = validateSchedule({
-          kind: row.schedule_kind,
-          at: row.schedule_at ?? undefined,
-          every: row.schedule_every ?? undefined,
-          expr: row.schedule_expr ?? undefined,
-          tz: row.schedule_tz
-        })
-        if (schedErr) return { error: schedErr }
-      }
-      await setCronJobEnabled(args.jobId, args.enabled, now)
-
-      if (args.enabled) {
-        const scheduled = scheduleJob({ ...row, enabled: 1, updated_at: now })
-        if (!scheduled) {
-          await setCronJobEnabled(args.jobId, false, Date.now())
-          return { error: `Failed to schedule job (kind=${row.schedule_kind})` }
-        }
-      } else {
-        cancelJob(args.jobId)
-      }
-
-      return { success: true, jobId: args.jobId, enabled: args.enabled }
-    } catch (err) {
-      return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
-    }
-  })
 
   registerCronMessagePackHandler<{ jobId: string }>('cron:run-now', async (args) => {
     if (!args.jobId) return { error: 'jobId is required' }
@@ -689,15 +691,18 @@ export function registerCronHandlers(): void {
     }
   })
 
-  registerCronMessagePackHandler<CronRunMessagesReplaceArgs>('cron:run-messages:replace', async (args) => {
-    if (!args.runId) return { error: 'runId is required' }
-    try {
-      await replaceCronRunMessages(args.runId, args.messages)
-      return { success: true }
-    } catch (err) {
-      return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
+  registerCronMessagePackHandler<CronRunMessagesReplaceArgs>(
+    'cron:run-messages:replace',
+    async (args) => {
+      if (!args.runId) return { error: 'runId is required' }
+      try {
+        await replaceCronRunMessages(args.runId, args.messages)
+        return { success: true }
+      } catch (err) {
+        return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
+      }
     }
-  })
+  )
 
   registerCronMessagePackHandler<CronRunLogAppendArgs>('cron:run-log:append', async (args) => {
     if (!args.runId) return { error: 'runId is required' }

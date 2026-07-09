@@ -220,6 +220,7 @@ export type SettingsTab =
   | 'mcp'
   | 'websearch'
   | 'skillsmarket'
+  | 'credentials'
   | 'pet'
   | 'about'
 
@@ -499,13 +500,20 @@ interface UIStore {
     string,
     React.RefObject<Electron.WebviewTag | null> | null | undefined
   >
+  browserWebContentsIdsBySession: Record<string, number | undefined>
   getBrowserWebviewRef: (
     sessionId?: string | null,
     projectId?: string | null
   ) => React.RefObject<Electron.WebviewTag | null> | null
+  getBrowserWebContentsId: (sessionId?: string | null, projectId?: string | null) => number | null
   browserWebviewRef: React.RefObject<Electron.WebviewTag | null> | null
   setBrowserWebviewRef: (
     ref: React.RefObject<Electron.WebviewTag | null> | null,
+    sessionId?: string | null,
+    projectId?: string | null
+  ) => void
+  setBrowserWebContentsId: (
+    webContentsId: number | null,
     sessionId?: string | null,
     projectId?: string | null
   ) => void
@@ -1815,10 +1823,16 @@ export const useUIStore = create<UIStore>()(
       setBrowserErrorInfo: (errorInfo, sessionId, projectId) =>
         set((state) => updateBrowserStateForSession(state, sessionId, { errorInfo }, projectId)),
       browserWebviewRefsBySession: {},
+      browserWebContentsIdsBySession: {},
       getBrowserWebviewRef: (sessionId, projectId) => {
         const state = get()
         const scope = resolvePanelScope(state, sessionId, projectId)
         return state.browserWebviewRefsBySession[getBrowserScopeKey(scope)] ?? null
+      },
+      getBrowserWebContentsId: (sessionId, projectId) => {
+        const state = get()
+        const scope = resolvePanelScope(state, sessionId, projectId)
+        return state.browserWebContentsIdsBySession[getBrowserScopeKey(scope)] ?? null
       },
       browserWebviewRef: null,
       setBrowserWebviewRef: (ref, sessionId, projectId) =>
@@ -1835,6 +1849,18 @@ export const useUIStore = create<UIStore>()(
             browserWebviewRefsBySession,
             ...(isActiveBrowserScope(state, scope) ? { browserWebviewRef: ref } : {})
           }
+        }),
+      setBrowserWebContentsId: (webContentsId, sessionId, projectId) =>
+        set((state) => {
+          const scope = resolvePanelScope(state, sessionId, projectId)
+          const key = getBrowserScopeKey(scope)
+          const browserWebContentsIdsBySession = { ...state.browserWebContentsIdsBySession }
+          if (typeof webContentsId === 'number' && webContentsId > 0) {
+            browserWebContentsIdsBySession[key] = webContentsId
+          } else {
+            delete browserWebContentsIdsBySession[key]
+          }
+          return { browserWebContentsIdsBySession }
         }),
       subAgentExecutionDetailOpen: false,
       subAgentExecutionDetailToolUseId: null,

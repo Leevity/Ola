@@ -1,9 +1,6 @@
 import { getDefaultApiUserAgent } from '../lib/api-user-agent'
 import { registerMessagePackHandler } from './messagepack-handler'
-import {
-  getBundledResourceDirCandidates,
-  nativeUserContentRequest
-} from './user-content-native'
+import { getBundledResourceDirCandidates, nativeUserContentRequest } from './user-content-native'
 import {
   BUILTIN_SOUL_TEMPLATES,
   type BuiltinSoulTemplateWithContent
@@ -41,10 +38,10 @@ export function registerSoulsHandlers(): void {
     undefined,
     { templates: BuiltinSoulTemplateWithContent[]; error?: string }
   >('souls:builtin-list', async () => {
-    return nativeUserContentRequest<{ templates: BuiltinSoulTemplateWithContent[]; error?: string }>(
-      'souls/builtin-list',
-      soulParams()
-    )
+    return nativeUserContentRequest<{
+      templates: BuiltinSoulTemplateWithContent[]
+      error?: string
+    }>('souls/builtin-list', soulParams())
   })
 
   registerMessagePackHandler<
@@ -64,15 +61,15 @@ export function registerSoulsHandlers(): void {
     )
   })
 
-  registerMessagePackHandler<
-    { apiKey?: string } | undefined,
-    { categories: SoulCategoryInfo[] }
-  >('souls:categories', async (args = {}) => {
-    return nativeUserContentRequest<{ categories: SoulCategoryInfo[] }>(
-      'souls/categories',
-      soulParams(args)
-    )
-  })
+  registerMessagePackHandler<{ apiKey?: string } | undefined, { categories: SoulCategoryInfo[] }>(
+    'souls:categories',
+    async (args = {}) => {
+      return nativeUserContentRequest<{ categories: SoulCategoryInfo[] }>(
+        'souls/categories',
+        soulParams(args)
+      )
+    }
+  )
 
   registerMessagePackHandler<
     { slug?: string; downloadUrl?: string; apiKey?: string },

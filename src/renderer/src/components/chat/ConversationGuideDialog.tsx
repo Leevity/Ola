@@ -302,9 +302,7 @@ export function ConversationGuideDialog({
               variant="outline"
               size="sm"
               className="gap-1.5"
-              onClick={() =>
-                window.open('https://ola.shop/', '_blank', 'noopener,noreferrer')
-              }
+              onClick={() => window.open('https://ola.shop/', '_blank', 'noopener,noreferrer')}
             >
               <ExternalLink className="size-3.5" />
               {t('guide.openDocs')}

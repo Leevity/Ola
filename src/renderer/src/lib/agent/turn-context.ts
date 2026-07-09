@@ -14,7 +14,10 @@ function buildTurnContextText(options: TurnContextOptions): string | null {
   ].join('\n')
 }
 
-function prependTextToContent(content: UnifiedMessage['content'], text: string): UnifiedMessage['content'] {
+function prependTextToContent(
+  content: UnifiedMessage['content'],
+  text: string
+): UnifiedMessage['content'] {
   if (typeof content === 'string') return `${text}\n\n${content}`
 
   const contextBlock: ContentBlock = { type: 'text', text }

@@ -307,7 +307,7 @@ function voiceParamsFromConfig(): PetVoiceParams | null {
   // global store for callers that haven't been migrated yet.
   const activeId = usePetsStore.getState().activePetId
   const pet = activeId
-    ? usePetsStore.getState().pets.find((p) => p.id === activeId) ?? null
+    ? (usePetsStore.getState().pets.find((p) => p.id === activeId) ?? null)
     : null
   if (pet) {
     const v = pet.agent

@@ -143,9 +143,7 @@ export function LocalTerminal({
       if (!snapshotLoaded) {
         pendingChunks.push({
           seq:
-            typeof data.seq === 'number'
-              ? data.seq
-              : lastSeqRef.current + pendingChunks.length + 1,
+            typeof data.seq === 'number' ? data.seq : lastSeqRef.current + pendingChunks.length + 1,
           data: data.data
         })
         return

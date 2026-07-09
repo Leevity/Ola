@@ -2,6 +2,53 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.3] - 2026-07-08
+
+Patch release focused on **credentials & browser login agent** — the agent can now sign into 22 first-party sites (GitHub, Google, Notion, Vercel, 1Password, Reddit, X, Discord, Slack, Linear, etc.) under user control, with all secrets handled locally via Electron safeStorage.
+
+### Highlights
+
+**Credentials & login agent — new**
+
+- **Local-first secret vault.** Passwords are encrypted with Electron `safeStorage` (macOS Keychain / Windows DPAPI / Linux libsecret) and split into `index.json` + `vault.bin` so the vault is never synced through WebDAV. Plaintext never crosses the main/renderer IPC boundary — credentials are injected straight into the webview via `webContents.executeJavaScript`.
+- **22 built-in site templates.** Declarative profiles for GitHub, Google, Notion, Vercel, 1Password, Reddit, X, Discord, Slack, Linear and more, each encoding URL match, form selectors, and post-login redirect behavior.
+- **6-step login state machine.** `IDLE → NAVIGATE → DETECT_CHALLENGE → FILL_PASSWORD → VERIFY → DONE/FAILED`, with explicit handoff for non-auto-resolvable challenges (captcha, TOTP, phone-OTP, email-link) via a mapped type compile-time guard.
+- **Challenge detector is shared across main and renderer** (pure string matching, no DOM dependency) so captcha / TOTP / phone-OTP / email-link detection cannot drift between processes.
+- **Verification loop.** After credential injection the state machine re-navigates and confirms the logged-in state; results surface as a toolbar badge (verified green shield vs stored amber key).
+- **Agent-callable tool.** A new `login-to-site` tool is exposed to the LLM runtime, so any agent (chat / cowork / code / clarify) can request "log in to X" through the state machine instead of touching credentials directly.
+- **Settings entry.** New `Credentials` tab in Settings with credential list, add/edit/delete form, and a visual catalog of the 22 built-in site templates. Bilingual (zh / en).
+
+**IPC & runtime**
+
+- 9 new typed IPC channels under `credentials:*`, all routed through MessagePack with no plaintext payloads.
+- `webContentsId` is now propagated through `ToolContext` so the main process can reach a specific webview for credential injection.
+- New `verify:main-safety` static check forbids main-process modules from touching `electron.session.*` / `app.getPath` at module top level (must be inside `app.whenReady`).
+- Browser panel shows a per-site credential badge in the toolbar, mirrors current URL against stored domains.
+- Repo-wide prettier pass across docs, components, IPC handlers, and pet subsystem.
+
+### Changes by area
+
+- **New modules (28 files)**
+  - shared: `credentials`, `site-profiles-shared`, `challenge-detector-shared`, `credentials.test-snippets`
+  - main: `credentials/secret-vault`, `ipc/credentials-handlers`
+  - renderer `lib/credentials/`: `credential-agent`, `login-state-machine`, `step-driver`, `site-profiles`, `challenge-detector`, `login-orchestrator`
+  - renderer `components/credentials/`: `CredentialsPanel`, `CredentialList`, `CredentialForm`, `LoginStepPanel`, `LoginProgressOverlay`, `ChallengePausedDialog`, `VerificationResultCard`, `BuiltinSiteTemplates`
+  - renderer `stores/`: `credentials-store`, `login-run-store`
+  - renderer `lib/tools/login-to-site-tool`
+  - locales: `en/credentials.json`, `en/login.json`, `zh/credentials.json`, `zh/login.json`
+  - `tools/check-main-module-safety`
+- **Modified**
+  - main: `index.ts` (registers credentials handlers + `OLA_OPEN_DEVTOOLS` env hook), all 12 IPC handler files (typed-IPC migration),
+  - renderer: `BrowserPanel` (toolbar badge, login overlay, webContentsId registration), `SettingsPage` (Credentials tab), `ui-store` (`browserWebContentsIdsBySession`), `tools/tool-types` (ToolContext.projectId + webContentsId), `settings-route`
+  - docs site: full prettier pass over MDX, AGENTS.md, README, the docs site home page
+  - pet subsystem + SSH components + various small UI files: prettier-only reflow
+
+### Security notes
+
+- Plaintext credentials never leave the main process except via `webContents.fromId + executeJavaScript` direct injection.
+- Captcha / TOTP / phone-OTP / email-link challenges are intentionally non-automatable — the state machine hands off to the user via `ChallengePausedDialog` and the LLM runtime cannot bypass this guard (`NON_AUTO_RESOLVABLE_CHALLENGES` is a `Record` mapped type).
+- Vault is split so encrypted blobs are not synced via WebDAV; only the index (metadata, no secrets) is portable.
+
 ## [1.0.1] - 2026-07-07
 
 Patch release focused on **Desktop Companions (桌宠)** — a major new feature area that turns Ola into a living workspace buddy, plus several companion UX refinements and platform integrations.

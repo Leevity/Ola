@@ -31,6 +31,7 @@ src/
 **Entry points:** `src/main/index.ts` (main process), `src/renderer/src/App.tsx` (renderer).
 
 **Key architectural patterns:**
+
 - **IPC:** Renderer calls `ipcClient.invoke(channel)`, main handles in `src/main/ipc/*-handlers.ts`.
 - **Agent runtime:** Runs in main process (`js-agent-runtime.ts`), provider-agnostic.
 - **Tool system:** Tools in `src/renderer/src/lib/tools/`, registered in phases (core → skills → sub-agents → teams).
@@ -56,14 +57,14 @@ npm run postinstall  # Rebuild native modules (better-sqlite3, robotjs, ssh2, no
 
 ## Coding Style & Naming Conventions
 
-| Rule             | Convention                                                    |
-| ---------------- | ------------------------------------------------------------- |
-| Formatting       | Prettier: single quotes, no semicolons, 100-col width, no trailing commas |
-| Indentation      | 2 spaces, LF line endings, UTF-8, final newline (EditorConfig) |
-| React components | PascalCase (`Layout.tsx`)                                     |
-| Stores/helpers   | kebab-case (`chat-store.ts`)                                  |
-| Path aliases     | `@renderer/*` → `src/renderer/src/*`                          |
-| i18n             | `t('key', { defaultValue: 'English text' })` — never hardcode Chinese in UI |
+| Rule             | Convention                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------ |
+| Formatting       | Prettier: single quotes, no semicolons, 100-col width, no trailing commas                  |
+| Indentation      | 2 spaces, LF line endings, UTF-8, final newline (EditorConfig)                             |
+| React components | PascalCase (`Layout.tsx`)                                                                  |
+| Stores/helpers   | kebab-case (`chat-store.ts`)                                                               |
+| Path aliases     | `@renderer/*` → `src/renderer/src/*`                                                       |
+| i18n             | `t('key', { defaultValue: 'English text' })` — never hardcode Chinese in UI                |
 | Comments         | Explain intent, invariants, boundaries, or non-obvious behavior. Avoid restating the code. |
 
 **Lint/format on save:** ESLint + Prettier enforce these rules automatically. Run `npm run lint` and `npm run format` before pushing.
@@ -92,6 +93,7 @@ refactor(scope): description    # Code restructuring without behavior change
 Examples from the history: `feat(app): add code workspace and runtime enhancements`, `fix(mcp): expose connected MCP tools in chat`, `chore(release): bump version to 0.9.118`.
 
 **Pull requests:**
+
 - Link the relevant issue (if any).
 - Include a brief description of what changed and why.
 - Attach screenshots for UI changes.

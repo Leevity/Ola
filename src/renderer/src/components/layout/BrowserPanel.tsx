@@ -1,8 +1,18 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { ArrowLeft, ArrowRight, RefreshCw, Square, Globe, AlertCircle } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  RefreshCw,
+  Square,
+  Globe,
+  AlertCircle,
+  KeyRound,
+  ShieldCheck
+} from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useCredentialsStore } from '@renderer/stores/credentials-store'
 import { getBrowserAccessDecision } from '@renderer/lib/app-plugin/browser-access'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
@@ -13,6 +23,11 @@ import {
   type MaybePromise
 } from '@renderer/lib/browser/webview-helpers'
 import { useTranslation } from 'react-i18next'
+import {
+  LoginProgressOverlay,
+  type LoginProgressStep
+} from '@renderer/components/credentials/LoginProgressOverlay'
+import { LoginStepPanel } from '@renderer/components/credentials/LoginStepPanel'
 import {
   BUILTIN_BROWSER_PARTITION,
   stripElectronFromUserAgent
@@ -39,6 +54,7 @@ export function BrowserPanel({
   const errorInfo = useUIStore((s) => s.getBrowserState(sessionId, projectId).errorInfo)
   const setBrowserErrorInfo = useUIStore((s) => s.setBrowserErrorInfo)
   const setBrowserWebviewRef = useUIStore((s) => s.setBrowserWebviewRef)
+  const setBrowserWebContentsId = useUIStore((s) => s.setBrowserWebContentsId)
   const browserUserDataReuseEnabled = useSettingsStore((s) => s.browserUserDataReuseEnabled)
 
   const [inputUrl, setInputUrl] = useState(storedUrl)
@@ -50,15 +66,15 @@ export function BrowserPanel({
     browserUserDataReuseEnabled ? stripElectronFromUserAgent(navigator.userAgent) : undefined
   )
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  const internalBrowserUrlUpdateRef = useRef(false)
   const initialBrowserUserDataReuseEnabledRef = useRef(browserUserDataReuseEnabled)
+  const [loginOverlayStep] = useState<LoginProgressStep | null>(null)
+  const refs = useCredentialsStore((s) => s.refs)
   const webviewUserAgent = runtimeBrowserUserDataReuseEnabled ? runtimeBrowserUserAgent : undefined
-  const webviewSessionProps: Pick<
-    React.ComponentProps<'webview'>,
-    'partition' | 'allowpopups' | 'plugins' | 'useragent'
-  > = {
+  const webviewSessionProps: Record<string, string> = {
     ...(runtimeBrowserUserDataReuseEnabled ? {} : { partition: BUILTIN_BROWSER_PARTITION }),
-    allowpopups: true,
-    plugins: runtimeBrowserUserDataReuseEnabled,
+    allowpopups: 'true',
+    ...(runtimeBrowserUserDataReuseEnabled ? { plugins: 'true' } : {}),
     ...(webviewUserAgent ? { useragent: webviewUserAgent } : {})
   }
 
@@ -122,12 +138,17 @@ export function BrowserPanel({
     setBrowserWebviewRef(webviewRef, sessionId, projectId)
     return () => {
       setBrowserWebviewRef(null, sessionId, projectId)
+      setBrowserWebContentsId(null, sessionId, projectId)
       setBrowserLoading(false, sessionId, projectId)
     }
-  }, [projectId, sessionId, setBrowserLoading, setBrowserWebviewRef])
+  }, [projectId, sessionId, setBrowserLoading, setBrowserWebContentsId, setBrowserWebviewRef])
 
   useEffect(() => {
     setInputUrl(storedUrl)
+    if (internalBrowserUrlUpdateRef.current) {
+      internalBrowserUrlUpdateRef.current = false
+      return
+    }
     setCommittedUrl(storedUrl)
   }, [storedUrl])
 
@@ -216,6 +237,49 @@ export function BrowserPanel({
     setBrowserCanGoForward
   ])
 
+  const updateWebContentsId = useCallback((): void => {
+    const wv = webviewRef.current
+    if (!isWebviewConnected(wv)) return
+    try {
+      setBrowserWebContentsId(wv.getWebContentsId(), sessionId, projectId)
+    } catch {
+      // Electron only exposes getWebContentsId after dom-ready.
+    }
+  }, [projectId, sessionId, setBrowserWebContentsId])
+
+  // Compute the toolbar credential badge outside of JSX so the JSX stays
+  // a pure render expression and React's error-boundary lint stays happy.
+  const credentialBadge = useMemo<React.ReactNode>(() => {
+    let host: string
+    try {
+      host = new URL(storedUrl).host.toLowerCase()
+    } catch {
+      return null
+    }
+    const matched = refs.find((r) => host === r.domain || host.endsWith(`.${r.domain}`))
+    if (!matched) return null
+    const verified = matched.lastVerificationStatus === 'pass'
+    return (
+      <div
+        className={`flex shrink-0 max-w-[140px] items-center gap-1 truncate rounded-md px-2 h-6 text-[10px] ${
+          verified
+            ? 'border border-emerald-300/60 bg-emerald-50/40 text-emerald-900 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-100'
+            : 'border border-amber-300/60 bg-amber-50/40 text-amber-900 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-100'
+        }`}
+        title={
+          verified
+            ? `Logged in as ${matched.usernameHint ?? ''} for ${matched.domain}`
+            : `Credential stored but not verified (${matched.lastVerificationStatus ?? 'unknown'})`
+        }
+      >
+        {verified ? <ShieldCheck className="size-3" /> : <KeyRound className="size-3" />}
+        <span>
+          {verified ? 'verified' : 'stored'} · {matched.domain}
+        </span>
+      </div>
+    )
+  }, [refs, storedUrl])
+
   useEffect(() => {
     const wv = webviewRef.current
     if (!isWebviewConnected(wv)) return
@@ -226,17 +290,24 @@ export function BrowserPanel({
     }
 
     const onStopLoading = (): void => {
+      updateWebContentsId()
       setBrowserLoading(false, sessionId, projectId)
       updateNavState()
     }
 
+    const onDomReady = (): void => {
+      updateWebContentsId()
+    }
+
     const onNavigate = (e: Electron.DidNavigateEvent): void => {
+      internalBrowserUrlUpdateRef.current = true
       setInputUrl(e.url)
       setBrowserUrl(e.url, sessionId, projectId)
       updateNavState()
     }
 
     const onNavigateInPage = (e: Electron.DidNavigateInPageEvent): void => {
+      internalBrowserUrlUpdateRef.current = true
       setInputUrl(e.url)
       setBrowserUrl(e.url, sessionId, projectId)
       updateNavState()
@@ -269,6 +340,7 @@ export function BrowserPanel({
 
     wv.addEventListener('did-start-loading', onStartLoading)
     wv.addEventListener('did-stop-loading', onStopLoading)
+    wv.addEventListener('dom-ready', onDomReady)
     wv.addEventListener('did-navigate', onNavigate as EventListener)
     wv.addEventListener('did-navigate-in-page', onNavigateInPage as EventListener)
     wv.addEventListener('page-title-updated', onTitleUpdated as EventListener)
@@ -279,6 +351,7 @@ export function BrowserPanel({
     return () => {
       wv.removeEventListener('did-start-loading', onStartLoading)
       wv.removeEventListener('did-stop-loading', onStopLoading)
+      wv.removeEventListener('dom-ready', onDomReady)
       wv.removeEventListener('did-navigate', onNavigate as EventListener)
       wv.removeEventListener('did-navigate-in-page', onNavigateInPage as EventListener)
       wv.removeEventListener('page-title-updated', onTitleUpdated as EventListener)
@@ -295,13 +368,14 @@ export function BrowserPanel({
     setBrowserErrorInfo,
     setBrowserUrl,
     setBrowserPageTitle,
+    updateWebContentsId,
     updateNavState
   ])
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 min-h-0 flex-col overflow-hidden">
       {/* Toolbar */}
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border/50 px-2">
+      <div className="flex h-9 min-w-0 shrink-0 items-center gap-1 overflow-hidden border-b border-border/50 px-2">
         <Button
           variant="ghost"
           size="icon"
@@ -344,7 +418,7 @@ export function BrowserPanel({
           </Button>
         )}
 
-        <div className="flex flex-1 items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-2 h-6">
+        <div className="flex min-w-0 flex-1 items-center gap-1 rounded-md border border-border/60 bg-muted/30 px-2 h-6">
           <Globe className="size-3 shrink-0 text-muted-foreground" />
           <input
             className="flex-1 bg-transparent text-[11px] outline-none placeholder:text-muted-foreground"
@@ -364,6 +438,7 @@ export function BrowserPanel({
         >
           {t('browser.go')}
         </Button>
+        {credentialBadge}
       </div>
 
       {/* Loading bar */}
@@ -373,8 +448,22 @@ export function BrowserPanel({
         </div>
       )}
 
+      {/* 6-step login status panel (PR2-A) */}
+      <LoginStepPanel />
+
       {/* Content */}
-      <div className="relative min-h-0 flex-1">
+      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+        <LoginProgressOverlay
+          open={loginOverlayStep !== null}
+          step={loginOverlayStep ?? 'resolving'}
+          domain={(() => {
+            try {
+              return new URL(storedUrl).host
+            } catch {
+              return null
+            }
+          })()}
+        />
         {committedUrl && (
           <webview
             key={runtimeBrowserUserDataReuseEnabled ? 'user-browser-profile' : 'ola-profile'}

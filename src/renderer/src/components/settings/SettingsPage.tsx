@@ -26,7 +26,8 @@ import {
   Users,
   Code2,
   Network,
-  PawPrint
+  PawPrint,
+  KeyRound
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { AnimatePresence } from 'motion/react'
@@ -87,6 +88,7 @@ import { ProfilePanel } from './ProfilePanel'
 import { ModelIcon, ProviderIcon } from './provider-icons'
 import { AutoMemoryPanel } from '@renderer/components/memory/AutoMemoryPanel'
 import { PetPanel } from './PetPanel'
+import { CredentialsPanel } from '@renderer/components/credentials/CredentialsPanel'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import {
@@ -485,6 +487,12 @@ const menuGroupDefs: Array<{
         icon: <Wand2 className="size-4" />,
         labelKey: 'skillsmarket.title',
         descKey: 'skillsmarket.subtitle'
+      },
+      {
+        id: 'credentials',
+        icon: <KeyRound className="size-4" />,
+        labelKey: 'credentials.title',
+        descKey: 'credentials.subtitle'
       }
     ]
   },
@@ -3606,6 +3614,7 @@ const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   websearch: WebSearchPanel,
   skillsmarket: SkillsMarketPanel,
   pet: PetPanel,
+  credentials: CredentialsPanel,
   about: AboutPanel
 }
 
@@ -3696,7 +3705,8 @@ export function SettingsPage(): React.JSX.Element {
             effectiveSettingsTab === 'modelManagement' ||
             effectiveSettingsTab === 'plugin' ||
             effectiveSettingsTab === 'extension' ||
-            effectiveSettingsTab === 'mcp' ? (
+            effectiveSettingsTab === 'mcp' ||
+            effectiveSettingsTab === 'credentials' ? (
               <div className="flex-1 min-h-0 min-w-0 overflow-hidden" key="full-panel">
                 <SlideIn
                   key={effectiveSettingsTab}

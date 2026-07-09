@@ -67,6 +67,7 @@ import {
 import { registerScreenshotHandlers } from './ipc/screenshot-handlers'
 import { registerWebSearchHandlers } from './ipc/web-search-handlers'
 import { registerBrowserHandlers } from './ipc/browser-handlers'
+import { registerCredentialsHandlers } from './ipc/credentials-handlers'
 import { registerOauthHandlers } from './ipc/oauth-handlers'
 import { registerImageGifHandlers } from './ipc/image-gif-handlers'
 import { registerGitHandlers } from './ipc/git-handlers'
@@ -1119,6 +1120,13 @@ function createWindow(): void {
   })
 
   void loadRendererWindow(window)
+  if (process.env.OLA_OPEN_DEVTOOLS === '1') {
+    window.webContents.once('did-finish-load', () => {
+      if (!window.isDestroyed() && !window.webContents.isDevToolsOpened()) {
+        window.webContents.openDevTools({ mode: 'detach' })
+      }
+    })
+  }
 
   // Zoom support: Ctrl/Cmd + Plus/Minus/0 and trackpad pinch
   const ZOOM_MIN = 0.75
@@ -1401,6 +1409,7 @@ if (gotSingleInstanceLock) {
     registerNotifyHandlers()
     registerWebSearchHandlers()
     registerBrowserHandlers()
+    registerCredentialsHandlers()
     registerOauthHandlers()
     registerImageGifHandlers()
     registerGitHandlers()
