@@ -36,6 +36,7 @@ Use this entry shape inside `user-context.md`:
 
 ```md
 {reference title or URL}
+
 - Date Added: YYYY-MM-DD.
 - File: assets/name.png
 - Useful Context: what this reference shows.

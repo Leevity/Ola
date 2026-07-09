@@ -32,6 +32,7 @@ Write `design-qa.md` in the prototype root:
 
 ```md
 **Findings**
+
 - [P1] Title
   Location: ...
   Evidence: source does X, implementation does Y.
@@ -39,12 +40,15 @@ Write `design-qa.md` in the prototype root:
   Fix: ...
 
 **Open Questions**
+
 - ...
 
 **Implementation Checklist**
+
 - ...
 
 **Follow-up Polish**
+
 - ...
 
 source visual truth path:

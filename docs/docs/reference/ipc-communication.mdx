@@ -11,21 +11,21 @@ Ola 使用 Electron IPC 把渲染进程和主进程连接起来。**渲染进程
 
 IPC 按领域分组，避免字符串散落在业务代码里：
 
-| 领域 | 典型通道 |
-| --- | --- |
-| 文件系统 | `fs:*`, `ssh:fs:*` |
-| 数据库 | `db:*` |
-| 设置与配置 | `settings:*`, `config:*` |
-| Agent / 运行时 | `agent:*`, `sidecar:*`, `team:*`, `team-worker:*` |
-| 消息平台 | `plugin:*` |
-| MCP | `mcp:*` |
-| Cron | `cron:*` |
-| SSH / Terminal | `ssh:*`, `terminal:*` |
-| 搜索 / Web / Browser | `web-search:*`, `browser:*` |
-| 通知 / 截图 / 输入 | `notify:*`, `screenshot:*`, `input:*` |
-| 图像 | `image:*`, `clipboard:*` |
-| 资源目录 | `skills:*`, `agents:*`, `commands:*`, `prompts:*` |
-| 迁移 / 其他 | `migration:*`, `wiki:*`, `git:*`, `process:*`, `oauth:*` |
+| 领域                 | 典型通道                                                 |
+| -------------------- | -------------------------------------------------------- |
+| 文件系统             | `fs:*`, `ssh:fs:*`                                       |
+| 数据库               | `db:*`                                                   |
+| 设置与配置           | `settings:*`, `config:*`                                 |
+| Agent / 运行时       | `agent:*`, `sidecar:*`, `team:*`, `team-worker:*`        |
+| 消息平台             | `plugin:*`                                               |
+| MCP                  | `mcp:*`                                                  |
+| Cron                 | `cron:*`                                                 |
+| SSH / Terminal       | `ssh:*`, `terminal:*`                                    |
+| 搜索 / Web / Browser | `web-search:*`, `browser:*`                              |
+| 通知 / 截图 / 输入   | `notify:*`, `screenshot:*`, `input:*`                    |
+| 图像                 | `image:*`, `clipboard:*`                                 |
+| 资源目录             | `skills:*`, `agents:*`, `commands:*`, `prompts:*`        |
+| 迁移 / 其他          | `migration:*`, `wiki:*`, `git:*`, `process:*`, `oauth:*` |
 
 ## 调用模式 / Invocation patterns
 
@@ -59,20 +59,20 @@ ipcMain.handle('mcp:list', () => readServers())
 
 ## 重要通道示例 / Important channels
 
-| 通道 | 用途 |
-| --- | --- |
-| `settings:get` / `settings:set` | 设置读取与保存 |
-| `config:get` / `config:set` | 安全配置读写 |
-| `db:*` | SQLite 业务数据 CRUD |
-| `cron:*` | Cron 任务和运行日志 |
-| `mcp:*` | MCP server 管理和能力发现 |
-| `plugin:*` | 消息平台插件实例、消息路由和自动回复 |
-| `ssh:*` | SSH 连接、远程文件、远程终端 |
-| `team-runtime:*` | Team Runtime 持久化和快照 |
-| `team-worker:*` | 隔离 worker 启停 |
-| `web-search:*` | 搜索与抓取 |
-| `browser:*` | 内置浏览器控制 |
-| `notify:*` | 桌面通知 |
+| 通道                            | 用途                                 |
+| ------------------------------- | ------------------------------------ |
+| `settings:get` / `settings:set` | 设置读取与保存                       |
+| `config:get` / `config:set`     | 安全配置读写                         |
+| `db:*`                          | SQLite 业务数据 CRUD                 |
+| `cron:*`                        | Cron 任务和运行日志                  |
+| `mcp:*`                         | MCP server 管理和能力发现            |
+| `plugin:*`                      | 消息平台插件实例、消息路由和自动回复 |
+| `ssh:*`                         | SSH 连接、远程文件、远程终端         |
+| `team-runtime:*`                | Team Runtime 持久化和快照            |
+| `team-worker:*`                 | 隔离 worker 启停                     |
+| `web-search:*`                  | 搜索与抓取                           |
+| `browser:*`                     | 内置浏览器控制                       |
+| `notify:*`                      | 桌面通知                             |
 
 ## 设计原则 / Design principles
 

@@ -431,7 +431,7 @@ export function AutoMemoryPanel({
                     : entry.memoryRootId
                       ? `${entry.memoryRootId}${entry.targetPath ? ` / ${entry.targetPath}` : ''}`
                       : entry.targetPath ||
-                      t('memory.auto.noTargetPath', { defaultValue: 'No target path' })}
+                        t('memory.auto.noTargetPath', { defaultValue: 'No target path' })}
                 </p>
                 {entry.status === 'written' && (
                   <Button

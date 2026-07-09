@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { animate, motion, useMotionValue, useTransform, type AnimationPlaybackControls } from 'motion/react'
+import {
+  animate,
+  motion,
+  useMotionValue,
+  useTransform,
+  type AnimationPlaybackControls
+} from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import {
   Bath,
@@ -239,10 +245,7 @@ export function PetView(): React.JSX.Element | null {
   const lift = useMotionValue(0)
   // The DOM y attribute combines the persistent walk position with the
   // transient drag lift so a single motion value drives both effects.
-  const yOffset = useTransform(
-    [y, lift],
-    ([latestY, latestLift]: number[]) => latestY + latestLift
-  )
+  const yOffset = useTransform([y, lift], ([latestY, latestLift]: number[]) => latestY + latestLift)
 
   const walkAnimRef = useRef<AnimationPlaybackControls | null>(null)
   // Scratch number used as the single progress carrier for the 2D walk so
@@ -429,10 +432,7 @@ export function PetView(): React.JSX.Element | null {
   useEffect(() => {
     const place = (): void => {
       const maxX = Math.max(EDGE_MARGIN, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
-      const maxY = Math.max(
-        EDGE_MARGIN,
-        window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
-      )
+      const maxY = Math.max(EDGE_MARGIN, window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN)
       if (!placedRef.current) {
         const saved = desktopPet?.position
         if (saved) {
@@ -493,22 +493,26 @@ export function PetView(): React.JSX.Element | null {
     if (typeof window === 'undefined') return
 
     const pointInRect = (clientX: number, clientY: number, rect: DOMRect): boolean =>
-      clientX >= rect.left &&
-      clientX <= rect.right &&
-      clientY >= rect.top &&
-      clientY <= rect.bottom
+      clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom
 
     const hitTest = (clientX: number, clientY: number): boolean => {
       const spriteRect = petSpriteRef.current?.getBoundingClientRect()
-      if (spriteRect && spriteRect.width > 0 && spriteRect.height > 0 &&
-          pointInRect(clientX, clientY, spriteRect)) {
+      if (
+        spriteRect &&
+        spriteRect.width > 0 &&
+        spriteRect.height > 0 &&
+        pointInRect(clientX, clientY, spriteRect)
+      ) {
         return true
       }
       // HUD / context menu / chat panel are siblings of the sprite in the
       // DOM tree, not children, so their rects extend well outside the
       // sprite rect. Hit-test each of them too so the cursor never lands
       // on a button that is rendered but click-through-blocked.
-      const uiRefs: Array<{ ref: React.RefObject<HTMLDivElement | null>; openRef: React.RefObject<boolean> }> = [
+      const uiRefs: Array<{
+        ref: React.RefObject<HTMLDivElement | null>
+        openRef: React.RefObject<boolean>
+      }> = [
         { ref: hudRef, openRef: hudOpenRef },
         { ref: menuRef, openRef: menuOpenRef },
         { ref: chatRef, openRef: chatOpenRef }
@@ -516,8 +520,7 @@ export function PetView(): React.JSX.Element | null {
       for (const slot of uiRefs) {
         if (!slot.openRef.current) continue
         const rect = slot.ref.current?.getBoundingClientRect()
-        if (rect && rect.width > 0 && rect.height > 0 &&
-            pointInRect(clientX, clientY, rect)) {
+        if (rect && rect.width > 0 && rect.height > 0 && pointInRect(clientX, clientY, rect)) {
           return true
         }
       }
@@ -689,14 +692,8 @@ export function PetView(): React.JSX.Element | null {
         onUpdate: (latestDistance) => {
           // Constrain by current bounds at every tick so a screen resize
           // mid-walk doesn't sling the pet off-screen.
-          const curMaxY = Math.max(
-            EDGE_MARGIN,
-            window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
-          )
-          const curMaxX = Math.max(
-            EDGE_MARGIN,
-            window.innerWidth - EDGE_MARGIN - PET_WIDTH
-          )
+          const curMaxY = Math.max(EDGE_MARGIN, window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN)
+          const curMaxX = Math.max(EDGE_MARGIN, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
           const tx = Math.max(EDGE_MARGIN, Math.min(curMaxX, targetX))
           const ty = Math.max(EDGE_MARGIN, Math.min(curMaxY, targetY))
           const fx = Math.max(EDGE_MARGIN, Math.min(curMaxX, fromX))
@@ -743,14 +740,8 @@ export function PetView(): React.JSX.Element | null {
       duration: distance / DASH_SPEED,
       ease: 'easeOut',
       onUpdate: (latestDistance) => {
-        const curMaxY = Math.max(
-          EDGE_MARGIN,
-          window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN
-        )
-        const curMaxX = Math.max(
-          EDGE_MARGIN,
-          window.innerWidth - EDGE_MARGIN - PET_WIDTH
-        )
+        const curMaxY = Math.max(EDGE_MARGIN, window.innerHeight - SPRITE_HEIGHT - EDGE_MARGIN)
+        const curMaxX = Math.max(EDGE_MARGIN, window.innerWidth - EDGE_MARGIN - PET_WIDTH)
         const tx = Math.max(EDGE_MARGIN, Math.min(curMaxX, targetX))
         const ty = Math.max(EDGE_MARGIN, Math.min(curMaxY, targetY))
         const fx = Math.max(EDGE_MARGIN, Math.min(curMaxX, fromX))
@@ -1695,9 +1686,7 @@ export function PetView(): React.JSX.Element | null {
   return (
     <div className="pointer-events-none relative h-screen w-screen select-none overflow-hidden bg-transparent">
       {away ? (
-        <div
-          className="pointer-events-auto absolute bottom-4 right-5 flex items-center gap-2 rounded-full border border-border bg-popover/95 px-3.5 py-2 text-xs text-popover-foreground shadow-lg backdrop-blur"
-        >
+        <div className="pointer-events-auto absolute bottom-4 right-5 flex items-center gap-2 rounded-full border border-border bg-popover/95 px-3.5 py-2 text-xs text-popover-foreground shadow-lg backdrop-blur">
           {awayTask?.kind === 'work' ? (
             <Briefcase className="size-3.5 text-amber-500" />
           ) : (

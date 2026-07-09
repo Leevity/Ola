@@ -101,14 +101,14 @@ flowchart TD
 
 ## 关键运行时 / Key runtime components
 
-| 组件 | 作用 | 位置 |
-| --- | --- | --- |
-| `ChannelManager` | 管理 8 个消息平台插件 | `src/main/channels/` |
-| `McpManager` | 管理 MCP server 连接和能力发现 | `src/main/mcp/` |
-| `CronScheduler` | 处理 at / every / cron 调度 | `src/main/cron/` |
-| `JS Agent Runtime` | 供 Cron 和插件自动回复复用的主进程 Agent 运行时 | `src/main/ipc/js-agent-runtime.ts` |
-| `Tool Registry` | 统一注册与调用工具 | `src/renderer/src/lib/agent/tool-registry.ts` |
-| `viewerRegistry` | 注册文件预览器 | `src/renderer/src/lib/preview/` |
+| 组件               | 作用                                            | 位置                                          |
+| ------------------ | ----------------------------------------------- | --------------------------------------------- |
+| `ChannelManager`   | 管理 8 个消息平台插件                           | `src/main/channels/`                          |
+| `McpManager`       | 管理 MCP server 连接和能力发现                  | `src/main/mcp/`                               |
+| `CronScheduler`    | 处理 at / every / cron 调度                     | `src/main/cron/`                              |
+| `JS Agent Runtime` | 供 Cron 和插件自动回复复用的主进程 Agent 运行时 | `src/main/ipc/js-agent-runtime.ts`            |
+| `Tool Registry`    | 统一注册与调用工具                              | `src/renderer/src/lib/agent/tool-registry.ts` |
+| `viewerRegistry`   | 注册文件预览器                                  | `src/renderer/src/lib/preview/`               |
 
 ## 数据流 / Data flow
 

@@ -3,7 +3,7 @@ productName: Ola
 # Pin to a 4-segment version so the Windows resource compiler accepts
 # FileVersion. Use a literal value (not ${version}) so electron-builder
 # does not concatenate the placeholder as a raw string into rcedit args.
-buildVersion: 1.0.2.0
+buildVersion: 1.0.3.0
 directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs

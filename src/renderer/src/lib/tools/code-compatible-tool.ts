@@ -30,8 +30,7 @@ const powerShellHandler: ToolHandler = {
 const monitorHandler: ToolHandler = {
   definition: {
     name: 'Monitor',
-    description:
-      'Run a background command and monitor its output through Ola background tasks.',
+    description: 'Run a background command and monitor its output through Ola background tasks.',
     inputSchema: {
       type: 'object',
       properties: {

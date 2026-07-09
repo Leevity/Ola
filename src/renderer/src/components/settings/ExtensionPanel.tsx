@@ -456,8 +456,7 @@ export function ExtensionPanel(): React.JSX.Element {
           </div>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
             {t('extension.emptyDesc', {
-              defaultValue:
-                'Choose a folder containing extension.json to add custom tools to Ola.'
+              defaultValue: 'Choose a folder containing extension.json to add custom tools to Ola.'
             })}
           </p>
         </div>

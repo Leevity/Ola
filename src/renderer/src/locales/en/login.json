@@ -1,0 +1,61 @@
+{
+  "steps": {
+    "idle": "Idle",
+    "navigate": "Open login page",
+    "detect_form": "Locate form",
+    "fill_username": "Fill username",
+    "fill_password": "Fill password",
+    "submit": "Submit",
+    "inspect_result": "Check result",
+    "done": "Done",
+    "paused": "Paused",
+    "failed": "Failed"
+  },
+  "current": "Current: {{step}}",
+  "awaiting": "Awaiting...",
+  "errors": {
+    "noCredential": "No credential is available. Add one or enable a built-in template first.",
+    "startFailed": "Could not start verification: {{error}}"
+  },
+  "warnings": {
+    "domainMismatch": "Using the credential for {{credentialDomain}}, but the run target is {{runDomain}}."
+  },
+  "handoff": {
+    "active": "Handed off to you",
+    "takeOver": "Take over the browser and complete the step manually.",
+    "resume": "Continue",
+    "reportDone": "Report done",
+    "reportFailed": "Report failed"
+  },
+  "actions": {
+    "start": "Start verification",
+    "takeover": "Take over",
+    "skip": "Skip step",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "clear": "Hide panel"
+  },
+  "messages": {
+    "opened": "Opened {{url}}",
+    "noProfile": "No site profile for {{domain}}; cannot locate the login form automatically",
+    "formLocated": "Form located ({{usernameSelector}} / {{passwordSelector}})",
+    "missingUsernameSelector": "Missing username selector",
+    "fillUsernameFailed": "Could not fill username",
+    "usernameFilled": "Username filled",
+    "missingPasswordSelector": "Missing password selector",
+    "passwordFailed": "Could not deliver password",
+    "passwordFilled": "Password delivered securely",
+    "missingSubmitSelector": "Missing submit selector",
+    "submitFailed": "Could not click login",
+    "submitted": "Login submitted",
+    "contentUnavailable": "Could not read page content",
+    "challengeDetected": "Detected {{kind}}. Complete it manually.",
+    "loginSuccess": "Login succeeded",
+    "successNotDetected": "Login success indicator was not detected",
+    "handoffRequested": "Paused. Waiting for you to take over.",
+    "skipped": "Skipped",
+    "cancelled": "Cancelled",
+    "retrying": "Retrying, attempt {{attempt}}...",
+    "retryExhausted": "Stopped after {{count}} failed retries"
+  }
+}

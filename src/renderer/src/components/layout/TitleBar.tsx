@@ -376,7 +376,7 @@ export function TitleBar({
                       : tCommon('app.update.downloading')
                     : updateInfo.downloaded
                       ? tCommon('app.update.readyShort', { version: updateInfo.newVersion })
-                    : tCommon('app.update.buttonLabel', { version: updateInfo.newVersion })}
+                      : tCommon('app.update.buttonLabel', { version: updateInfo.newVersion })}
                 </span>
               </Button>
             </TooltipTrigger>

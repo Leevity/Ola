@@ -72,9 +72,12 @@ export function registerSyncHandlers(): void {
     syncEngine.getProviderDescriptors()
   )
 
-  registerSyncMessagePackHandler<SyncProviderConfig | undefined>('sync:connection:test', (provider) => {
-    return syncEngine.testConnection(provider)
-  })
+  registerSyncMessagePackHandler<SyncProviderConfig | undefined>(
+    'sync:connection:test',
+    (provider) => {
+      return syncEngine.testConnection(provider)
+    }
+  )
 
   registerSyncMessagePackHandler<undefined>('sync:status', () => syncEngine.getStatus())
 

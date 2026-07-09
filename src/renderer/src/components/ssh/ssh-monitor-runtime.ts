@@ -555,7 +555,9 @@ export async function isRemoteMonitorInstalled(connectionId: string): Promise<bo
   return !!result?.exists
 }
 
-export async function installRemoteMonitorRuntime(connectionId: string): Promise<RemoteMonitorPaths> {
+export async function installRemoteMonitorRuntime(
+  connectionId: string
+): Promise<RemoteMonitorPaths> {
   const paths = await getRemoteMonitorPaths(connectionId)
   const mkdirResult = (await ipcClient.invoke(IPC.SSH_EXEC, {
     connectionId,

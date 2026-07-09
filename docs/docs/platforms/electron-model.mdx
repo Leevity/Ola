@@ -9,12 +9,12 @@ Ola 的 Electron 架构不是“一个窗口 + 一个渲染页”这么简单，
 
 ## 进程边界 / Process boundaries
 
-| 层 | 入口 | 职责 |
-| --- | --- | --- |
-| Main | `src/main/index.ts` | 窗口、托盘、数据库、IPC、MCP、Cron、SSH、消息平台、更新、崩溃日志 |
-| Preload | `src/preload/index.ts` | 只暴露白名单 API，提供最小安全桥接 |
-| Renderer | `src/renderer/src/main.tsx` | UI、Agent Loop、Tool Registry、Stores、Preview、Team Runtime |
-| Shared | `src/shared/` | 跨进程类型、事件协议、消息协议、Team Runtime 契约 |
+| 层       | 入口                        | 职责                                                              |
+| -------- | --------------------------- | ----------------------------------------------------------------- |
+| Main     | `src/main/index.ts`         | 窗口、托盘、数据库、IPC、MCP、Cron、SSH、消息平台、更新、崩溃日志 |
+| Preload  | `src/preload/index.ts`      | 只暴露白名单 API，提供最小安全桥接                                |
+| Renderer | `src/renderer/src/main.tsx` | UI、Agent Loop、Tool Registry、Stores、Preview、Team Runtime      |
+| Shared   | `src/shared/`               | 跨进程类型、事件协议、消息协议、Team Runtime 契约                 |
 
 ## Main 进程 / Main process
 

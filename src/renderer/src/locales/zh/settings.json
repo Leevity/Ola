@@ -1545,5 +1545,9 @@
     "copyConversation": "复制对话",
     "allowTool": "允许工具执行",
     "denyTool": "拒绝工具执行"
+  },
+  "credentials": {
+    "title": "凭据管理",
+    "subtitle": "管理 Agent 可用于站点登录的凭据"
   }
 }

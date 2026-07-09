@@ -971,16 +971,19 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   })
 
   // Find a plugin session by external chat ID
-  registerChannelMessagePackHandler<string>('plugin:sessions:find-by-chat', async (externalChatId) => {
-    const result = await requestNativeDb<NativePluginSessionFindResult>(
-      'db/plugin-sessions-find-by-chat',
-      { externalChatId }
-    )
-    if (!result.success) {
-      throw new Error(result.error || 'Find plugin session failed')
+  registerChannelMessagePackHandler<string>(
+    'plugin:sessions:find-by-chat',
+    async (externalChatId) => {
+      const result = await requestNativeDb<NativePluginSessionFindResult>(
+        'db/plugin-sessions-find-by-chat',
+        { externalChatId }
+      )
+      if (!result.success) {
+        throw new Error(result.error || 'Find plugin session failed')
+      }
+      return result.session ?? null
     }
-    return result.session ?? null
-  })
+  )
 
   // ── Streaming output IPC ──
 
@@ -1044,31 +1047,37 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   )
 
   /** Clear all messages in a plugin session */
-  registerChannelMessagePackHandler<{ sessionId: string }>('plugin:sessions:clear', async (args) => {
-    const result = assertNativeMutation(
-      await requestNativeDb<NativePluginSessionMutationResult>(
-        'db/plugin-sessions-clear',
-        args as Record<string, unknown>
-      ),
-      'Clear plugin session'
-    )
-    return { deleted: result.deleted }
-  })
+  registerChannelMessagePackHandler<{ sessionId: string }>(
+    'plugin:sessions:clear',
+    async (args) => {
+      const result = assertNativeMutation(
+        await requestNativeDb<NativePluginSessionMutationResult>(
+          'db/plugin-sessions-clear',
+          args as Record<string, unknown>
+        ),
+        'Clear plugin session'
+      )
+      return { deleted: result.deleted }
+    }
+  )
 
   /** Delete a plugin session and its messages */
-  registerChannelMessagePackHandler<{ sessionId: string }>('plugin:sessions:delete', async (args) => {
-    assertNativeMutation(
-      await requestNativeDb<NativePluginSessionMutationResult>(
-        'db/plugin-sessions-delete',
-        args as Record<string, unknown>
-      ),
-      'Delete plugin session'
-    )
-    // Notify renderer to remove from store
-    const payload = { sessionId: args.sessionId }
-    safeSendMessagePackToAllWindows('plugin:session-deleted', payload)
-    return { ok: true }
-  })
+  registerChannelMessagePackHandler<{ sessionId: string }>(
+    'plugin:sessions:delete',
+    async (args) => {
+      assertNativeMutation(
+        await requestNativeDb<NativePluginSessionMutationResult>(
+          'db/plugin-sessions-delete',
+          args as Record<string, unknown>
+        ),
+        'Delete plugin session'
+      )
+      // Notify renderer to remove from store
+      const payload = { sessionId: args.sessionId }
+      safeSendMessagePackToAllWindows('plugin:session-deleted', payload)
+      return { ok: true }
+    }
+  )
 
   /** Rename a plugin session */
   registerChannelMessagePackHandler<{ sessionId: string; title: string }>(

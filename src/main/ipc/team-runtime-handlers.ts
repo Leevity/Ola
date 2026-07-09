@@ -22,7 +22,11 @@ async function nativeTeamRuntimeRequest<TResult>(
   args: unknown,
   timeoutMs = 60_000
 ): Promise<TResult> {
-  const result = await getNativeWorker().request<TResult | NativeErrorResult>(method, args, timeoutMs)
+  const result = await getNativeWorker().request<TResult | NativeErrorResult>(
+    method,
+    args,
+    timeoutMs
+  )
   if (isNativeErrorResult(result)) {
     throw new Error(result.error)
   }
@@ -55,12 +59,9 @@ export function registerTeamRuntimeHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<GetTeamRuntimeSnapshotArgs>(
-    'team-runtime:snapshot',
-    async (args) => {
-      return nativeTeamRuntimeRequest<TeamRuntimeSnapshot | null>('team-runtime/snapshot', args)
-    }
-  )
+  registerMessagePackHandler<GetTeamRuntimeSnapshotArgs>('team-runtime:snapshot', async (args) => {
+    return nativeTeamRuntimeRequest<TeamRuntimeSnapshot | null>('team-runtime/snapshot', args)
+  })
 
   registerMessagePackHandler<UpdateTeamRuntimeMemberArgs>(
     'team-runtime:member:update',

@@ -54,12 +54,9 @@ export function registerCommandsHandlers(): void {
     return nativeUserContentRequest<CommandLoadResult>('commands/load', commandParams(args))
   })
 
-  registerMessagePackHandler<undefined, CommandManageItem[]>(
-    'commands:manage-list',
-    async () => {
-      return nativeUserContentRequest<CommandManageItem[]>('commands/manage-list', commandParams())
-    }
-  )
+  registerMessagePackHandler<undefined, CommandManageItem[]>('commands:manage-list', async () => {
+    return nativeUserContentRequest<CommandManageItem[]>('commands/manage-list', commandParams())
+  })
 
   registerMessagePackHandler<{ path: string }, CommandManageReadResult>(
     'commands:manage-read',

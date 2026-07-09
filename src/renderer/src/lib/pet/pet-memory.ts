@@ -97,7 +97,10 @@ export async function appendPetMemories(
   return capped
 }
 
-export async function removePetMemory(index: number, petId?: string | null): Promise<PetMemoryEntry[]> {
+export async function removePetMemory(
+  index: number,
+  petId?: string | null
+): Promise<PetMemoryEntry[]> {
   const entries = await loadPetMemories(petId)
   if (index >= 0 && index < entries.length) {
     entries.splice(index, 1)

@@ -370,7 +370,9 @@ async function uploadBufferToCdn(params: {
   throw lastError instanceof Error ? lastError : new Error('Weixin CDN upload failed')
 }
 
-function normalizeUploadUrlResponse(response: WeixinGetUploadUrlResponse): WeixinGetUploadUrlResponse {
+function normalizeUploadUrlResponse(
+  response: WeixinGetUploadUrlResponse
+): WeixinGetUploadUrlResponse {
   const nested = response.data
   if (!nested) return response
   return {
@@ -474,9 +476,7 @@ export class WeixinApi {
     const uploadFullUrl = uploadUrl.upload_full_url?.trim()
     const errcode = uploadUrl.errcode ?? uploadUrl.ret ?? 0
     if (errcode !== 0) {
-      throw new Error(
-        `Weixin getuploadurl failed: ${uploadUrl.errmsg || `errcode ${errcode}`}`
-      )
+      throw new Error(`Weixin getuploadurl failed: ${uploadUrl.errmsg || `errcode ${errcode}`}`)
     }
     if (!uploadParam && !uploadFullUrl) {
       throw new Error('Weixin getuploadurl returned no upload_param or upload_full_url')

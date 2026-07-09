@@ -62,7 +62,10 @@ function normalizeMessageForHash(message: UnifiedMessage): unknown {
   }
 }
 
-type CacheRatioUsage = Partial<Pick<TokenUsage, 'inputTokens' | 'cacheReadTokens'>> | null | undefined
+type CacheRatioUsage =
+  | Partial<Pick<TokenUsage, 'inputTokens' | 'cacheReadTokens'>>
+  | null
+  | undefined
 
 function readTokenCount(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0

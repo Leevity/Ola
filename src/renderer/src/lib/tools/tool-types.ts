@@ -4,7 +4,8 @@ import type { PluginPermissions as ChannelPermissions } from '../channel/types'
 // --- Tool Context ---
 
 export interface ToolContext {
-  sessionId?: string
+  sessionId?: string | null
+  projectId?: string | null
   workingFolder?: string
   sshConnectionId?: string
   signal: AbortSignal
@@ -28,6 +29,8 @@ export interface ToolContext {
   /** Plugin message sender identifiers (when available) */
   pluginSenderId?: string
   pluginSenderName?: string
+  /** Browser webContents id (Electron) when the tool is being run from inside the BrowserPanel. */
+  webContentsId?: number
   /** Mutable shared state bag — survives { ...toolCtx } spread copies in runtime tool dispatch.
    *  Used for per-run flags like deliveryUsed that must persist across tool calls. */
   sharedState?: { deliveryUsed?: boolean; bashCwd?: string }

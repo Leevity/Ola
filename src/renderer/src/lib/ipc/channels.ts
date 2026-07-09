@@ -321,6 +321,17 @@ export const IPC = {
   BROWSER_CLEAR_COOKIES: 'browser:clear-cookies',
   BROWSER_EMULATION_STATUS: 'browser:emulation-status',
 
+  // Credentials
+  CREDENTIALS_VAULT_STATUS: 'credentials:vault-status',
+  CREDENTIALS_STORE: 'credentials:store',
+  CREDENTIALS_LIST: 'credentials:list',
+  CREDENTIALS_DELETE: 'credentials:delete',
+  CREDENTIALS_LIST_TEMPLATES: 'credentials:list-templates',
+  CREDENTIALS_ENABLE_TEMPLATE: 'credentials:enable-template',
+  CREDENTIALS_RECORD_VERIFICATION: 'credentials:record-verification',
+  CREDENTIALS_FILL_PASSWORD: 'credentials:fill-password',
+  CREDENTIALS_UPDATE: 'credentials:update',
+
   // OAuth
   OAUTH_START: 'oauth:start',
   OAUTH_STOP: 'oauth:stop',

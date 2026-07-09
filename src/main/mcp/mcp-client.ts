@@ -16,7 +16,9 @@ function buildProcessEnv(): Record<string, string> {
 }
 
 function isNpmCommand(command: string): boolean {
-  const name = basename(command).toLowerCase().replace(/\.(cmd|exe)$/, '')
+  const name = basename(command)
+    .toLowerCase()
+    .replace(/\.(cmd|exe)$/, '')
   return name === 'npm' || name === 'npx'
 }
 

@@ -204,12 +204,9 @@ export function onTerminalSessionExit(listener: (event: TerminalExitEvent) => vo
 export function registerTerminalHandlers(): void {
   ensureNativeTerminalEventBridge()
 
-  registerMessagePackHandler<CreateTerminalSessionArgs>(
-    'terminal:create',
-    async (args, event) => {
-      return await createTerminalSession(args, event.sender)
-    }
-  )
+  registerMessagePackHandler<CreateTerminalSessionArgs>('terminal:create', async (args, event) => {
+    return await createTerminalSession(args, event.sender)
+  })
 
   registerMessagePackHandler<{ id: string; data: string }>('terminal:input', async (args) => {
     return await writeTerminalSession(args.id, args.data)
@@ -239,9 +236,7 @@ export function registerTerminalHandlers(): void {
 
   registerMessagePackHandler<{ id: string }>('terminal:get', async (args) => {
     const session = await getTerminalSessionSnapshot(args.id)
-    return session
-      ? { success: true, session }
-      : { success: false, error: 'Terminal not found' }
+    return session ? { success: true, session } : { success: false, error: 'Terminal not found' }
   })
 
   registerMessagePackHandler<undefined>('terminal:list', async () => {

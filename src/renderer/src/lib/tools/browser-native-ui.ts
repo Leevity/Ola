@@ -28,7 +28,14 @@ function normalizeRecord(value: unknown): Record<string, unknown> {
 
 function createToolContext(record: Record<string, unknown>): ToolContext {
   return {
-    sessionId: typeof record.sessionId === 'string' ? record.sessionId : undefined,
+    sessionId:
+      typeof record.sessionId === 'string' || record.sessionId === null
+        ? record.sessionId
+        : undefined,
+    projectId:
+      typeof record.projectId === 'string' || record.projectId === null
+        ? record.projectId
+        : undefined,
     workingFolder: typeof record.workingFolder === 'string' ? record.workingFolder : undefined,
     currentToolUseId: typeof record.toolUseId === 'string' ? record.toolUseId : undefined,
     agentRunId:
@@ -43,7 +50,8 @@ function createToolContext(record: Record<string, unknown>): ToolContext {
 }
 
 function getWebview(ctx?: ToolContext): Electron.WebviewTag | null {
-  const webview = useUIStore.getState().getBrowserWebviewRef(ctx?.sessionId)?.current ?? null
+  const webview =
+    useUIStore.getState().getBrowserWebviewRef(ctx?.sessionId, ctx?.projectId)?.current ?? null
   return isWebviewConnected(webview) ? webview : null
 }
 
@@ -114,7 +122,7 @@ function getBrowserAccessError(url: string): ToolResultContent | null {
 }
 
 function getCurrentBrowserAccessError(ctx?: ToolContext): ToolResultContent | null {
-  const url = useUIStore.getState().getBrowserState(ctx?.sessionId).url
+  const url = useUIStore.getState().getBrowserState(ctx?.sessionId, ctx?.projectId).url
   return url ? getBrowserAccessError(url) : null
 }
 
@@ -152,7 +160,7 @@ async function executeBrowserNavigate(
     }
     const accessError = getBrowserAccessError(url)
     if (accessError) return accessError
-    useUIStore.getState().openBrowserTab(url, ctx.sessionId)
+    useUIStore.getState().openBrowserTab(url, ctx.sessionId, ctx.projectId)
     const webview = await waitForWebview(ctx)
     if (!webview) {
       return encodeToolError('Browser view did not attach. Reopen the browser tab and try again.')
@@ -162,7 +170,7 @@ async function executeBrowserNavigate(
       target.src = url
     })
     await loadPromise
-    const browserState = useUIStore.getState().getBrowserState(ctx.sessionId)
+    const browserState = useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId)
     return encodeStructuredToolResult({
       success: true,
       url,
@@ -201,7 +209,7 @@ async function executeBrowserNavigate(
     await runWebviewCommand(webview, 'refresh', (target) => target.reload())
   }
   await loadPromise
-  const browserState = useUIStore.getState().getBrowserState(ctx.sessionId)
+  const browserState = useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId)
   return encodeStructuredToolResult({
     success: true,
     url: browserState.url,
@@ -310,7 +318,7 @@ async function executeBrowserGetContent(
     if (parsed.error) return encodeToolError(parsed.error)
     const content = (parsed.content ?? '').slice(0, 80000)
     return encodeStructuredToolResult({
-      url: useUIStore.getState().getBrowserState(ctx.sessionId).url,
+      url: useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId).url,
       title: parsed.title,
       type: 'html',
       content
@@ -326,7 +334,7 @@ async function executeBrowserGetContent(
   if (parsed.error) return encodeToolError(parsed.error)
   const content = (parsed.content ?? '').slice(0, 80000)
   return encodeStructuredToolResult({
-    url: useUIStore.getState().getBrowserState(ctx.sessionId).url,
+    url: useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId).url,
     title: parsed.title,
     type: 'markdown',
     content
@@ -368,7 +376,7 @@ async function executeBrowserScreenshot(
     image,
     {
       type: 'text',
-      text: `Screenshot captured: ${size.width}x${size.height}px - ${useUIStore.getState().getBrowserState(ctx.sessionId).url}`
+      text: `Screenshot captured: ${size.width}x${size.height}px - ${useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId).url}`
     }
   ]
 }
@@ -451,7 +459,7 @@ async function executeBrowserSnapshot(
     .map((item, index) => `[${index}] ${item.description}\n    selector: ${item.selector}`)
     .join('\n')
   return encodeStructuredToolResult({
-    url: useUIStore.getState().getBrowserState(ctx.sessionId).url,
+    url: useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId).url,
     title: parsed.title,
     elementCount: parsed.count ?? elements.length,
     elements: lines

@@ -14,22 +14,22 @@ Ola 的渲染进程使用 **Zustand + Immer** 组织状态。总体思路是：
 
 ## 核心 store / Core stores
 
-| Store | 作用 | 持久化 |
-| --- | --- | --- |
-| `chat-store` | 项目、会话、消息、模式、工作目录、活动会话 | SQLite + IPC |
-| `agent-store` | Agent loop、工具调用、审批、子代理、usage | 本地持久化 |
-| `task-store` | 会话级任务面板 / Steps | SQLite |
-| `plan-store` | Plan Mode 的计划文件与状态 | SQLite |
-| `team-store` | Team Runtime、成员、任务、消息 | 本地持久化 + runtime JSON |
-| `provider-store` | provider / model / auth 配置 | 配置存储 |
-| `settings-store` | 全局设置、代理、语言、Web 搜索、工作目录 | `settings.json` |
-| `app-plugin-store` | 图像、浏览器、桌面控制插件配置 | 配置存储 |
-| `channel-store` | 消息平台插件实例、自动回复状态 | 本地持久化 |
-| `mcp-store` | MCP server 配置与连接状态 | 本地持久化 + `mcp-servers.json` |
-| `cron-store` | Cron jobs、run history、日志 | SQLite |
-| `ssh-store` | SSH groups、connections、远程上下文 | 本地持久化 + SQLite |
-| `resources-store` | agents / commands / prompts / skills catalog | IPC + filesystem |
-| `goal-store` | Session goal / budget / progress | SQLite |
+| Store              | 作用                                         | 持久化                          |
+| ------------------ | -------------------------------------------- | ------------------------------- |
+| `chat-store`       | 项目、会话、消息、模式、工作目录、活动会话   | SQLite + IPC                    |
+| `agent-store`      | Agent loop、工具调用、审批、子代理、usage    | 本地持久化                      |
+| `task-store`       | 会话级任务面板 / Steps                       | SQLite                          |
+| `plan-store`       | Plan Mode 的计划文件与状态                   | SQLite                          |
+| `team-store`       | Team Runtime、成员、任务、消息               | 本地持久化 + runtime JSON       |
+| `provider-store`   | provider / model / auth 配置                 | 配置存储                        |
+| `settings-store`   | 全局设置、代理、语言、Web 搜索、工作目录     | `settings.json`                 |
+| `app-plugin-store` | 图像、浏览器、桌面控制插件配置               | 配置存储                        |
+| `channel-store`    | 消息平台插件实例、自动回复状态               | 本地持久化                      |
+| `mcp-store`        | MCP server 配置与连接状态                    | 本地持久化 + `mcp-servers.json` |
+| `cron-store`       | Cron jobs、run history、日志                 | SQLite                          |
+| `ssh-store`        | SSH groups、connections、远程上下文          | 本地持久化 + SQLite             |
+| `resources-store`  | agents / commands / prompts / skills catalog | IPC + filesystem                |
+| `goal-store`       | Session goal / budget / progress             | SQLite                          |
 
 ## 辅助 store / Supporting stores
 
@@ -56,7 +56,9 @@ Ola 的渲染进程使用 **Zustand + Immer** 组织状态。总体思路是：
 ```ts
 create<State>()(
   persist(
-    immer((set, get) => ({ /* ... */ })),
+    immer((set, get) => ({
+      /* ... */
+    })),
     {
       name: 'store-name',
       storage: createJSONStorage(() => ipcStorage)
@@ -67,13 +69,13 @@ create<State>()(
 
 ## 状态边界 / State boundaries
 
-| 边界 | 原则 |
-| --- | --- |
-| 会话实体 | 由 `chat-store` 和数据库同步，避免单纯靠内存 |
-| 运行态 | `agent-store` 保留流式文本、工具调用、审批与子代理状态 |
-| 外部连接 | channel / MCP / SSH 各有独立 store |
-| 配置 | `settings-store`、`provider-store`、`app-plugin-store`、`channel-store` |
-| 视图 | `ui-store` 处理布局和面板，不承担业务逻辑 |
+| 边界     | 原则                                                                    |
+| -------- | ----------------------------------------------------------------------- |
+| 会话实体 | 由 `chat-store` 和数据库同步，避免单纯靠内存                            |
+| 运行态   | `agent-store` 保留流式文本、工具调用、审批与子代理状态                  |
+| 外部连接 | channel / MCP / SSH 各有独立 store                                      |
+| 配置     | `settings-store`、`provider-store`、`app-plugin-store`、`channel-store` |
+| 视图     | `ui-store` 处理布局和面板，不承担业务逻辑                               |
 
 ## 你在代码里会看到什么 / What to expect in code
 

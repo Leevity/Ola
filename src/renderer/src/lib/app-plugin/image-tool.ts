@@ -3,7 +3,8 @@ import { IMAGE_GENERATE_TOOL_NAME } from './types'
 
 function nativeOnlyImageGenerateResult(): string {
   return JSON.stringify({
-    error: 'ImageGenerate executes in the .NET Native Worker and is unavailable through the renderer boundary.'
+    error:
+      'ImageGenerate executes in the .NET Native Worker and is unavailable through the renderer boundary.'
   })
 }
 

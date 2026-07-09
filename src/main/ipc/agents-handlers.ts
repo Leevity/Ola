@@ -82,10 +82,7 @@ export function registerAgentsHandlers(): void {
   registerMessagePackHandler<{ path: string; content: string }, AgentMutationResult>(
     'agents:manage-save',
     async (args) => {
-      return nativeUserContentRequest<AgentMutationResult>(
-        'agents/manage-save',
-        agentParams(args)
-      )
+      return nativeUserContentRequest<AgentMutationResult>('agents/manage-save', agentParams(args))
     }
   )
 }

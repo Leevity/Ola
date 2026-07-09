@@ -91,24 +91,27 @@ export function registerMemoryAutomationHandlers(): void {
     }
   )
 
-  registerMemoryMessagePackHandler<MemoryAutomationUndoArgs>('memory-automation:undo', async (args) => {
-    try {
-      const entry = await memoryAutomationDao.markMemoryAutomationUndo(
-        args.id,
-        args.status ?? 'undone',
-        args.error
-      )
-      if (!entry) {
-        return { success: false, error: 'Memory automation entry not found' }
-      }
-      return { success: true, entry }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error)
+  registerMemoryMessagePackHandler<MemoryAutomationUndoArgs>(
+    'memory-automation:undo',
+    async (args) => {
+      try {
+        const entry = await memoryAutomationDao.markMemoryAutomationUndo(
+          args.id,
+          args.status ?? 'undone',
+          args.error
+        )
+        if (!entry) {
+          return { success: false, error: 'Memory automation entry not found' }
+        }
+        return { success: true, entry }
+      } catch (error) {
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : String(error)
+        }
       }
     }
-  })
+  )
 
   registerMemoryMessagePackHandler<{ sessionId?: string } | undefined>(
     'memory-automation:run-session',
