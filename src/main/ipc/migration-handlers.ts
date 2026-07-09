@@ -20,21 +20,22 @@ export function registerMigrationHandlers(): void {
     return buildOpenCodeMigrationPreview()
   })
 
-  registerMessagePackHandler<
-    { source?: string; decisions?: MigrationApplyDecision[] } | undefined
-  >('migration:apply', async (args) => {
-    if (args?.source && args.source !== 'opencode') {
-      return {
-        source: args.source,
-        sourcePath: '',
-        backupPath: undefined,
-        warnings: [`Unsupported migration source: ${args.source}`],
-        results: [],
-        summary: { total: 0, applied: 0, skipped: 0, failed: 1 },
-        appliedAt: Date.now()
+  registerMessagePackHandler<{ source?: string; decisions?: MigrationApplyDecision[] } | undefined>(
+    'migration:apply',
+    async (args) => {
+      if (args?.source && args.source !== 'opencode') {
+        return {
+          source: args.source,
+          sourcePath: '',
+          backupPath: undefined,
+          warnings: [`Unsupported migration source: ${args.source}`],
+          results: [],
+          summary: { total: 0, applied: 0, skipped: 0, failed: 1 },
+          appliedAt: Date.now()
+        }
       }
-    }
 
-    return applyOpenCodeMigration(Array.isArray(args?.decisions) ? args?.decisions : [])
-  })
+      return applyOpenCodeMigration(Array.isArray(args?.decisions) ? args?.decisions : [])
+    }
+  )
 }

@@ -402,11 +402,7 @@ export function AppSidebar(): React.JSX.Element {
       <Sidebar side="left" variant="sidebar" collapsible="icon">
         <SidebarHeader>
           <div className="flex items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-            <img
-              src={appIconUrl}
-              alt="Ola"
-              className="size-8 rounded-xl object-cover shadow-sm"
-            />
+            <img src={appIconUrl} alt="Ola" className="size-8 rounded-xl object-cover shadow-sm" />
             <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">
               Ola
             </span>

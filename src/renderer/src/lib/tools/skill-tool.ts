@@ -103,7 +103,9 @@ function createSkillHandler(): ToolHandler {
       if (!skillName) {
         return encodeToolError('SkillName is required')
       }
-      return encodeToolError('Skill executes in the .NET Native Worker and is unavailable through the renderer boundary.')
+      return encodeToolError(
+        'Skill executes in the .NET Native Worker and is unavailable through the renderer boundary.'
+      )
     },
     requiresApproval: () => false
   }

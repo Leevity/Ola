@@ -35,7 +35,9 @@ export function DocCard({
       <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cowork-red/70 to-transparent opacity-0 transition group-hover:opacity-100" />
       <span>
         {eyebrow ? (
-          <span className="mb-2 block font-mono text-[11px] uppercase text-cowork-red">{eyebrow}</span>
+          <span className="mb-2 block font-mono text-[11px] uppercase text-cowork-red">
+            {eyebrow}
+          </span>
         ) : null}
         <span className="text-sm font-semibold text-fd-foreground">{title}</span>
       </span>
@@ -151,8 +153,8 @@ export function CommandItem({
       <div className="min-w-0">
         <div className="relative">
           <code className="block overflow-x-auto rounded-md border border-fd-border/70 bg-[#080707] px-3 py-2 pe-12 font-mono text-xs leading-6 text-fd-foreground">
-          <span className="select-none text-cowork-red">$ </span>
-          {command}
+            <span className="select-none text-cowork-red">$ </span>
+            {command}
           </code>
           <CopyCommandButton value={command} />
         </div>
@@ -191,13 +193,7 @@ export function Runbook({ children }: { children: ReactNode }) {
   return <ol className="runbook-list not-prose my-6 grid gap-3">{children}</ol>
 }
 
-export function RunbookStep({
-  title,
-  children
-}: {
-  title: string
-  children: ReactNode
-}) {
+export function RunbookStep({ title, children }: { title: string; children: ReactNode }) {
   return (
     <li className="runbook-step relative rounded-lg border border-fd-border/80 bg-fd-card/55 p-4 ps-14">
       <div className="flex items-center gap-2 text-sm font-semibold text-fd-foreground">

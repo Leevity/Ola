@@ -50,12 +50,12 @@
 
 每次对话选择最合适的模式：
 
-| 模式      | 用途 |
-| --------- | ---- |
+| 模式      | 用途                                                             |
+| --------- | ---------------------------------------------------------------- |
 | `clarify` | 提出有据可查的问题，解决歧义，在任何代码编写前产出可审阅的计划。 |
-| `cowork`  | 完整 Agent：代码搜索、文件 I/O、Shell、浏览器、子智能体委派等。 |
-| `code`    | 结对编程 — 聚焦代码生成和精准编辑，集成 Monaco Editor。 |
-| `acp`     | 架构管控：澄清需求、设计方案、分解任务并委派给子智能体执行。 |
+| `cowork`  | 完整 Agent：代码搜索、文件 I/O、Shell、浏览器、子智能体委派等。  |
+| `code`    | 结对编程 — 聚焦代码生成和精准编辑，集成 Monaco Editor。          |
+| `acp`     | 架构管控：澄清需求、设计方案、分解任务并委派给子智能体执行。     |
 
 ### 🧰 工具体系
 
@@ -74,16 +74,16 @@
 
 Ola 默认集成多个主流通讯平台，让智能体在你能看到的地方把结果送达。
 
-| 平台             | 支持 |
-| ---------------- | ---- |
-| 飞书 / Lark      | ✅   |
-| 钉钉             | ✅   |
-| Discord          | ✅   |
-| QQ               | ✅   |
-| Telegram         | ✅   |
-| 企业微信         | ✅   |
-| 微信公众号       | ✅   |
-| WhatsApp         | ✅   |
+| 平台        | 支持 |
+| ----------- | ---- |
+| 飞书 / Lark | ✅   |
+| 钉钉        | ✅   |
+| Discord     | ✅   |
+| QQ          | ✅   |
+| Telegram    | ✅   |
+| 企业微信    | ✅   |
+| 微信公众号  | ✅   |
+| WhatsApp    | ✅   |
 
 ### ⏰ 持久化
 
@@ -128,17 +128,17 @@ npm run dev
 
 ### 常用命令
 
-| 命令                | 说明                                |
-| ------------------- | ----------------------------------- |
-| `npm run dev`       | 启动 Electron + Vite 热重载开发     |
-| `npm run build`     | 类型检查并构建生产版本              |
-| `npm run build:win` | 构建 Windows 安装包                 |
-| `npm run build:mac` | 构建 macOS .dmg/zip                |
-| `npm run build:linux` | 构建 Linux .AppImage/.deb        |
-| `npm run lint`      | ESLint 检查（带缓存）               |
-| `npm run typecheck` | TypeScript 类型检查（主 + 渲染进程）|
-| `npm run format`    | Prettier 自动格式化                 |
-| `npm run native:publish` | 为当前平台构建 .NET sidecar   |
+| 命令                     | 说明                                 |
+| ------------------------ | ------------------------------------ |
+| `npm run dev`            | 启动 Electron + Vite 热重载开发      |
+| `npm run build`          | 类型检查并构建生产版本               |
+| `npm run build:win`      | 构建 Windows 安装包                  |
+| `npm run build:mac`      | 构建 macOS .dmg/zip                  |
+| `npm run build:linux`    | 构建 Linux .AppImage/.deb            |
+| `npm run lint`           | ESLint 检查（带缓存）                |
+| `npm run typecheck`      | TypeScript 类型检查（主 + 渲染进程） |
+| `npm run format`         | Prettier 自动格式化                  |
+| `npm run native:publish` | 为当前平台构建 .NET sidecar          |
 
 > **数据目录：** `~/.ola/` — 包含 SQLite 数据库、配置、智能体、技能、命令和提示词。
 

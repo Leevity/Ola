@@ -241,8 +241,8 @@ function summarizeMemorySnapshot(snapshot: LayeredMemorySnapshot): string {
 function hasUsableProvider(provider: ProviderConfig | null): provider is ProviderConfig {
   return Boolean(
     provider &&
-      provider.type !== 'openai-images' &&
-      (provider.apiKey || provider.requiresApiKey === false)
+    provider.type !== 'openai-images' &&
+    (provider.apiKey || provider.requiresApiKey === false)
   )
 }
 
@@ -267,7 +267,10 @@ function hasSecretLikeText(content: string): boolean {
 
 function redactSecretLikeText(content: string): string {
   return content
-    .replace(/-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/gi, '[REDACTED_PRIVATE_KEY]')
+    .replace(
+      /-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----[\s\S]*?-----END (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----/gi,
+      '[REDACTED_PRIVATE_KEY]'
+    )
     .replace(/\bsk-[A-Za-z0-9_-]{20,}\b/g, '[REDACTED_OPENAI_KEY]')
     .replace(/\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{20,}\b/g, '[REDACTED_GITHUB_TOKEN]')
     .replace(/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED_AWS_KEY]')
@@ -321,9 +324,7 @@ function uniqueJsonRepairCandidates(raw: string): string[] {
   const candidates = [
     raw,
     withoutTrailingCommas,
-    withoutTrailingCommas
-      .replace(/[\u201C\u201D]/g, '"')
-      .replace(/[\u2018\u2019]/g, "'")
+    withoutTrailingCommas.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'")
   ]
   return [...new Set(candidates.map((candidate) => candidate.trim()).filter(Boolean))]
 }
@@ -425,14 +426,18 @@ function parseStage1Json(raw: string, sessionId: string): PipelineScopeOutput[] 
   for (const item of scopeOutputs) {
     if (!item || typeof item !== 'object') continue
     const record = item as Record<string, unknown>
-    const scope = record.scope === 'project' ? 'project' : record.scope === 'global' ? 'global' : null
+    const scope =
+      record.scope === 'project' ? 'project' : record.scope === 'global' ? 'global' : null
     if (!scope) continue
     const rawMemory = typeof record.raw_memory === 'string' ? record.raw_memory.trim() : ''
     const rolloutSummary =
       typeof record.rollout_summary === 'string' ? record.rollout_summary.trim() : ''
     const rolloutSlug =
       typeof record.rollout_slug === 'string' && record.rollout_slug.trim()
-        ? record.rollout_slug.trim().replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 80)
+        ? record.rollout_slug
+            .trim()
+            .replace(/[^a-zA-Z0-9_-]+/g, '-')
+            .slice(0, 80)
         : rolloutSlugFromSession(sessionId, scope)
     if (!rawMemory && !rolloutSummary) continue
     outputs.push({
@@ -454,7 +459,9 @@ function parseConsolidationJson(raw: string): ConsolidationOutput | null {
   if (typeof record.memory_markdown === 'string') output.memoryMarkdown = record.memory_markdown
   if (typeof record.summary_markdown === 'string') output.summaryMarkdown = record.summary_markdown
   if (Array.isArray(record.written_items)) {
-    output.writtenItems = record.written_items.filter((item): item is string => typeof item === 'string')
+    output.writtenItems = record.written_items.filter(
+      (item): item is string => typeof item === 'string'
+    )
   }
   return output
 }
@@ -636,7 +643,10 @@ async function completeStage1(args: {
   })
 }
 
-async function createPhase2Job(root: MemoryRootDescriptor, sessionId?: string | null): Promise<MemoryPipelineJob | null> {
+async function createPhase2Job(
+  root: MemoryRootDescriptor,
+  sessionId?: string | null
+): Promise<MemoryPipelineJob | null> {
   const result = await pipelineRun({
     action: 'record-job',
     jobKind: 'phase2',
@@ -689,7 +699,8 @@ function buildStage1Input(args: {
     }
   }
   const summary = sanitizeMemoryPayload(args.scopeOutput.rolloutSummary)
-  const slug = args.scopeOutput.rolloutSlug || rolloutSlugFromSession(args.sourceSessionId, args.root.scope)
+  const slug =
+    args.scopeOutput.rolloutSlug || rolloutSlugFromSession(args.sourceSessionId, args.root.scope)
   return {
     input: {
       memoryRootId: args.root.id,
@@ -785,7 +796,10 @@ function appendPipelineSection(markdown: string, outputs: MemoryStage1Output[]):
   return `${next.trimEnd()}\n${lines.join('\n')}\n`
 }
 
-function buildRawMemoriesMarkdown(root: MemoryRootDescriptor, outputs: MemoryStage1Output[]): string {
+function buildRawMemoriesMarkdown(
+  root: MemoryRootDescriptor,
+  outputs: MemoryStage1Output[]
+): string {
   const sections = outputs
     .slice()
     .reverse()
@@ -802,7 +816,10 @@ function buildRawMemoriesMarkdown(root: MemoryRootDescriptor, outputs: MemorySta
   return `# Raw Memories\n\n${sections.join('\n\n')}\n`
 }
 
-function buildRolloutSummaryMarkdown(root: MemoryRootDescriptor, output: MemoryStage1Output): string {
+function buildRolloutSummaryMarkdown(
+  root: MemoryRootDescriptor,
+  output: MemoryStage1Output
+): string {
   return [
     `# ${output.rolloutSlug}`,
     '',
@@ -884,7 +901,10 @@ async function runConsolidation(args: {
   return parseConsolidationJson(raw)
 }
 
-async function writeWithRetry(descriptor: TargetDescriptor, nextContent: string): Promise<string | null> {
+async function writeWithRetry(
+  descriptor: TargetDescriptor,
+  nextContent: string
+): Promise<string | null> {
   const before = descriptor.missingFile ? undefined : descriptor.content
   let error = await writeTargetContent(descriptor, nextContent, before)
   if (error?.includes('File changed since it was read')) {
@@ -970,10 +990,12 @@ async function runPhase2ForRoot(args: {
       fallbackMemory
     )
     const needsSummary =
-      estimateTokens(nextMemory) > Math.max(1000, useSettingsStore.getState().memorySummaryBudgetTokens)
+      estimateTokens(nextMemory) >
+      Math.max(1000, useSettingsStore.getState().memorySummaryBudgetTokens)
     const nextSummary = ensureMarkdownDocument(
       sanitizeMemoryPayload(
-        consolidation?.summaryMarkdown ?? (needsSummary ? buildSummaryFallback(nextMemory) : nextMemory)
+        consolidation?.summaryMarkdown ??
+          (needsSummary ? buildSummaryFallback(nextMemory) : nextMemory)
       ).content || buildSummaryFallback(nextMemory),
       SUMMARY_TEMPLATE
     )
@@ -1002,7 +1024,9 @@ async function runPhase2ForRoot(args: {
       sourceSessionId: args.sourceSessionId,
       targetPath: memoryDescriptor.path,
       status: 'written',
-      fingerprint: fingerprintContent(`${args.root.id}:${outputs.map((output) => output.id).join(':')}`),
+      fingerprint: fingerprintContent(
+        `${args.root.id}:${outputs.map((output) => output.id).join(':')}`
+      ),
       evidence: {
         memoryRootId: args.root.id,
         stage1OutputIds: outputs.map((output) => output.id),
@@ -1334,7 +1358,10 @@ export async function runDailyMemoryRollup(options: DailyRollupOptions = {}): Pr
   }
   if (rootInputs.length === 0) return
 
-  const prepared = await prepareSessionPipeline({ sessionId: `rollup:${sourceDate}`, roots: rootInputs })
+  const prepared = await prepareSessionPipeline({
+    sessionId: `rollup:${sourceDate}`,
+    roots: rootInputs
+  })
   if (!prepared.success) return
   const targets: Array<{ root: MemoryRootDescriptor; descriptor: TargetDescriptor }> = []
 

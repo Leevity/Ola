@@ -59,9 +59,7 @@ function coerceNativePlan(value: unknown): Plan | null {
   }
 }
 
-export async function handleNativePlanUiUpdate(
-  params: unknown
-): Promise<NativePlanUiUpdateResult> {
+export async function handleNativePlanUiUpdate(params: unknown): Promise<NativePlanUiUpdateResult> {
   const record = isRecord(params) ? params : {}
   const action = coerceString(record.action)
   const plan = coerceNativePlan(record.plan)

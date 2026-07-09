@@ -345,9 +345,7 @@ function createSandbox(): ExtensionJsSandbox {
     console,
     fetch: () =>
       Promise.reject(
-        new Error(
-          'Direct fetch is disabled in Ola extension sandboxes. Use ctx.fetch instead.'
-        )
+        new Error('Direct fetch is disabled in Ola extension sandboxes. Use ctx.fetch instead.')
       ),
     XMLHttpRequest: undefined,
     WebSocket: undefined,

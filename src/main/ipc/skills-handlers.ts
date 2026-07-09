@@ -121,15 +121,18 @@ export function registerSkillsHandlers(): void {
     nativeSkillsRequest('skills/delete', args)
   )
 
-  registerMessagePackHandler<{ name: string }, MutationResult>('skills:open-folder', async (args) => {
-    const result = await nativeSkillsRequest<SkillPathResult>('skills/resolve-path', args)
-    if (!result.success || !result.path) {
-      return { success: false, error: result.error ?? 'Skill path not found' }
-    }
+  registerMessagePackHandler<{ name: string }, MutationResult>(
+    'skills:open-folder',
+    async (args) => {
+      const result = await nativeSkillsRequest<SkillPathResult>('skills/resolve-path', args)
+      if (!result.success || !result.path) {
+        return { success: false, error: result.error ?? 'Skill path not found' }
+      }
 
-    const error = await shell.openPath(result.path)
-    return error ? { success: false, error } : { success: true }
-  })
+      const error = await shell.openPath(result.path)
+      return error ? { success: false, error } : { success: true }
+    }
+  )
 
   registerMessagePackHandler<{ sourcePath: string }, MutationResult & { name?: string }>(
     'skills:add-from-folder',

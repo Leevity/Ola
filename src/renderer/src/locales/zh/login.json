@@ -1,0 +1,61 @@
+{
+  "steps": {
+    "idle": "空闲",
+    "navigate": "打开登录页",
+    "detect_form": "定位表单",
+    "fill_username": "填用户名",
+    "fill_password": "填密码",
+    "submit": "提交登录",
+    "inspect_result": "检查结果",
+    "done": "完成",
+    "paused": "已暂停",
+    "failed": "已失败"
+  },
+  "current": "当前:{{step}}",
+  "awaiting": "等待中...",
+  "errors": {
+    "noCredential": "没有可用凭据,请先添加或启用一个模板",
+    "startFailed": "校验启动失败:{{error}}"
+  },
+  "warnings": {
+    "domainMismatch": "将用 {{credentialDomain}} 的凭据登录,但 run 目标是 {{runDomain}}"
+  },
+  "handoff": {
+    "active": "已交给您接管",
+    "takeOver": "请手动操作浏览器完成当前步骤。",
+    "resume": "继续",
+    "reportDone": "报告完成",
+    "reportFailed": "报告失败"
+  },
+  "actions": {
+    "start": "开始校验",
+    "takeover": "我接手",
+    "skip": "跳过这步",
+    "retry": "重试",
+    "cancel": "取消",
+    "clear": "隐藏状态条"
+  },
+  "messages": {
+    "opened": "已打开 {{url}}",
+    "noProfile": "没有 {{domain}} 的策略表,无法自动定位表单",
+    "formLocated": "已定位表单 ({{usernameSelector}} / {{passwordSelector}})",
+    "missingUsernameSelector": "缺 username selector",
+    "fillUsernameFailed": "填用户名失败",
+    "usernameFilled": "已填用户名",
+    "missingPasswordSelector": "缺 password selector",
+    "passwordFailed": "密码投递失败",
+    "passwordFilled": "密码已安全投递",
+    "missingSubmitSelector": "缺 submit selector",
+    "submitFailed": "点击登录失败",
+    "submitted": "已点登录",
+    "contentUnavailable": "拿不到页面内容",
+    "challengeDetected": "检测到 {{kind}},等您完成",
+    "loginSuccess": "登录成功",
+    "successNotDetected": "未检测到登录成功标志",
+    "handoffRequested": "已暂停,等待您接管",
+    "skipped": "已跳过",
+    "cancelled": "已取消",
+    "retrying": "重试第 {{attempt}} 次...",
+    "retryExhausted": "放弃:重试 {{count}} 次仍失败"
+  }
+}

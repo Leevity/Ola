@@ -447,12 +447,36 @@ export function SshConnectionInspector({
   }
 
   const navItems: Array<{ key: InspectorPanel; label: string; icon: React.ReactNode }> = [
-    { key: 'basic', label: t('workspace.basicInfo', { defaultValue: '基本信息' }), icon: <Link2 className="size-4" /> },
-    { key: 'auth', label: t('workspace.connectionSettings', { defaultValue: '连接设置' }), icon: <Server className="size-4" /> },
-    { key: 'jump', label: t('workspace.jumpHost', { defaultValue: '跳板机' }), icon: <ArrowUpRight className="size-4" /> },
-    { key: 'proxy', label: t('workspace.proxySettings', { defaultValue: '代理设置' }), icon: <Network className="size-4" /> },
-    { key: 'other', label: t('workspace.otherSettings', { defaultValue: '其他设置' }), icon: <Settings2 className="size-4" /> },
-    { key: 'init', label: t('workspace.initialize', { defaultValue: '初始化' }), icon: <Wrench className="size-4" /> }
+    {
+      key: 'basic',
+      label: t('workspace.basicInfo', { defaultValue: '基本信息' }),
+      icon: <Link2 className="size-4" />
+    },
+    {
+      key: 'auth',
+      label: t('workspace.connectionSettings', { defaultValue: '连接设置' }),
+      icon: <Server className="size-4" />
+    },
+    {
+      key: 'jump',
+      label: t('workspace.jumpHost', { defaultValue: '跳板机' }),
+      icon: <ArrowUpRight className="size-4" />
+    },
+    {
+      key: 'proxy',
+      label: t('workspace.proxySettings', { defaultValue: '代理设置' }),
+      icon: <Network className="size-4" />
+    },
+    {
+      key: 'other',
+      label: t('workspace.otherSettings', { defaultValue: '其他设置' }),
+      icon: <Settings2 className="size-4" />
+    },
+    {
+      key: 'init',
+      label: t('workspace.initialize', { defaultValue: '初始化' }),
+      icon: <Wrench className="size-4" />
+    }
   ]
 
   const authSummary =
@@ -723,7 +747,9 @@ export function SshConnectionInspector({
                   ) : null}
 
                   <div className="rounded-[10px] border border-[#3d3d3d] bg-[#2b2b2b] px-3 py-3 text-[13px]">
-                    <div className="text-[#8b8b8b]">{t('workspace.authSummary', { defaultValue: '认证摘要' })}</div>
+                    <div className="text-[#8b8b8b]">
+                      {t('workspace.authSummary', { defaultValue: '认证摘要' })}
+                    </div>
                     <div className="mt-1 text-[#f5f5f5]">
                       {formState.username || 'root'} / {authSummary}
                     </div>
@@ -884,7 +910,11 @@ export function SshConnectionInspector({
             onClick={() => void handlePrimaryAction()}
             disabled={!canSubmit || saving}
           >
-            {session?.status === 'connected' ? <Terminal className="size-4" /> : <ArrowUpRight className="size-4" />}
+            {session?.status === 'connected' ? (
+              <Terminal className="size-4" />
+            ) : (
+              <ArrowUpRight className="size-4" />
+            )}
             {session?.status === 'connected' ? t('openTerminal') : t('connect')}
           </Button>
         </div>

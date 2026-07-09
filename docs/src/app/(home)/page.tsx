@@ -152,9 +152,12 @@ export default function HomePage() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-12 lg:grid-cols-[0.9fr_1.1fr] lg:px-8">
           <div>
             <p className="text-xs font-semibold uppercase text-[#ff5a52]">Documentation map</p>
-            <h2 className="mt-3 text-3xl font-bold text-white">按工作方式组织，而不是按源码目录组织。</h2>
+            <h2 className="mt-3 text-3xl font-bold text-white">
+              按工作方式组织，而不是按源码目录组织。
+            </h2>
             <p className="mt-4 text-sm leading-7 text-zinc-400">
-              顶栏是产品语义入口；左侧导航在每个栏目里按任务和对象分组；正文提供入口卡片、步骤和命令块，方便人和 AI 一起阅读。
+              顶栏是产品语义入口；左侧导航在每个栏目里按任务和对象分组；正文提供入口卡片、步骤和命令块，方便人和
+              AI 一起阅读。
             </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
@@ -181,7 +184,9 @@ export default function HomePage() {
       <section className="mx-auto grid max-w-7xl gap-8 px-4 py-14 lg:grid-cols-[0.8fr_1.2fr] lg:px-8">
         <div>
           <p className="text-xs font-semibold uppercase text-[#ff5a52]">Runtime surfaces</p>
-          <h2 className="mt-3 text-3xl font-bold text-white">本地工具、消息渠道和 Agent 协作汇到同一个桌面运行时。</h2>
+          <h2 className="mt-3 text-3xl font-bold text-white">
+            本地工具、消息渠道和 Agent 协作汇到同一个桌面运行时。
+          </h2>
         </div>
         <div className="overflow-hidden rounded-lg border border-white/10">
           {capabilityRows.map(([name, value]) => (

@@ -142,14 +142,16 @@ export function persistChatRoute(state: ChatRouteState): void {
   if (lastPersistedChatRoute === serialized) return
 
   lastPersistedChatRoute = serialized
-  void ipcClient.invoke('settings:set', {
-    key: LAST_CHAT_ROUTE_SETTINGS_KEY,
-    value
-  }).catch(() => {
-    if (lastPersistedChatRoute === serialized) {
-      lastPersistedChatRoute = null
-    }
-  })
+  void ipcClient
+    .invoke('settings:set', {
+      key: LAST_CHAT_ROUTE_SETTINGS_KEY,
+      value
+    })
+    .catch(() => {
+      if (lastPersistedChatRoute === serialized) {
+        lastPersistedChatRoute = null
+      }
+    })
 }
 
 export function replaceChatRoute(state: ChatRouteState): void {

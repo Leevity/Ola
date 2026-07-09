@@ -50,11 +50,11 @@ Most AI chat interfaces are isolated from your actual work environment. You spen
 
 Every conversation picks the right mode:
 
-| Mode      | Purpose |
-| --------- | ------- |
-| `clarify` | Ask grounded questions, resolve ambiguity, produce a reviewable plan before any code is written. |
-| `cowork`  | Full agent: code search, file I/O, shell, browser, sub-agent delegation, and more. |
-| `code`    | Pair programming — focused code generation and surgical editing with Monaco Editor integration. |
+| Mode      | Purpose                                                                                           |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| `clarify` | Ask grounded questions, resolve ambiguity, produce a reviewable plan before any code is written.  |
+| `cowork`  | Full agent: code search, file I/O, shell, browser, sub-agent delegation, and more.                |
+| `code`    | Pair programming — focused code generation and surgical editing with Monaco Editor integration.   |
 | `acp`     | Architecture-control lead: clarify, design, decompose, and delegate implementation to sub-agents. |
 
 ### 🧰 Tool System
@@ -74,16 +74,16 @@ Every conversation picks the right mode:
 
 Ola ships with integrations for several messaging platforms so the agent can reach you where you already are.
 
-| Platform          | Support |
-| ----------------- | ------- |
-| Feishu / Lark     | ✅      |
-| DingTalk          | ✅      |
-| Discord           | ✅      |
-| QQ                | ✅      |
-| Telegram          | ✅      |
-| WeCom (WeChat Work) | ✅   |
-| WeChat Official   | ✅      |
-| WhatsApp          | ✅      |
+| Platform            | Support |
+| ------------------- | ------- |
+| Feishu / Lark       | ✅      |
+| DingTalk            | ✅      |
+| Discord             | ✅      |
+| QQ                  | ✅      |
+| Telegram            | ✅      |
+| WeCom (WeChat Work) | ✅      |
+| WeChat Official     | ✅      |
+| WhatsApp            | ✅      |
 
 ### ⏰ Persistence
 
@@ -128,16 +128,16 @@ npm run dev
 
 ### Key Commands
 
-| Command             | Description                           |
-| ------------------- | ------------------------------------- |
-| `npm run dev`       | Start Electron + Vite with hot reload |
-| `npm run build`     | Typecheck then build for production   |
-| `npm run build:win` | Build Windows installer               |
-| `npm run build:mac` | Build macOS .dmg/zip                  |
-| `npm run build:linux` | Build Linux .AppImage/.deb         |
-| `npm run lint`      | ESLint with cache                     |
-| `npm run typecheck` | TypeScript check (main + renderer)    |
-| `npm run format`    | Prettier auto-format                  |
+| Command                  | Description                                     |
+| ------------------------ | ----------------------------------------------- |
+| `npm run dev`            | Start Electron + Vite with hot reload           |
+| `npm run build`          | Typecheck then build for production             |
+| `npm run build:win`      | Build Windows installer                         |
+| `npm run build:mac`      | Build macOS .dmg/zip                            |
+| `npm run build:linux`    | Build Linux .AppImage/.deb                      |
+| `npm run lint`           | ESLint with cache                               |
+| `npm run typecheck`      | TypeScript check (main + renderer)              |
+| `npm run format`         | Prettier auto-format                            |
 | `npm run native:publish` | Build the .NET sidecar for the current platform |
 
 > **Data directory:** `~/.ola/` — SQLite database, config, agents, skills, commands, and prompts.

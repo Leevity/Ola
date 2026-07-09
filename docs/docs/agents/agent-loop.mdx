@@ -31,15 +31,15 @@ runAgentLoop(messages, config, toolCtx, onApprovalNeeded?)
 
 ### 关键参数
 
-| 参数 | 作用 |
-| --- | --- |
-| `messages` | 当前对话消息 |
-| `config.provider` | 当前 provider 配置 |
-| `config.tools` | 已注册工具定义 |
-| `config.contextCompression` | 上下文压缩配置 |
-| `config.maxIterations` | 最大循环轮次 |
-| `config.signal` | AbortSignal，用于取消请求 |
-| `toolCtx` | 工具执行上下文（IPC、工作目录、会话、插件信息） |
+| 参数                        | 作用                                            |
+| --------------------------- | ----------------------------------------------- |
+| `messages`                  | 当前对话消息                                    |
+| `config.provider`           | 当前 provider 配置                              |
+| `config.tools`              | 已注册工具定义                                  |
+| `config.contextCompression` | 上下文压缩配置                                  |
+| `config.maxIterations`      | 最大循环轮次                                    |
+| `config.signal`             | AbortSignal，用于取消请求                       |
+| `toolCtx`                   | 工具执行上下文（IPC、工作目录、会话、插件信息） |
 
 ## 流式事件 / Streaming events
 

@@ -835,7 +835,12 @@ export const usePetsStore = create<PetsStore>()(
 // fall back to rehydrate when no patch is supplied (e.g. create / archive
 // flows that involve a refetch).
 ipcClient.on('pet:sync-event', (payload) => {
-  const event = payload as { kind?: string; action?: string; id?: string; patch?: Record<string, unknown> } | null
+  const event = payload as {
+    kind?: string
+    action?: string
+    id?: string
+    patch?: Record<string, unknown>
+  } | null
   if (!event) return
   if (event.kind === 'exp') {
     void usePetsStore.persist.rehydrate()
@@ -846,9 +851,7 @@ ipcClient.on('pet:sync-event', (payload) => {
       // Merge the patch in place — this round-trips back the pet state the
       // originator just wrote to disk, without forcing a rehydrate.
       usePetsStore.setState((state) => ({
-        pets: state.pets.map((pet) =>
-          pet.id === event.id ? { ...pet, ...event.patch } : pet
-        )
+        pets: state.pets.map((pet) => (pet.id === event.id ? { ...pet, ...event.patch } : pet))
       }))
     } else {
       void usePetsStore.persist.rehydrate()

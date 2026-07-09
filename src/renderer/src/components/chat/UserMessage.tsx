@@ -173,17 +173,17 @@ function UserSelectedFileReadsView({
           const status = skipped
             ? t('userMessage.selectedFileReadSkipped', { defaultValue: 'Path reference' })
             : file.error
-            ? t('userMessage.selectedFileReadFailed', { defaultValue: 'Read failed' })
-            : file.truncated
-              ? t('userMessage.selectedFileReadTruncated', {
-                  count: file.lineCount,
-                  maxLines: file.maxLines,
-                  defaultValue: 'Read first {{count}} lines'
-                })
-              : t('userMessage.selectedFileReadLines', {
-                  count: file.lineCount,
-                  defaultValue: 'Read {{count}} lines'
-                })
+              ? t('userMessage.selectedFileReadFailed', { defaultValue: 'Read failed' })
+              : file.truncated
+                ? t('userMessage.selectedFileReadTruncated', {
+                    count: file.lineCount,
+                    maxLines: file.maxLines,
+                    defaultValue: 'Read first {{count}} lines'
+                  })
+                : t('userMessage.selectedFileReadLines', {
+                    count: file.lineCount,
+                    defaultValue: 'Read {{count}} lines'
+                  })
 
           return (
             <div
@@ -212,10 +212,10 @@ function UserSelectedFileReadsView({
                   skipped
                     ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
                     : file.error
-                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
-                    : file.truncated
-                      ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
-                      : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300'
+                      : file.truncated
+                        ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300'
+                        : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
                 )}
               >
                 {status}

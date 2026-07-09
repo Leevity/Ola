@@ -9,11 +9,11 @@ Ola 的 Cron 系统把“让 Agent 稍后执行”变成了可持久化、可审
 
 ## 支持的调度 / Supported schedules
 
-| kind | 含义 | 示例 |
-| --- | --- | --- |
-| `at` | 一次性延迟执行 | `+10m`、`+2h`、`+1d` |
-| `every` | 固定间隔重复执行 | `3600000`（1 小时） |
-| `cron` | 标准 5 段 cron 表达式 | `0 9 * * *` |
+| kind    | 含义                  | 示例                 |
+| ------- | --------------------- | -------------------- |
+| `at`    | 一次性延迟执行        | `+10m`、`+2h`、`+1d` |
+| `every` | 固定间隔重复执行      | `3600000`（1 小时）  |
+| `cron`  | 标准 5 段 cron 表达式 | `0 9 * * *`          |
 
 ## 关键规则 / Important rules
 
@@ -63,26 +63,26 @@ Cron 相关数据落在这些表里：
 
 ### `cron_jobs` 关键字段
 
-| 字段 | 作用 |
-| --- | --- |
-| `schedule_kind` | at / every / cron |
-| `schedule_at` | 一次性执行时间 |
-| `schedule_every` | 间隔毫秒数 |
-| `schedule_expr` | cron 表达式 |
-| `schedule_tz` | 时区 |
-| `agent_id` | 指定子代理 |
-| `model` | 模型覆盖 |
-| `working_folder` | 执行目录 |
-| `ssh_connection_id` | 远程执行上下文 |
-| `session_id` | 来源 session |
-| `delivery_mode` | desktop / session / none |
-| `delivery_target` | session 目标 |
-| `plugin_id` / `plugin_chat_id` | 消息平台投递目标 |
-| `enabled` | 是否启用 |
-| `delete_after_run` | 运行后删除 |
-| `last_fired_at` | 最近触发时间 |
-| `fire_count` | 触发次数 |
-| `deleted_at` | 软删除时间 |
+| 字段                           | 作用                     |
+| ------------------------------ | ------------------------ |
+| `schedule_kind`                | at / every / cron        |
+| `schedule_at`                  | 一次性执行时间           |
+| `schedule_every`               | 间隔毫秒数               |
+| `schedule_expr`                | cron 表达式              |
+| `schedule_tz`                  | 时区                     |
+| `agent_id`                     | 指定子代理               |
+| `model`                        | 模型覆盖                 |
+| `working_folder`               | 执行目录                 |
+| `ssh_connection_id`            | 远程执行上下文           |
+| `session_id`                   | 来源 session             |
+| `delivery_mode`                | desktop / session / none |
+| `delivery_target`              | session 目标             |
+| `plugin_id` / `plugin_chat_id` | 消息平台投递目标         |
+| `enabled`                      | 是否启用                 |
+| `delete_after_run`             | 运行后删除               |
+| `last_fired_at`                | 最近触发时间             |
+| `fire_count`                   | 触发次数                 |
+| `deleted_at`                   | 软删除时间               |
 
 ### `cron_runs` 会保存快照
 
