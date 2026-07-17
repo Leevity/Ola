@@ -43,7 +43,8 @@ Most AI chat interfaces are isolated from your actual work environment. You spen
 ### ⚙️ Runtime
 
 - **4-layer Electron architecture** — Main process, Preload bridge, Renderer UI (React 19), and provider-agnostic agent runtime backed by a .NET native sidecar.
-- **TypeScript end-to-end** — Type safety from SQLite through IPC to the UI.
+- **Typed cross-runtime contracts** — TypeScript DTOs and audited C# protocol mirrors from SQLite
+  routes through IPC to the UI.
 - **SSH remote support** — Agents operate on remote hosts transparently via SSH with xterm.js terminal integration.
 
 ### 🔄 4 Agent Modes
@@ -111,8 +112,10 @@ Renderer (React 19)  ←→  Preload (contextBridge)  ←→  Main Process
 
 - **Renderer** — React 19 + Tailwind CSS + Zustand stores. Owns the message surface, approvals, and session UX.
 - **Preload** — Narrow `contextBridge` API for secure main↔renderer communication.
-- **Main Process** — System access: SQLite, filesystem, shell, SSH, messaging plugins, cron, MCP client.
-- **Agent Runtime** — Provider-agnostic (`js-agent-runtime.ts`), streams responses, handles tool calls. A .NET 10 native sidecar (`Ola.Native.Worker`) handles SQLite, file I/O, and other heavy work over MessagePack + Unix domain sockets.
+- **Main Process** — Window and process orchestration, IPC, messaging plugins, cron, and MCP client.
+- **Agent Runtime** — Provider-agnostic and hosted by the .NET 10 `Ola.Native.Worker`. Electron main
+  supervises it and bridges MessagePack streams, approvals, and renderer-owned tools. The same
+  worker owns SQLite, file I/O, and other native capabilities.
 
 ## 🛠️ Quick Start
 

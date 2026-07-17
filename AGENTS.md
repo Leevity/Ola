@@ -10,7 +10,7 @@ src/
 │   ├── index.ts       # App bootstrap, window lifecycle, zoom
 │   ├── channels/      # Messaging plugins (Feishu, DingTalk, Discord, QQ, etc.)
 │   ├── cron/          # Scheduled task agent runtime
-│   ├── db/            # SQLite DAOs (messages, sessions, projects, tasks, plans)
+│   ├── db/            # Thin SQLite IPC wrappers backed by the Native Worker
 │   ├── ipc/           # IPC handlers (main ↔ renderer bridge)
 │   ├── mcp/           # Model Context Protocol client
 │   ├── goals/         # Goal/task persistence and lifecycle
@@ -33,10 +33,12 @@ src/
 **Key architectural patterns:**
 
 - **IPC:** Renderer calls `ipcClient.invoke(channel)`, main handles in `src/main/ipc/*-handlers.ts`.
-- **Agent runtime:** Runs in main process (`js-agent-runtime.ts`), provider-agnostic.
+- **Agent runtime:** Runs in `Ola.Native.Worker`; main bridges MessagePack streams and renderer
+  reverse requests through `native-agent-runtime.ts` and `sidecar-manager.ts`.
 - **Tool system:** Tools in `src/renderer/src/lib/tools/`, registered in phases (core → skills → sub-agents → teams).
 - **Session modes:** `chat`, `clarify`, `cowork`, `code`, `acp` — each with distinct prompts/tools/UI.
-- **SQLite schema:** Evolves via additive `ensureColumn` — columns added if absent, never dropped. No migration files.
+- **SQLite schema:** Owned by the Native Worker `DbSchemaMigrator`; migrations are additive and old
+  columns are not dropped.
 - **Data directory:** `~/.ola/` — never commit its contents.
 
 ## Build, Test, and Development Commands
@@ -50,7 +52,8 @@ npm run build:linux  # Linux .AppImage/.deb
 npm run lint         # ESLint with cache
 npm run typecheck    # TypeScript check (tsc --noEmit for both tsconfig.node.json & tsconfig.web.json)
 npm run format       # Prettier (single quotes, no semicolons, 100-col width)
-npm run postinstall  # Rebuild native modules (better-sqlite3, robotjs, ssh2, node-pty) for Electron
+npm run postinstall  # Prepare native Electron dependencies and the .NET Native Worker
+npm run audit:sync   # Compare Ola with the pinned sibling OpenCowork reference
 ```
 
 **CI:** GitHub Actions (`build.yml`) builds on push to release tag across Windows (x64, arm64), macOS (arm64, amd64), and Linux (x64, arm64). Artifacts uploaded to the GitHub Release.

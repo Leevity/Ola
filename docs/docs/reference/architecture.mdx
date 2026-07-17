@@ -1,128 +1,115 @@
 ---
-title: 整体架构概述
-description: Ola 的真实分层、模块边界与数据流。
+title: 整体架构概览
+description: Ola 当前的进程边界、Native Worker 运行时和核心数据流。
 ---
 
-# 整体架构概述 / Architecture Overview
+# 整体架构概览 / Architecture Overview
 
-Ola 的实现可以概括为一句话：**Electron 主进程负责系统能力，渲染进程负责 Agent 运行时和 UI，Preload 只暴露最小桥接，Shared 维护跨进程契约。**
+Ola 是 Electron、React 和 .NET Native Worker 组成的本地优先桌面应用。Renderer 管理交互，
+Electron Main 管理系统边界和进程生命周期，`Ola.Native.Worker` 承担 Agent Runtime、SQLite
+以及主要原生能力。Preload 只暴露受控桥接，`src/shared` 保存跨进程协议。
 
 ## 架构图 / Architecture diagram
 
 ```mermaid
-flowchart TD
+flowchart LR
   subgraph Renderer["Renderer · React 19 + Zustand"]
-    UI["App / Pages / Panels"]
-    Stores["Stores · chat / agent / plan / team / provider / plugin / mcp / cron"]
-    Loop["Agent Loop"]
-    Tools["Tool Registry"]
-    Preview["Preview / Viewer Registry"]
-    Teams["Team Runtime UI"]
+    UI["Pages and panels"]
+    Stores["Session and UI state"]
+    Tools["Renderer-owned tool handlers"]
   end
 
-  subgraph Preload["Preload · Security bridge"]
-    Bridge["window.electron + window.api"]
+  subgraph Preload["Preload · security bridge"]
+    Bridge["window.electron / window.api"]
   end
 
-  subgraph Main["Main · Electron + Node.js"]
-    Win["Window / Tray / Updater / Crash Logger"]
-    IPC["IPC handlers"]
-    DB["SQLite data.db"]
-    Cron["Cron scheduler"]
-    MCP["McpManager"]
-    Channels["ChannelManager"]
-    SSH["SSH runtime"]
-    Runtime["JS Agent Runtime"]
+  subgraph Main["Electron Main · orchestration"]
+    Windows["Windows / tray / updater"]
+    IPC["IPC and MessagePack routing"]
+    Supervisor["Native Worker supervisor"]
+    Services["Channels / cron / MCP / browser"]
   end
 
-  Shared["Shared · protocols & types"]
+  subgraph Worker["Ola.Native.Worker · .NET 10"]
+    Agent["Provider loop and Agent runtime"]
+    DB["SQLite and schema migration"]
+    Native["File / Git / Shell / SSH / Sync"]
+  end
 
-  UI --> Stores
-  Stores --> Loop
-  Loop --> Tools
-  Tools -->|IPC| Bridge
-  Bridge --> IPC
-  IPC --> DB
-  IPC --> Cron
-  IPC --> MCP
-  IPC --> Channels
-  IPC --> SSH
-  IPC --> Runtime
-  Runtime --> DB
-  Channels --> External["Feishu / DingTalk / WeCom / QQ / Weixin / Telegram / Discord / WhatsApp"]
-  Shared --- Loop
-  Shared --- Runtime
-  Shared --- Teams
+  Shared["Shared TypeScript contracts"]
+  UI --> Stores --> Bridge --> IPC --> Supervisor
+  Supervisor <--> Agent
+  Supervisor <--> DB
+  Supervisor <--> Native
+  Agent -. "reverse tool / approval request" .-> IPC
+  IPC -. "stream events" .-> Stores
+  Services --> IPC
+  Shared --- Renderer
+  Shared --- Main
 ```
 
-## 四层职责 / Four layers
+## 四层职责 / Layer responsibilities
 
-### 1) Main
+### Renderer
 
-入口是 `src/main/index.ts`。主进程负责：
+- React 页面、会话展示、权限弹窗和用户交互。
+- Zustand 保存 UI 状态和面向用户的配置。
+- 仅执行必须访问 Renderer 状态的 reverse-request 工具。
+- 不直接打开 SQLite，不托管模型 provider loop。
 
-- 创建窗口、托盘和更新器
-- 注册所有 IPC handlers
-- 管理 SQLite 数据库
-- 管理 Cron、SSH、MCP 和消息平台插件
-- 处理崩溃日志和系统级错误
-- 在启动和退出时统一清理后台资源
+### Preload
 
-### 2) Preload
+- 在 `contextIsolation` 边界上提供受控 Electron API。
+- 不承载领域逻辑，不通过 `nodeIntegration` 绕过 Main。
 
-入口是 `src/preload/index.ts`。它只暴露少量能力：
+### Electron Main
 
-- image 下载 / base64 / 剪贴板
-- Team Runtime 创建、快照、消息、成员更新
-- Team Worker 的启动与停止
+- 创建窗口、托盘、更新器并注册 IPC。
+- 启动、心跳检查、重启和关闭 Native Worker。
+- 在 Renderer IPC 与 Worker MessagePack 协议之间路由请求和流事件。
+- 管理 channels、cron、MCP、浏览器、SSH 窗口等需要 Electron 生命周期的服务。
 
-这层是安全边界，不承载业务逻辑。
+### Native Worker
 
-### 3) Renderer
+- 运行 provider-agnostic Agent loop、上下文压缩、工具调度和流事件生成。
+- 通过 reverse requests 请求 Renderer 工具或人工审批。
+- 打开 `~/.ola/data.db`，执行查询和增量 schema migration。
+- 提供 File、Git、Shell、SSH、Sync、Settings 等原生路由。
 
-入口是 `src/renderer/src/main.tsx`。它承担：
+## 核心调用链 / Core request flow
 
-- React UI
-- Agent Loop
-- Tool Registry
-- Provider 适配
-- 计划 / 任务 / 团队 / 资源面板
-- 文件预览与浏览器面板
-- 应用插件工具注册
+1. Renderer 构造带 session、provider、tool 和权限快照的 Agent 请求。
+2. Main 的 sidecar bridge 把请求发送到 Native Worker。
+3. Worker 从 SQLite 或请求负载装配上下文并运行 provider loop。
+4. 原生工具在 Worker 内执行；Renderer 工具和审批通过 reverse request 返回 Main/Renderer。
+5. Worker 发送带 `runId`、`sessionId` 和序号的 MessagePack 流事件。
+6. Renderer 只把匹配当前 session/run 的事件写入状态，并把最终消息持久化。
 
-### 4) Shared
+## 数据边界 / Data boundaries
 
-`src/shared/` 集中放：
+| 数据 | 权威所有者 | 说明 |
+| --- | --- | --- |
+| SQLite schema and rows | Native Worker | Main 中的 DB 文件是 typed bridge |
+| Agent run lifecycle | Native Worker + Main supervisor | Renderer 只展示派生状态 |
+| UI/session presentation | Renderer | Zustand 与会话路由负责前台/后台切换 |
+| Secrets | Electron Main | Renderer 只接收脱敏 metadata |
+| Cross-process DTOs | `src/shared` | TS/C# 镜像需要契约校验 |
 
-- Agent stream / loop 协议
-- Team Runtime 类型
-- OpenAI / Anthropic 消息协议
-- 迁移类型与其他跨进程 DTO
+## 关键实现 / Key implementation
 
-## 关键运行时 / Key runtime components
+| Component | Responsibility | Source |
+| --- | --- | --- |
+| Native worker supervisor | spawn、heartbeat、restart、MessagePack framing | `src/main/lib/native-worker.ts` |
+| Agent bridge | handshake、active runs、reverse requests | `src/main/ipc/native-agent-runtime.ts` |
+| Sidecar IPC | Renderer routing、permissions、stream forwarding | `src/main/ipc/sidecar-manager.ts` |
+| Agent Runtime | providers、tools、compression、stream | `sidecars/Ola.Native.Worker/Modules/AgentRuntime/` |
+| SQLite module | schema migration and data routes | `sidecars/Ola.Native.Worker/Modules/Db/` |
+| Tool registry | Renderer-owned tool definitions | `src/renderer/src/lib/agent/tool-registry.ts` |
 
-| 组件               | 作用                                            | 位置                                          |
-| ------------------ | ----------------------------------------------- | --------------------------------------------- |
-| `ChannelManager`   | 管理 8 个消息平台插件                           | `src/main/channels/`                          |
-| `McpManager`       | 管理 MCP server 连接和能力发现                  | `src/main/mcp/`                               |
-| `CronScheduler`    | 处理 at / every / cron 调度                     | `src/main/cron/`                              |
-| `JS Agent Runtime` | 供 Cron 和插件自动回复复用的主进程 Agent 运行时 | `src/main/ipc/js-agent-runtime.ts`            |
-| `Tool Registry`    | 统一注册与调用工具                              | `src/renderer/src/lib/agent/tool-registry.ts` |
-| `viewerRegistry`   | 注册文件预览器                                  | `src/renderer/src/lib/preview/`               |
+## 设计约束 / Invariants
 
-## 数据流 / Data flow
-
-1. 用户在 UI 中发起聊天、计划、任务或插件动作。
-2. React store 更新本地运行态。
-3. Agent Loop 通过 provider 发起模型请求并接收流式事件。
-4. 工具调用被分发到 renderer、本地 store、主进程 IPC、MCP、Team Runtime 或插件服务。
-5. 主进程负责落盘、系统调用、消息平台交互和后台调度。
-6. 结果回流到 store，再驱动 UI、右侧面板、通知窗口或外部消息平台。
-
-## 设计原则 / Design principles
-
-- **本地优先**：默认不依赖外部托管状态。
-- **边界清晰**：系统能力不直接暴露给 renderer。
-- **协议先行**：跨进程和跨 runtime 的对象优先定义在 `shared/`。
-- **可插拔**：provider、channel、MCP、skill、command、agent 都是注册式扩展。
-- **可追溯**：任务、计划、Cron、Goal 和 usage 都能在本地查询。
+- 数据库迁移只做增量修改；不得要求用户删除 `~/.ola`。
+- `Ola.Native.Worker`、`OLA_*` 和 `~/.ola` 是产品身份，不能从参考项目复制改名。
+- Renderer、Main、Worker 的 route 和 payload 必须通过 shared type 或自动契约审计保持一致。
+- Worker 断连必须终止其拥有的 run，不能让 Renderer 永久显示生成中。
+- 引入 OpenCowork 能力前运行 `npm run audit:sync`，区分品牌差异和行为差异。

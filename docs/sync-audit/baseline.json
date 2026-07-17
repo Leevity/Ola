@@ -1,0 +1,4179 @@
+{
+  "schemaVersion": 1,
+  "baseline": {
+    "ola": {
+      "version": "1.0.3",
+      "sourceFingerprint": "e53e214f03a17584ab461d0ba9a23a140cedc3b9c7aebb793791ce4e9344132a"
+    },
+    "reference": {
+      "product": "OpenCowork",
+      "version": "1.2.0",
+      "commit": "d4d9f06c27f3de198835b6c24d6c8e02f41bc85e",
+      "pathHint": "../OpenCowork"
+    }
+  },
+  "scope": [
+    "src/main",
+    "src/preload",
+    "src/renderer/src",
+    "src/shared",
+    "sidecars",
+    "scripts"
+  ],
+  "summary": {
+    "files": {
+      "identical": 480,
+      "brandOnly": 43,
+      "changed": 265,
+      "onlyOla": 42,
+      "onlyReference": 95
+    }
+  },
+  "files": {
+    "identical": [
+      {
+        "canonicalPath": "scripts/verify-extension-example.mjs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Contracts/CommonModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Hosting/WorkerHost.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Hosting/WorkerHostBuilder.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentChanges/AgentChangeModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentChanges/AgentChangeRuntimeModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentChanges/AgentChangeRuntimeTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesEventParser.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesHeaders.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesProvider.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesSanitizer.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesState.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesWriteState.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAskUserExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeBrowserExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeChannelPluginExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeCodeCompatibleExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeContextCompression.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeCronExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeDeliveryGuard.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeDesktopExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeExtensionExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeGeminiProvider.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeGlobInputNormalizer.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeGlobResultFormatter.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeGoalExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeGrepResultFormatter.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeMcpExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeNotifyExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesComputerUse.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesImageGeneration.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePluginExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeProviderModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeProviderSupport.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeSkillExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeSshToolExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTaskExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTeamExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTeamRuntimeApi.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTeamUiBridge.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeToolArgumentStreaming.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTranslationExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeWebFetchExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeWebSearchExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeWidgetExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Channels/ChannelConfigModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Config/ConfigModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbAgentChangeModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbAgentChangeTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbCronModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbDrawRunModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbDrawRunTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbGoalModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbGoalTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMaintenanceTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMemoryAutomationModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMemoryAutomationTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMemoryPipelineModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMemoryPipelineTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbPlanModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbPlanTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbPluginSessionModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbProjectModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbProjectTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbQqWakeupModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbQqWakeupTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSchemaModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSchemaTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSessionModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSessionTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSql.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSshModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSshTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSyncModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSyncTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbTaskModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbTaskTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbUsageAnalyticsTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbUsageWriterTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Extensions/ExtensionHttpToolExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Extensions/ExtensionManagementStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Extensions/ExtensionModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Extensions/ExtensionModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileDocumentTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileGrepExternalEngines.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileGrepInputNormalizer.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Git/GitModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Git/GitModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Git/GitTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Mcp/McpConfigModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/OpenAIAudio/OpenAIAudioModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/OpenAIAudio/OpenAIAudioModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/OpenAIImages/OpenAIImagesModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/OpenAIImages/OpenAIImagesModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Settings/SettingsModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Shell/ShellModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Shell/ShellModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Shell/ShellTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Skills/SkillModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshDirectoryUploadTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshFileModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshFileTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshProcessTaskRegistry.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshRemoteCopyTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshSearchTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshTransferDownloadTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshTransferRemoteCopyTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshTransferScanTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshTransferUploadTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Sync/SyncModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/SystemModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Terminal/TerminalModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Terminal/TerminalModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Terminal/TerminalTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/UserContent/UserCommandCatalog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/UserContent/UserContentModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/UserContent/UserPromptCatalog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Web/WebModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Web/WebRuntime.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/IWorkerModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/MessagePackFrameProtocol.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/MessagePackJsonTranscoder.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/MessagePackWriter.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerDispatcher.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerEndpoint.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerHttpClientFactory.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerJson.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerMessagePackEvent.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerModuleContext.cs"
+      },
+      {
+        "canonicalPath": "src/main/channels/auto-reply.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/base-plugin-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/channel-config-store.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/channel-descriptors.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/plugin-commands.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/dingtalk/dingtalk-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/dingtalk/dingtalk-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/dingtalk/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/discord/discord-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/discord/discord-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/discord/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/feishu/feishu-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/feishu/feishu-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/feishu/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/qq/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/qq/qq-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/qq/qq-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/qq/session-store.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/telegram/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/telegram/telegram-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/telegram/telegram-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/wecom/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/wecom/wecom-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/wecom/wecom-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/weixin/weixin-login.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/weixin/weixin-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/whatsapp/parse-ws-message.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/whatsapp/whatsapp-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/whatsapp/whatsapp-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/ws-transport.ts"
+      },
+      {
+        "canonicalPath": "src/main/cron/cron-scheduler.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/agent-changes-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/cron-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/draw-runs-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/goals-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/memory-automation-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/memory-pipeline-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/plans-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/projects-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/qq-wakeup-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/sessions-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/ssh-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/sync-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/tasks-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/usage-events-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/goals/goal-runtime.ts"
+      },
+      {
+        "canonicalPath": "src/main/goals/goal-sync.ts"
+      },
+      {
+        "canonicalPath": "src/main/image/gif-encoder.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/agent-change-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/desktop-control.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/extension-native-bridge.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/gitignore-utils.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/goal-runtime-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/input-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/messagepack-handler.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/oauth-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/prompts-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/screenshot-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/secure-key-store.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/shell-environment.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/shell-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/user-content-native.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/web-search-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/mcp/mcp-types.ts"
+      },
+      {
+        "canonicalPath": "src/main/migration/opencode-parser.ts"
+      },
+      {
+        "canonicalPath": "src/main/window-ipc.ts"
+      },
+      {
+        "canonicalPath": "src/preload/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/Versions.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/components/radix/files.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/primitives/effects/highlight.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/primitives/radix/accordion.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/primitives/radix/checkbox.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/primitives/radix/files.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/changelog/ChangelogDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/AskUserQuestionCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ChangeReviewSheet.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/CodeDiffViewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/CompressionStatusMessage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ContextCompressionMessage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/FileAwareEditor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/GitPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ImageGeneratingLoader.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ImageGenerationErrorCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/LazySyntaxHighlighter.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/LoadingIndicator.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/NewSessionProjectSelector.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/OrchestrationStagePills.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ProjectArchivePage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ProjectBindingSelector.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/RunChangeReviewCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/SelectFileInlineText.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/SelectedFileBar.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/SystemCommandCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/TokenCounter.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/WorkingFolderSelectorDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/change-summary-utils.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/file-change-utils.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/use-image-display-src.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/AcpPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/ArtifactsPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/CronPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/FileTreePanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/PlanPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/StepsPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/TeamPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/TeammateCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/editor/CodeEditor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/editor/MonacoDiffEditor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/error-boundary.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/icons/plugin-icons.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/NavRail.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/OrchestrationConsole.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/PendingInboxPopover.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/PreviewPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/SessionListPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/WindowControls.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/scm/SourceControlPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/scm/scm-diff.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/AccountListEditor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/AnalyticsOverview.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/GlobalThemePanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/KeyboardShortcutsDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/McpPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/MigrationPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/PluginPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/SettingsDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/WebSearchPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/skills/SkillInstallDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/souls/SoulInstallDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshConnectionCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshConnectionDetail.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshConnectionForm.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshDashboardStats.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshFileEditor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshFileExplorer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshGroupDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshKeychainWorkspace.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshProcessMonitor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshSftpFilePreview.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshSftpWorkspace.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshSupportWorkspaces.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshTerminalThemePanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/ssh-local-utils.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/tasks/RunTranscriptThread.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/tasks/task-schedule.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/terminal/SshConnectionPicker.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/theme-provider.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/theme-runtime-sync.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/translate/TranslatePage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/accordion.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/alert-dialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/alert.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/aspect-ratio.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/avatar.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/badge.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/button.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/checkbox.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/collapsible.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/combobox.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/command.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/confirm-dialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/context-menu.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/dialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/dropdown-menu.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/hover-card.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/input-group.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/input.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/popover.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/select.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/separator.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/sheet.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/sidebar.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/skeleton.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/slider.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/sonner.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/spinner.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/switch.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/textarea.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ui/tooltip.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/workspace/WorkspaceView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/env.d.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-controlled-state.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-dev-server.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-estimated-tokens.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-file-watcher.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-mobile.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-prompt-recommendation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-streaming-markdown-blocks.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-typewriter.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent-runtime-sync.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/concurrency-limiter.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/context-compression-runtime.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/context-compression.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/goal-context.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/parallel-tool-calls-prompt.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/run-agent-via-sidecar.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/skill-reviewer.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/catalog.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/events.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/registry.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/workspace-protocol.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/events.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/prompts.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/runtime-client.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/team-native-control.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/team-native-ui.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/tools/send-message.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/tools/team-create.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/tools/team-delete.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/tools/team-native-guard.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/tools/team-status.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/tool-registry.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/usage-merge.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/auto-model-selector.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/generate-title.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/responses-image-generation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/responses-session-policy.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/browser-tool-names.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/desktop-click-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/desktop-routing.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/desktop-screenshot-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/desktop-scroll-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/desktop-type-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/desktop-wait-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/image-tool-retry.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/auth/channel.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/auth/oauth.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/auth/provider-auth.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/browser/webview-helpers.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/channel/plugin-tools.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/channel/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/chat-working-folder.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/commands/command-loader.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/constants.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/constants/session-icons.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/drag-folder.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/draw-prompt-optimizer.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/extensions/extension-result.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/extensions/extension-tools.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/format-duration.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/get-strict-context.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/git/generate-commit-message.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/i18n-language.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/image-attachments.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/agent-stream-receiver.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/ipc-client.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/ipc-state-storage.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/ipc-storage.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/messagepack-ipc-client.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/sidecar-approval-registry.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/live-output-animation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/mcp/mcp-tools.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/mcp/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/mode-tooltips.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/monaco/editor-options.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/monaco/languages.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/monaco/source-navigation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/orchestration/build-history-snapshot.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/orchestration/build-runs.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/orchestration/stage-resolver.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/orchestration/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-pose-prompts.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/register-viewers.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewer-registry.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/audio-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/binary-file-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/dev-server-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/docx-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/fallback-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/font-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/html-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/image-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/markdown-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/office-online-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/pdf-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/spreadsheet-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/svg-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/video-viewer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/prompt-optimizer/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/prompt-optimizer/optimizer.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/prompts/prompt-loader.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/recommendation/prompt-recommendation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/renderer-memory-monitor.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/select-file-editor.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/select-file-tags.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/session-control-sync.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/session-model-resolution.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/session-runtime-sync.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/session-scope.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/session-window.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/streaming-perf.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/terminal/project-terminal-context.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/terminal/unified-terminal-tabs.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/theme-presets.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/ask-user-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/bash-output.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/bash-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/browser-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/cron-events.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/cron-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/dynamic-tool-catalog.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/goal-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/notify-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/plan-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/search-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/todo-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/tool-input-sanitizer.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/tool-result-format.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/web-search-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/widget-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/translate-agent-service.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/translate-service.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/utils.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/utils/export-session-image.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/utils/html-to-image-loader.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/utils/image-clipboard.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/background-session-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/channel-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/cron-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/draw-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/git-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/goal-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/image-edit-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/mcp-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/notify-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/plan-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/quota-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/resources-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/souls-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/task-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/translate-store.ts"
+      },
+      {
+        "canonicalPath": "src/shared/builtin-souls.ts"
+      },
+      {
+        "canonicalPath": "src/shared/live-tool-input-summary.ts"
+      },
+      {
+        "canonicalPath": "src/shared/memory-automation-types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/messagepack/agent-stream-codec.ts"
+      },
+      {
+        "canonicalPath": "src/shared/migration-types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/openai-responses-session.ts"
+      },
+      {
+        "canonicalPath": "src/shared/shell-output-compactor.ts"
+      },
+      {
+        "canonicalPath": "src/shared/sync-types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/team-runtime-types.ts"
+      }
+    ],
+    "brandOnly": [
+      {
+        "canonicalPath": "scripts/verify-message-windowing.mjs",
+        "olaPath": "scripts/verify-message-windowing.mjs",
+        "referencePath": "scripts/verify-message-windowing.mjs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesRequestValidator.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesRequestValidator.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesRequestValidator.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeImageGenerateExecutor.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeImageGenerateExecutor.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeImageGenerateExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeMemoryExecutor.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeMemoryExecutor.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeMemoryExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTeamRuntimeStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeTeamRuntimeStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeTeamRuntimeStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Channels/ChannelConfigStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Channels/ChannelConfigStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Channels/QqSessionStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Channels/QqSessionStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Channels/QqSessionStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Config/ConfigStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Config/ConfigStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Config/ConfigStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbConnectionFactory.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbConnectionFactory.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbConnectionFactory.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbCronTools.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbCronTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbCronTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbPluginSessionTools.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbPluginSessionTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbPluginSessionTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Extensions/ExtensionManifestStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionManifestStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Extensions/ExtensionManifestStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Mcp/McpConfigStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Mcp/McpConfigStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Mcp/McpConfigStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Settings/SettingsStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Settings/SettingsStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Settings/SettingsStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshConfigStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Ssh/SshConfigStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Ssh/SshConfigStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshOpenSsh.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Ssh/SshOpenSsh.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Ssh/SshOpenSsh.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/UserContent/UserContentPaths.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentPaths.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/UserContent/UserContentPaths.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/UserContent/UserSoulCatalog.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/UserContent/UserSoulCatalog.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/UserContent/UserSoulCatalog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Program.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Program.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Program.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/ApiUserAgent.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/ApiUserAgent.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/ApiUserAgent.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerLog.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/WorkerLog.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/WorkerLog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerMemory.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/WorkerMemory.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/WorkerMemory.cs"
+      },
+      {
+        "canonicalPath": "src/main/db/database.ts",
+        "olaPath": "src/main/db/database.ts",
+        "referencePath": "src/main/db/database.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/api-proxy.ts",
+        "olaPath": "src/main/ipc/api-proxy.ts",
+        "referencePath": "src/main/ipc/api-proxy.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/image-gif-handlers.ts",
+        "olaPath": "src/main/ipc/image-gif-handlers.ts",
+        "referencePath": "src/main/ipc/image-gif-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/lib/api-user-agent.ts",
+        "olaPath": "src/main/lib/api-user-agent.ts",
+        "referencePath": "src/main/lib/api-user-agent.ts"
+      },
+      {
+        "canonicalPath": "src/main/lib/messagepack-route-reader.ts",
+        "olaPath": "src/main/lib/messagepack-route-reader.ts",
+        "referencePath": "src/main/lib/messagepack-route-reader.ts"
+      },
+      {
+        "canonicalPath": "src/main/migration/migration-backup.ts",
+        "olaPath": "src/main/migration/migration-backup.ts",
+        "referencePath": "src/main/migration/migration-backup.ts"
+      },
+      {
+        "canonicalPath": "src/main/migration/types.ts",
+        "olaPath": "src/main/migration/types.ts",
+        "referencePath": "src/main/migration/types.ts"
+      },
+      {
+        "canonicalPath": "src/main/ssh/ssh-config.ts",
+        "olaPath": "src/main/ssh/ssh-config.ts",
+        "referencePath": "src/main/ssh/ssh-config.ts"
+      },
+      {
+        "canonicalPath": "src/main/ssh/ssh-transfer.ts",
+        "olaPath": "src/main/ssh/ssh-transfer.ts",
+        "referencePath": "src/main/ssh/ssh-transfer.ts"
+      },
+      {
+        "canonicalPath": "src/main/sync/sync-engine.ts",
+        "olaPath": "src/main/sync/sync-engine.ts",
+        "referencePath": "src/main/sync/sync-engine.ts"
+      },
+      {
+        "canonicalPath": "src/preload/index.d.ts",
+        "olaPath": "src/preload/index.d.ts",
+        "referencePath": "src/preload/index.d.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/SkillsMenu.tsx",
+        "olaPath": "src/renderer/src/components/chat/SkillsMenu.tsx",
+        "referencePath": "src/renderer/src/components/chat/SkillsMenu.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/ProfilePanel.tsx",
+        "olaPath": "src/renderer/src/components/settings/ProfilePanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/ProfilePanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshImportDialog.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshImportDialog.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshImportDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshTerminalStatusPanel.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshTerminalStatusPanel.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshTerminalStatusPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/dynamic-context.ts",
+        "olaPath": "src/renderer/src/lib/agent/dynamic-context.ts",
+        "referencePath": "src/renderer/src/lib/agent/dynamic-context.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/memory-files.ts",
+        "olaPath": "src/renderer/src/lib/agent/memory-files.ts",
+        "referencePath": "src/renderer/src/lib/agent/memory-files.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/builtin/index.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/builtin/index.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/builtin/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/api-user-agent.ts",
+        "olaPath": "src/renderer/src/lib/api/api-user-agent.ts",
+        "referencePath": "src/renderer/src/lib/api/api-user-agent.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/index.ts",
+        "olaPath": "src/renderer/src/lib/tools/index.ts",
+        "referencePath": "src/renderer/src/lib/tools/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/memory-tool.ts",
+        "olaPath": "src/renderer/src/lib/tools/memory-tool.ts",
+        "referencePath": "src/renderer/src/lib/tools/memory-tool.ts"
+      }
+    ],
+    "changed": [
+      {
+        "canonicalPath": "scripts/postinstall.mjs",
+        "olaPath": "scripts/postinstall.mjs",
+        "referencePath": "scripts/postinstall.mjs"
+      },
+      {
+        "canonicalPath": "scripts/predev.mjs",
+        "olaPath": "scripts/predev.mjs",
+        "referencePath": "scripts/predev.mjs"
+      },
+      {
+        "canonicalPath": "scripts/publish-native-worker.mjs",
+        "olaPath": "scripts/publish-native-worker.mjs",
+        "referencePath": "scripts/publish-native-worker.mjs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Hosting/WorkerModuleCatalog.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Hosting/WorkerModuleCatalog.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Hosting/WorkerModuleCatalog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesInputWriter.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesInputWriter.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeAnthropicMessagesInputWriter.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeDebugPayload.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeDebugPayload.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeDebugPayload.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeModels.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModels.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeNativeToolExecutor.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeNativeToolExecutor.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeNativeToolExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesEventParser.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesEventParser.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesEventParser.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesInputWriter.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesInputWriter.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesInputWriter.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesProvider.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesProvider.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesProvider.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesState.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesState.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesState.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesTransport.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesTransport.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesTransport.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePlanExecutor.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimePlanExecutor.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimePlanExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeReverseRequests.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeReverseRequests.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeReverseRequests.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentBackgroundExecutor.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentBackgroundExecutor.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentBackgroundExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentExecutor.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentExecutor.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentExecutor.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeTools.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/OpenAIChatRuntime.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/OpenAIChatRuntime.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/OpenAIChatRuntime.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMessageModels.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbMessageModels.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbMessageModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbMessageTools.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbMessageTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbMessageTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbModule.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbSchemaMigrator.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Db/DbSchemaMigrator.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbSchemaMigrator.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/OpenAIAudio/OpenAIAudioTools.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/OpenAIAudio/OpenAIAudioTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/OpenAIAudio/OpenAIAudioTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/OpenAIImages/OpenAIImagesTools.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/OpenAIImages/OpenAIImagesTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/OpenAIImages/OpenAIImagesTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Skills/SkillCatalog.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Skills/SkillCatalog.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Skills/SkillCatalog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Ssh/SshConfigTransfer.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Ssh/SshConfigTransfer.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Ssh/SshConfigTransfer.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Sync/SyncFileStore.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/Sync/SyncFileStore.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Sync/SyncFileStore.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/UserContent/UserAgentCatalog.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Modules/UserContent/UserAgentCatalog.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/UserContent/UserAgentCatalog.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/AgentStreamMessagePackEmitter.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/AgentStreamMessagePackEmitter.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/AgentStreamMessagePackEmitter.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/JsonHelpers.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/JsonHelpers.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/JsonHelpers.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/LocalIpcWorkerServer.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/LocalIpcWorkerServer.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/LocalIpcWorkerServer.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerRequestContext.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/WorkerRequestContext.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/WorkerRequestContext.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Runtime/WorkerResponse.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Runtime/WorkerResponse.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Runtime/WorkerResponse.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Serialization/WorkerJsonContext.cs",
+        "olaPath": "sidecars/Ola.Native.Worker/Serialization/WorkerJsonContext.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Serialization/WorkerJsonContext.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/{PRODUCT}.Native.Worker.csproj",
+        "olaPath": "sidecars/Ola.Native.Worker/Ola.Native.Worker.csproj",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/OpenCowork.Native.Worker.csproj"
+      },
+      {
+        "canonicalPath": "src/main/browser/browser-emulation.ts",
+        "olaPath": "src/main/browser/browser-emulation.ts",
+        "referencePath": "src/main/browser/browser-emulation.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/channel-manager.ts",
+        "olaPath": "src/main/channels/channel-manager.ts",
+        "referencePath": "src/main/channels/channel-manager.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/channel-types.ts",
+        "olaPath": "src/main/channels/channel-types.ts",
+        "referencePath": "src/main/channels/channel-types.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/providers/weixin/weixin-api.ts",
+        "olaPath": "src/main/channels/providers/weixin/weixin-api.ts",
+        "referencePath": "src/main/channels/providers/weixin/weixin-api.ts"
+      },
+      {
+        "canonicalPath": "src/main/crash-logger.ts",
+        "olaPath": "src/main/crash-logger.ts",
+        "referencePath": "src/main/crash-logger.ts"
+      },
+      {
+        "canonicalPath": "src/main/cron/cron-agent-background.ts",
+        "olaPath": "src/main/cron/cron-agent-background.ts",
+        "referencePath": "src/main/cron/cron-agent-background.ts"
+      },
+      {
+        "canonicalPath": "src/main/db/messages-dao.ts",
+        "olaPath": "src/main/db/messages-dao.ts",
+        "referencePath": "src/main/db/messages-dao.ts"
+      },
+      {
+        "canonicalPath": "src/main/index.ts",
+        "olaPath": "src/main/index.ts",
+        "referencePath": "src/main/index.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/adaptive-event-batcher.ts",
+        "olaPath": "src/main/ipc/adaptive-event-batcher.ts",
+        "referencePath": "src/main/ipc/adaptive-event-batcher.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/agents-handlers.ts",
+        "olaPath": "src/main/ipc/agents-handlers.ts",
+        "referencePath": "src/main/ipc/agents-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/browser-handlers.ts",
+        "olaPath": "src/main/ipc/browser-handlers.ts",
+        "referencePath": "src/main/ipc/browser-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/channel-handlers.ts",
+        "olaPath": "src/main/ipc/channel-handlers.ts",
+        "referencePath": "src/main/ipc/channel-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/commands-handlers.ts",
+        "olaPath": "src/main/ipc/commands-handlers.ts",
+        "referencePath": "src/main/ipc/commands-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/cron-handlers.ts",
+        "olaPath": "src/main/ipc/cron-handlers.ts",
+        "referencePath": "src/main/ipc/cron-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/db-handlers.ts",
+        "olaPath": "src/main/ipc/db-handlers.ts",
+        "referencePath": "src/main/ipc/db-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/extension-handlers.ts",
+        "olaPath": "src/main/ipc/extension-handlers.ts",
+        "referencePath": "src/main/ipc/extension-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/extension-js-runtime.ts",
+        "olaPath": "src/main/ipc/extension-js-runtime.ts",
+        "referencePath": "src/main/ipc/extension-js-runtime.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/fs-handlers.ts",
+        "olaPath": "src/main/ipc/fs-handlers.ts",
+        "referencePath": "src/main/ipc/fs-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/git-handlers.ts",
+        "olaPath": "src/main/ipc/git-handlers.ts",
+        "referencePath": "src/main/ipc/git-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/mcp-handlers.ts",
+        "olaPath": "src/main/ipc/mcp-handlers.ts",
+        "referencePath": "src/main/ipc/mcp-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/memory-automation-handlers.ts",
+        "olaPath": "src/main/ipc/memory-automation-handlers.ts",
+        "referencePath": "src/main/ipc/memory-automation-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/migration-handlers.ts",
+        "olaPath": "src/main/ipc/migration-handlers.ts",
+        "referencePath": "src/main/ipc/migration-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/native-agent-runtime.ts",
+        "olaPath": "src/main/ipc/native-agent-runtime.ts",
+        "referencePath": "src/main/ipc/native-agent-runtime.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/notify-handlers.ts",
+        "olaPath": "src/main/ipc/notify-handlers.ts",
+        "referencePath": "src/main/ipc/notify-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/pet-handlers.ts",
+        "olaPath": "src/main/ipc/pet-handlers.ts",
+        "referencePath": "src/main/ipc/pet-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/process-manager.ts",
+        "olaPath": "src/main/ipc/process-manager.ts",
+        "referencePath": "src/main/ipc/process-manager.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/settings-handlers.ts",
+        "olaPath": "src/main/ipc/settings-handlers.ts",
+        "referencePath": "src/main/ipc/settings-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/sidecar-manager.ts",
+        "olaPath": "src/main/ipc/sidecar-manager.ts",
+        "referencePath": "src/main/ipc/sidecar-manager.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/skills-handlers.ts",
+        "olaPath": "src/main/ipc/skills-handlers.ts",
+        "referencePath": "src/main/ipc/skills-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/souls-handlers.ts",
+        "olaPath": "src/main/ipc/souls-handlers.ts",
+        "referencePath": "src/main/ipc/souls-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/ssh-handlers.ts",
+        "olaPath": "src/main/ipc/ssh-handlers.ts",
+        "referencePath": "src/main/ipc/ssh-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/sync-handlers.ts",
+        "olaPath": "src/main/ipc/sync-handlers.ts",
+        "referencePath": "src/main/ipc/sync-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/team-runtime-handlers.ts",
+        "olaPath": "src/main/ipc/team-runtime-handlers.ts",
+        "referencePath": "src/main/ipc/team-runtime-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/terminal-handlers.ts",
+        "olaPath": "src/main/ipc/terminal-handlers.ts",
+        "referencePath": "src/main/ipc/terminal-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/lib/native-worker.ts",
+        "olaPath": "src/main/lib/native-worker.ts",
+        "referencePath": "src/main/lib/native-worker.ts"
+      },
+      {
+        "canonicalPath": "src/main/mcp/mcp-client.ts",
+        "olaPath": "src/main/mcp/mcp-client.ts",
+        "referencePath": "src/main/mcp/mcp-client.ts"
+      },
+      {
+        "canonicalPath": "src/main/mcp/mcp-manager.ts",
+        "olaPath": "src/main/mcp/mcp-manager.ts",
+        "referencePath": "src/main/mcp/mcp-manager.ts"
+      },
+      {
+        "canonicalPath": "src/main/migration/opencode-apply.ts",
+        "olaPath": "src/main/migration/opencode-apply.ts",
+        "referencePath": "src/main/migration/opencode-apply.ts"
+      },
+      {
+        "canonicalPath": "src/main/migration/opencode-preview.ts",
+        "olaPath": "src/main/migration/opencode-preview.ts",
+        "referencePath": "src/main/migration/opencode-preview.ts"
+      },
+      {
+        "canonicalPath": "src/main/sync/sync-config.ts",
+        "olaPath": "src/main/sync/sync-config.ts",
+        "referencePath": "src/main/sync/sync-config.ts"
+      },
+      {
+        "canonicalPath": "src/main/sync/webdav-provider.ts",
+        "olaPath": "src/main/sync/webdav-provider.ts",
+        "referencePath": "src/main/sync/webdav-provider.ts"
+      },
+      {
+        "canonicalPath": "src/main/updater.ts",
+        "olaPath": "src/main/updater.ts",
+        "referencePath": "src/main/updater.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/App.tsx",
+        "olaPath": "src/renderer/src/App.tsx",
+        "referencePath": "src/renderer/src/App.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/animate-ui/transitions.tsx",
+        "olaPath": "src/renderer/src/components/animate-ui/transitions.tsx",
+        "referencePath": "src/renderer/src/components/animate-ui/transitions.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/AgentErrorCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/AgentErrorCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/AgentErrorCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/AssistantMessage.tsx",
+        "olaPath": "src/renderer/src/components/chat/AssistantMessage.tsx",
+        "referencePath": "src/renderer/src/components/chat/AssistantMessage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/BrowserToolCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/BrowserToolCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/BrowserToolCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ChatHomePage.tsx",
+        "olaPath": "src/renderer/src/components/chat/ChatHomePage.tsx",
+        "referencePath": "src/renderer/src/components/chat/ChatHomePage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/CompactToolCallHeader.tsx",
+        "olaPath": "src/renderer/src/components/chat/CompactToolCallHeader.tsx",
+        "referencePath": "src/renderer/src/components/chat/CompactToolCallHeader.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ConversationGuideDialog.tsx",
+        "olaPath": "src/renderer/src/components/chat/ConversationGuideDialog.tsx",
+        "referencePath": "src/renderer/src/components/chat/ConversationGuideDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/DesktopActionToolCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/DesktopActionToolCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/DesktopActionToolCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ExtensionToolResultCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/ExtensionToolResultCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/ExtensionToolResultCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/FileChangeCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/FileChangeCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/FileChangeCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ImageEditDialog.tsx",
+        "olaPath": "src/renderer/src/components/chat/ImageEditDialog.tsx",
+        "referencePath": "src/renderer/src/components/chat/ImageEditDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ImagePluginToolCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/ImagePluginToolCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/ImagePluginToolCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ImagePreview.tsx",
+        "olaPath": "src/renderer/src/components/chat/ImagePreview.tsx",
+        "referencePath": "src/renderer/src/components/chat/ImagePreview.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/InputArea.tsx",
+        "olaPath": "src/renderer/src/components/chat/InputArea.tsx",
+        "referencePath": "src/renderer/src/components/chat/InputArea.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/MessageItem.tsx",
+        "olaPath": "src/renderer/src/components/chat/MessageItem.tsx",
+        "referencePath": "src/renderer/src/components/chat/MessageItem.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/MessageList.tsx",
+        "olaPath": "src/renderer/src/components/chat/MessageList.tsx",
+        "referencePath": "src/renderer/src/components/chat/MessageList.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ModelSwitcher.tsx",
+        "olaPath": "src/renderer/src/components/chat/ModelSwitcher.tsx",
+        "referencePath": "src/renderer/src/components/chat/ModelSwitcher.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/OrchestrationBlock.tsx",
+        "olaPath": "src/renderer/src/components/chat/OrchestrationBlock.tsx",
+        "referencePath": "src/renderer/src/components/chat/OrchestrationBlock.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/OrchestrationMemberStrip.tsx",
+        "olaPath": "src/renderer/src/components/chat/OrchestrationMemberStrip.tsx",
+        "referencePath": "src/renderer/src/components/chat/OrchestrationMemberStrip.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/PlanReviewCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/PlanReviewCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/PlanReviewCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ProjectHomePage.tsx",
+        "olaPath": "src/renderer/src/components/chat/ProjectHomePage.tsx",
+        "referencePath": "src/renderer/src/components/chat/ProjectHomePage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/SessionChangeSummaryCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/SessionChangeSummaryCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/SessionChangeSummaryCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/SubAgentCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/SubAgentCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/SubAgentCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/TeamEventCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/TeamEventCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/TeamEventCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ThinkingBlock.tsx",
+        "olaPath": "src/renderer/src/components/chat/ThinkingBlock.tsx",
+        "referencePath": "src/renderer/src/components/chat/ThinkingBlock.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/TodoCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/TodoCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/TodoCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ToolCallCard.tsx",
+        "olaPath": "src/renderer/src/components/chat/ToolCallCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/ToolCallCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ToolCallGroup.tsx",
+        "olaPath": "src/renderer/src/components/chat/ToolCallGroup.tsx",
+        "referencePath": "src/renderer/src/components/chat/ToolCallGroup.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/TranscriptMessageList.tsx",
+        "olaPath": "src/renderer/src/components/chat/TranscriptMessageList.tsx",
+        "referencePath": "src/renderer/src/components/chat/TranscriptMessageList.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/UserMessage.tsx",
+        "olaPath": "src/renderer/src/components/chat/UserMessage.tsx",
+        "referencePath": "src/renderer/src/components/chat/UserMessage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/tool-call-summary.ts",
+        "olaPath": "src/renderer/src/components/chat/tool-call-summary.ts",
+        "referencePath": "src/renderer/src/components/chat/tool-call-summary.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/transcript-utils.ts",
+        "olaPath": "src/renderer/src/components/chat/transcript-utils.ts",
+        "referencePath": "src/renderer/src/components/chat/transcript-utils.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/ContextPanel.tsx",
+        "olaPath": "src/renderer/src/components/cowork/ContextPanel.tsx",
+        "referencePath": "src/renderer/src/components/cowork/ContextPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/PermissionDialog.tsx",
+        "olaPath": "src/renderer/src/components/cowork/PermissionDialog.tsx",
+        "referencePath": "src/renderer/src/components/cowork/PermissionDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/cowork/SkillsPanel.tsx",
+        "olaPath": "src/renderer/src/components/cowork/SkillsPanel.tsx",
+        "referencePath": "src/renderer/src/components/cowork/SkillsPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/DrawPage.tsx",
+        "olaPath": "src/renderer/src/components/draw/DrawPage.tsx",
+        "referencePath": "src/renderer/src/components/draw/DrawPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/goal/GoalSessionControls.tsx",
+        "olaPath": "src/renderer/src/components/goal/GoalSessionControls.tsx",
+        "referencePath": "src/renderer/src/components/goal/GoalSessionControls.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/AgentFilesPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/AgentFilesPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/AgentFilesPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/AppSidebar.tsx",
+        "olaPath": "src/renderer/src/components/layout/AppSidebar.tsx",
+        "referencePath": "src/renderer/src/components/layout/AppSidebar.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/BrowserPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/BrowserPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/BrowserPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/CommandPalette.tsx",
+        "olaPath": "src/renderer/src/components/layout/CommandPalette.tsx",
+        "referencePath": "src/renderer/src/components/layout/CommandPalette.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/DetachedSessionPage.tsx",
+        "olaPath": "src/renderer/src/components/layout/DetachedSessionPage.tsx",
+        "referencePath": "src/renderer/src/components/layout/DetachedSessionPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/DetailPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/DetailPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/DetailPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/Layout.tsx",
+        "olaPath": "src/renderer/src/components/layout/Layout.tsx",
+        "referencePath": "src/renderer/src/components/layout/Layout.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/RightPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/RightPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/RightPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/RightPanelHeader.tsx",
+        "olaPath": "src/renderer/src/components/layout/RightPanelHeader.tsx",
+        "referencePath": "src/renderer/src/components/layout/RightPanelHeader.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/RuntimeStatusPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/RuntimeStatusPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/RuntimeStatusPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/SessionChangeReviewPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/SessionChangeReviewPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/SessionChangeReviewPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/SessionConversationPane.tsx",
+        "olaPath": "src/renderer/src/components/layout/SessionConversationPane.tsx",
+        "referencePath": "src/renderer/src/components/layout/SessionConversationPane.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/SubAgentExecutionDetail.tsx",
+        "olaPath": "src/renderer/src/components/layout/SubAgentExecutionDetail.tsx",
+        "referencePath": "src/renderer/src/components/layout/SubAgentExecutionDetail.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/SubAgentsPanel.tsx",
+        "olaPath": "src/renderer/src/components/layout/SubAgentsPanel.tsx",
+        "referencePath": "src/renderer/src/components/layout/SubAgentsPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/TitleBar.tsx",
+        "olaPath": "src/renderer/src/components/layout/TitleBar.tsx",
+        "referencePath": "src/renderer/src/components/layout/TitleBar.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/WorkspaceSidebar.tsx",
+        "olaPath": "src/renderer/src/components/layout/WorkspaceSidebar.tsx",
+        "referencePath": "src/renderer/src/components/layout/WorkspaceSidebar.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/right-panel-defs.ts",
+        "olaPath": "src/renderer/src/components/layout/right-panel-defs.ts",
+        "referencePath": "src/renderer/src/components/layout/right-panel-defs.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/sub-agent-run-data.ts",
+        "olaPath": "src/renderer/src/components/layout/sub-agent-run-data.ts",
+        "referencePath": "src/renderer/src/components/layout/sub-agent-run-data.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/memory/AutoMemoryPanel.tsx",
+        "olaPath": "src/renderer/src/components/memory/AutoMemoryPanel.tsx",
+        "referencePath": "src/renderer/src/components/memory/AutoMemoryPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/notify/NotifyWindow.tsx",
+        "olaPath": "src/renderer/src/components/notify/NotifyWindow.tsx",
+        "referencePath": "src/renderer/src/components/notify/NotifyWindow.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/onboarding/OnboardingPage.tsx",
+        "olaPath": "src/renderer/src/components/onboarding/OnboardingPage.tsx",
+        "referencePath": "src/renderer/src/components/onboarding/OnboardingPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/pet/CapybaraSprite.tsx",
+        "olaPath": "src/renderer/src/components/pet/CapybaraSprite.tsx",
+        "referencePath": "src/renderer/src/components/pet/CapybaraSprite.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/pet/PetView.tsx",
+        "olaPath": "src/renderer/src/components/pet/PetView.tsx",
+        "referencePath": "src/renderer/src/components/pet/PetView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/pet/PetWindow.tsx",
+        "olaPath": "src/renderer/src/components/pet/PetWindow.tsx",
+        "referencePath": "src/renderer/src/components/pet/PetWindow.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/pet/use-pet-skin-images.ts",
+        "olaPath": "src/renderer/src/components/pet/use-pet-skin-images.ts",
+        "referencePath": "src/renderer/src/components/pet/use-pet-skin-images.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/resources/ResourcesPage.tsx",
+        "olaPath": "src/renderer/src/components/resources/ResourcesPage.tsx",
+        "referencePath": "src/renderer/src/components/resources/ResourcesPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/AppPluginPanel.tsx",
+        "olaPath": "src/renderer/src/components/settings/AppPluginPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/AppPluginPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/ExtensionPanel.tsx",
+        "olaPath": "src/renderer/src/components/settings/ExtensionPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/ExtensionPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/PetPanel.tsx",
+        "olaPath": "src/renderer/src/components/settings/PetPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/PetPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/ProviderPanel.tsx",
+        "olaPath": "src/renderer/src/components/settings/ProviderPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/ProviderPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/SettingsPage.tsx",
+        "olaPath": "src/renderer/src/components/settings/SettingsPage.tsx",
+        "referencePath": "src/renderer/src/components/settings/SettingsPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/SkillsMarketPanel.tsx",
+        "olaPath": "src/renderer/src/components/settings/SkillsMarketPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/SkillsMarketPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/provider-icons.tsx",
+        "olaPath": "src/renderer/src/components/settings/provider-icons.tsx",
+        "referencePath": "src/renderer/src/components/settings/provider-icons.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/skills/SkillsPage.tsx",
+        "olaPath": "src/renderer/src/components/skills/SkillsPage.tsx",
+        "referencePath": "src/renderer/src/components/skills/SkillsPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/souls/SoulsPage.tsx",
+        "olaPath": "src/renderer/src/components/souls/SoulsPage.tsx",
+        "referencePath": "src/renderer/src/components/souls/SoulsPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshConnectedWorkspace.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshConnectedWorkspace.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshConnectedWorkspace.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshConnectionInspector.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshConnectionInspector.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshConnectionInspector.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshConnectionList.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshConnectionList.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshConnectionList.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshPage.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshPage.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshTerminal.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshTerminal.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshTerminal.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshViewToggle.tsx",
+        "olaPath": "src/renderer/src/components/ssh/SshViewToggle.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshViewToggle.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/ssh-monitor-runtime.ts",
+        "olaPath": "src/renderer/src/components/ssh/ssh-monitor-runtime.ts",
+        "referencePath": "src/renderer/src/components/ssh/ssh-monitor-runtime.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/sync/SyncPage.tsx",
+        "olaPath": "src/renderer/src/components/sync/SyncPage.tsx",
+        "referencePath": "src/renderer/src/components/sync/SyncPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/tasks/TasksPage.tsx",
+        "olaPath": "src/renderer/src/components/tasks/TasksPage.tsx",
+        "referencePath": "src/renderer/src/components/tasks/TasksPage.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/terminal/LocalTerminal.tsx",
+        "olaPath": "src/renderer/src/components/terminal/LocalTerminal.tsx",
+        "referencePath": "src/renderer/src/components/terminal/LocalTerminal.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/terminal/ProjectTerminalDock.tsx",
+        "olaPath": "src/renderer/src/components/terminal/ProjectTerminalDock.tsx",
+        "referencePath": "src/renderer/src/components/terminal/ProjectTerminalDock.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/terminal/TerminalPanel.tsx",
+        "olaPath": "src/renderer/src/components/terminal/TerminalPanel.tsx",
+        "referencePath": "src/renderer/src/components/terminal/TerminalPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-chat-actions.ts",
+        "olaPath": "src/renderer/src/hooks/use-chat-actions.ts",
+        "referencePath": "src/renderer/src/hooks/use-chat-actions.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-git-panel-split.ts",
+        "olaPath": "src/renderer/src/hooks/use-git-panel-split.ts",
+        "referencePath": "src/renderer/src/hooks/use-git-panel-split.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-plugin-auto-reply.ts",
+        "olaPath": "src/renderer/src/hooks/use-plugin-auto-reply.ts",
+        "referencePath": "src/renderer/src/hooks/use-plugin-auto-reply.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/cache-shape.ts",
+        "olaPath": "src/renderer/src/lib/agent/cache-shape.ts",
+        "referencePath": "src/renderer/src/lib/agent/cache-shape.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/memory-automation.ts",
+        "olaPath": "src/renderer/src/lib/agent/memory-automation.ts",
+        "referencePath": "src/renderer/src/lib/agent/memory-automation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/prompt-cache-key.ts",
+        "olaPath": "src/renderer/src/lib/agent/prompt-cache-key.ts",
+        "referencePath": "src/renderer/src/lib/agent/prompt-cache-key.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/session-runtime-router.ts",
+        "olaPath": "src/renderer/src/lib/agent/session-runtime-router.ts",
+        "referencePath": "src/renderer/src/lib/agent/session-runtime-router.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/session-scoped-agent-state.ts",
+        "olaPath": "src/renderer/src/lib/agent/session-scoped-agent-state.ts",
+        "referencePath": "src/renderer/src/lib/agent/session-scoped-agent-state.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/stream-event-adapter.ts",
+        "olaPath": "src/renderer/src/lib/agent/stream-event-adapter.ts",
+        "referencePath": "src/renderer/src/lib/agent/stream-event-adapter.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/create-tool.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/create-tool.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/create-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/default-system-prompt.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/default-system-prompt.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/default-system-prompt.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/input-message.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/input-message.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/input-message.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/limits.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/limits.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/limits.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/resolve-tools.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/resolve-tools.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/resolve-tools.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/runtime-cache-policy.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/runtime-cache-policy.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/runtime-cache-policy.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/types.ts",
+        "olaPath": "src/renderer/src/lib/agent/sub-agents/types.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/system-prompt.ts",
+        "olaPath": "src/renderer/src/lib/agent/system-prompt.ts",
+        "referencePath": "src/renderer/src/lib/agent/system-prompt.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/inbox-poller.ts",
+        "olaPath": "src/renderer/src/lib/agent/teams/inbox-poller.ts",
+        "referencePath": "src/renderer/src/lib/agent/teams/inbox-poller.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/teams/register.ts",
+        "olaPath": "src/renderer/src/lib/agent/teams/register.ts",
+        "referencePath": "src/renderer/src/lib/agent/teams/register.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/types.ts",
+        "olaPath": "src/renderer/src/lib/agent/types.ts",
+        "referencePath": "src/renderer/src/lib/agent/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/visual-context.ts",
+        "olaPath": "src/renderer/src/lib/agent/visual-context.ts",
+        "referencePath": "src/renderer/src/lib/agent/visual-context.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/openai-images-provider.ts",
+        "olaPath": "src/renderer/src/lib/api/openai-images-provider.ts",
+        "referencePath": "src/renderer/src/lib/api/openai-images-provider.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/types.ts",
+        "olaPath": "src/renderer/src/lib/api/types.ts",
+        "referencePath": "src/renderer/src/lib/api/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/browser-access.ts",
+        "olaPath": "src/renderer/src/lib/app-plugin/browser-access.ts",
+        "referencePath": "src/renderer/src/lib/app-plugin/browser-access.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/image-tool.ts",
+        "olaPath": "src/renderer/src/lib/app-plugin/image-tool.ts",
+        "referencePath": "src/renderer/src/lib/app-plugin/image-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/app-plugin/types.ts",
+        "olaPath": "src/renderer/src/lib/app-plugin/types.ts",
+        "referencePath": "src/renderer/src/lib/app-plugin/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/auth/copilot.ts",
+        "olaPath": "src/renderer/src/lib/auth/copilot.ts",
+        "referencePath": "src/renderer/src/lib/auth/copilot.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/chat-mode-tools.ts",
+        "olaPath": "src/renderer/src/lib/chat-mode-tools.ts",
+        "referencePath": "src/renderer/src/lib/chat-mode-tools.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/chat-route.ts",
+        "olaPath": "src/renderer/src/lib/chat-route.ts",
+        "referencePath": "src/renderer/src/lib/chat-route.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/commands/system-command.ts",
+        "olaPath": "src/renderer/src/lib/commands/system-command.ts",
+        "referencePath": "src/renderer/src/lib/commands/system-command.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/debug-store.ts",
+        "olaPath": "src/renderer/src/lib/debug-store.ts",
+        "referencePath": "src/renderer/src/lib/debug-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/draw-history.ts",
+        "olaPath": "src/renderer/src/lib/draw-history.ts",
+        "referencePath": "src/renderer/src/lib/draw-history.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/format-tokens.ts",
+        "olaPath": "src/renderer/src/lib/format-tokens.ts",
+        "referencePath": "src/renderer/src/lib/format-tokens.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/agent-bridge.ts",
+        "olaPath": "src/renderer/src/lib/ipc/agent-bridge.ts",
+        "referencePath": "src/renderer/src/lib/ipc/agent-bridge.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/channels.ts",
+        "olaPath": "src/renderer/src/lib/ipc/channels.ts",
+        "referencePath": "src/renderer/src/lib/ipc/channels.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/config-storage.ts",
+        "olaPath": "src/renderer/src/lib/ipc/config-storage.ts",
+        "referencePath": "src/renderer/src/lib/ipc/config-storage.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/messagepack-channel-routing.ts",
+        "olaPath": "src/renderer/src/lib/ipc/messagepack-channel-routing.ts",
+        "referencePath": "src/renderer/src/lib/ipc/messagepack-channel-routing.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/renderer-tool-bridge.ts",
+        "olaPath": "src/renderer/src/lib/ipc/renderer-tool-bridge.ts",
+        "referencePath": "src/renderer/src/lib/ipc/renderer-tool-bridge.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/sidecar-protocol.ts",
+        "olaPath": "src/renderer/src/lib/ipc/sidecar-protocol.ts",
+        "referencePath": "src/renderer/src/lib/ipc/sidecar-protocol.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/monaco/setup.ts",
+        "olaPath": "src/renderer/src/lib/monaco/setup.ts",
+        "referencePath": "src/renderer/src/lib/monaco/setup.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/monaco/workspace.ts",
+        "olaPath": "src/renderer/src/lib/monaco/workspace.ts",
+        "referencePath": "src/renderer/src/lib/monaco/workspace.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-agent.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-agent.ts",
+        "referencePath": "src/renderer/src/lib/pet/pet-agent.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-exp.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-exp.ts",
+        "referencePath": "src/renderer/src/lib/pet/pet-exp.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-memory.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-memory.ts",
+        "referencePath": "src/renderer/src/lib/pet/pet-memory.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-proactive.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-proactive.ts",
+        "referencePath": "src/renderer/src/lib/pet/pet-proactive.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-voice.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-voice.ts",
+        "referencePath": "src/renderer/src/lib/pet/pet-voice.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/MermaidBlock.tsx",
+        "olaPath": "src/renderer/src/lib/preview/viewers/MermaidBlock.tsx",
+        "referencePath": "src/renderer/src/lib/preview/viewers/MermaidBlock.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/preview/viewers/markdown-components.tsx",
+        "olaPath": "src/renderer/src/lib/preview/viewers/markdown-components.tsx",
+        "referencePath": "src/renderer/src/lib/preview/viewers/markdown-components.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/settings-route.ts",
+        "olaPath": "src/renderer/src/lib/settings-route.ts",
+        "referencePath": "src/renderer/src/lib/settings-route.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/browser-native-ui.ts",
+        "olaPath": "src/renderer/src/lib/tools/browser-native-ui.ts",
+        "referencePath": "src/renderer/src/lib/tools/browser-native-ui.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/code-compatible-tool.ts",
+        "olaPath": "src/renderer/src/lib/tools/code-compatible-tool.ts",
+        "referencePath": "src/renderer/src/lib/tools/code-compatible-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/fs-tool.ts",
+        "olaPath": "src/renderer/src/lib/tools/fs-tool.ts",
+        "referencePath": "src/renderer/src/lib/tools/fs-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/plan-native-ui.ts",
+        "olaPath": "src/renderer/src/lib/tools/plan-native-ui.ts",
+        "referencePath": "src/renderer/src/lib/tools/plan-native-ui.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/skill-tool.ts",
+        "olaPath": "src/renderer/src/lib/tools/skill-tool.ts",
+        "referencePath": "src/renderer/src/lib/tools/skill-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/tool-types.ts",
+        "olaPath": "src/renderer/src/lib/tools/tool-types.ts",
+        "referencePath": "src/renderer/src/lib/tools/tool-types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/usage-analytics.ts",
+        "olaPath": "src/renderer/src/lib/usage-analytics.ts",
+        "referencePath": "src/renderer/src/lib/usage-analytics.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/utils/export-chat.ts",
+        "olaPath": "src/renderer/src/lib/utils/export-chat.ts",
+        "referencePath": "src/renderer/src/lib/utils/export-chat.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/utils/mermaid-theme.ts",
+        "olaPath": "src/renderer/src/lib/utils/mermaid-theme.ts",
+        "referencePath": "src/renderer/src/lib/utils/mermaid-theme.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/locales/index.ts",
+        "olaPath": "src/renderer/src/locales/index.ts",
+        "referencePath": "src/renderer/src/locales/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/main.tsx",
+        "olaPath": "src/renderer/src/main.tsx",
+        "referencePath": "src/renderer/src/main.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/agent-store.ts",
+        "olaPath": "src/renderer/src/stores/agent-store.ts",
+        "referencePath": "src/renderer/src/stores/agent-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/app-plugin-store.ts",
+        "olaPath": "src/renderer/src/stores/app-plugin-store.ts",
+        "referencePath": "src/renderer/src/stores/app-plugin-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/chat-store.ts",
+        "olaPath": "src/renderer/src/stores/chat-store.ts",
+        "referencePath": "src/renderer/src/stores/chat-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/extension-store.ts",
+        "olaPath": "src/renderer/src/stores/extension-store.ts",
+        "referencePath": "src/renderer/src/stores/extension-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pet-agent-store.ts",
+        "olaPath": "src/renderer/src/stores/pet-agent-store.ts",
+        "referencePath": "src/renderer/src/stores/pet-agent-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pet-exp-store.ts",
+        "olaPath": "src/renderer/src/stores/pet-exp-store.ts",
+        "referencePath": "src/renderer/src/stores/pet-exp-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pet-skin-store.ts",
+        "olaPath": "src/renderer/src/stores/pet-skin-store.ts",
+        "referencePath": "src/renderer/src/stores/pet-skin-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pet-store.ts",
+        "olaPath": "src/renderer/src/stores/pet-store.ts",
+        "referencePath": "src/renderer/src/stores/pet-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/provider-store.ts",
+        "olaPath": "src/renderer/src/stores/provider-store.ts",
+        "referencePath": "src/renderer/src/stores/provider-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/anthropic.ts",
+        "olaPath": "src/renderer/src/stores/providers/anthropic.ts",
+        "referencePath": "src/renderer/src/stores/providers/anthropic.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/azure-openai.ts",
+        "olaPath": "src/renderer/src/stores/providers/azure-openai.ts",
+        "referencePath": "src/renderer/src/stores/providers/azure-openai.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/baidu.ts",
+        "olaPath": "src/renderer/src/stores/providers/baidu.ts",
+        "referencePath": "src/renderer/src/stores/providers/baidu.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/bigmodel.ts",
+        "olaPath": "src/renderer/src/stores/providers/bigmodel.ts",
+        "referencePath": "src/renderer/src/stores/providers/bigmodel.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/codex-oauth.ts",
+        "olaPath": "src/renderer/src/stores/providers/codex-oauth.ts",
+        "referencePath": "src/renderer/src/stores/providers/codex-oauth.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/copilot-oauth.ts",
+        "olaPath": "src/renderer/src/stores/providers/copilot-oauth.ts",
+        "referencePath": "src/renderer/src/stores/providers/copilot-oauth.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/deepseek.ts",
+        "olaPath": "src/renderer/src/stores/providers/deepseek.ts",
+        "referencePath": "src/renderer/src/stores/providers/deepseek.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/gitee-ai.ts",
+        "olaPath": "src/renderer/src/stores/providers/gitee-ai.ts",
+        "referencePath": "src/renderer/src/stores/providers/gitee-ai.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/google.ts",
+        "olaPath": "src/renderer/src/stores/providers/google.ts",
+        "referencePath": "src/renderer/src/stores/providers/google.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/index.ts",
+        "olaPath": "src/renderer/src/stores/providers/index.ts",
+        "referencePath": "src/renderer/src/stores/providers/index.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/longcat.ts",
+        "olaPath": "src/renderer/src/stores/providers/longcat.ts",
+        "referencePath": "src/renderer/src/stores/providers/longcat.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/minimax.ts",
+        "olaPath": "src/renderer/src/stores/providers/minimax.ts",
+        "referencePath": "src/renderer/src/stores/providers/minimax.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/moonshot.ts",
+        "olaPath": "src/renderer/src/stores/providers/moonshot.ts",
+        "referencePath": "src/renderer/src/stores/providers/moonshot.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/ollama.ts",
+        "olaPath": "src/renderer/src/stores/providers/ollama.ts",
+        "referencePath": "src/renderer/src/stores/providers/ollama.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/openai.ts",
+        "olaPath": "src/renderer/src/stores/providers/openai.ts",
+        "referencePath": "src/renderer/src/stores/providers/openai.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/openrouter.ts",
+        "olaPath": "src/renderer/src/stores/providers/openrouter.ts",
+        "referencePath": "src/renderer/src/stores/providers/openrouter.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/qwen.ts",
+        "olaPath": "src/renderer/src/stores/providers/qwen.ts",
+        "referencePath": "src/renderer/src/stores/providers/qwen.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/siliconflow.ts",
+        "olaPath": "src/renderer/src/stores/providers/siliconflow.ts",
+        "referencePath": "src/renderer/src/stores/providers/siliconflow.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/types.ts",
+        "olaPath": "src/renderer/src/stores/providers/types.ts",
+        "referencePath": "src/renderer/src/stores/providers/types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/volcengine.ts",
+        "olaPath": "src/renderer/src/stores/providers/volcengine.ts",
+        "referencePath": "src/renderer/src/stores/providers/volcengine.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/x-ai.ts",
+        "olaPath": "src/renderer/src/stores/providers/x-ai.ts",
+        "referencePath": "src/renderer/src/stores/providers/x-ai.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/xiaomi.ts",
+        "olaPath": "src/renderer/src/stores/providers/xiaomi.ts",
+        "referencePath": "src/renderer/src/stores/providers/xiaomi.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/settings-store.ts",
+        "olaPath": "src/renderer/src/stores/settings-store.ts",
+        "referencePath": "src/renderer/src/stores/settings-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/skills-store.ts",
+        "olaPath": "src/renderer/src/stores/skills-store.ts",
+        "referencePath": "src/renderer/src/stores/skills-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/ssh-store.ts",
+        "olaPath": "src/renderer/src/stores/ssh-store.ts",
+        "referencePath": "src/renderer/src/stores/ssh-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/team-store.ts",
+        "olaPath": "src/renderer/src/stores/team-store.ts",
+        "referencePath": "src/renderer/src/stores/team-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/terminal-store.ts",
+        "olaPath": "src/renderer/src/stores/terminal-store.ts",
+        "referencePath": "src/renderer/src/stores/terminal-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/ui-store.ts",
+        "olaPath": "src/renderer/src/stores/ui-store.ts",
+        "referencePath": "src/renderer/src/stores/ui-store.ts"
+      },
+      {
+        "canonicalPath": "src/shared/agent-loop-types.ts",
+        "olaPath": "src/shared/agent-loop-types.ts",
+        "referencePath": "src/shared/agent-loop-types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/agent-stream-protocol.ts",
+        "olaPath": "src/shared/agent-stream-protocol.ts",
+        "referencePath": "src/shared/agent-stream-protocol.ts"
+      },
+      {
+        "canonicalPath": "src/shared/browser-plugin.ts",
+        "olaPath": "src/shared/browser-plugin.ts",
+        "referencePath": "src/shared/browser-plugin.ts"
+      },
+      {
+        "canonicalPath": "src/shared/extension-types.ts",
+        "olaPath": "src/shared/extension-types.ts",
+        "referencePath": "src/shared/extension-types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/messagepack/binary-ipc.ts",
+        "olaPath": "src/shared/messagepack/binary-ipc.ts",
+        "referencePath": "src/shared/messagepack/binary-ipc.ts"
+      }
+    ],
+    "onlyOla": [
+      {
+        "canonicalPath": "scripts/audit-opencowork-sync.mjs",
+        "olaPath": "scripts/audit-opencowork-sync.mjs"
+      },
+      {
+        "canonicalPath": "scripts/launch-dev.mjs",
+        "olaPath": "scripts/launch-dev.mjs"
+      },
+      {
+        "canonicalPath": "src/main/credentials/secret-vault.ts",
+        "olaPath": "src/main/credentials/secret-vault.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/credentials-handlers.ts",
+        "olaPath": "src/main/ipc/credentials-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/BuiltinSiteTemplates.tsx",
+        "olaPath": "src/renderer/src/components/credentials/BuiltinSiteTemplates.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/ChallengePausedDialog.tsx",
+        "olaPath": "src/renderer/src/components/credentials/ChallengePausedDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/CredentialForm.tsx",
+        "olaPath": "src/renderer/src/components/credentials/CredentialForm.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/CredentialList.tsx",
+        "olaPath": "src/renderer/src/components/credentials/CredentialList.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/CredentialsPanel.tsx",
+        "olaPath": "src/renderer/src/components/credentials/CredentialsPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/LoginProgressOverlay.tsx",
+        "olaPath": "src/renderer/src/components/credentials/LoginProgressOverlay.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/LoginStepPanel.tsx",
+        "olaPath": "src/renderer/src/components/credentials/LoginStepPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/credentials/VerificationResultCard.tsx",
+        "olaPath": "src/renderer/src/components/credentials/VerificationResultCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/WorkingFolderSheet.tsx",
+        "olaPath": "src/renderer/src/components/layout/WorkingFolderSheet.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetEditorDialog.tsx",
+        "olaPath": "src/renderer/src/components/settings/pet/PetEditorDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetListTab.tsx",
+        "olaPath": "src/renderer/src/components/settings/pet/PetListTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/pet-editor/AgentSection.tsx",
+        "olaPath": "src/renderer/src/components/settings/pet/pet-editor/AgentSection.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/pet-editor/ExpSection.tsx",
+        "olaPath": "src/renderer/src/components/settings/pet/pet-editor/ExpSection.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/pet-editor/OverviewSection.tsx",
+        "olaPath": "src/renderer/src/components/settings/pet/pet-editor/OverviewSection.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/pet-editor/SkinSection.tsx",
+        "olaPath": "src/renderer/src/components/settings/pet/pet-editor/SkinSection.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/turn-context.ts",
+        "olaPath": "src/renderer/src/lib/agent/turn-context.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/credentials/challenge-detector.ts",
+        "olaPath": "src/renderer/src/lib/credentials/challenge-detector.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/credentials/credential-agent.ts",
+        "olaPath": "src/renderer/src/lib/credentials/credential-agent.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/credentials/login-orchestrator.ts",
+        "olaPath": "src/renderer/src/lib/credentials/login-orchestrator.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/credentials/login-state-machine.ts",
+        "olaPath": "src/renderer/src/lib/credentials/login-state-machine.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/credentials/site-profiles.ts",
+        "olaPath": "src/renderer/src/lib/credentials/site-profiles.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/credentials/step-driver.ts",
+        "olaPath": "src/renderer/src/lib/credentials/step-driver.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/default-pet-sync.ts",
+        "olaPath": "src/renderer/src/lib/pet/default-pet-sync.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-claim-optimizer.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-claim-optimizer.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-migrate.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-migrate.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/pet/pet-standards.ts",
+        "olaPath": "src/renderer/src/lib/pet/pet-standards.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/tools/login-to-site-tool.ts",
+        "olaPath": "src/renderer/src/lib/tools/login-to-site-tool.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/credentials-store.ts",
+        "olaPath": "src/renderer/src/stores/credentials-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/input-draft-store.ts",
+        "olaPath": "src/renderer/src/stores/input-draft-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/login-run-store.ts",
+        "olaPath": "src/renderer/src/stores/login-run-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pet-resource-pool-store.ts",
+        "olaPath": "src/renderer/src/stores/pet-resource-pool-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pet-wallet-store.ts",
+        "olaPath": "src/renderer/src/stores/pet-wallet-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/pets-store.ts",
+        "olaPath": "src/renderer/src/stores/pets-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/whalecloud.ts",
+        "olaPath": "src/renderer/src/stores/providers/whalecloud.ts"
+      },
+      {
+        "canonicalPath": "src/shared/challenge-detector-shared.ts",
+        "olaPath": "src/shared/challenge-detector-shared.ts"
+      },
+      {
+        "canonicalPath": "src/shared/credentials.test-snippets.ts",
+        "olaPath": "src/shared/credentials.test-snippets.ts"
+      },
+      {
+        "canonicalPath": "src/shared/credentials.ts",
+        "olaPath": "src/shared/credentials.ts"
+      },
+      {
+        "canonicalPath": "src/shared/site-profiles-shared.ts",
+        "olaPath": "src/shared/site-profiles-shared.ts"
+      }
+    ],
+    "onlyReference": [
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeHooks.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeHooks.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIPromptCache.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIPromptCache.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentConcurrency.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeSubAgentConcurrency.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbHookModels.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbHookModels.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Db/DbHookTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Db/DbHookTools.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/File/FileSystemAccess.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/File/FileSystemAccess.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Seedance/SeedanceVideoModule.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Seedance/SeedanceVideoModule.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/Seedance/SeedanceVideoTools.cs",
+        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/Seedance/SeedanceVideoTools.cs"
+      },
+      {
+        "canonicalPath": "src/main/browser/browser-cookie-import.ts",
+        "referencePath": "src/main/browser/browser-cookie-import.ts"
+      },
+      {
+        "canonicalPath": "src/main/channels/register-providers.ts",
+        "referencePath": "src/main/channels/register-providers.ts"
+      },
+      {
+        "canonicalPath": "src/main/distribution.ts",
+        "referencePath": "src/main/distribution.ts"
+      },
+      {
+        "canonicalPath": "src/main/hooks/hooks-db.ts",
+        "referencePath": "src/main/hooks/hooks-db.ts"
+      },
+      {
+        "canonicalPath": "src/main/hooks/hooks-loader.ts",
+        "referencePath": "src/main/hooks/hooks-loader.ts"
+      },
+      {
+        "canonicalPath": "src/main/hooks/hooks-runner.ts",
+        "referencePath": "src/main/hooks/hooks-runner.ts"
+      },
+      {
+        "canonicalPath": "src/main/hooks/hooks-service.ts",
+        "referencePath": "src/main/hooks/hooks-service.ts"
+      },
+      {
+        "canonicalPath": "src/main/hooks/hooks-utils.ts",
+        "referencePath": "src/main/hooks/hooks-utils.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/ai-provider-handlers.ts",
+        "referencePath": "src/main/ipc/ai-provider-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/extension-plugin-sync.ts",
+        "referencePath": "src/main/ipc/extension-plugin-sync.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/hooks-handlers.ts",
+        "referencePath": "src/main/ipc/hooks-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/input-draft-handlers.ts",
+        "referencePath": "src/main/ipc/input-draft-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/seedance-video-handlers.ts",
+        "referencePath": "src/main/ipc/seedance-video-handlers.ts"
+      },
+      {
+        "canonicalPath": "src/main/ipc/ssh-connection-payload.ts",
+        "referencePath": "src/main/ipc/ssh-connection-payload.ts"
+      },
+      {
+        "canonicalPath": "src/main/lib/ai-provider-store.ts",
+        "referencePath": "src/main/lib/ai-provider-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/BashArtifactsCard.tsx",
+        "referencePath": "src/renderer/src/components/chat/BashArtifactsCard.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/CollapsibleHeightPanel.tsx",
+        "referencePath": "src/renderer/src/components/chat/CollapsibleHeightPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/ReasoningEffortSlider.tsx",
+        "referencePath": "src/renderer/src/components/chat/ReasoningEffortSlider.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/WebSearchBlock.tsx",
+        "referencePath": "src/renderer/src/components/chat/WebSearchBlock.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/chat/execution-outline.ts",
+        "referencePath": "src/renderer/src/components/chat/execution-outline.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/EdgeLayer.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/EdgeLayer.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/GraphCanvas.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/GraphCanvas.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/GraphControls.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/GraphControls.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/GraphMinimap.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/GraphMinimap.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeAngleDialog.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeAngleDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeCropDialog.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeCropDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeMaskEditor.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeMaskEditor.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeOutpaint.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeOutpaint.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeSplitDialog.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeSplitDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeUpscaleDialog.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeUpscaleDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/NodeView.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/NodeView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/ProjectSwitcher.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/ProjectSwitcher.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/add-image-node.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/add-image-node.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/assets/AssetPickerDialog.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/assets/AssetPickerDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/assets/asset-store.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/assets/asset-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/assistant/CanvasAssistant.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/assistant/CanvasAssistant.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/assistant/assistant-store.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/assistant/assistant-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/connection-context.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/connection-context.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/draw-projects-store.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/draw-projects-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/graph-actions.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/graph-actions.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/graph-geometry.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/graph-geometry.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/graph-keyboard.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/graph-keyboard.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/graph-persistence.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/graph-persistence.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/graph-store.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/graph-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/graph-types.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/graph-types.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/node-factory.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/node-factory.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/node-image-ops.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/node-image-ops.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/nodes/ConfigNodeView.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/nodes/ConfigNodeView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/nodes/ImageNodeView.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/nodes/ImageNodeView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/nodes/TextNodeView.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/nodes/TextNodeView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/nodes/VideoNodeView.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/nodes/VideoNodeView.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/prompt-library/PromptLibraryDialog.tsx",
+        "referencePath": "src/renderer/src/components/draw/graph/prompt-library/PromptLibraryDialog.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/prompt-library/builtin-prompts.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/prompt-library/builtin-prompts.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/prompt-library/prompt-source.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/prompt-library/prompt-source.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/use-draw-projects.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/use-draw-projects.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/use-graph-generation.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/use-graph-generation.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/use-node-image.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/use-node-image.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/draw/graph/use-video-jobs.ts",
+        "referencePath": "src/renderer/src/components/draw/graph/use-video-jobs.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/layout/sub-agent-visuals.tsx",
+        "referencePath": "src/renderer/src/components/layout/sub-agent-visuals.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/AiCodingPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/AiCodingPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/HooksPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/HooksPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/PermissionPanel.tsx",
+        "referencePath": "src/renderer/src/components/settings/PermissionPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetAgentTab.tsx",
+        "referencePath": "src/renderer/src/components/settings/pet/PetAgentTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetMemoryTab.tsx",
+        "referencePath": "src/renderer/src/components/settings/pet/PetMemoryTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetOverviewTab.tsx",
+        "referencePath": "src/renderer/src/components/settings/pet/PetOverviewTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetSkinsTab.tsx",
+        "referencePath": "src/renderer/src/components/settings/pet/PetSkinsTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetStatsTab.tsx",
+        "referencePath": "src/renderer/src/components/settings/pet/PetStatsTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/PetStudioTab.tsx",
+        "referencePath": "src/renderer/src/components/settings/pet/PetStudioTab.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/pet/use-pet-window-open.ts",
+        "referencePath": "src/renderer/src/components/settings/pet/use-pet-window-open.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/ssh/SshWindowApp.tsx",
+        "referencePath": "src/renderer/src/components/ssh/SshWindowApp.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/updater/UpdateReleaseNotes.tsx",
+        "referencePath": "src/renderer/src/components/updater/UpdateReleaseNotes.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/hooks/use-input-draft-persistence.ts",
+        "referencePath": "src/renderer/src/hooks/use-input-draft-persistence.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/background-events.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/background-events.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/agent/sub-agents/sub-agent-native-ui.ts",
+        "referencePath": "src/renderer/src/lib/agent/sub-agents/sub-agent-native-ui.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ai-coding-terminal.ts",
+        "referencePath": "src/renderer/src/lib/ai-coding-terminal.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/api/seedance-video-provider.ts",
+        "referencePath": "src/renderer/src/lib/api/seedance-video-provider.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/content-blocks.ts",
+        "referencePath": "src/renderer/src/lib/content-blocks.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/image-mask.ts",
+        "referencePath": "src/renderer/src/lib/image-mask.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/input-drafts.ts",
+        "referencePath": "src/renderer/src/lib/input-drafts.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/lib/ipc/ai-provider-storage.ts",
+        "referencePath": "src/renderer/src/lib/ipc/ai-provider-storage.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/hooks-store.ts",
+        "referencePath": "src/renderer/src/stores/hooks-store.ts"
+      },
+      {
+        "canonicalPath": "src/renderer/src/stores/providers/routin-ai.ts",
+        "referencePath": "src/renderer/src/stores/providers/routin-ai.ts"
+      },
+      {
+        "canonicalPath": "src/shared/app-distribution.ts",
+        "referencePath": "src/shared/app-distribution.ts"
+      },
+      {
+        "canonicalPath": "src/shared/hooks/types.ts",
+        "referencePath": "src/shared/hooks/types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/input-draft-types.ts",
+        "referencePath": "src/shared/input-draft-types.ts"
+      },
+      {
+        "canonicalPath": "src/shared/permission-policy.ts",
+        "referencePath": "src/shared/permission-policy.ts"
+      }
+    ]
+  },
+  "catalog": {
+    "ipcChannels": {
+      "shared": [
+        ")) {\r\n    const id = normalized.slice(8).trim()\r\n    if (!id) throw new Error(`Invalid QQ channel chat ID: ${chatId}`)\r\n    return { type: ",
+        "agent-runtime:sync",
+        "agent:session-visibility",
+        "agents:list",
+        "api:request",
+        "app:homedir",
+        "app:system-info",
+        "config:get",
+        "config:set",
+        "fs:list-desktop-directories",
+        "fs:list-dir",
+        "fs:mkdir",
+        "fs:read-document",
+        "fs:read-file",
+        "fs:read-file-binary",
+        "fs:select-folder",
+        "fs:write-file",
+        "notify:desktop",
+        "pet-window:close",
+        "pet-window:idle-seconds",
+        "pet-window:set-focusable",
+        "pet-window:set-ignore-mouse",
+        "pet:exp-add",
+        "pet:open-studio",
+        "pet:sync",
+        "pet:tts-cancel",
+        "pet:tts-stream",
+        "plugin:stream:finish",
+        "plugin:stream:start",
+        "session-control:sync",
+        "session-runtime:sync",
+        "settings:get",
+        "shell:abort",
+        "shell:openExternal",
+        "shell:openPath",
+        "sidecar:can-handle",
+        "sidecar:notify",
+        "sidecar:start",
+        "sidecar:status",
+        "sidecar:stop",
+        "skills:add-from-folder",
+        "skills:cleanup-temp",
+        "skills:delete",
+        "skills:download-remote",
+        "skills:list",
+        "skills:list-files",
+        "skills:market-list",
+        "skills:open-folder",
+        "skills:read",
+        "skills:save",
+        "skills:scan",
+        "ssh:data",
+        "ssh:resize",
+        "window:close",
+        "window:isMaximized",
+        "window:maximize",
+        "window:minimize"
+      ],
+      "onlyOla": [
+        "fs:select-file",
+        "pet-window:open",
+        "pet:create",
+        "pet:export-aniya-template",
+        "pet:import-companion-folder",
+        "pet:save-generated-sprite",
+        "pet:update",
+        "update:download"
+      ],
+      "onlyReference": [
+        "fs:write-file-binary",
+        "seedance-video:cancel",
+        "seedance-video:start",
+        "seedance-video:status",
+        "settings:set",
+        "shell:showItemInFolder",
+        "shell:trashPath",
+        "sidecar:recycle"
+      ]
+    },
+    "nativeRoutes": {
+      "shared": [
+        "agent-changes/diff-local",
+        "agent-changes/get-hydrated",
+        "agent-changes/list-session-hydrated",
+        "agent-changes/rollback-local-change",
+        "agent/append-messages",
+        "agent/cancel",
+        "agent/compress-context",
+        "agent/debug-body-read",
+        "agent/request-stop",
+        "agent/reverse-response",
+        "agent/run",
+        "agent/session-visibility",
+        "agents/ensure",
+        "agents/list",
+        "agents/load",
+        "agents/manage-list",
+        "agents/manage-read",
+        "agents/manage-save",
+        "capabilities/check",
+        "channel/config-add",
+        "channel/config-get",
+        "channel/config-list",
+        "channel/config-remove",
+        "channel/config-update",
+        "channel/config-write",
+        "channel/qq-session-clear",
+        "channel/qq-session-load",
+        "channel/qq-session-save",
+        "commands/ensure",
+        "commands/list",
+        "commands/load",
+        "commands/manage-create",
+        "commands/manage-list",
+        "commands/manage-read",
+        "commands/manage-save",
+        "config/delete",
+        "config/get",
+        "config/read",
+        "config/set",
+        "config/write",
+        "db/agent-changes-append-file",
+        "db/agent-changes-delete-finalized-before",
+        "db/agent-changes-get",
+        "db/agent-changes-list-session",
+        "db/agent-changes-mark-reverted",
+        "db/agent-changes-recompute",
+        "db/cron-jobs-create",
+        "db/cron-jobs-delete",
+        "db/cron-jobs-get",
+        "db/cron-jobs-list",
+        "db/cron-jobs-mark-fired",
+        "db/cron-jobs-set-enabled",
+        "db/cron-jobs-soft-delete",
+        "db/cron-jobs-update",
+        "db/cron-load-persisted-jobs",
+        "db/cron-run-detail",
+        "db/cron-run-log-append",
+        "db/cron-run-messages-replace",
+        "db/cron-runs-create",
+        "db/cron-runs-get",
+        "db/cron-runs-list",
+        "db/cron-runs-update",
+        "db/draw-runs-clear",
+        "db/draw-runs-delete",
+        "db/draw-runs-list",
+        "db/draw-runs-save",
+        "db/goal-events-add",
+        "db/goal-events-list",
+        "db/goals-account",
+        "db/goals-clear",
+        "db/goals-create",
+        "db/goals-get",
+        "db/goals-list",
+        "db/goals-replace",
+        "db/goals-update",
+        "db/initialize",
+        "db/memory-automation-add",
+        "db/memory-automation-get",
+        "db/memory-automation-list",
+        "db/memory-automation-mark-undo",
+        "db/memory-automation-rollup-has",
+        "db/memory-automation-rollup-mark",
+        "db/memory-citation-record",
+        "db/memory-jobs-create",
+        "db/memory-jobs-finish",
+        "db/memory-jobs-get",
+        "db/memory-jobs-list",
+        "db/memory-root-clear",
+        "db/memory-roots-ensure",
+        "db/memory-roots-get",
+        "db/memory-roots-list",
+        "db/memory-stage1-add",
+        "db/memory-stage1-list",
+        "db/messages-add",
+        "db/messages-add-batch",
+        "db/messages-clear",
+        "db/messages-compact-session",
+        "db/messages-count",
+        "db/messages-delete",
+        "db/messages-delete-last",
+        "db/messages-insert-artifacts",
+        "db/messages-list",
+        "db/messages-list-page",
+        "db/messages-list-user",
+        "db/messages-replace",
+        "db/messages-request-context",
+        "db/messages-search-content",
+        "db/messages-truncate-from",
+        "db/messages-update",
+        "db/messages-upsert",
+        "db/messages-usage-stats",
+        "db/messages-window-around",
+        "db/plans-create",
+        "db/plans-delete",
+        "db/plans-get",
+        "db/plans-get-by-session",
+        "db/plans-list",
+        "db/plans-update",
+        "db/plugin-normal-projects",
+        "db/plugin-remove-data",
+        "db/plugin-route-session",
+        "db/plugin-sessions-clear",
+        "db/plugin-sessions-create",
+        "db/plugin-sessions-delete",
+        "db/plugin-sessions-find-by-chat",
+        "db/plugin-sessions-list",
+        "db/plugin-sessions-list-all",
+        "db/plugin-sessions-messages",
+        "db/plugin-sessions-rename",
+        "db/plugin-sync-session-models",
+        "db/plugin-sync-session-project",
+        "db/projects-create",
+        "db/projects-delete",
+        "db/projects-ensure-default",
+        "db/projects-ensure-plugin",
+        "db/projects-find-by-plugin",
+        "db/projects-get",
+        "db/projects-list",
+        "db/projects-update",
+        "db/qq-wakeup-mark-sent",
+        "db/qq-wakeup-resolve",
+        "db/session-reset-conversation",
+        "db/session-status",
+        "db/sessions-clear-all",
+        "db/sessions-create",
+        "db/sessions-delete",
+        "db/sessions-get",
+        "db/sessions-list",
+        "db/sessions-update",
+        "db/ssh-connections-create",
+        "db/ssh-connections-delete",
+        "db/ssh-connections-get",
+        "db/ssh-connections-list",
+        "db/ssh-connections-update",
+        "db/ssh-groups-create",
+        "db/ssh-groups-delete",
+        "db/ssh-groups-list",
+        "db/ssh-groups-update",
+        "db/sync-apply-db-merge",
+        "db/sync-capture-local",
+        "db/sync-save-metadata",
+        "db/tasks-create",
+        "db/tasks-delete",
+        "db/tasks-delete-by-session",
+        "db/tasks-get",
+        "db/tasks-list-by-session",
+        "db/tasks-update",
+        "db/usage-add-event",
+        "db/usage-maintenance",
+        "db/usage-query",
+        "extension/execute-tool",
+        "extension/install-from-folder",
+        "extension/list",
+        "extension/read-asset",
+        "extension/remove",
+        "extension/resolve-path",
+        "extension/storage-delete",
+        "extension/storage-get",
+        "extension/storage-set",
+        "extension/update",
+        "fs/delete",
+        "fs/glob",
+        "fs/grep",
+        "fs/list-dir",
+        "fs/mkdir",
+        "fs/move",
+        "fs/read-document",
+        "fs/read-file",
+        "fs/read-file-binary",
+        "fs/read-text-file-lines",
+        "fs/search-files",
+        "fs/stat-path",
+        "fs/write-file",
+        "fs/write-file-binary",
+        "git/exec",
+        "git/exec-local",
+        "git/query",
+        "git/query-local",
+        "git/scan-repositories",
+        "git/status-detailed",
+        "initialize",
+        "mcp/config-add",
+        "mcp/config-get",
+        "mcp/config-list",
+        "mcp/config-remove",
+        "mcp/config-update",
+        "openai-audio/speech",
+        "openai-audio/transcribe",
+        "openai-images/generate",
+        "ping",
+        "prompts/ensure",
+        "prompts/list",
+        "prompts/load",
+        "settings/delete",
+        "settings/get",
+        "settings/read",
+        "settings/set",
+        "settings/write",
+        "shell/abort",
+        "shell/exec",
+        "shutdown",
+        "skills/add-from-folder",
+        "skills/cleanup-temp",
+        "skills/delete",
+        "skills/download-remote",
+        "skills/ensure-builtin",
+        "skills/ensure-builtins",
+        "skills/list",
+        "skills/list-files",
+        "skills/load",
+        "skills/market-list",
+        "skills/read",
+        "skills/resolve-path",
+        "skills/save",
+        "skills/scan",
+        "souls/builtin-list",
+        "souls/categories",
+        "souls/download-remote",
+        "souls/get-target-paths",
+        "souls/install",
+        "souls/market-list",
+        "ssh/config-connection-create",
+        "ssh/config-connection-delete",
+        "ssh/config-connection-get",
+        "ssh/config-connection-update",
+        "ssh/config-connections-list",
+        "ssh/config-export",
+        "ssh/config-group-create",
+        "ssh/config-group-delete",
+        "ssh/config-group-update",
+        "ssh/config-groups-list",
+        "ssh/config-openssh-host",
+        "ssh/config-snapshot",
+        "ssh/config-write-snapshot",
+        "ssh/exec",
+        "ssh/fs-delete",
+        "ssh/fs-download",
+        "ssh/fs-download-abort",
+        "ssh/fs-glob",
+        "ssh/fs-grep",
+        "ssh/fs-home-dir",
+        "ssh/fs-list-dir",
+        "ssh/fs-mkdir",
+        "ssh/fs-move",
+        "ssh/fs-read-file",
+        "ssh/fs-read-file-binary",
+        "ssh/fs-read-text-file-lines",
+        "ssh/fs-remote-copy-abort",
+        "ssh/fs-remote-copy-file",
+        "ssh/fs-resolve-path",
+        "ssh/fs-stat-path",
+        "ssh/fs-transfer-download",
+        "ssh/fs-transfer-remote-copy",
+        "ssh/fs-transfer-scan",
+        "ssh/fs-transfer-upload",
+        "ssh/fs-upload-abort",
+        "ssh/fs-upload-directory",
+        "ssh/fs-upload-file",
+        "ssh/fs-write-file",
+        "ssh/fs-write-file-binary",
+        "ssh/import-apply",
+        "ssh/import-preview",
+        "ssh/test-connection",
+        "sync/files-apply",
+        "sync/files-capture",
+        "sync/files-delete",
+        "team-runtime/create",
+        "team-runtime/delete",
+        "team-runtime/manifest-update",
+        "team-runtime/member-update",
+        "team-runtime/message-append",
+        "team-runtime/messages-consume",
+        "team-runtime/snapshot",
+        "terminal/create",
+        "terminal/get",
+        "terminal/input",
+        "terminal/kill",
+        "terminal/kill-all",
+        "terminal/list",
+        "terminal/resize",
+        "web/fetch",
+        "web/search",
+        "worker/memory",
+        "worker/ping",
+        "worker/routes"
+      ],
+      "onlyOla": [],
+      "onlyReference": [
+        "db/hooks-runs-cleanup",
+        "db/hooks-runs-insert",
+        "db/hooks-runs-list",
+        "db/hooks-trusts-list",
+        "db/hooks-trusts-upsert",
+        "db/messages-list-locator",
+        "seedance-video/download",
+        "seedance-video/generate",
+        "seedance-video/status"
+      ]
+    },
+    "dbRoutes": {
+      "shared": [
+        "db/agent-changes-append-file",
+        "db/agent-changes-delete-finalized-before",
+        "db/agent-changes-get",
+        "db/agent-changes-list-session",
+        "db/agent-changes-mark-reverted",
+        "db/agent-changes-recompute",
+        "db/cron-jobs-create",
+        "db/cron-jobs-delete",
+        "db/cron-jobs-get",
+        "db/cron-jobs-list",
+        "db/cron-jobs-mark-fired",
+        "db/cron-jobs-set-enabled",
+        "db/cron-jobs-soft-delete",
+        "db/cron-jobs-update",
+        "db/cron-load-persisted-jobs",
+        "db/cron-run-detail",
+        "db/cron-run-log-append",
+        "db/cron-run-messages-replace",
+        "db/cron-runs-create",
+        "db/cron-runs-get",
+        "db/cron-runs-list",
+        "db/cron-runs-update",
+        "db/draw-runs-clear",
+        "db/draw-runs-delete",
+        "db/draw-runs-list",
+        "db/draw-runs-save",
+        "db/goal-events-add",
+        "db/goal-events-list",
+        "db/goals-account",
+        "db/goals-clear",
+        "db/goals-create",
+        "db/goals-get",
+        "db/goals-list",
+        "db/goals-replace",
+        "db/goals-update",
+        "db/initialize",
+        "db/memory-automation-add",
+        "db/memory-automation-get",
+        "db/memory-automation-list",
+        "db/memory-automation-mark-undo",
+        "db/memory-automation-rollup-has",
+        "db/memory-automation-rollup-mark",
+        "db/memory-citation-record",
+        "db/memory-jobs-create",
+        "db/memory-jobs-finish",
+        "db/memory-jobs-get",
+        "db/memory-jobs-list",
+        "db/memory-root-clear",
+        "db/memory-roots-ensure",
+        "db/memory-roots-get",
+        "db/memory-roots-list",
+        "db/memory-stage1-add",
+        "db/memory-stage1-list",
+        "db/messages-add",
+        "db/messages-add-batch",
+        "db/messages-clear",
+        "db/messages-compact-session",
+        "db/messages-count",
+        "db/messages-delete",
+        "db/messages-delete-last",
+        "db/messages-insert-artifacts",
+        "db/messages-list",
+        "db/messages-list-page",
+        "db/messages-list-user",
+        "db/messages-replace",
+        "db/messages-request-context",
+        "db/messages-search-content",
+        "db/messages-truncate-from",
+        "db/messages-update",
+        "db/messages-upsert",
+        "db/messages-usage-stats",
+        "db/messages-window-around",
+        "db/plans-create",
+        "db/plans-delete",
+        "db/plans-get",
+        "db/plans-get-by-session",
+        "db/plans-list",
+        "db/plans-update",
+        "db/plugin-normal-projects",
+        "db/plugin-remove-data",
+        "db/plugin-route-session",
+        "db/plugin-sessions-clear",
+        "db/plugin-sessions-create",
+        "db/plugin-sessions-delete",
+        "db/plugin-sessions-find-by-chat",
+        "db/plugin-sessions-list",
+        "db/plugin-sessions-list-all",
+        "db/plugin-sessions-messages",
+        "db/plugin-sessions-rename",
+        "db/plugin-sync-session-models",
+        "db/plugin-sync-session-project",
+        "db/projects-create",
+        "db/projects-delete",
+        "db/projects-ensure-default",
+        "db/projects-ensure-plugin",
+        "db/projects-find-by-plugin",
+        "db/projects-get",
+        "db/projects-list",
+        "db/projects-update",
+        "db/qq-wakeup-mark-sent",
+        "db/qq-wakeup-resolve",
+        "db/session-reset-conversation",
+        "db/session-status",
+        "db/sessions-clear-all",
+        "db/sessions-create",
+        "db/sessions-delete",
+        "db/sessions-get",
+        "db/sessions-list",
+        "db/sessions-update",
+        "db/ssh-connections-create",
+        "db/ssh-connections-delete",
+        "db/ssh-connections-get",
+        "db/ssh-connections-list",
+        "db/ssh-connections-update",
+        "db/ssh-groups-create",
+        "db/ssh-groups-delete",
+        "db/ssh-groups-list",
+        "db/ssh-groups-update",
+        "db/sync-apply-db-merge",
+        "db/sync-capture-local",
+        "db/sync-save-metadata",
+        "db/tasks-create",
+        "db/tasks-delete",
+        "db/tasks-delete-by-session",
+        "db/tasks-get",
+        "db/tasks-list-by-session",
+        "db/tasks-update",
+        "db/usage-add-event",
+        "db/usage-maintenance",
+        "db/usage-query"
+      ],
+      "onlyOla": [],
+      "onlyReference": [
+        "db/hooks-runs-cleanup",
+        "db/hooks-runs-insert",
+        "db/hooks-runs-list",
+        "db/hooks-trusts-list",
+        "db/hooks-trusts-upsert",
+        "db/messages-list-locator"
+      ]
+    },
+    "settingsTabs": {
+      "shared": [
+        "about",
+        "analytics",
+        "channel",
+        "extension",
+        "general",
+        "mcp",
+        "memory",
+        "model",
+        "modelManagement",
+        "pet",
+        "plugin",
+        "provider",
+        "skillsmarket",
+        "subagent",
+        "system",
+        "team",
+        "websearch"
+      ],
+      "onlyOla": [
+        "credentials"
+      ],
+      "onlyReference": [
+        "aiCodingClaudeCode",
+        "aiCodingCodex",
+        "hooks",
+        "migration",
+        "permission",
+        "profile"
+      ]
+    },
+    "nativeModules": {
+      "shared": [
+        "AgentChanges",
+        "AgentRuntime",
+        "Channels",
+        "Config",
+        "Db",
+        "Extensions",
+        "File",
+        "Git",
+        "Mcp",
+        "OpenAIAudio",
+        "OpenAIImages",
+        "Settings",
+        "Shell",
+        "Skills",
+        "Ssh",
+        "Sync",
+        "SystemModule.cs",
+        "Terminal",
+        "UserContent",
+        "Web"
+      ],
+      "onlyOla": [],
+      "onlyReference": [
+        "Seedance"
+      ]
+    }
+  }
+}
