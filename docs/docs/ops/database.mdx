@@ -5,13 +5,15 @@ description: Ola SQLite 数据库的表结构、业务域和迁移策略。
 
 # 数据库设计 / Database Design
 
-Ola 使用 **SQLite + better-sqlite3** 作为本地持久化核心。数据库文件位于 `~/.ola/data.db`，初始化入口在 `src/main/db/database.ts`。
+Ola 使用 **SQLite + Native Worker** 作为本地持久化核心。数据库文件位于
+`~/.ola/data.db`。`src/main/db/database.ts` 只负责发起 `db/initialize`，实际连接、查询和迁移
+由 `sidecars/Ola.Native.Worker/Modules/Db/` 承担。
 
 ## 基础配置 / Database config
 
 | 项       | 值                    |
 | -------- | --------------------- |
-| 引擎     | `better-sqlite3`      |
+| 引擎     | Native Worker SQLite  |
 | 位置     | `~/.ola/data.db`      |
 | 模式     | WAL                   |
 | 外键     | `foreign_keys = ON`   |
@@ -182,4 +184,5 @@ Ola 采用的是“**加列不删列**”的演进策略：
 - 数据库已经从“聊天记录仓库”演进成“本地 Agent 工作台的核心存储层”
 - 主线关系是：`project -> session -> messages / plans / tasks`
 - Cron、SSH、Wiki、Goal、Usage 都是一级对象，不是附属功能
-- 文档里如果看到旧 schema，应该以 `src/main/db/database.ts` 为准
+- 文档里如果看到旧 schema，应该以
+  `sidecars/Ola.Native.Worker/Modules/Db/DbSchemaMigrator.cs` 为准
