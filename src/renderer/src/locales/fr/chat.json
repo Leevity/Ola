@@ -932,6 +932,23 @@
     "collapsedMessage": "Le message s'est effondré",
     "imagesCollapsed": "{{count}} images"
   },
+  "executionRun": {
+    "title": "Journal du processus",
+    "running": "En cours",
+    "completedSteps": "{{count}} étapes terminées",
+    "reviewedContext": "{{count}} éléments de contexte consultés",
+    "ranCommands": "{{count}} commandes exécutées",
+    "fileChanges": "{{count}} modifications de fichiers terminées",
+    "externalTools": "{{count}} outils externes appelés",
+    "browserActions": "{{count}} actions navigateur ou bureau terminées",
+    "subTasks": "{{count}} tâches déléguées terminées",
+    "needsAttention": "Action requise",
+    "failed": "Échec de l’exécution",
+    "canceled": "Annulé",
+    "summary": "{{status}} · {{count}} étapes{{duration}}",
+    "expandDetails": "Afficher les détails",
+    "collapseDetails": "Masquer les détails"
+  },
   "toolGroup": {
     "readFiles": "Lire {{count}} fichiers",
     "searchedPatterns": "Recherche {{count}} modèles",

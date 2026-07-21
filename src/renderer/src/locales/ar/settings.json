@@ -151,6 +151,8 @@
     "systemProxyDesc": "Set the proxy URL used by the whole app process, for example http://127.0.0.1:7890 or http://host:port.",
     "toolbarCollapsedByDefault": "مخزن أدوات الإنهيار",
     "toolbarCollapsedByDefaultDesc": "خارجاً عن مساره، يبدأ ولاية \"أدابار\" الأيسر عندما يفتح التطبيق",
+    "collapseExecutionRunsByDefault": "طي سجلات العملية افتراضيًا",
+    "collapseExecutionRunsByDefaultDesc": "يبرز الإجابة النهائية مع الاحتفاظ بتفاصيل الأدوات القابلة للتوسيع. عطّله لإظهار العملية دائمًا.",
     "chinese": "√",
     "english": "الإنكليزية",
     "systemPromptPlaceholder": "أضف تعليمات العرف",

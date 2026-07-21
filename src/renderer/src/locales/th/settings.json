@@ -151,6 +151,8 @@
     "systemProxyDesc": "ตั้งค่าที่อยู่ URL ของพร็อกซีที่ถูกใช้โดยโพรเซสทั้งหมดของโปรแกรม ตัวอย่างเช่น http: // 127.0.1:7890 หรือ http: port",
     "toolbarCollapsedByDefault": "ยุบแถบเครื่องมือโดยปริยาย",
     "toolbarCollapsedByDefaultDesc": "ออกจากโปรแกรมโดยปริยาย แล้วทําการเริ่มสถานะของแถบเครื่องมือด้านซ้ายเมื่อโปรแกรมเปิด",
+    "collapseExecutionRunsByDefault": "ยุบกระบวนการโดยค่าเริ่มต้น",
+    "collapseExecutionRunsByDefaultDesc": "เน้นคำตอบสุดท้ายและเก็บรายละเอียดเครื่องมือที่ขยายได้ ปิดเพื่อแสดงกระบวนการเสมอ",
     "chinese": "○",
     "english": "อังกฤษ",
     "systemPromptPlaceholder": "เพิ่มคําแนะนํากําหนดเอง...",

@@ -151,6 +151,8 @@
     "systemProxyDesc": "Đặt URL ủy nhiệm được dùng bởi toàn bộ tiến trình ứng dụng, ví dụ http tảng127.0. 1:7890 hay http vội:port.",
     "toolbarCollapsedByDefault": "Co lại thanh công cụ theo mặc định",
     "toolbarCollapsedByDefaultDesc": "Tắt theo mặc định. Khởi động trạng thái thanh công cụ bên trái khi ứng dụng mở.",
+    "collapseExecutionRunsByDefault": "Thu gọn tiến trình theo mặc định",
+    "collapseExecutionRunsByDefaultDesc": "Làm nổi bật câu trả lời cuối và giữ chi tiết công cụ có thể mở rộng. Tắt để luôn mở tiến trình.",
     "chinese": "teppi82",
     "english": "Tiếng Anh",
     "systemPromptPlaceholder": "Thêm hướng dẫn tự chọn...",

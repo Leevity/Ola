@@ -151,6 +151,8 @@
     "systemProxyDesc": "Stel de proxy-URL in die gebruikt wordt door het hele appproces, bijvoorbeeld http://127.0.0.1:7890 of http://host:port.",
     "toolbarCollapsedByDefault": "Werkbalk standaard invouwen",
     "toolbarCollapsedByDefaultDesc": "Standaard uit. Initialiseer de status van de linker werkbalk wanneer de app wordt geopend.",
+    "collapseExecutionRunsByDefault": "Proceslogboeken standaard inklappen",
+    "collapseExecutionRunsByDefaultDesc": "Benadrukt het eindantwoord en bewaart uitklapbare tooldetails. Schakel uit om processen altijd uit te klappen.",
     "chinese": "",
     "english": "Engels",
     "systemPromptPlaceholder": "Aangepaste instructies toevoegen...",

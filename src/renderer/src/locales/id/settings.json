@@ -151,6 +151,8 @@
     "systemProxyDesc": "Set proxy URL yang digunakan oleh seluruh proses app, sebagai contoh http: / / 127.0.0.1: 7890 atau http: / / host: port.",
     "toolbarCollapsedByDefault": "Lipat bilah alat secara baku",
     "toolbarCollapsedByDefaultDesc": "Secara baku. Inisialisasi keadaan toolbar kiri ketika aplikasi terbuka.",
+    "collapseExecutionRunsByDefault": "Ciutkan proses secara default",
+    "collapseExecutionRunsByDefaultDesc": "Tonjolkan jawaban akhir sambil mempertahankan detail alat yang dapat dibuka. Nonaktifkan agar proses selalu terbuka.",
     "chinese": "Aboenim",
     "english": "Inggris",
     "systemPromptPlaceholder": "Tambahkan instruksi gubahan...",

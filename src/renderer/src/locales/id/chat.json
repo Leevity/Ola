@@ -932,6 +932,23 @@
     "collapsedMessage": "Pesan runtuh",
     "imagesCollapsed": "{{count}} gambar"
   },
+  "executionRun": {
+    "title": "Catatan proses",
+    "running": "Sedang berjalan",
+    "completedSteps": "{{count}} langkah selesai",
+    "reviewedContext": "Meninjau {{count}} langkah konteks",
+    "ranCommands": "Menjalankan {{count}} perintah",
+    "fileChanges": "Menyelesaikan {{count}} perubahan berkas",
+    "externalTools": "Memanggil {{count}} alat eksternal",
+    "browserActions": "Menyelesaikan {{count}} aksi browser atau desktop",
+    "subTasks": "Menyelesaikan {{count}} tugas delegasi",
+    "needsAttention": "Perlu ditangani",
+    "failed": "Eksekusi gagal",
+    "canceled": "Dibatalkan",
+    "summary": "{{status}} · {{count}} langkah{{duration}}",
+    "expandDetails": "Buka detail",
+    "collapseDetails": "Tutup detail"
+  },
   "toolGroup": {
     "readFiles": "Baca {{count}} berkas",
     "searchedPatterns": "Dicari {{count}} pola",

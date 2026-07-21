@@ -932,6 +932,23 @@
     "collapsedMessage": "Comment",
     "imagesCollapsed": "{{count}} Ảnh"
   },
+  "executionRun": {
+    "title": "Nhật ký tiến trình",
+    "running": "Đang thực hiện",
+    "completedSteps": "Đã hoàn thành {{count}} bước",
+    "reviewedContext": "Đã xem {{count}} mục ngữ cảnh",
+    "ranCommands": "Đã chạy {{count}} lệnh",
+    "fileChanges": "Đã hoàn thành {{count}} thay đổi tệp",
+    "externalTools": "Đã gọi {{count}} công cụ bên ngoài",
+    "browserActions": "Đã hoàn thành {{count}} thao tác trình duyệt hoặc máy tính",
+    "subTasks": "Đã hoàn thành {{count}} tác vụ được giao",
+    "needsAttention": "Cần xử lý",
+    "failed": "Thực thi thất bại",
+    "canceled": "Đã hủy",
+    "summary": "{{status}} · {{count}} bước{{duration}}",
+    "expandDetails": "Mở chi tiết",
+    "collapseDetails": "Thu gọn chi tiết"
+  },
   "toolGroup": {
     "readFiles": "Đọc {{count}} Tập tin",
     "searchedPatterns": "Đã tìm kiếm {{count}} mẫu",

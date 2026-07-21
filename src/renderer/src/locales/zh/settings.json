@@ -191,6 +191,8 @@
     "systemProxyDesc": "设置整个应用进程使用的代理地址，例如 http://127.0.0.1:7890 或 http://host:port。",
     "toolbarCollapsedByDefault": "工具栏默认收起",
     "toolbarCollapsedByDefaultDesc": "默认不收起。新打开应用时按此状态初始化左侧工具栏。",
+    "collapseExecutionRunsByDefault": "默认折叠执行过程",
+    "collapseExecutionRunsByDefaultDesc": "突出最终答复，同时保留可展开的工具详情。关闭后将始终展开过程记录。",
     "chinese": "中文",
     "english": "English",
     "systemPromptPlaceholder": "添加自定义指令...",

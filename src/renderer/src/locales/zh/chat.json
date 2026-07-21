@@ -1027,6 +1027,23 @@
     "collapsedMessage": "已收起消息",
     "imagesCollapsed": "{{count}} 张图片"
   },
+  "executionRun": {
+    "title": "过程记录",
+    "running": "正在执行",
+    "completedSteps": "已完成 {{count}} 个步骤",
+    "reviewedContext": "查阅了 {{count}} 项上下文",
+    "ranCommands": "执行了 {{count}} 条命令",
+    "fileChanges": "完成了 {{count}} 次文件修改",
+    "externalTools": "调用了 {{count}} 个外部工具",
+    "browserActions": "完成了 {{count}} 个浏览器或桌面操作",
+    "subTasks": "完成了 {{count}} 个委派任务",
+    "needsAttention": "需要处理",
+    "failed": "执行失败",
+    "canceled": "已取消",
+    "summary": "{{status}} · {{count}} 个步骤{{duration}}",
+    "expandDetails": "展开详情",
+    "collapseDetails": "收起详情"
+  },
   "toolGroup": {
     "readFiles": "读取了 {{count}} 个文件",
     "searchedPatterns": "搜索了 {{count}} 个模式",

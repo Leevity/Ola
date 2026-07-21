@@ -932,6 +932,23 @@
     "collapsedMessage": "Сообщение рухнуло",
     "imagesCollapsed": "{{count}} изображения"
   },
+  "executionRun": {
+    "title": "Журнал процесса",
+    "running": "Выполняется",
+    "completedSteps": "Выполнено шагов: {{count}}",
+    "reviewedContext": "Проверено элементов контекста: {{count}}",
+    "ranCommands": "Выполнено команд: {{count}}",
+    "fileChanges": "Выполнено изменений файлов: {{count}}",
+    "externalTools": "Вызвано внешних инструментов: {{count}}",
+    "browserActions": "Выполнено действий браузера или рабочего стола: {{count}}",
+    "subTasks": "Выполнено делегированных задач: {{count}}",
+    "needsAttention": "Требует внимания",
+    "failed": "Ошибка выполнения",
+    "canceled": "Отменено",
+    "summary": "{{status}} · шагов: {{count}}{{duration}}",
+    "expandDetails": "Развернуть подробности",
+    "collapseDetails": "Свернуть подробности"
+  },
   "toolGroup": {
     "readFiles": "Читать {{count}} файлы",
     "searchedPatterns": "В поисках {{count}} закономерности",

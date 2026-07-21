@@ -151,6 +151,8 @@
     "systemProxyDesc": "Tüm uygulama sürecinde kullanılan URL proxyunu ayarlayın, örneğin http://127.0.0.1:7890 veya http://host:port.",
     "toolbarCollapsedByDefault": "Colalt araç çubuğu varsayılan",
     "toolbarCollapsedByDefaultDesc": "Varsayılan olarak kapalı. Uygulama açılırken sol araç çubuğu durumu.",
+    "collapseExecutionRunsByDefault": "Süreçleri varsayılan olarak daralt",
+    "collapseExecutionRunsByDefaultDesc": "Son yanıtı öne çıkarır ve açılabilir araç ayrıntılarını korur. Süreçleri her zaman açmak için kapatın.",
     "chinese": "",
     "english": "İngilizce İngilizce İngilizce English",
     "systemPromptPlaceholder": "Özel talimatları ekleyin...",
