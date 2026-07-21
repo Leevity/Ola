@@ -15,6 +15,7 @@
     "verify:message-windowing": "node ./scripts/verify-message-windowing.mjs",
     "verify:provider-retry": "node ./scripts/verify-provider-retry.mjs",
     "verify:input-drafts": "esbuild tools/verify-input-drafts.ts --bundle --platform=node --format=esm --external:electron --outfile=node_modules/.cache/ola-verify-input-drafts.mjs && node node_modules/.cache/ola-verify-input-drafts.mjs",
+    "verify:execution-outline": "esbuild tools/verify-execution-outline.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-execution-outline.mjs && node node_modules/.cache/ola-verify-execution-outline.mjs",
     "verify:main-safety": "node --experimental-strip-types tools/check-main-module-safety.ts",
     "verify:permission-policy": "node --experimental-strip-types tools/verify-permission-policy.ts",
     "audit:sync": "node ./scripts/audit-opencowork-sync.mjs",
