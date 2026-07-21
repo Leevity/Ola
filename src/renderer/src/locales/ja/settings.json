@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "自動化フック",
+    "subtitle": "ローカルのライフサイクルスクリプトを確認して信頼",
+    "refresh": "更新",
+    "securityNotice": "フックはローカルコマンドを実行します。パスとハッシュを確認してください。ファイル変更後は再承認が必要です。",
+    "configured": "設定済みフック",
+    "empty": "ユーザーまたはプロジェクトのフックがありません。",
+    "source": { "user": "ユーザー", "project": "プロジェクト" },
+    "configHash": "設定",
+    "revoke": "信頼を取り消す",
+    "reviewAndTrust": "確認して信頼",
+    "history": "実行履歴",
+    "noHistory": "実行履歴はありません。",
+    "status": {
+      "completed": "完了",
+      "failed": "失敗",
+      "blocked": "ブロック",
+      "timed-out": "タイムアウト",
+      "canceled": "キャンセル"
+    }
+  },
   "page": {
     "title": "設定",
     "subtitle": "環境設定とモデル設定",

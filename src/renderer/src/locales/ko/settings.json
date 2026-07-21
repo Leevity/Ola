@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "자동화 Hook",
+    "subtitle": "로컬 수명 주기 스크립트 검토 및 신뢰",
+    "refresh": "새로 고침",
+    "securityNotice": "Hook은 로컬 명령을 실행합니다. 경로와 해시를 확인하세요. 파일이 변경되면 다시 승인해야 합니다.",
+    "configured": "구성된 Hook",
+    "empty": "사용자 또는 프로젝트 Hook이 없습니다.",
+    "source": { "user": "사용자", "project": "프로젝트" },
+    "configHash": "구성",
+    "revoke": "신뢰 취소",
+    "reviewAndTrust": "검토 후 신뢰",
+    "history": "실행 기록",
+    "noHistory": "실행 기록이 없습니다.",
+    "status": {
+      "completed": "완료",
+      "failed": "실패",
+      "blocked": "차단됨",
+      "timed-out": "시간 초과",
+      "canceled": "취소됨"
+    }
+  },
   "page": {
     "title": "설정",
     "subtitle": "환경 설정 및 모델 설정",

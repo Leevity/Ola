@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Hooks d’automatisation",
+    "subtitle": "Examiner et approuver les scripts locaux du cycle de vie",
+    "refresh": "Actualiser",
+    "securityNotice": "Les hooks exécutent des commandes locales. Vérifiez le chemin et les empreintes ; toute modification impose une nouvelle autorisation.",
+    "configured": "Hooks configurés",
+    "empty": "Aucun hook utilisateur ou projet trouvé.",
+    "source": { "user": "Utilisateur", "project": "Projet" },
+    "configHash": "configuration",
+    "revoke": "Révoquer la confiance",
+    "reviewAndTrust": "Examiner et approuver",
+    "history": "Historique d’exécution",
+    "noHistory": "Aucune exécution pour le moment.",
+    "status": {
+      "completed": "Terminé",
+      "failed": "Échec",
+      "blocked": "Bloqué",
+      "timed-out": "Délai dépassé",
+      "canceled": "Annulé"
+    }
+  },
   "page": {
     "title": "Paramètres",
     "subtitle": "Préférences et paramètres du modèle",

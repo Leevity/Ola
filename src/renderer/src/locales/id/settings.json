@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Hook otomatisasi",
+    "subtitle": "Tinjau dan percayai skrip siklus hidup lokal",
+    "refresh": "Segarkan",
+    "securityNotice": "Hook menjalankan perintah lokal. Periksa jalur dan hash; setiap perubahan file memerlukan izin ulang.",
+    "configured": "Hook terkonfigurasi",
+    "empty": "Tidak ada hook pengguna atau proyek.",
+    "source": { "user": "Pengguna", "project": "Proyek" },
+    "configHash": "konfigurasi",
+    "revoke": "Cabut kepercayaan",
+    "reviewAndTrust": "Tinjau dan percayai",
+    "history": "Riwayat eksekusi",
+    "noHistory": "Belum ada eksekusi hook.",
+    "status": {
+      "completed": "Selesai",
+      "failed": "Gagal",
+      "blocked": "Diblokir",
+      "timed-out": "Waktu habis",
+      "canceled": "Dibatalkan"
+    }
+  },
   "page": {
     "title": "Pengaturan",
     "subtitle": "Pengaturan & Model Preferensi",

@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Automatisierungs-Hooks",
+    "subtitle": "Lokale Lebenszyklus-Skripte prüfen und freigeben",
+    "refresh": "Aktualisieren",
+    "securityNotice": "Hooks führen lokale Befehle aus. Prüfen Sie Pfad und Hashes; jede Dateiänderung erfordert eine neue Freigabe.",
+    "configured": "Konfigurierte Hooks",
+    "empty": "Keine Hooks für Benutzer oder Projekt gefunden.",
+    "source": { "user": "Benutzer", "project": "Projekt" },
+    "configHash": "Konfiguration",
+    "revoke": "Vertrauen widerrufen",
+    "reviewAndTrust": "Prüfen und vertrauen",
+    "history": "Ausführungsverlauf",
+    "noHistory": "Noch keine Hook-Ausführungen.",
+    "status": {
+      "completed": "Abgeschlossen",
+      "failed": "Fehlgeschlagen",
+      "blocked": "Blockiert",
+      "timed-out": "Zeitüberschreitung",
+      "canceled": "Abgebrochen"
+    }
+  },
   "page": {
     "title": "Einstellungen",
     "subtitle": "Vorlieben & Modelleinstellungen",

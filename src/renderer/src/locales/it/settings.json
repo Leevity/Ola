@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Hook di automazione",
+    "subtitle": "Esamina e autorizza gli script locali del ciclo di vita",
+    "refresh": "Aggiorna",
+    "securityNotice": "Gli hook eseguono comandi locali. Verifica percorso e hash; ogni modifica richiede una nuova autorizzazione.",
+    "configured": "Hook configurati",
+    "empty": "Nessun hook utente o di progetto trovato.",
+    "source": { "user": "Utente", "project": "Progetto" },
+    "configHash": "configurazione",
+    "revoke": "Revoca fiducia",
+    "reviewAndTrust": "Esamina e autorizza",
+    "history": "Cronologia esecuzioni",
+    "noHistory": "Nessuna esecuzione hook.",
+    "status": {
+      "completed": "Completato",
+      "failed": "Non riuscito",
+      "blocked": "Bloccato",
+      "timed-out": "Tempo scaduto",
+      "canceled": "Annullato"
+    }
+  },
   "page": {
     "title": "Impostazioni",
     "subtitle": "Preferenze e impostazioni del modello",

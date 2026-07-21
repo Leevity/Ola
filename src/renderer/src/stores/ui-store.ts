@@ -212,6 +212,7 @@ export type SettingsTab =
   | 'general'
   | 'system'
   | 'permission'
+  | 'hooks'
   | 'memory'
   | 'analytics'
   | 'provider'

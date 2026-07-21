@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Hooks de automação",
+    "subtitle": "Revise e autorize scripts locais do ciclo de vida",
+    "refresh": "Atualizar",
+    "securityNotice": "Hooks executam comandos locais. Verifique caminho e hashes; qualquer alteração exige nova autorização.",
+    "configured": "Hooks configurados",
+    "empty": "Nenhum hook de usuário ou projeto encontrado.",
+    "source": { "user": "Usuário", "project": "Projeto" },
+    "configHash": "configuração",
+    "revoke": "Revogar confiança",
+    "reviewAndTrust": "Revisar e confiar",
+    "history": "Histórico de execução",
+    "noHistory": "Ainda não há execuções.",
+    "status": {
+      "completed": "Concluído",
+      "failed": "Falhou",
+      "blocked": "Bloqueado",
+      "timed-out": "Tempo esgotado",
+      "canceled": "Cancelado"
+    }
+  },
   "page": {
     "title": "Configuração",
     "subtitle": "Configurações & Modelo",

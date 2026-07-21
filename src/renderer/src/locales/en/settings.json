@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Automation hooks",
+    "subtitle": "Review, trust, and inspect local lifecycle scripts",
+    "refresh": "Refresh",
+    "securityNotice": "Hooks run local commands. Review the resolved path and hashes before trusting them; any file change requires trust again.",
+    "configured": "Configured hooks",
+    "empty": "No hooks were found for the user or current project.",
+    "source": { "user": "User", "project": "Project" },
+    "configHash": "config",
+    "revoke": "Revoke trust",
+    "reviewAndTrust": "Review and trust",
+    "history": "Run history",
+    "noHistory": "No hook runs yet.",
+    "status": {
+      "completed": "Completed",
+      "failed": "Failed",
+      "blocked": "Blocked",
+      "timed-out": "Timed out",
+      "canceled": "Canceled"
+    }
+  },
   "permission": {
     "title": "Permissions",
     "subtitle": "Tool whitelist & shell command rules",
