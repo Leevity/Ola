@@ -1,12 +1,13 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { Brain, FileText, ScrollText, icons } from 'lucide-react'
+import { Brain, FileText, Loader2, ScrollText, StopCircle, icons } from 'lucide-react'
 
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import { formatTokens, getBillableTotalTokens } from '@renderer/lib/format-tokens'
 import { parseSubAgentMeta } from '@renderer/lib/agent/sub-agents/create-tool'
 import { subAgentRegistry } from '@renderer/lib/agent/sub-agents/registry'
+import { agentBridge } from '@renderer/lib/ipc/agent-bridge'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
@@ -307,13 +308,47 @@ function SubAgentCardInner({
       .openSubAgentExecutionDetail(toolUseId, histText || undefined, displayName, sessionId)
   }
 
+  const currentLoopId = useAgentStore((s) => s.currentLoopId)
+  const [cancelPending, setCancelPending] = React.useState(false)
+  const canCancel = isRunning && Boolean(currentLoopId) && !cancelPending
+  const handleCancel = React.useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation()
+      event.preventDefault()
+      const runId = currentLoopId
+      if (!runId || cancelPending) return
+      setCancelPending(true)
+      const target = agentBridge.cancelAgent(runId, toolUseId)
+      target
+        .then((result) => {
+          if (!result?.cancelled) {
+            console.warn('[SubAgentCard] cancel failed', result)
+          }
+        })
+        .catch((err) => {
+          console.warn('[SubAgentCard] cancel error', err)
+        })
+        .finally(() => {
+          window.setTimeout(() => setCancelPending(false), 1200)
+        })
+    },
+    [cancelPending, currentLoopId, toolUseId]
+  )
+
   const card = (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={handleOpenPanel}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          handleOpenPanel()
+        }
+      }}
       title={`${t('subAgent.viewDetails')} · ${metaText}`}
       className={cn(
-        'group my-2 w-full rounded-[9px] px-3 py-2.5 text-left transition-colors',
+        'group relative my-2 w-full rounded-[9px] px-3 py-2.5 text-left transition-colors',
         'hover:bg-[#242424] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/35',
         isRunning && 'bg-[#1f1f1f]',
         isError && 'bg-[#241919] hover:bg-[#2a1c1c]',
@@ -352,7 +387,28 @@ function SubAgentCardInner({
           <DotMatrix filled={meterFill} tone={meterTone} />
         </div>
       </div>
-    </button>
+      {canCancel || cancelPending ? (
+        <button
+          type="button"
+          onClick={handleCancel}
+          aria-label={t('subAgent.cancel', { defaultValue: 'Cancel sub-agent' })}
+          title={t('subAgent.cancel', { defaultValue: 'Cancel sub-agent' })}
+          className={cn(
+            'absolute right-2 top-2 inline-flex size-7 items-center justify-center rounded-full border transition-colors',
+            'border-rose-400/45 bg-rose-500/10 text-rose-100 hover:border-rose-300/65 hover:bg-rose-500/20',
+            'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-rose-300/55',
+            !canCancel && 'pointer-events-none opacity-60'
+          )}
+          data-testid="sub-agent-cancel-button"
+        >
+          {cancelPending ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <StopCircle className="size-3.5" />
+          )}
+        </button>
+      ) : null}
+    </div>
   )
 
   return descriptionText || promptText ? (

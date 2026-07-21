@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ProviderConfig,
   StreamEvent,
   ToolDefinition,
@@ -98,11 +98,15 @@ class AgentBridgeClient {
     )
   }
 
-  async cancelAgent(runId: string): Promise<{ cancelled: boolean; runId?: string }> {
-    return await invokeMessagePackBinary<{ cancelled: boolean; runId?: string }>(
-      toMessagePackChannel('agent:cancel'),
-      { runId }
-    )
+  async cancelAgent(
+    runId: string,
+    toolUseId?: string
+  ): Promise<{ cancelled: boolean; runId?: string; toolUseId?: string }> {
+    return await invokeMessagePackBinary<{
+      cancelled: boolean
+      runId?: string
+      toolUseId?: string
+    }>(toMessagePackChannel('agent:cancel'), { runId, toolUseId })
   }
 
   async requestStopAgent(runId: string): Promise<{ stopped: boolean; runId?: string }> {

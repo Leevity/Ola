@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 
 internal sealed record AgentRuntimeInitializeResult(bool Ok, string Runtime, string Version);
 
@@ -6,7 +6,10 @@ internal sealed record AgentRuntimeCapabilityResult(bool Supported);
 
 internal sealed record AgentRuntimeRunResult(bool Started, string RunId);
 
-internal sealed record AgentRuntimeCancelResult(bool Cancelled, string? RunId);
+internal sealed record AgentRuntimeCancelResult(
+    bool Cancelled,
+    string? RunId,
+    string? ToolUseId = null);
 
 internal sealed record AgentRuntimeStopResult(bool Stopped, string? RunId);
 

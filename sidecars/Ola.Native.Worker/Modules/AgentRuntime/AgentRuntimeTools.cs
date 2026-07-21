@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 
 internal static class AgentRuntimeTools
@@ -112,21 +112,39 @@ internal static class AgentRuntimeTools
         if (string.IsNullOrEmpty(runId))
         {
             return WorkerResponse.Json(
-                new AgentRuntimeCancelResult(false, null),
+                new AgentRuntimeCancelResult(false, null, null),
                 WorkerJsonContext.Default.AgentRuntimeCancelResult);
         }
 
         if (!ActiveRuns.TryGetValue(runId, out var state))
         {
             return WorkerResponse.Json(
-                new AgentRuntimeCancelResult(false, runId),
+                new AgentRuntimeCancelResult(false, runId, null),
+                WorkerJsonContext.Default.AgentRuntimeCancelResult);
+        }
+
+        var toolUseId = JsonHelpers.GetString(parameters, "toolUseId")?.Trim();
+        if (!string.IsNullOrEmpty(toolUseId))
+        {
+            if (state.TryCancelSubAgent(toolUseId))
+            {
+                WorkerLog.Info(
+                    $"agent run sub-agent cancel requested runId={runId} toolUseId={toolUseId}");
+                return WorkerResponse.Json(
+                    new AgentRuntimeCancelResult(true, runId, toolUseId),
+                    WorkerJsonContext.Default.AgentRuntimeCancelResult);
+            }
+            WorkerLog.Info(
+                $"agent run sub-agent cancel no-match runId={runId} toolUseId={toolUseId}");
+            return WorkerResponse.Json(
+                new AgentRuntimeCancelResult(false, runId, toolUseId),
                 WorkerJsonContext.Default.AgentRuntimeCancelResult);
         }
 
         state.Cancel("user");
         WorkerLog.Info($"agent run cancel requested runId={runId}");
         return WorkerResponse.Json(
-            new AgentRuntimeCancelResult(true, runId),
+            new AgentRuntimeCancelResult(true, runId, null),
             WorkerJsonContext.Default.AgentRuntimeCancelResult);
     }
 
@@ -303,6 +321,8 @@ internal static class AgentRuntimeTools
     {
         private readonly CancellationTokenSource cancellation = new();
         private readonly ConcurrentQueue<JsonElement> queuedMessages = new();
+        private readonly ConcurrentDictionary<string, AgentRuntimeRunState>
+            subAgentChildrenByToolUseId = new(StringComparer.Ordinal);
         private long seq;
         private int queuedMessageCount;
         private int stopRequested;
@@ -395,6 +415,30 @@ internal static class AgentRuntimeTools
         {
             _ = reason;
             cancellation.Cancel();
+        }
+
+        public void RegisterSubAgent(string toolUseId, AgentRuntimeRunState childState)
+        {
+            if (string.IsNullOrEmpty(toolUseId) || childState is null) return;
+            subAgentChildrenByToolUseId[toolUseId] = childState;
+        }
+
+        public void UnregisterSubAgent(string toolUseId)
+        {
+            if (string.IsNullOrEmpty(toolUseId)) return;
+            subAgentChildrenByToolUseId.TryRemove(toolUseId, out _);
+        }
+
+        public bool TryCancelSubAgent(string toolUseId)
+        {
+            if (string.IsNullOrEmpty(toolUseId)) return false;
+            if (!subAgentChildrenByToolUseId.TryGetValue(toolUseId, out var child) ||
+                child is null)
+            {
+                return false;
+            }
+            child.Cancel($"user:sub-agent:{toolUseId}");
+            return true;
         }
 
         public void RequestStop(string reason)
