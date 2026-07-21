@@ -17,6 +17,7 @@
     "audit:sync": "node ./scripts/audit-opencowork-sync.mjs",
     "audit:sync:check": "node ./scripts/audit-opencowork-sync.mjs --check",
     "audit:sync:write": "node ./scripts/audit-opencowork-sync.mjs --write",
+    "verify:sync-audit": "node ./scripts/verify-sync-audit.mjs",
     "verify:remote-store": "node --experimental-strip-types tools/verify-remote-connection-store.ts",
     "verify:remote-test": "node --experimental-strip-types tools/verify-remote-connection-test.ts",
     "verify:remote-authorization": "node --experimental-strip-types tools/verify-remote-authorization.ts",

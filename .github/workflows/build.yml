@@ -111,6 +111,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Checkout pinned OpenCowork audit reference
+        if: ${{ vars.OPEN_COWORK_REFERENCE_REPOSITORY != '' }}
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.OPEN_COWORK_REFERENCE_REPOSITORY }}
+          ref: 18413c22a498a26748fa28dfcc05a24df8787ad8
+          path: OpenCowork
+
+      - name: Check OpenCowork sync audit baseline
+        if: ${{ vars.OPEN_COWORK_REFERENCE_REPOSITORY != '' }}
+        run: npm run audit:sync:check
+        env:
+          OPEN_COWORK_REFERENCE: ${{ github.workspace }}/OpenCowork
+
       - name: Sync version to package.json
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
