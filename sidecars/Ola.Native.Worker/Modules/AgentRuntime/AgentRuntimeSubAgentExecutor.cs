@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -162,6 +162,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
             SuppressTransportEvents = true
         };
         childState.ReplaceParameters(childParameters);
+        parentState.RegisterSubAgent(call.Id, childState);
 
         var collector = new SubAgentRunCollector(
             definition.Name,
@@ -205,6 +206,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
         }
         finally
         {
+            parentState.UnregisterSubAgent(call.Id);
             childState.Dispose();
         }
 
