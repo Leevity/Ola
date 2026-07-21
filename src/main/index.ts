@@ -57,6 +57,7 @@ import { ChannelManager } from './channels/channel-manager'
 import { autoConnectMcpServers, registerMcpHandlers } from './ipc/mcp-handlers'
 import { registerCronHandlers } from './ipc/cron-handlers'
 import { registerInputHandlers } from './ipc/input-handlers'
+import { registerInputDraftHandlers } from './ipc/input-draft-handlers'
 import { closeAllRemoteSessions, registerRemoteHandlers } from './ipc/remote-handlers'
 import { registerNotifyHandlers } from './ipc/notify-handlers'
 import {
@@ -1401,6 +1402,7 @@ if (gotSingleInstanceLock) {
     registerCronHandlers()
     registerScreenshotHandlers()
     registerInputHandlers()
+    await registerInputDraftHandlers()
     registerRemoteHandlers()
 
     registerSidecarHandlers()

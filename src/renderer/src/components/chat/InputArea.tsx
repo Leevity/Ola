@@ -79,8 +79,11 @@ import { useChatStore } from '@renderer/stores/chat-store'
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import {
+  getHomeInputDraftKey,
+  getProjectInputDraftKey,
   getSessionInputDraftKey,
   hasInputDraftContent,
+  type InputDraftValue,
   useInputDraftStore
 } from '@renderer/stores/input-draft-store'
 import { useShallow } from 'zustand/react/shallow'
@@ -1460,7 +1463,11 @@ function ReadOnlyModelBadge({
 
 interface InputAreaProps {
   sessionId?: string | null
-  onSend: (text: string, images?: ImageAttachment[], options?: SendMessageOptions) => void
+  onSend: (
+    text: string,
+    images?: ImageAttachment[],
+    options?: SendMessageOptions
+  ) => void | Promise<void>
   onStop?: () => void
   onSelectFolder?: () => void
   isStreaming?: boolean
@@ -1526,6 +1533,12 @@ export function InputArea({
   const [fileSearchLoading, setFileSearchLoading] = React.useState(false)
   const [selectedFileSearchIndex, setSelectedFileSearchIndex] = React.useState(0)
   const [attachedImages, setAttachedImages] = React.useState<ImageAttachment[]>([])
+  const latestDraftRef = React.useRef<InputDraftValue>({
+    text: '',
+    images: [],
+    skill: null,
+    selectedFiles: []
+  })
   const [previewImage, setPreviewImage] = React.useState<ImageAttachment | null>(null)
   const [pendingImageReads, setPendingImageReads] = React.useState(0)
   const [isOptimizing, setIsOptimizing] = React.useState(false)
@@ -1565,6 +1578,13 @@ export function InputArea({
   const documentRef = React.useRef(documentNodes)
   const selectedFilesRef = React.useRef(selectedFiles)
   const isContextCompressing = contextCompressionStatus === 'compressing'
+
+  latestDraftRef.current = {
+    text: finalSerializedText,
+    images: cloneImageAttachments(attachedImages),
+    skill: selectedSkill,
+    selectedFiles: selectedFiles.map((file) => ({ ...file }))
+  }
 
   const getMaxInputHeight = React.useCallback(() => {
     const container = containerRef.current
@@ -1878,10 +1898,18 @@ export function InputArea({
     workingFolder
   })
   const activeDraftKey = React.useMemo(
-    () => draftKeyOverride ?? (draftSessionId ? getSessionInputDraftKey(draftSessionId) : null),
-    [draftKeyOverride, draftSessionId]
+    () =>
+      draftKeyOverride ??
+      (draftSessionId
+        ? getSessionInputDraftKey(draftSessionId)
+        : activeProjectId && mode !== 'chat'
+          ? getProjectInputDraftKey(activeProjectId)
+          : getHomeInputDraftKey(mode)),
+    [activeProjectId, draftKeyOverride, draftSessionId, mode]
   )
-  const inputDraftHydrated = useInputDraftStore((s) => s.hydrated)
+  const inputDraftHydrated = useInputDraftStore((s) =>
+    activeDraftKey ? Boolean(s.hydratedKeys[activeDraftKey]) : true
+  )
   const persistedDraft = useInputDraftStore(
     React.useCallback(
       (state) => (activeDraftKey ? (state.draftsByKey[activeDraftKey] ?? null) : null),
@@ -1890,7 +1918,9 @@ export function InputArea({
   )
   const setPersistedDraft = useInputDraftStore((s) => s.setDraft)
   const removePersistedDraft = useInputDraftStore((s) => s.removeDraft)
+  const hydratePersistedDraft = useInputDraftStore((s) => s.hydrateDraft)
   const draftReadyKeyRef = React.useRef<string | null>(null)
+  const draftAppliedKeyRef = React.useRef<string | null>(null)
   const queuedMessagesSnapshotRef = React.useRef<PendingSessionMessageItem[]>(EMPTY_QUEUED_MESSAGES)
   const getQueuedMessagesSnapshot = React.useCallback(() => {
     if (suppressPendingQueue) return EMPTY_QUEUED_MESSAGES
@@ -2638,7 +2668,27 @@ export function InputArea({
   }, [queuedMessages.length])
 
   React.useEffect(() => {
+    if (!activeDraftKey) return
+    void hydratePersistedDraft(activeDraftKey).catch((error) => {
+      console.warn('[InputDrafts] hydrate failed:', error)
+    })
+
+    return () => {
+      clearTimeout(draftSaveTimerRef.current)
+      if (draftReadyKeyRef.current !== activeDraftKey) return
+      const draft = latestDraftRef.current
+      const operation = hasInputDraftContent(draft)
+        ? setPersistedDraft(activeDraftKey, draft)
+        : removePersistedDraft(activeDraftKey)
+      void operation.catch((error) => {
+        console.warn('[InputDrafts] flush before scope switch failed:', error)
+      })
+    }
+  }, [activeDraftKey, hydratePersistedDraft, removePersistedDraft, setPersistedDraft])
+
+  React.useEffect(() => {
     if (!inputDraftHydrated) return
+    if (draftAppliedKeyRef.current === activeDraftKey) return
 
     clearTimeout(draftSaveTimerRef.current)
     const persistedText = persistedDraft?.text ?? ''
@@ -2652,6 +2702,7 @@ export function InputArea({
       )
 
     draftReadyKeyRef.current = null
+    draftAppliedKeyRef.current = activeDraftKey
     applyEditorStateFromSerializedText(
       shouldResetHomeReferenceDraft ? '' : persistedText,
       shouldResetHomeReferenceDraft ? [] : persistedSelectedFiles
@@ -2715,11 +2766,15 @@ export function InputArea({
       }
 
       if (hasInputDraftContent(nextDraft)) {
-        setPersistedDraft(activeDraftKey, nextDraft)
+        void setPersistedDraft(activeDraftKey, nextDraft).catch((error) => {
+          console.warn('[InputDrafts] save failed:', error)
+        })
         return
       }
 
-      removePersistedDraft(activeDraftKey)
+      void removePersistedDraft(activeDraftKey).catch((error) => {
+        console.warn('[InputDrafts] delete failed:', error)
+      })
     }, 400)
 
     return () => clearTimeout(draftSaveTimerRef.current)
@@ -2989,8 +3044,12 @@ export function InputArea({
 
   const resetComposer = React.useCallback((): void => {
     if (activeDraftKey) {
-      removePersistedDraft(activeDraftKey)
+      void removePersistedDraft(activeDraftKey).catch((error) => {
+        console.warn('[InputDrafts] delete after send failed:', error)
+      })
     }
+
+    latestDraftRef.current = { text: '', images: [], skill: null, selectedFiles: [] }
 
     setDocumentNodes([])
     setSelectedFiles([])
@@ -3039,13 +3098,40 @@ export function InputArea({
       sendOptions.goalObjective = goalObjective
     }
 
-    onSend(message, attachedImages.length > 0 ? attachedImages : undefined, sendOptions)
+    const submittedDraft = latestDraftRef.current
+    let sendResult: void | Promise<void>
+    try {
+      sendResult = onSend(
+        message,
+        attachedImages.length > 0 ? attachedImages : undefined,
+        sendOptions
+      )
+    } catch (error) {
+      console.error('[InputDrafts] send failed; retaining draft:', error)
+      toast.error(t('input.sendFailedDraftRetained'))
+      return
+    }
 
     resetComposer()
     if (goalObjective) {
       setPendingGoalMode(false)
     }
+
+    void Promise.resolve(sendResult).catch(async (error) => {
+      console.error('[InputDrafts] send failed; restoring draft:', error)
+      if (activeDraftKey && !hasInputDraftContent(latestDraftRef.current)) {
+        await setPersistedDraft(activeDraftKey, submittedDraft).catch((saveError) => {
+          console.warn('[InputDrafts] failed to restore rejected draft:', saveError)
+        })
+        applyEditorStateFromSerializedText(submittedDraft.text, submittedDraft.selectedFiles)
+        setAttachedImages(cloneImageAttachments(submittedDraft.images))
+        setSelectedSkill(submittedDraft.skill)
+      }
+      toast.error(t('input.sendFailedDraftRetained'))
+    })
   }, [
+    activeDraftKey,
+    applyEditorStateFromSerializedText,
     getLiveEditorState,
     attachedImages,
     disabled,
@@ -3057,6 +3143,7 @@ export function InputArea({
     onSend,
     planMode,
     resetComposer,
+    setPersistedDraft,
     t
   ])
 
