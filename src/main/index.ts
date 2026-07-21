@@ -1202,13 +1202,21 @@ async function createSshWindow(): Promise<void> {
 // Prevent hard crashes from unhandled errors
 
 process.on('uncaughtException', (err) => {
-  console.error('[Main] Uncaught exception:', err)
   recordCrash('main_uncaught_exception', { error: err })
+  try {
+    console.error('[Main] Uncaught exception:', err)
+  } catch {
+    // A detached or broken stderr stream must not recursively trigger this handler.
+  }
 })
 
 process.on('unhandledRejection', (reason) => {
-  console.error('[Main] Unhandled rejection:', reason)
   recordCrash('main_unhandled_rejection', { reason })
+  try {
+    console.error('[Main] Unhandled rejection:', reason)
+  } catch {
+    // A detached or broken stderr stream must not recursively trigger this handler.
+  }
 })
 
 app.on('child-process-gone', (_event, details) => {
