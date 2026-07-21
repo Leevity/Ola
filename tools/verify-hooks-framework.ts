@@ -42,6 +42,31 @@ await writeFile(
 const changed = await loadHooksConfig(configPath, 'project', new Set([pending[0].trustKey]))
 assert.equal(changed[0].trustState, 'pending', 'script changes must invalidate trust')
 
+const artifactPath = join(configDir, 'policy.txt')
+await writeFile(artifactPath, 'v1')
+await writeFile(
+  configPath,
+  JSON.stringify({
+    version: 1,
+    hooks: [
+      {
+        id: 'artifact',
+        event: 'sessionStart',
+        command: './hook.sh',
+        artifacts: ['./policy.txt']
+      }
+    ]
+  })
+)
+const artifactHook = (await loadHooksConfig(configPath, 'project'))[0]
+await writeFile(artifactPath, 'v2')
+const changedArtifact = await loadHooksConfig(
+  configPath,
+  'project',
+  new Set([artifactHook.trustKey])
+)
+assert.equal(changedArtifact[0].trustState, 'pending', 'artifact changes must invalidate trust')
+
 const outside = join(root, 'outside.sh')
 await writeFile(outside, '#!/bin/sh\nexit 0\n')
 await chmod(outside, 0o700)

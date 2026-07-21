@@ -81,7 +81,11 @@ function isWithin(path: string, root: string): boolean {
   return path === root || path.startsWith(`${root}${sep}`)
 }
 
-async function resolveExecutable(command: string, configPath: string): Promise<string> {
+async function resolveHookFile(
+  command: string,
+  configPath: string,
+  requireExecutable: boolean
+): Promise<string> {
   const candidate = isAbsolute(command) ? command : resolve(dirname(configPath), command)
   const canonical = await realpath(candidate)
   const allowedRoot = await realpath(dirname(configPath))
@@ -90,7 +94,7 @@ async function resolveExecutable(command: string, configPath: string): Promise<s
   }
   const info = await stat(canonical)
   if (!info.isFile()) throw new Error(`Hook executable is not a file: ${command}`)
-  await access(canonical, constants.X_OK)
+  if (requireExecutable) await access(canonical, constants.X_OK)
   return canonical
 }
 
@@ -105,11 +109,11 @@ export async function loadHooksConfig(
   const configHash = hash(rawConfig)
   return Promise.all(
     config.hooks.map(async (hook) => {
-      const executablePath = await resolveExecutable(hook.command, canonicalConfigPath)
+      const executablePath = await resolveHookFile(hook.command, canonicalConfigPath, true)
       const executableHash = hash(await readFile(executablePath))
       const artifactEntries = await Promise.all(
         (hook.artifacts ?? []).map(async (artifact) => {
-          const artifactPath = await resolveExecutable(artifact, canonicalConfigPath)
+          const artifactPath = await resolveHookFile(artifact, canonicalConfigPath, false)
           return [artifactPath, hash(await readFile(artifactPath))] as const
         })
       )
