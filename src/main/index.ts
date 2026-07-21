@@ -58,6 +58,7 @@ import { autoConnectMcpServers, registerMcpHandlers } from './ipc/mcp-handlers'
 import { registerCronHandlers } from './ipc/cron-handlers'
 import { registerInputHandlers } from './ipc/input-handlers'
 import { registerInputDraftHandlers } from './ipc/input-draft-handlers'
+import { registerHooksHandlers } from './ipc/hooks-handlers'
 import { closeAllRemoteSessions, registerRemoteHandlers } from './ipc/remote-handlers'
 import { registerNotifyHandlers } from './ipc/notify-handlers'
 import {
@@ -1403,6 +1404,7 @@ if (gotSingleInstanceLock) {
     registerScreenshotHandlers()
     registerInputHandlers()
     await registerInputDraftHandlers()
+    registerHooksHandlers()
     registerRemoteHandlers()
 
     registerSidecarHandlers()
