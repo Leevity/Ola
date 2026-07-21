@@ -1,4 +1,4 @@
-// IPC Channel Constants
+﻿// IPC Channel Constants
 
 export const IPC = {
   // App
@@ -64,6 +64,14 @@ export const IPC = {
   AGENT_CHANGES_DIFF_CONTENT: 'agent:changes:diff-content',
   AGENT_CHANGES_UNDO_RUN: 'agent:changes:undo-run',
   AGENT_CHANGES_UNDO_FILE: 'agent:changes:undo-file',
+
+  // Sub-Agent History
+  SUB_AGENT_HISTORY_INDEX: 'agent:sub-agent-history:index',
+  SUB_AGENT_HISTORY_LIST: 'agent:sub-agent-history:list',
+  SUB_AGENT_HISTORY_APPLY: 'agent:sub-agent-history:apply',
+  SUB_AGENT_HISTORY_REPLACE: 'agent:sub-agent-history:replace',
+  SUB_AGENT_HISTORY_MIGRATION_STATUS: 'agent:sub-agent-history:migration-status',
+  SUB_AGENT_HISTORY_MIGRATION_MARK: 'agent:sub-agent-history:migration-mark',
 
   // Memory Automation
   MEMORY_AUTOMATION_LIST: 'memory-automation:list',

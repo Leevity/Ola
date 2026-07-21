@@ -1,4 +1,4 @@
-import {
+﻿import {
   app,
   shell,
   BrowserWindow,
@@ -29,6 +29,7 @@ import icon_mac from '../../resources/icon-mac.png?asset'
 
 import { registerFsHandlers } from './ipc/fs-handlers'
 import { registerAgentChangeHandlers } from './ipc/agent-change-handlers'
+import { registerSubAgentHistoryHandlers } from './ipc/sub-agent-history-handlers'
 
 import { registerShellHandlers } from './ipc/shell-handlers'
 
@@ -1360,6 +1361,7 @@ if (gotSingleInstanceLock) {
 
     registerFsHandlers()
     registerAgentChangeHandlers()
+    registerSubAgentHistoryHandlers()
 
     registerShellHandlers()
 
