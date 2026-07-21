@@ -39,6 +39,12 @@ internal sealed class DbModule : IWorkerModule
         context.Register("db/agent-changes-mark-reverted", DbAgentChangeTools.MarkFileReverted);
         context.Register("db/agent-changes-recompute", DbAgentChangeTools.Recompute);
         context.Register("db/agent-changes-delete-finalized-before", DbAgentChangeTools.DeleteFinalizedOlderThan);
+        context.Register("db/sub-agent-history-index", DbSubAgentHistoryTools.Index);
+        context.Register("db/sub-agent-history-list", DbSubAgentHistoryTools.List);
+        context.Register("db/sub-agent-history-apply", DbSubAgentHistoryTools.Apply);
+        context.Register("db/sub-agent-history-replace", DbSubAgentHistoryTools.Replace);
+        context.Register("db/sub-agent-history-migration-status", DbSubAgentHistoryTools.MigrationStatus);
+        context.Register("db/sub-agent-history-migration-mark", DbSubAgentHistoryTools.MarkMigration);
         context.Register("db/ssh-groups-list", DbSshTools.ListGroups);
         context.Register("db/ssh-groups-create", DbSshTools.CreateGroup);
         context.Register("db/ssh-groups-update", DbSshTools.UpdateGroup);

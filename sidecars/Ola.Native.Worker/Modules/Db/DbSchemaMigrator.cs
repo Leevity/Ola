@@ -16,6 +16,7 @@ internal static class DbSchemaMigrator
         WorkerLog.Info("db schema initialize start");
         CreateCoreTables(connection);
         CreateAgentChangeTables(connection);
+        CreateSubAgentHistoryTables(connection);
         CreateMemoryTables(connection);
         CreateGoalTables(connection);
         CreateWorkItemTables(connection);
@@ -118,6 +119,38 @@ internal static class DbSchemaMigrator
               ON agent_file_changes(session_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_agent_file_changes_tool_use
               ON agent_file_changes(tool_use_id);
+            """);
+    }
+
+    private static void CreateSubAgentHistoryTables(SqliteConnection connection)
+    {
+        Execute(connection, """
+            CREATE TABLE IF NOT EXISTS sub_agent_history (
+              id TEXT PRIMARY KEY,
+              session_id TEXT NOT NULL,
+              sub_agent_id TEXT NOT NULL,
+              tool_use_id TEXT NOT NULL,
+              name TEXT NOT NULL,
+              status TEXT NOT NULL,
+              started_at INTEGER NOT NULL,
+              completed_at INTEGER,
+              updated_at INTEGER NOT NULL,
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              snapshot_json TEXT NOT NULL,
+              FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_sub_agent_history_session_tool
+              ON sub_agent_history(session_id, tool_use_id);
+            CREATE INDEX IF NOT EXISTS idx_sub_agent_history_session_started_sort
+              ON sub_agent_history(session_id, started_at DESC, sort_order DESC);
+            CREATE INDEX IF NOT EXISTS idx_sub_agent_history_started
+              ON sub_agent_history(started_at DESC);
+
+            CREATE TABLE IF NOT EXISTS app_migrations (
+              key TEXT PRIMARY KEY,
+              applied_at INTEGER NOT NULL
+            );
             """);
     }
 
