@@ -1,27 +1,21 @@
 import type { RequestDebugInfoWire } from './agent-stream-protocol'
+import type {
+  CanonicalContentBlock,
+  ImageContentBlock,
+  TextContentBlock,
+  ToolResultContent
+} from './content-blocks'
 
 // Shared types for the agent loop event protocol.
 // Used by both main-process cron loop and renderer interactive loop.
 
 // ---- Minimal content types for the event wire format ----
 
-export interface AgentTextBlock {
-  type: 'text'
-  text: string
-}
+export type AgentTextBlock = TextContentBlock
 
-export interface AgentImageResultBlock {
-  type: 'image'
-  source: {
-    type: 'base64' | 'url'
-    mediaType?: string
-    data?: string
-    url?: string
-    filePath?: string
-  }
-}
+export type AgentImageResultBlock = ImageContentBlock
 
-export type AgentToolResultContent = string | Array<AgentTextBlock | AgentImageResultBlock>
+export type AgentToolResultContent = ToolResultContent
 
 export interface AgentTokenUsage {
   inputTokens: number
@@ -148,20 +142,4 @@ export interface AgentLoopMessage {
   meta?: Record<string, unknown>
 }
 
-export type AgentLoopContentBlock =
-  | AgentTextBlock
-  | {
-      type: 'thinking'
-      thinking: string
-      encryptedContent?: string
-      encryptedContentProvider?: 'anthropic' | 'openai-responses' | 'google'
-    }
-  | {
-      type: 'tool_use'
-      id: string
-      name: string
-      input: Record<string, unknown>
-      extraContent?: Record<string, unknown>
-    }
-  | { type: 'tool_result'; toolUseId: string; content: AgentToolResultContent; isError?: boolean }
-  | AgentImageResultBlock
+export type AgentLoopContentBlock = CanonicalContentBlock

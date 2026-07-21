@@ -17,6 +17,13 @@ export interface AgentStreamEnvelope {
 
 // ---- Wire sub-types (flat, JSON-serializable, no class instances) ----
 
+import type {
+  CanonicalContentBlock,
+  ImageContentBlock,
+  TextContentBlock,
+  ToolCallExtraContent
+} from './content-blocks'
+
 export interface TokenUsageWire {
   inputTokens: number
   outputTokens: number
@@ -52,18 +59,7 @@ export interface ToolCallStateWire {
   completedAt?: number
 }
 
-export interface ToolCallExtraContentWire {
-  google?: { thought_signature?: string }
-  openaiResponses?: {
-    computerUse?: {
-      kind: 'computer_use'
-      computerCallId: string
-      computerActionType: string
-      computerActionIndex: number
-      autoAddedScreenshot?: boolean
-    }
-  }
-}
+export type ToolCallExtraContentWire = ToolCallExtraContent
 
 export interface ToolUseBlockWire {
   id: string
@@ -78,21 +74,9 @@ export interface ToolResultWire {
   isError?: boolean
 }
 
-export interface TextBlockWire {
-  type: 'text'
-  text: string
-}
+export type TextBlockWire = TextContentBlock
 
-export interface ImageBlockWire {
-  type: 'image'
-  source: {
-    type: 'base64' | 'url'
-    mediaType?: string
-    data?: string
-    url?: string
-    filePath?: string
-  }
-}
+export type ImageBlockWire = ImageContentBlock
 
 export interface ImageErrorWire {
   code: 'timeout' | 'network' | 'request_aborted' | 'api_error' | 'unknown'
@@ -138,37 +122,7 @@ export interface MessageWire {
   meta?: Record<string, unknown>
 }
 
-export type ContentBlockWire =
-  | TextBlockWire
-  | ImageBlockWire
-  | { type: 'image_error'; code: string; message: string }
-  | {
-      type: 'agent_error'
-      code: 'runtime_error' | 'tool_error' | 'unknown'
-      message: string
-      errorType?: string
-      details?: string
-      stackTrace?: string
-    }
-  | {
-      type: 'tool_use'
-      id: string
-      name: string
-      input: Record<string, unknown>
-      extraContent?: ToolCallExtraContentWire
-    }
-  | {
-      type: 'tool_result'
-      toolUseId: string
-      content: string | Array<TextBlockWire | ImageBlockWire>
-      isError?: boolean
-    }
-  | {
-      type: 'thinking'
-      thinking: string
-      encryptedContent?: string
-      encryptedContentProvider?: 'anthropic' | 'openai-responses' | 'google'
-    }
+export type ContentBlockWire = CanonicalContentBlock
 
 // ---- Event classification ----
 

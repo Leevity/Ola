@@ -4,9 +4,18 @@ import type {
   ProviderConfig,
   TokenUsage,
   ToolDefinition,
-  ToolResultContent,
   UnifiedMessage
 } from '../api/types'
+import type {
+  AgentErrorContentBlock,
+  CanonicalContentBlock,
+  ImageContentBlock,
+  TextContentBlock,
+  ThinkingContentBlock,
+  ToolCallExtraContent,
+  ToolResultContentBlock,
+  ToolUseContentBlock
+} from '../../../../shared/content-blocks'
 import type { ToolCallState } from '../agent/types'
 import type { CompressionConfig } from '../agent/context-compression'
 import { resolveProviderUserAgent } from '../api/api-user-agent'
@@ -18,75 +27,14 @@ import {
   type PermissionPolicySnapshot
 } from '../../../../shared/permission-policy'
 
-export interface SidecarTextBlock {
-  type: 'text'
-  text: string
-}
-
-export interface SidecarImageBlock {
-  type: 'image'
-  source: {
-    type: 'base64' | 'url'
-    mediaType?: string
-    data?: string
-    url?: string
-    filePath?: string
-  }
-}
-
-export interface SidecarToolCallExtraContent {
-  google?: {
-    thought_signature?: string
-  }
-  openaiResponses?: {
-    computerUse?: {
-      kind: 'computer_use'
-      computerCallId: string
-      computerActionType: string
-      computerActionIndex: number
-      autoAddedScreenshot?: boolean
-    }
-  }
-}
-
-export interface SidecarToolUseBlock {
-  type: 'tool_use'
-  id: string
-  name: string
-  input: Record<string, unknown>
-  extraContent?: SidecarToolCallExtraContent
-}
-
-export interface SidecarToolResultBlock {
-  type: 'tool_result'
-  toolUseId: string
-  content: ToolResultContent
-  isError?: boolean
-}
-
-export interface SidecarThinkingBlock {
-  type: 'thinking'
-  thinking: string
-  encryptedContent?: string
-  encryptedContentProvider?: 'anthropic' | 'openai-responses' | 'google'
-}
-
-export interface SidecarAgentErrorBlock {
-  type: 'agent_error'
-  code: 'runtime_error' | 'tool_error' | 'unknown'
-  message: string
-  errorType?: string
-  details?: string
-  stackTrace?: string
-}
-
-export type SidecarContentBlock =
-  | SidecarTextBlock
-  | SidecarImageBlock
-  | SidecarToolUseBlock
-  | SidecarToolResultBlock
-  | SidecarThinkingBlock
-  | SidecarAgentErrorBlock
+export type SidecarTextBlock = TextContentBlock
+export type SidecarImageBlock = ImageContentBlock
+export type SidecarToolCallExtraContent = ToolCallExtraContent
+export type SidecarToolUseBlock = ToolUseContentBlock
+export type SidecarToolResultBlock = ToolResultContentBlock
+export type SidecarThinkingBlock = ThinkingContentBlock
+export type SidecarAgentErrorBlock = AgentErrorContentBlock
+export type SidecarContentBlock = CanonicalContentBlock
 
 export interface SidecarUnifiedMessage {
   id: string
