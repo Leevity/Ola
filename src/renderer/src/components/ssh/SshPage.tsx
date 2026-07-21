@@ -425,7 +425,7 @@ function ConnectionStage({
   )
 }
 
-export function SshPage(): React.JSX.Element {
+export function SshPage({ embedded = false }: { embedded?: boolean } = {}): React.JSX.Element {
   const { t } = useTranslation('ssh')
   const { t: tSettings } = useTranslation('settings')
   const { resolvedTheme } = useTheme()
@@ -745,16 +745,20 @@ export function SshPage(): React.JSX.Element {
     <div className="flex h-full flex-col overflow-hidden" style={sshWorkspaceStyle}>
       <div
         className={cn(
-          'titlebar-drag relative flex h-[52px] shrink-0 items-center gap-3 border-b px-3',
-          isMac ? 'pl-[78px]' : 'pr-[132px]'
+          'relative flex h-[52px] shrink-0 items-center gap-3 border-b px-3',
+          embedded ? 'titlebar-no-drag' : 'titlebar-drag',
+          !embedded && (isMac ? 'pl-[78px]' : 'pr-[132px]')
         )}
         style={{
           ...getTitlebarStyle(shellTone, shellPalette),
-          paddingRight: isMac ? undefined : 'calc(132px + 0.75rem)'
+          paddingRight: embedded || isMac ? undefined : 'calc(132px + 0.75rem)'
         }}
       >
         <div
-          className="min-w-[190px] max-w-[280px] shrink-0 overflow-hidden"
+          className={cn(
+            'min-w-[190px] max-w-[280px] shrink-0 overflow-hidden',
+            embedded && 'hidden'
+          )}
           title={`${chromeEyebrow} · ${chromeTitle} · ${activeChromeThemeBadge} · ${chromeMeta}`}
         >
           <div className="truncate text-[0.62rem] font-semibold uppercase tracking-[0.22em] opacity-65">
@@ -818,7 +822,7 @@ export function SshPage(): React.JSX.Element {
             </ChromePill>
           </div>
 
-          {openTabs.length > 0 ? (
+          {!embedded && openTabs.length > 0 ? (
             <div
               className="h-6 w-px shrink-0"
               style={{ background: getToneBorderColor(shellTone, shellPalette) }}
@@ -826,57 +830,61 @@ export function SshPage(): React.JSX.Element {
           ) : null}
 
           <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
-            {openTabs.map((tab) => {
-              const active = showTerminalView && tab.id === activeTabId
-              const session = tab.sessionId ? sessions[tab.sessionId] : null
-              const isConnected = session?.status === 'connected'
-              const isConnecting =
-                tab.type === 'terminal' &&
-                (tab.sessionId ? session?.status === 'connecting' : tab.status === 'connecting')
+            {!embedded
+              ? openTabs.map((tab) => {
+                  const active = showTerminalView && tab.id === activeTabId
+                  const session = tab.sessionId ? sessions[tab.sessionId] : null
+                  const isConnected = session?.status === 'connected'
+                  const isConnecting =
+                    tab.type === 'terminal' &&
+                    (tab.sessionId ? session?.status === 'connecting' : tab.status === 'connecting')
 
-              return (
-                <ChromePill
-                  key={tab.id}
-                  tone={shellTone}
-                  palette={shellPalette}
-                  active={active}
-                  className="max-w-[220px] min-w-[118px] pr-2"
-                  onClick={() => useSshStore.getState().setActiveTab(tab.id)}
-                >
-                  {tab.type === 'file' ? (
-                    <FileCode2 className="size-3.5 shrink-0" />
-                  ) : (
-                    <Terminal className="size-3.5 shrink-0" />
-                  )}
-                  <span className="truncate">{tab.title}</span>
-                  {isConnecting ? (
-                    <Loader2 className="size-3 animate-spin shrink-0" />
-                  ) : isConnected ? (
-                    <span className="size-2 shrink-0 rounded-full bg-current opacity-85" />
-                  ) : null}
-                  <span
-                    className="rounded-full p-1 transition-opacity hover:opacity-75"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      handleCloseTab(tab.id)
-                    }}
-                  >
-                    <X className="size-3" />
-                  </span>
-                </ChromePill>
-              )
-            })}
+                  return (
+                    <ChromePill
+                      key={tab.id}
+                      tone={shellTone}
+                      palette={shellPalette}
+                      active={active}
+                      className="max-w-[220px] min-w-[118px] pr-2"
+                      onClick={() => useSshStore.getState().setActiveTab(tab.id)}
+                    >
+                      {tab.type === 'file' ? (
+                        <FileCode2 className="size-3.5 shrink-0" />
+                      ) : (
+                        <Terminal className="size-3.5 shrink-0" />
+                      )}
+                      <span className="truncate">{tab.title}</span>
+                      {isConnecting ? (
+                        <Loader2 className="size-3 animate-spin shrink-0" />
+                      ) : isConnected ? (
+                        <span className="size-2 shrink-0 rounded-full bg-current opacity-85" />
+                      ) : null}
+                      <span
+                        className="rounded-full p-1 transition-opacity hover:opacity-75"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          handleCloseTab(tab.id)
+                        }}
+                      >
+                        <X className="size-3" />
+                      </span>
+                    </ChromePill>
+                  )
+                })
+              : null}
           </div>
 
-          <button
-            type="button"
-            onClick={handlePrimaryPlus}
-            className="titlebar-no-drag inline-flex size-8 shrink-0 items-center justify-center rounded-[12px] transition-opacity hover:opacity-80"
-            style={getToneIconButtonStyle(shellTone, shellPalette)}
-            title={showTerminalView ? t('terminal.newTab') : t('newConnection')}
-          >
-            <Plus className="size-4" />
-          </button>
+          {!embedded ? (
+            <button
+              type="button"
+              onClick={handlePrimaryPlus}
+              className="titlebar-no-drag inline-flex size-8 shrink-0 items-center justify-center rounded-[12px] transition-opacity hover:opacity-80"
+              style={getToneIconButtonStyle(shellTone, shellPalette)}
+              title={showTerminalView ? t('terminal.newTab') : t('newConnection')}
+            >
+              <Plus className="size-4" />
+            </button>
+          ) : null}
         </div>
 
         <div className="titlebar-no-drag flex items-center gap-1">
@@ -927,17 +935,19 @@ export function SshPage(): React.JSX.Element {
             </SheetContent>
           </Sheet>
 
-          <button
-            type="button"
-            className="inline-flex size-8 items-center justify-center rounded-[12px] transition-opacity hover:opacity-80"
-            style={getToneIconButtonStyle(shellTone, shellPalette)}
-            title={t('workspace.notifications', { defaultValue: 'Notifications' })}
-          >
-            <Bell className="size-4" />
-          </button>
+          {!embedded ? (
+            <button
+              type="button"
+              className="inline-flex size-8 items-center justify-center rounded-[12px] transition-opacity hover:opacity-80"
+              style={getToneIconButtonStyle(shellTone, shellPalette)}
+              title={t('workspace.notifications', { defaultValue: 'Notifications' })}
+            >
+              <Bell className="size-4" />
+            </button>
+          ) : null}
         </div>
 
-        {!isMac ? (
+        {!embedded && !isMac ? (
           <div className="absolute right-0 top-0 z-10">
             <WindowControls />
           </div>

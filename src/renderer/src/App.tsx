@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { useTranslation } from 'react-i18next'
 import { Layout } from './components/layout/Layout'
 import { DetachedSessionPage } from './components/layout/DetachedSessionPage'
-import { SshPage } from './components/ssh/SshPage'
+import { RemotePage } from './components/remote/RemotePage'
 import { OnboardingPage } from './components/onboarding/OnboardingPage'
 import { Toaster } from './components/ui/sonner'
 import { Button } from './components/ui/button'
@@ -860,7 +860,7 @@ function App(): React.JSX.Element {
       <ErrorBoundary>
         <ThemeProvider defaultTheme={theme}>
           <ThemeRuntimeSync />
-          <SshPage />
+          <RemotePage standalone />
           <Toaster position="bottom-left" theme="system" richColors />
           <ConfirmDialogProvider />
           <NotifyToastContainer />

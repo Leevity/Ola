@@ -310,6 +310,7 @@ export const IPC = {
   DESKTOP_INPUT_CLICK: 'desktop:input:click',
   DESKTOP_INPUT_TYPE: 'desktop:input:type',
   DESKTOP_INPUT_SCROLL: 'desktop:input:scroll',
+  DESKTOP_INPUT_STATUS: 'desktop:input:status',
 
   // Web Search
   WEB_SEARCH: 'web:search',
@@ -336,6 +337,24 @@ export const IPC = {
   OAUTH_START: 'oauth:start',
   OAUTH_STOP: 'oauth:stop',
   OAUTH_CALLBACK: 'oauth:callback',
+
+  // Remote Control
+  REMOTE_CONNECTION_LIST: 'remote:connection:list',
+  REMOTE_CONNECTION_CREATE: 'remote:connection:create',
+  REMOTE_CONNECTION_UPDATE: 'remote:connection:update',
+  REMOTE_CONNECTION_TEST: 'remote:connection:test',
+  REMOTE_CONNECTION_DELETE: 'remote:connection:delete',
+  REMOTE_SESSION_LIST: 'remote:session:list',
+  REMOTE_SESSION_CREDENTIAL: 'remote:session:credential',
+  REMOTE_CONNECT: 'remote:connect',
+  REMOTE_DISCONNECT: 'remote:disconnect',
+  REMOTE_RDP_DETECT: 'remote:rdp:detect',
+  REMOTE_VNC_DETECT: 'remote:vnc:detect',
+  REMOTE_INPUT_SET_SESSION: 'remote:input:set-session',
+  REMOTE_INPUT_DISPATCH: 'remote:input:dispatch',
+  REMOTE_ACCOUNT_INVOKE: 'remote:account:invoke',
+  REMOTE_CAPTURE_PERMISSION: 'remote:capture:permission',
+  REMOTE_CAPTURE_SOURCES: 'remote:capture:sources',
 
   // SSH Management
   SSH_GROUP_LIST: 'ssh:group:list',

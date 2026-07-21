@@ -86,9 +86,7 @@ export function runAllTests(): void {
   }
 
   // 8. All returned challenges are non-auto-resolvable.
-  //    The shared DetectedChallenge type uses mapped-type spread
-  //    (NON_AUTO_RESOLVABLE_CHALLENGES) so the literal `autoResolvable`
-  //    property isn't visible to TS; we read it via a runtime cast.
+  //    Every detector result carries the literal false safety marker.
   for (const html of [
     '<div class="g-recaptcha"></div>',
     '<div class="h-captcha"></div>',
@@ -99,8 +97,7 @@ export function runAllTests(): void {
     const page = snapshotFromHtml('https://example.com/', html)
     const c = detectChallenge(page)
     if (c) {
-      const value = (c as unknown as Record<string, unknown>).autoResolvable
-      expect(value === false, `challenge ${c.kind} must NOT be auto-resolvable`)
+      expect(c.autoResolvable === false, `challenge ${c.kind} must NOT be auto-resolvable`)
     }
   }
 }

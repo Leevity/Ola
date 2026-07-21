@@ -218,6 +218,10 @@
     "createdAt": "创建时间"
   },
   "workspace": {
+    "collapse": "收起",
+    "searchOrConnect": "搜索主机，或输入 ssh 用户@主机",
+    "moreTools": "更多工具",
+    "newGroup": "新建分组",
     "vaults": "主机库",
     "allVaults": "全部主机",
     "chrome": {

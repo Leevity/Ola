@@ -65,8 +65,8 @@ function report(kind: ChallengeKind, evidence: string): DetectedChallenge {
     kind,
     detectedAt: Date.now(),
     evidence,
-    ...NON_AUTO_RESOLVABLE_CHALLENGES
-  } as DetectedChallenge
+    autoResolvable: NON_AUTO_RESOLVABLE_CHALLENGES[kind]
+  }
 }
 
 export function detectChallenge(snapshot: PageSnapshot): DetectedChallenge | null {

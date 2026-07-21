@@ -21,7 +21,6 @@ import {
   ListFilter,
   Loader2,
   MessageSquare,
-  Monitor,
   MoreHorizontal,
   PanelLeftClose,
   Pencil,
@@ -419,6 +418,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const skillsPageOpen = useUIStore((state) => state.skillsPageOpen)
   const soulsPageOpen = useUIStore((state) => state.soulsPageOpen)
   const syncPageOpen = useUIStore((state) => state.syncPageOpen)
+  const remotePageOpen = useUIStore((state) => state.remotePageOpen)
   const resourcesPageOpen = useUIStore((state) => state.resourcesPageOpen)
   const drawPageOpen = useUIStore((state) => state.drawPageOpen)
   const translatePageOpen = useUIStore((state) => state.translatePageOpen)
@@ -566,12 +566,18 @@ export function WorkspaceSidebar(): React.JSX.Element {
     !skillsPageOpen &&
     !soulsPageOpen &&
     !syncPageOpen &&
+    !remotePageOpen &&
     !resourcesPageOpen &&
     !drawPageOpen &&
     !translatePageOpen &&
     !tasksPageOpen
   const featureMenuActive =
-    resourcesPageOpen || skillsPageOpen || soulsPageOpen || syncPageOpen || drawPageOpen
+    resourcesPageOpen ||
+    skillsPageOpen ||
+    soulsPageOpen ||
+    syncPageOpen ||
+    remotePageOpen ||
+    drawPageOpen
   const sessionsByProject = useMemo(() => {
     const next = new Map<string, SessionListItem[]>()
     for (const session of sessions) {
@@ -1050,6 +1056,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
       onClick: openCommandPalette
     },
     {
+      key: 'remote',
+      label: t('navRail.remote', { defaultValue: 'Remote' }),
+      icon: <Server className="size-4 shrink-0" />,
+      active: false,
+      onClick: () => void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
+    },
+    {
       key: 'plugins',
       label: t('sidebar.pluginsLabel'),
       icon: <Wand2 className="size-4 shrink-0" />,
@@ -1424,15 +1437,6 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 >
                   <CloudSync className="size-4" />
                   <span>{t('navRail.sync')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
-                  }}
-                >
-                  <Monitor className="size-4" />
-                  <span>{t('navRail.ssh')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

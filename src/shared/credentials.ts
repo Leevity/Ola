@@ -82,6 +82,7 @@ export interface DetectedChallenge {
   kind: ChallengeKind
   detectedAt: number
   evidence: string
+  autoResolvable: false
 }
 
 export type LoginStatus =

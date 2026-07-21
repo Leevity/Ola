@@ -218,6 +218,10 @@
     "createdAt": "Created"
   },
   "workspace": {
+    "collapse": "Collapse",
+    "searchOrConnect": "Search hosts or enter ssh user@host",
+    "moreTools": "More tools",
+    "newGroup": "New group",
     "vaults": "Hosts",
     "allVaults": "All hosts",
     "chrome": {

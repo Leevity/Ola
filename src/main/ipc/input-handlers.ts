@@ -1,10 +1,12 @@
 import {
   DESKTOP_INPUT_CLICK,
   DESKTOP_INPUT_SCROLL,
+  DESKTOP_INPUT_STATUS,
   DESKTOP_INPUT_TYPE,
   desktopInputClick,
   desktopInputScroll,
   desktopInputType,
+  isDesktopInputAvailable,
   type ClickArgs,
   type ScrollArgs,
   type TypeArgs
@@ -12,6 +14,10 @@ import {
 import { registerMessagePackHandler } from './messagepack-handler'
 
 export function registerInputHandlers(): void {
+  registerMessagePackHandler<void>(DESKTOP_INPUT_STATUS, () => {
+    return isDesktopInputAvailable()
+  })
+
   registerMessagePackHandler<ClickArgs>(DESKTOP_INPUT_CLICK, (args) => {
     return desktopInputClick(args)
   })

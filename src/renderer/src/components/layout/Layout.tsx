@@ -57,6 +57,11 @@ const ResourcesPage = lazy(async () => {
   return { default: mod.ResourcesPage }
 })
 
+const RemotePage = lazy(async () => {
+  const mod = await import('@renderer/components/remote/RemotePage')
+  return { default: mod.RemotePage }
+})
+
 const TranslatePage = lazy(async () => {
   const mod = await import('@renderer/components/translate/TranslatePage')
   return { default: mod.TranslatePage }
@@ -328,6 +333,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const skillsPageOpen = useUIStore((s) => s.skillsPageOpen)
   const soulsPageOpen = useUIStore((s) => s.soulsPageOpen)
   const syncPageOpen = useUIStore((s) => s.syncPageOpen)
+  const remotePageOpen = useUIStore((s) => s.remotePageOpen)
   const resourcesPageOpen = useUIStore((s) => s.resourcesPageOpen)
   const drawPageOpen = useUIStore((s) => s.drawPageOpen)
   const translatePageOpen = useUIStore((s) => s.translatePageOpen)
@@ -339,6 +345,9 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     }
     if (resourcesPageOpen) {
       return { title: t('navRail.resources', { defaultValue: 'Resources' }), subtitle: null }
+    }
+    if (remotePageOpen) {
+      return { title: t('navRail.remote', { defaultValue: 'Remote' }), subtitle: null }
     }
     if (skillsPageOpen) {
       return { title: t('navRail.skills', { defaultValue: 'Tools' }), subtitle: null }
@@ -404,6 +413,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     chatView,
     drawPageOpen,
     mode,
+    remotePageOpen,
     resourcesPageOpen,
     settingsPageOpen,
     skillsPageOpen,
@@ -735,6 +745,15 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
               >
                 <Suspense fallback={<LazyPageFallback />}>
                   <ResourcesPage />
+                </Suspense>
+              </PageTransition>
+            ) : remotePageOpen ? (
+              <PageTransition
+                key="remote-page"
+                className="flex-1 min-w-0 bg-background overflow-hidden"
+              >
+                <Suspense fallback={<LazyPageFallback />}>
+                  <RemotePage />
                 </Suspense>
               </PageTransition>
             ) : skillsPageOpen ? (
