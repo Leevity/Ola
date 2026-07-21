@@ -62,9 +62,10 @@ internal static partial class AgentRuntimeAnthropicMessagesProvider
             state.CancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var errorBody = await response.Content.ReadAsStringAsync(state.CancellationToken);
-            throw new InvalidOperationException(
-                $"Anthropic Messages request failed HTTP {(int)response.StatusCode}: {errorBody}");
+            throw await AgentRuntimeProviderHttpException.CreateAsync(
+                "Anthropic Messages",
+                response,
+                state.CancellationToken);
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync(state.CancellationToken);

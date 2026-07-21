@@ -101,6 +101,12 @@ export function readPermissionPolicySnapshot(): PermissionPolicySnapshot | undef
   )
 }
 
+export function readProviderRetryMaxAttempts(): number {
+  const value = readPersistedSettingsState().providerRetryMaxAttempts
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 4
+  return Math.min(6, Math.max(1, Math.floor(value)))
+}
+
 export async function flushSettingsSync(): Promise<void> {
   if (!pendingWrite) return
   await pendingWrite.catch((err) => {

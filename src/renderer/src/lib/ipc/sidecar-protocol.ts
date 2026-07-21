@@ -12,6 +12,7 @@ import type { CompressionConfig } from '../agent/context-compression'
 import { resolveProviderUserAgent } from '../api/api-user-agent'
 import { summarizeToolInputForHistory } from '../tools/tool-input-sanitizer'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useProviderStore } from '@renderer/stores/provider-store'
 import {
   toPermissionPolicySnapshot,
   type PermissionPolicySnapshot
@@ -217,6 +218,8 @@ export interface SidecarAgentRunRequest {
   workingFolder?: string
   maxIterations: number
   forceApproval: boolean
+  providerRetryMaxAttempts?: number
+  compressionProvider?: SidecarProviderConfig
   permissionPolicy?: PermissionPolicySnapshot
   maxParallelTools?: number
   compression?: CompressionConfig
@@ -601,6 +604,16 @@ export function buildSidecarAgentRunRequest(args: {
 
   const maxParallelTools = normalizeMaxParallelTools(args.maxParallelTools)
   const permissionPolicy = toPermissionPolicySnapshot(useSettingsStore.getState().permissionPolicy)
+  const settings = useSettingsStore.getState()
+  const compressionBinding = settings.contextCompressionModel
+  const compressionProviderConfig = compressionBinding
+    ? useProviderStore
+        .getState()
+        .getProviderConfigById(compressionBinding.providerId, compressionBinding.modelId)
+    : null
+  const compressionProvider = compressionProviderConfig
+    ? mapSidecarProvider(compressionProviderConfig)
+    : null
   const webSearch = mapSidecarWebSearchConfig(args.tools)
   const imagePluginProvider = args.imagePluginProvider
     ? mapSidecarProvider(args.imagePluginProvider)
@@ -632,6 +645,8 @@ export function buildSidecarAgentRunRequest(args: {
     ...(args.compression ? { compression: args.compression } : {}),
     maxIterations: args.maxIterations,
     forceApproval: args.forceApproval,
+    providerRetryMaxAttempts: settings.providerRetryMaxAttempts,
+    ...(args.compression && compressionProvider ? { compressionProvider } : {}),
     ...(permissionPolicy ? { permissionPolicy } : {}),
     ...(maxParallelTools !== undefined ? { maxParallelTools } : {}),
     ...(args.sessionMode ? { sessionMode: args.sessionMode } : {}),

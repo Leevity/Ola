@@ -82,6 +82,10 @@ internal static class AgentStreamMessagePackEmitter
         WriteOptionalString(writer, "thinkingEncryptedContent", streamEvent.ThinkingEncryptedContent);
         WriteOptionalString(writer, "thinkingEncryptedProvider", streamEvent.ThinkingEncryptedProvider);
         WriteOptionalJson(writer, "toolCallExtraContent", streamEvent.SubAgentToolCallExtraContent);
+        WriteOptionalInt(writer, "attempt", streamEvent.Attempt);
+        WriteOptionalInt(writer, "maxAttempts", streamEvent.MaxAttempts);
+        WriteOptionalInt(writer, "delayMs", streamEvent.DelayMs);
+        WriteOptionalInt(writer, "statusCode", streamEvent.StatusCode);
     }
 
     private static int CountEventProperties(AgentRuntimeStreamEvent streamEvent)
@@ -129,6 +133,10 @@ internal static class AgentStreamMessagePackEmitter
         if (streamEvent.ThinkingEncryptedContent is not null) count++;
         if (streamEvent.ThinkingEncryptedProvider is not null) count++;
         if (HasJson(streamEvent.SubAgentToolCallExtraContent)) count++;
+        if (streamEvent.Attempt.HasValue) count++;
+        if (streamEvent.MaxAttempts.HasValue) count++;
+        if (streamEvent.DelayMs.HasValue) count++;
+        if (streamEvent.StatusCode.HasValue) count++;
         return count;
     }
 

@@ -913,6 +913,10 @@
     "selectedFileReadFailed": "读取失败"
   },
   "assistantMessage": {
+    "retryingRequest": "服务繁忙，正在重试",
+    "retryingRequestDetail": "{{delay}} 后进行第 {{attempt}}/{{maxAttempts}} 次尝试{{statusSuffix}}",
+    "retryStatusSuffix": "，状态码 {{statusCode}}",
+    "cancelRetry": "取消",
     "changedFiles_one": "编辑了 {{count}} 个文件",
     "changedFiles_other": "编辑了 {{count}} 个文件",
     "createdFiles_one": "已创建 {{count}} 个文件",

@@ -1,6 +1,10 @@
 import { nanoid } from 'nanoid'
 import { readConfig } from '../ipc/secure-key-store'
-import { readPermissionPolicySnapshot, readSettings } from '../ipc/settings-handlers'
+import {
+  readPermissionPolicySnapshot,
+  readProviderRetryMaxAttempts,
+  readSettings
+} from '../ipc/settings-handlers'
 import type {
   ToolCallState,
   InteractiveAgentEvent,
@@ -986,6 +990,7 @@ async function* runNativeAgentLoop(args: {
       ...(connection ? { connection } : {}),
       maxIterations: args.config.maxIterations,
       forceApproval: args.config.forceApproval === true,
+      providerRetryMaxAttempts: readProviderRetryMaxAttempts(),
       ...(permissionPolicy ? { permissionPolicy } : {}),
       maxParallelTools: args.config.maxParallelTools,
       callerAgent: 'CronAgent',

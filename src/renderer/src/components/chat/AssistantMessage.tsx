@@ -146,6 +146,7 @@ interface AssistantMessageProps {
   orchestrationRun?: OrchestrationRun | null
   hiddenToolUseIds?: Set<string>
   requestRetryState?: RequestRetryState | null
+  onCancelRequestRetry?: () => void
   requestDebugInfo?: RequestDebugInfo
   meta?: MessageMeta
 }
@@ -1813,6 +1814,7 @@ export function AssistantMessage({
   orchestrationRun,
   hiddenToolUseIds,
   requestRetryState,
+  onCancelRequestRetry,
   requestDebugInfo,
   meta
 }: AssistantMessageProps): React.JSX.Element {
@@ -3096,7 +3098,7 @@ export function AssistantMessage({
         {requestRetryState && (
           <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
             <RotateCcw className="mt-0.5 size-3.5 shrink-0 animate-spin" />
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <div className="font-medium">
                 {t('assistantMessage.retryingRequest', {
                   defaultValue: 'Request retrying'
@@ -3110,12 +3112,23 @@ export function AssistantMessage({
                   maxAttempts: requestRetryState.maxAttempts,
                   delay: formatRetryDelay(requestRetryState.delayMs),
                   statusSuffix: requestRetryState.statusCode
-                    ? `, status code ${requestRetryState.statusCode}`
+                    ? t('assistantMessage.retryStatusSuffix', {
+                        statusCode: requestRetryState.statusCode
+                      })
                     : ''
                 })}
                 {requestRetryState.reason ? ` · ${requestRetryState.reason}` : ''}
               </div>
             </div>
+            {onCancelRequestRetry ? (
+              <button
+                type="button"
+                className="shrink-0 rounded-md border border-amber-500/30 px-2 py-1 font-medium transition-colors hover:bg-amber-500/10"
+                onClick={onCancelRequestRetry}
+              >
+                {t('assistantMessage.cancelRetry')}
+              </button>
+            ) : null}
           </div>
         )}
         {collapsed ? (

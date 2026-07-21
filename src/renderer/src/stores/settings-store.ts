@@ -82,6 +82,18 @@ export const DEFAULT_MAX_CONCURRENT_SUB_AGENTS = 2
 export const MIN_MAX_CONCURRENT_SUB_AGENTS = 1
 export const MAX_MAX_CONCURRENT_SUB_AGENTS = 8
 
+export const DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS = 4
+export const MIN_PROVIDER_RETRY_MAX_ATTEMPTS = 1
+export const MAX_PROVIDER_RETRY_MAX_ATTEMPTS = 6
+
+export function clampProviderRetryMaxAttempts(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS
+  return Math.min(
+    MAX_PROVIDER_RETRY_MAX_ATTEMPTS,
+    Math.max(MIN_PROVIDER_RETRY_MAX_ATTEMPTS, Math.floor(value))
+  )
+}
+
 export interface RecentWorkingTarget {
   workingFolder: string
   sshConnectionId: string | null
@@ -265,6 +277,9 @@ interface SettingsStore {
   browserUserDataReuseEnabled: boolean
   browserUserDataSource: BrowserUserDataSource
   contextCompressionEnabled: boolean
+  contextCompressionThreshold: number
+  contextCompressionModel: ModelBinding | null
+  providerRetryMaxAttempts: number
   editorWorkspaceEnabled: boolean
   editorRemoteLanguageServiceEnabled: boolean
   maxParallelToolCalls: number
@@ -381,6 +396,9 @@ export const useSettingsStore = create<SettingsStore>()(
       browserUserDataReuseEnabled: true,
       browserUserDataSource: DEFAULT_BROWSER_USER_DATA_SOURCE,
       contextCompressionEnabled: true,
+      contextCompressionThreshold: 0.8,
+      contextCompressionModel: null,
+      providerRetryMaxAttempts: DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS,
       editorWorkspaceEnabled: false,
       editorRemoteLanguageServiceEnabled: false,
       maxParallelToolCalls: DEFAULT_MAX_PARALLEL_TOOL_CALLS,
@@ -462,6 +480,13 @@ export const useSettingsStore = create<SettingsStore>()(
               ? {}
               : {
                   maxConcurrentSubAgents: clampMaxConcurrentSubAgents(patch.maxConcurrentSubAgents)
+                }),
+            ...(patch.providerRetryMaxAttempts === undefined
+              ? {}
+              : {
+                  providerRetryMaxAttempts: clampProviderRetryMaxAttempts(
+                    patch.providerRetryMaxAttempts
+                  )
                 })
           }
 
@@ -485,7 +510,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'ola-settings',
-      version: 26,
+      version: 27,
       storage: createJSONStorage(() => ipcStorage),
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>
@@ -511,6 +536,25 @@ export const useSettingsStore = create<SettingsStore>()(
           state.language = detectSystemLanguage()
         }
         state.permissionPolicy = sanitizePermissionPolicy(state.permissionPolicy)
+        state.contextCompressionThreshold =
+          typeof state.contextCompressionThreshold === 'number'
+            ? Math.min(0.9, Math.max(0.3, state.contextCompressionThreshold))
+            : 0.8
+        if (
+          !state.contextCompressionModel ||
+          typeof state.contextCompressionModel !== 'object' ||
+          Array.isArray(state.contextCompressionModel) ||
+          typeof (state.contextCompressionModel as Record<string, unknown>).providerId !==
+            'string' ||
+          typeof (state.contextCompressionModel as Record<string, unknown>).modelId !== 'string'
+        ) {
+          state.contextCompressionModel = null
+        }
+        state.providerRetryMaxAttempts = clampProviderRetryMaxAttempts(
+          typeof state.providerRetryMaxAttempts === 'number'
+            ? state.providerRetryMaxAttempts
+            : DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS
+        )
         // Add web search settings if missing
         if (state.webSearchEnabled === undefined) {
           state.webSearchEnabled = false
@@ -769,6 +813,9 @@ export const useSettingsStore = create<SettingsStore>()(
         reasoningEffortByModel: state.reasoningEffortByModel,
         teamToolsEnabled: state.teamToolsEnabled,
         contextCompressionEnabled: state.contextCompressionEnabled,
+        contextCompressionThreshold: state.contextCompressionThreshold,
+        contextCompressionModel: state.contextCompressionModel,
+        providerRetryMaxAttempts: clampProviderRetryMaxAttempts(state.providerRetryMaxAttempts),
         editorWorkspaceEnabled: state.editorWorkspaceEnabled,
         editorRemoteLanguageServiceEnabled: state.editorRemoteLanguageServiceEnabled,
         maxParallelToolCalls: clampMaxParallelToolCalls(state.maxParallelToolCalls),

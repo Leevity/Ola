@@ -39,9 +39,10 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
             state.CancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var errorBody = await response.Content.ReadAsStringAsync(state.CancellationToken);
-            throw new InvalidOperationException(
-                $"OpenAI Responses request failed HTTP {(int)response.StatusCode}: {errorBody}");
+            throw await AgentRuntimeProviderHttpException.CreateAsync(
+                "OpenAI Responses",
+                response,
+                state.CancellationToken);
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync(state.CancellationToken);

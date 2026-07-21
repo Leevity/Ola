@@ -62,6 +62,7 @@ interface MessageListProps {
   onContinue?: () => void
   onEditUserMessage?: (messageId: string, draft: EditableUserMessageDraft) => void
   onDeleteMessage?: (messageId: string) => void
+  onCancelRequestRetry?: () => void
   exportAll?: boolean
   fullWidth?: boolean
 }
@@ -225,6 +226,7 @@ interface MessageRowProps {
   onContinue?: () => void
   onEditUserMessage?: (messageId: string, draft: EditableUserMessageDraft) => void
   onDeleteMessage?: (messageId: string) => void
+  onCancelRequestRetry?: () => void
 }
 
 const EMPTY_MESSAGES: UnifiedMessage[] = []
@@ -775,7 +777,8 @@ const MessageRow = React.memo(function MessageRow({
   onRetry,
   onContinue,
   onEditUserMessage,
-  onDeleteMessage
+  onDeleteMessage,
+  onCancelRequestRetry
 }: MessageRowProps): React.JSX.Element {
   const isAnchor = anchorMessageId === message.id
   const isHighlighted = highlightMessageId === message.id
@@ -810,6 +813,7 @@ const MessageRow = React.memo(function MessageRow({
         orchestrationRun={orchestrationRun}
         hiddenToolUseIds={hiddenToolUseIds}
         requestRetryState={requestRetryState}
+        onCancelRequestRetry={onCancelRequestRetry}
       />
       {showChangeSummary && message.role === 'assistant' && !isStreaming && sessionId ? (
         <SessionChangeSummaryCard
@@ -969,6 +973,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     onContinue,
     onEditUserMessage,
     onDeleteMessage,
+    onCancelRequestRetry,
     exportAll = false,
     fullWidth = false
   } = props
@@ -1795,6 +1800,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
                 onContinue={onContinue}
                 onEditUserMessage={onEditUserMessage}
                 onDeleteMessage={onDeleteMessage}
+                onCancelRequestRetry={onCancelRequestRetry}
               />
             )
           })}
