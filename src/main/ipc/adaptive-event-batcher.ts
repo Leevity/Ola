@@ -408,8 +408,16 @@ function mapContentBlock(raw: unknown): ContentBlockWire | null {
       return typeof block.text === 'string' ? { type: 'text', text: block.text } : null
     case 'image':
       return mapImageBlock(raw)
-    case 'image_error':
-      return { type: 'image_error', code: str(block.code, 'unknown'), message: str(block.message) }
+    case 'image_error': {
+      const code =
+        block.code === 'timeout' ||
+        block.code === 'network' ||
+        block.code === 'request_aborted' ||
+        block.code === 'api_error'
+          ? block.code
+          : 'unknown'
+      return { type: 'image_error', code, message: str(block.message) }
+    }
     case 'agent_error': {
       const code =
         block.code === 'runtime_error' || block.code === 'tool_error' ? block.code : 'unknown'
@@ -454,6 +462,14 @@ function mapContentBlock(raw: unknown): ContentBlockWire | null {
           ? { encryptedContentProvider: block.encryptedContentProvider }
           : {})
       }
+    case 'extension':
+      return typeof block.kind === 'string' && block.data && typeof block.data === 'object'
+        ? {
+            type: 'extension',
+            kind: block.kind,
+            data: rec(block.data)
+          }
+        : null
     default:
       return null
   }

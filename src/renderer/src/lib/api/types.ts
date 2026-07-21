@@ -40,72 +40,17 @@ export interface TokenUsage {
 
 // --- Content Blocks ---
 
-export interface TextBlock {
-  type: 'text'
-  text: string
-}
-
-export interface ImageBlock {
-  type: 'image'
-  source: {
-    type: 'base64' | 'url'
-    mediaType?: string
-    data?: string
-    url?: string
-    filePath?: string
-  }
-}
-
-export type ImageErrorCode = 'timeout' | 'network' | 'request_aborted' | 'api_error' | 'unknown'
-
-export interface ImageErrorBlock {
-  type: 'image_error'
-  code: ImageErrorCode
-  message: string
-}
-
-export type AgentErrorCode = 'runtime_error' | 'tool_error' | 'unknown'
-
-export interface AgentErrorBlock {
-  type: 'agent_error'
-  code: AgentErrorCode
-  message: string
-  errorType?: string
-  details?: string
-  stackTrace?: string
-}
-
+export type AgentErrorCode = import('../../../../shared/content-blocks').AgentErrorCode
+export type ImageErrorCode = import('../../../../shared/content-blocks').ImageErrorCode
 export type OpenAIComputerActionType =
-  | 'click'
-  | 'double_click'
-  | 'scroll'
-  | 'keypress'
-  | 'type'
-  | 'wait'
-  | 'screenshot'
-
-export interface ToolCallExtraContent {
-  google?: {
-    thought_signature?: string
-  }
-  openaiResponses?: {
-    computerUse?: {
-      kind: 'computer_use'
-      computerCallId: string
-      computerActionType: OpenAIComputerActionType
-      computerActionIndex: number
-      autoAddedScreenshot?: boolean
-    }
-  }
-}
-
-export interface ToolUseBlock {
-  type: 'tool_use'
-  id: string
-  name: string
-  input: Record<string, unknown>
-  extraContent?: ToolCallExtraContent
-}
+  import('../../../../shared/content-blocks').OpenAIComputerActionType
+export type ToolCallExtraContent = import('../../../../shared/content-blocks').ToolCallExtraContent
+export type ToolResultContent = import('../../../../shared/content-blocks').ToolResultContent
+export type TextBlock = import('../../../../shared/content-blocks').TextContentBlock
+export type ImageBlock = import('../../../../shared/content-blocks').ImageContentBlock
+export type ImageErrorBlock = import('../../../../shared/content-blocks').ImageErrorContentBlock
+export type AgentErrorBlock = import('../../../../shared/content-blocks').AgentErrorContentBlock
+export type ToolUseBlock = import('../../../../shared/content-blocks').ToolUseContentBlock
 
 /**
  * Placeholder stored in a persisted Write/Edit tool_use input field when the
@@ -126,34 +71,11 @@ export function isElidedToolInput(value: unknown): value is ElidedToolInput {
   )
 }
 
-export type ToolResultContent = string | Array<TextBlock | ImageBlock>
-
-export interface ToolResultBlock {
-  type: 'tool_result'
-  toolUseId: string
-  content: ToolResultContent
-  isError?: boolean
-}
-
-export interface ThinkingBlock {
-  type: 'thinking'
-  thinking: string
-  /** Provider-issued encrypted/signature payload for reasoning continuity validation */
-  encryptedContent?: string
-  /** Which provider emitted encryptedContent (used to replay only to compatible APIs) */
-  encryptedContentProvider?: 'anthropic' | 'openai-responses' | 'google'
-  startedAt?: number
-  completedAt?: number
-}
-
-export type ContentBlock =
-  | TextBlock
-  | ImageBlock
-  | ImageErrorBlock
-  | AgentErrorBlock
-  | ToolUseBlock
-  | ToolResultBlock
-  | ThinkingBlock
+export type ToolResultBlock = import('../../../../shared/content-blocks').ToolResultContentBlock
+export type ThinkingBlock = import('../../../../shared/content-blocks').ThinkingContentBlock
+export type ExtensionContentBlock =
+  import('../../../../shared/content-blocks').ExtensionContentBlock
+export type ContentBlock = import('../../../../shared/content-blocks').CanonicalContentBlock
 
 // --- Messages ---
 

@@ -2734,6 +2734,20 @@ export function AssistantMessage({
               }
               case 'tool_use':
                 return renderToolBlock(block, block.id, item.index)
+              case 'extension':
+                return (
+                  <details
+                    key={item.index}
+                    className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs"
+                  >
+                    <summary className="cursor-pointer font-medium">
+                      {t('assistantMessage.extensionContent', { kind: block.kind })}
+                    </summary>
+                    <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted-foreground">
+                      {JSON.stringify(block.data, null, 2)}
+                    </pre>
+                  </details>
+                )
               default:
                 return null
             }
