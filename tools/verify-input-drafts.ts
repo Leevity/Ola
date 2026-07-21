@@ -136,6 +136,13 @@ try {
   )
   assert.equal(isCanonicalContentBlock({ type: 'unknown' }), false)
 
+  const emptyEditorKey = getCustomInputDraftKey('editor', 'empty')
+  assert.equal(
+    (await writeDraft({ key: emptyEditorKey, draft: { ...emptyDraft, text: '\n' } })).success,
+    true
+  )
+  assert.equal((await readDraft({ key: emptyEditorKey })).draft, null)
+
   console.log('input-drafts verification passed')
 } finally {
   await rm(tempDirectory, { recursive: true, force: true })

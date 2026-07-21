@@ -93,7 +93,7 @@ export function hasInputDraftContent(
   draft: Pick<InputDraftContent, 'text' | 'images' | 'skill' | 'selectedFiles'>
 ): boolean {
   return (
-    draft.text.length > 0 ||
+    draft.text.trim().length > 0 ||
     draft.images.length > 0 ||
     draft.skill !== null ||
     draft.selectedFiles.length > 0
