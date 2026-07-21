@@ -1144,6 +1144,22 @@ function GeneralPanel(): React.JSX.Element {
             }
           />
         </div>
+        <div className="flex items-center justify-between max-w-lg">
+          <div>
+            <label className="text-sm font-medium">
+              {t('general.collapseExecutionRunsByDefault')}
+            </label>
+            <p className="text-xs text-muted-foreground">
+              {t('general.collapseExecutionRunsByDefaultDesc')}
+            </p>
+          </div>
+          <Switch
+            checked={settings.collapseExecutionRunsByDefault}
+            onCheckedChange={(checked) =>
+              settings.updateSettings({ collapseExecutionRunsByDefault: checked })
+            }
+          />
+        </div>
       </section>
 
       <Separator />
@@ -1646,6 +1662,7 @@ function GeneralPanel(): React.JSX.Element {
               animationsEnabled: true,
               liveOutputAnimationStyle: 'agile',
               toolbarCollapsedByDefault: false,
+              collapseExecutionRunsByDefault: true,
               maxParallelToolCalls: DEFAULT_MAX_PARALLEL_TOOL_CALLS,
               maxConcurrentSubAgents: DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
               autoUpdateEnabled: true,

@@ -318,6 +318,7 @@ interface SettingsStore {
   animationsEnabled: boolean
   liveOutputAnimationStyle: LiveOutputAnimationStyle
   toolbarCollapsedByDefault: boolean
+  collapseExecutionRunsByDefault: boolean
   leftSidebarWidth: number
 
   // Web Search Settings
@@ -437,6 +438,7 @@ export const useSettingsStore = create<SettingsStore>()(
       animationsEnabled: true,
       liveOutputAnimationStyle: 'agile',
       toolbarCollapsedByDefault: false,
+      collapseExecutionRunsByDefault: true,
       leftSidebarWidth: LEFT_SIDEBAR_DEFAULT_WIDTH,
 
       // Web Search Settings
@@ -653,6 +655,9 @@ export const useSettingsStore = create<SettingsStore>()(
         if (state.toolbarCollapsedByDefault === undefined) {
           state.toolbarCollapsedByDefault = false
         }
+        if (state.collapseExecutionRunsByDefault === undefined) {
+          state.collapseExecutionRunsByDefault = true
+        }
         if (state.leftSidebarWidth === undefined || typeof state.leftSidebarWidth !== 'number') {
           state.leftSidebarWidth = LEFT_SIDEBAR_DEFAULT_WIDTH
         } else {
@@ -853,6 +858,7 @@ export const useSettingsStore = create<SettingsStore>()(
         animationsEnabled: state.animationsEnabled,
         liveOutputAnimationStyle: state.liveOutputAnimationStyle,
         toolbarCollapsedByDefault: state.toolbarCollapsedByDefault,
+        collapseExecutionRunsByDefault: state.collapseExecutionRunsByDefault,
         leftSidebarWidth: clampLeftSidebarWidth(state.leftSidebarWidth),
         // Web Search Settings
         webSearchEnabled: state.webSearchEnabled,

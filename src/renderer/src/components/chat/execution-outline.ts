@@ -162,10 +162,7 @@ function runStatus(items: ToolExecutionItem[]): ToolExecutionStatus {
   return 'completed'
 }
 
-function finalizeRun(
-  items: ToolExecutionItem[],
-  alwaysExpand: boolean
-): ToolExecutionRun | null {
+function finalizeRun(items: ToolExecutionItem[], alwaysExpand: boolean): ToolExecutionRun | null {
   if (items.length === 0) return null
   const visibleItems = items.filter((item) => item.visibility !== 'hidden')
   if (visibleItems.length === 0) return null
@@ -193,7 +190,8 @@ function finalizeRun(
     categoryCounts[item.category] = (categoryCounts[item.category] ?? 0) + 1
   }
   return {
-    id: `${visibleItems[0].toolUseId}:${visibleItems.at(-1)!.toolUseId}`,
+    // The first tool id remains stable while streaming appends more steps to this run.
+    id: visibleItems[0].toolUseId,
     startBlockIndex: items[0].blockIndex,
     endBlockIndex: items.at(-1)!.blockIndex,
     items,
