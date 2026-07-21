@@ -30,6 +30,8 @@ import {
 } from './desktop-control'
 import { getNativeAgentRuntimeManager } from './native-agent-runtime'
 import { getNativeSshConnectionPayload } from './ssh-handlers'
+import { hooksService } from '../hooks/hooks-service'
+import type { HookEvent, HookInvocation } from '../../shared/hooks/types'
 import {
   executeChannelSpecificPluginTool,
   executePluginAction,
@@ -621,6 +623,16 @@ export function registerSidecarHandlers(): void {
     // stream events that were emitted before them.
     flushAllStreamBatches()
     switch (method) {
+      case 'hooks/run': {
+        const hookParams = params as {
+          event?: HookEvent
+          invocation?: Omit<HookInvocation, 'event' | 'version'>
+        } | null
+        if (!hookParams?.event || !hookParams.invocation?.sessionId) {
+          throw new Error('hooks/run requires an event and session invocation')
+        }
+        return { outputs: await hooksService.emit(hookParams.event, hookParams.invocation) }
+      }
       case 'approval/request': {
         const requestId = `sidecar-approval-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
         const targetWindow = resolveRendererTargetWindow(params, runWindowIds, sessionWindowIds)

@@ -20,6 +20,7 @@ export interface HookCommandConfig {
   event: HookEvent
   command: string
   args?: string[]
+  artifacts?: string[]
   timeoutMs?: number
   enabled?: boolean
 }
@@ -29,13 +30,15 @@ export interface HooksConfig {
   hooks: HookCommandConfig[]
 }
 
-export interface LoadedHook extends Required<Omit<HookCommandConfig, 'args'>> {
+export interface LoadedHook extends Required<Omit<HookCommandConfig, 'args' | 'artifacts'>> {
   args: string[]
+  artifacts: string[]
   source: HookSource
   configPath: string
   configHash: string
   executablePath: string
   executableHash: string
+  artifactHashes: Record<string, string>
   trustKey: string
   trustState: HookTrustState
 }

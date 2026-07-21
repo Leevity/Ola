@@ -32,6 +32,16 @@ internal sealed record AgentRuntimeApprovalRequest(
     string SessionId,
     AgentRuntimeToolCallState ToolCall);
 
+internal sealed record AgentRuntimeHookRequest(string Event, AgentRuntimeHookInvocation Invocation);
+
+internal sealed record AgentRuntimeHookInvocation(
+    string SessionId,
+    string? ProjectPath,
+    string? ToolName,
+    JsonElement? ToolInput,
+    JsonElement? ToolResult,
+    string CancellationKey);
+
 internal sealed record AgentRuntimeActiveRun(
     string RunId,
     string SessionId,

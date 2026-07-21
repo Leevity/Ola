@@ -37,9 +37,18 @@ function parseHook(value: unknown, index: number): HookCommandConfig {
   if (value.args !== undefined && !Array.isArray(value.args)) {
     throw new Error(`Hook ${value.id} args must be an array`)
   }
+  if (value.artifacts !== undefined && !Array.isArray(value.artifacts)) {
+    throw new Error(`Hook ${value.id} artifacts must be an array`)
+  }
   const args = (value.args ?? []).map((arg) => {
     if (typeof arg !== 'string') throw new Error(`Hook ${value.id} args must be strings`)
     return arg
+  })
+  const artifacts = (value.artifacts ?? []).map((artifact) => {
+    if (typeof artifact !== 'string' || !artifact.trim()) {
+      throw new Error(`Hook ${value.id} artifacts must be non-empty strings`)
+    }
+    return artifact
   })
   const timeoutMs = value.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : Number(value.timeoutMs)
   if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > MAX_TIMEOUT_MS) {
@@ -50,6 +59,7 @@ function parseHook(value: unknown, index: number): HookCommandConfig {
     event: value.event as HookCommandConfig['event'],
     command: value.command,
     args,
+    artifacts,
     timeoutMs,
     enabled: value.enabled !== false
   }
@@ -97,18 +107,27 @@ export async function loadHooksConfig(
     config.hooks.map(async (hook) => {
       const executablePath = await resolveExecutable(hook.command, canonicalConfigPath)
       const executableHash = hash(await readFile(executablePath))
+      const artifactEntries = await Promise.all(
+        (hook.artifacts ?? []).map(async (artifact) => {
+          const artifactPath = await resolveExecutable(artifact, canonicalConfigPath)
+          return [artifactPath, hash(await readFile(artifactPath))] as const
+        })
+      )
+      const artifactHashes = Object.fromEntries(artifactEntries)
       const trustKey = hash(
         JSON.stringify({
           source,
           configPath: canonicalConfigPath,
           configHash,
           executablePath,
-          executableHash
+          executableHash,
+          artifactHashes
         })
       )
       return {
         ...hook,
         args: hook.args ?? [],
+        artifacts: hook.artifacts ?? [],
         timeoutMs: hook.timeoutMs ?? DEFAULT_TIMEOUT_MS,
         enabled: hook.enabled !== false,
         source,
@@ -116,6 +135,7 @@ export async function loadHooksConfig(
         configHash,
         executablePath,
         executableHash,
+        artifactHashes,
         trustKey,
         trustState: trustedKeys.has(trustKey) ? 'trusted' : 'pending'
       }

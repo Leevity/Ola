@@ -51,6 +51,7 @@ import {
   SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL
 } from '../../../shared/messagepack/binary-ipc'
 import { clearPendingQuestions } from '@renderer/lib/tools/ask-user-tool'
+import type { HookEvent, HookOutput } from '../../../shared/hooks/types'
 
 import { ACP_MODE_ALLOWED_TOOLS, PLAN_MODE_ALLOWED_TOOLS } from '@renderer/lib/tools/plan-tool'
 import { usePlanStore, type Plan } from '@renderer/stores/plan-store'
@@ -213,6 +214,7 @@ import type { AgentStreamEvent } from '../../../shared/agent-stream-protocol'
 /** Per-session abort controllers — module-level so concurrent sessions don't overwrite each other */
 const sessionAbortControllers = new Map<string, AbortController>()
 const sessionSidecarRunIds = new Map<string, string>()
+const hookStartedSessions = new Set<string>()
 const stopAfterCurrentRequestSessions = new Set<string>()
 const continuingToolExecutionSessions = new Set<string>()
 const pendingGoalContinuationSessions = new Set<string>()
@@ -233,6 +235,7 @@ useChatStore.subscribe((state) => {
         pendingSessionMessages.delete(id)
         pendingSessionMessageViews.delete(id)
         pausedPendingSessionDispatch.delete(id)
+        hookStartedSessions.delete(id)
       }
     }
   }
@@ -240,6 +243,21 @@ useChatStore.subscribe((state) => {
 })
 type SidecarApprovalIpcPayload = { requestId: string; method: string; params: unknown }
 type SidecarApprovalIpcResponse = { requestId: string; approved: boolean; reason?: string }
+
+async function emitHooks(
+  event: HookEvent,
+  invocation: {
+    sessionId: string
+    projectPath?: string
+    toolName?: string
+    toolInput?: Record<string, unknown>
+    toolResult?: unknown
+    prompt?: string
+    cancellationKey?: string
+  }
+): Promise<HookOutput[]> {
+  return (await ipcClient.invoke('hooks:emit', { event, invocation })) as HookOutput[]
+}
 
 async function sendSidecarApprovalResponse(response: SidecarApprovalIpcResponse): Promise<void> {
   await invokeMessagePack(SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL, response)
@@ -258,6 +276,32 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
     return
   }
 
+  const approvalSession = request.sessionId
+    ? useChatStore.getState().sessions.find((session) => session.id === request.sessionId)
+    : undefined
+  const hookOutputs = await emitHooks('permissionRequest', {
+    sessionId: request.sessionId ?? 'unknown',
+    projectPath: approvalSession?.workingFolder,
+    toolName: request.toolCall.name,
+    toolInput: request.toolCall.input,
+    cancellationKey: request.sessionId ?? payload.requestId
+  }).catch((error) => {
+    console.warn('[Hooks] permissionRequest failed safely:', error)
+    return []
+  })
+  const hookDecision = hookOutputs.findLast(
+    (output) => output.permissionDecision
+  )?.permissionDecision
+  const hookBlock = hookOutputs.find((output) => output.block)?.block
+  if (hookDecision === 'deny' || hookBlock) {
+    await sendSidecarApprovalResponse({
+      requestId: payload.requestId,
+      approved: false,
+      reason: hookBlock?.reason ?? 'Denied by trusted hook'
+    })
+    return
+  }
+
   const registeredDecision = await resolveSidecarApprovalRequest(request)
   if (registeredDecision) {
     await sendSidecarApprovalResponse({
@@ -265,6 +309,11 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
       approved: registeredDecision.approved,
       ...(registeredDecision.reason ? { reason: registeredDecision.reason } : {})
     })
+    return
+  }
+
+  if (hookDecision === 'allow') {
+    await sendSidecarApprovalResponse({ requestId: payload.requestId, approved: true })
     return
   }
 
@@ -2848,6 +2897,19 @@ function finishStoppingSession(sessionId: string): void {
   }
 
   void cancelSidecarRun(sessionId)
+  void ipcClient
+    .invoke('hooks:cancel', { key: sessionId })
+    .then(() => {
+      const projectPath = useChatStore
+        .getState()
+        .sessions.find((item) => item.id === sessionId)?.workingFolder
+      return emitHooks('stop', {
+        sessionId,
+        projectPath,
+        cancellationKey: `${sessionId}:stop`
+      })
+    })
+    .catch(() => {})
   setStreamingMessageIdWithSync(sessionId, null)
   useAgentStore.getState().setSessionStatus(sessionId, null)
 
@@ -3163,6 +3225,22 @@ function isProgressAgentEvent(event: AgentEvent): boolean {
   return event.type !== 'request_debug'
 }
 
+function emitRuntimeHookForAgentEvent(sessionId: string, event: AgentEvent): void {
+  const projectPath = useChatStore
+    .getState()
+    .sessions.find((item) => item.id === sessionId)?.workingFolder
+  const base = { sessionId, projectPath, cancellationKey: sessionId }
+  let emission: Promise<HookOutput[]> | null = null
+  if (event.type === 'context_compression_start') {
+    emission = emitHooks('preCompact', base)
+  } else if (event.type === 'context_compressed') {
+    emission = emitHooks('postCompact', base)
+  } else if (event.type === 'loop_end' || event.type === 'error') {
+    emission = emitHooks('stop', base)
+  }
+  void emission?.catch((error) => console.warn('[Hooks] runtime event failed:', error))
+}
+
 function createSidecarEventStream(options: {
   sessionId: string
   sidecarRequest: unknown
@@ -3258,6 +3336,7 @@ function createSidecarEventStream(options: {
 
         const agentEvent = toAgentEvent(event)
         if (agentEvent) {
+          emitRuntimeHookForAgentEvent(sessionId, agentEvent)
           pushEvent(agentEvent)
         }
       }
@@ -3521,6 +3600,32 @@ export function useChatActions(): {
         })
       }
       await ensureChatSessionWorkingFolder(sessionId)
+      const hookSession = useChatStore.getState().sessions.find((item) => item.id === sessionId)
+      if (!hookStartedSessions.has(sessionId)) {
+        hookStartedSessions.add(sessionId)
+        await emitHooks('sessionStart', {
+          sessionId,
+          projectPath: hookSession?.workingFolder,
+          cancellationKey: sessionId
+        }).catch((error) => console.warn('[Hooks] sessionStart failed:', error))
+      }
+      if (source !== 'continue' && source !== 'team') {
+        const promptOutputs = await emitHooks('userPromptSubmit', {
+          sessionId,
+          projectPath: hookSession?.workingFolder,
+          prompt: text,
+          cancellationKey: sessionId
+        }).catch((error) => {
+          console.warn('[Hooks] userPromptSubmit failed:', error)
+          return []
+        })
+        const block = promptOutputs.find((output) => output.block)?.block
+        if (block) throw new Error(block.reason)
+        for (const output of promptOutputs) {
+          if (output.updatedPrompt !== undefined) text = output.updatedPrompt
+          if (output.additionalContext) text = `${output.additionalContext}\n\n${text}`
+        }
+      }
       if (source !== 'continue') {
         // Reset the back-to-back Task dedup guard on every fresh user turn —
         // the guard is only meant to block immediate retries within one loop,

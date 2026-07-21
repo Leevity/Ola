@@ -55,7 +55,34 @@ export class HooksRunner {
   constructor(private readonly maxConcurrency = 4) {}
 
   cancel(cancellationKey: string): void {
-    for (const child of this.active.get(cancellationKey) ?? []) child.kill('SIGTERM')
+    for (const child of this.active.get(cancellationKey) ?? []) this.terminate(child)
+  }
+
+  private terminate(child: ChildProcessWithoutNullStreams): void {
+    if (child.exitCode !== null || child.signalCode !== null) return
+    const signalTree = (signal: NodeJS.Signals): void => {
+      if (process.platform === 'win32') {
+        if (child.pid) {
+          const killer = spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], {
+            stdio: 'ignore',
+            windowsHide: true
+          })
+          killer.unref()
+        }
+        return
+      }
+      if (!child.pid) return
+      try {
+        process.kill(-child.pid, signal)
+      } catch {
+        child.kill(signal)
+      }
+    }
+    signalTree('SIGTERM')
+    const escalation = setTimeout(() => {
+      if (child.exitCode === null && child.signalCode === null) signalTree('SIGKILL')
+    }, 1_000)
+    escalation.unref()
   }
 
   async run(hook: LoadedHook, invocation: HookInvocation): Promise<HookRunResult> {
@@ -80,14 +107,15 @@ export class HooksRunner {
     this.running += 1
     return new Promise((resolve, reject) => {
       const child = spawn(hook.executablePath, hook.args, {
-        cwd: invocation.projectPath || dirname(hook.configPath),
+        cwd:
+          hook.source === 'project' ? dirname(dirname(hook.configPath)) : dirname(hook.configPath),
         env: {
           PATH: process.env.PATH ?? '',
           HOME: process.env.HOME ?? '',
           LANG: process.env.LANG ?? 'C.UTF-8'
         },
         stdio: ['pipe', 'pipe', 'pipe'],
-        detached: false,
+        detached: process.platform !== 'win32',
         windowsHide: true
       })
       const key = invocation.cancellationKey ?? invocation.sessionId
@@ -98,10 +126,20 @@ export class HooksRunner {
       let stderr: Buffer<ArrayBufferLike> = Buffer.alloc(0)
       let overflow = false
       let timedOut = false
+      let cleaned = false
+      const cleanup = (): boolean => {
+        if (cleaned) return false
+        cleaned = true
+        clearTimeout(timer)
+        children.delete(child)
+        if (!children.size) this.active.delete(key)
+        this.running -= 1
+        return true
+      }
       const append = (current: Buffer, chunk: Buffer): Buffer => {
         if (current.byteLength + chunk.byteLength > MAX_OUTPUT_BYTES) {
           overflow = true
-          child.kill('SIGTERM')
+          this.terminate(child)
           return current
         }
         return Buffer.concat([current, chunk])
@@ -114,32 +152,35 @@ export class HooksRunner {
       })
       const timer = setTimeout(() => {
         timedOut = true
-        child.kill('SIGTERM')
+        this.terminate(child)
       }, hook.timeoutMs)
-      child.on('error', reject)
+      child.on('error', (error) => {
+        if (cleanup()) reject(error)
+      })
       child.on('close', (code, signal) => {
-        clearTimeout(timer)
-        children.delete(child)
-        if (!children.size) this.active.delete(key)
-        this.running -= 1
+        if (!cleanup()) return
         record.durationMs = Date.now() - startedAt
         record.exitCode = code
         record.stdoutSummary = stdout.toString('utf8').slice(-MAX_SUMMARY_CHARS)
         record.stderrSummary = stderr.toString('utf8').slice(-MAX_SUMMARY_CHARS)
         record.status = timedOut
           ? 'timed-out'
-          : signal
-            ? 'canceled'
-            : overflow || code !== 0
-              ? 'failed'
-              : 'completed'
+          : overflow
+            ? 'failed'
+            : signal
+              ? 'canceled'
+              : code !== 0
+                ? 'failed'
+                : 'completed'
         if (record.status !== 'completed') {
           resolve({ output: {}, record })
           return
         }
         try {
+          const output = sanitizeOutput(stdout.length ? JSON.parse(stdout.toString('utf8')) : {})
+          if (output.block) record.status = 'blocked'
           resolve({
-            output: sanitizeOutput(stdout.length ? JSON.parse(stdout.toString('utf8')) : {}),
+            output,
             record
           })
         } catch {
