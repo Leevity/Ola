@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Hook tự động hóa",
+    "subtitle": "Xem xét và tin cậy tập lệnh vòng đời cục bộ",
+    "refresh": "Làm mới",
+    "securityNotice": "Hook chạy lệnh cục bộ. Hãy kiểm tra đường dẫn và mã băm; mọi thay đổi tệp đều cần cấp quyền lại.",
+    "configured": "Hook đã cấu hình",
+    "empty": "Không tìm thấy hook người dùng hoặc dự án.",
+    "source": { "user": "Người dùng", "project": "Dự án" },
+    "configHash": "cấu hình",
+    "revoke": "Thu hồi tin cậy",
+    "reviewAndTrust": "Xem xét và tin cậy",
+    "history": "Lịch sử chạy",
+    "noHistory": "Chưa có lần chạy hook.",
+    "status": {
+      "completed": "Hoàn tất",
+      "failed": "Thất bại",
+      "blocked": "Đã chặn",
+      "timed-out": "Hết thời gian",
+      "canceled": "Đã hủy"
+    }
+  },
   "page": {
     "title": "Thiết lập",
     "subtitle": "Thiết lập kiểu & ưa thích",

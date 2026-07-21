@@ -28,12 +28,14 @@ import {
   Network,
   PawPrint,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Workflow
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { AnimatePresence } from 'motion/react'
 import { useUIStore, type SettingsTab } from '@renderer/stores/ui-store'
 import { PermissionPanel } from './PermissionPanel'
+import { HooksPanel } from './HooksPanel'
 import { useChatStore } from '@renderer/stores/chat-store'
 import {
   clampMaxParallelToolCalls,
@@ -446,6 +448,12 @@ const menuGroupDefs: Array<{
         icon: <ShieldCheck className="size-4" />,
         labelKey: 'permission.title',
         descKey: 'permission.subtitle'
+      },
+      {
+        id: 'hooks',
+        icon: <Workflow className="size-4" />,
+        labelKey: 'hooks.title',
+        descKey: 'hooks.subtitle'
       }
     ]
   },
@@ -3754,6 +3762,7 @@ const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   general: GeneralPanel,
   system: SystemPanel,
   permission: PermissionPanel,
+  hooks: HooksPanel,
   memory: MemoryPanel,
   analytics: AnalyticsPanel,
   provider: ProviderPanel,

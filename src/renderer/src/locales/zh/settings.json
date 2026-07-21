@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "自动化 Hook",
+    "subtitle": "审查、信任并检查本地生命周期脚本",
+    "refresh": "刷新",
+    "securityNotice": "Hook 会执行本地命令。信任前请核对解析后的路径和哈希；任何文件变化都会要求重新授权。",
+    "configured": "已配置的 Hook",
+    "empty": "用户级和当前项目均未发现 Hook。",
+    "source": { "user": "用户级", "project": "项目级" },
+    "configHash": "配置",
+    "revoke": "撤销信任",
+    "reviewAndTrust": "审查并信任",
+    "history": "运行历史",
+    "noHistory": "暂无 Hook 运行记录。",
+    "status": {
+      "completed": "已完成",
+      "failed": "失败",
+      "blocked": "已阻止",
+      "timed-out": "已超时",
+      "canceled": "已取消"
+    }
+  },
   "permission": {
     "title": "权限管理",
     "subtitle": "工具白名单与命令允许/拒绝规则",

@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Otomasyon kancaları",
+    "subtitle": "Yerel yaşam döngüsü betiklerini inceleyin ve güvenin",
+    "refresh": "Yenile",
+    "securityNotice": "Kancalar yerel komutlar çalıştırır. Yolu ve karmaları inceleyin; her dosya değişikliği yeniden izin gerektirir.",
+    "configured": "Yapılandırılmış kancalar",
+    "empty": "Kullanıcı veya proje kancası bulunamadı.",
+    "source": { "user": "Kullanıcı", "project": "Proje" },
+    "configHash": "yapılandırma",
+    "revoke": "Güveni kaldır",
+    "reviewAndTrust": "İncele ve güven",
+    "history": "Çalıştırma geçmişi",
+    "noHistory": "Henüz kanca çalıştırılmadı.",
+    "status": {
+      "completed": "Tamamlandı",
+      "failed": "Başarısız",
+      "blocked": "Engellendi",
+      "timed-out": "Zaman aşımı",
+      "canceled": "İptal edildi"
+    }
+  },
   "page": {
     "title": "Ayarlar",
     "subtitle": "Tercihler ve Model Ayarları",

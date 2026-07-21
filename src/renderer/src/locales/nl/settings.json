@@ -1,4 +1,25 @@
 {
+  "hooks": {
+    "title": "Automatiseringshooks",
+    "subtitle": "Lokale levenscyclusscripts controleren en vertrouwen",
+    "refresh": "Vernieuwen",
+    "securityNotice": "Hooks voeren lokale opdrachten uit. Controleer pad en hashes; na elke wijziging is opnieuw toestemming nodig.",
+    "configured": "Geconfigureerde hooks",
+    "empty": "Geen gebruikers- of projecthooks gevonden.",
+    "source": { "user": "Gebruiker", "project": "Project" },
+    "configHash": "configuratie",
+    "revoke": "Vertrouwen intrekken",
+    "reviewAndTrust": "Controleren en vertrouwen",
+    "history": "Uitvoeringsgeschiedenis",
+    "noHistory": "Nog geen hookuitvoeringen.",
+    "status": {
+      "completed": "Voltooid",
+      "failed": "Mislukt",
+      "blocked": "Geblokkeerd",
+      "timed-out": "Time-out",
+      "canceled": "Geannuleerd"
+    }
+  },
   "page": {
     "title": "Instellingen",
     "subtitle": "Voorkeuren & modelinstellingen",
