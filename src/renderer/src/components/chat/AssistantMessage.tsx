@@ -12,8 +12,6 @@ import {
 import {
   Copy,
   Check,
-  ChevronDown,
-  ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
   Bug,
@@ -22,8 +20,6 @@ import {
   Trash2,
   RotateCcw,
   Play,
-  Loader2,
-  CheckCircle2,
   Ellipsis,
   Eraser,
   Languages,
@@ -34,7 +30,6 @@ import {
   CircleHelp
 } from 'lucide-react'
 import { FadeIn, ScaleIn } from '@renderer/components/animate-ui'
-import { cn } from '@renderer/lib/utils'
 import { ImageGeneratingLoader } from './ImageGeneratingLoader'
 import { ImageGenerationErrorCard } from './ImageGenerationErrorCard'
 import { AgentErrorCard } from './AgentErrorCard'
@@ -57,6 +52,12 @@ import type {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { ToolCallCard, WidgetOutputBlock } from './ToolCallCard'
 import { ToolCallGroup } from './ToolCallGroup'
+import { ExecutionRunSummary } from './ExecutionRunSummary'
+import {
+  buildExecutionOutline,
+  type ToolExecutionItem,
+  type ToolExecutionRun
+} from './execution-outline'
 import { FileChangeCard } from './FileChangeCard'
 import { SubAgentCard } from './SubAgentCard'
 import { ThinkingBlock } from './ThinkingBlock'
@@ -98,8 +99,6 @@ import { LazySyntaxHighlighter } from './LazySyntaxHighlighter'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
 import { aggregateDisplayableRunFileChanges } from './file-change-utils'
-import type { AggregatedFileChange } from './file-change-utils'
-import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -154,6 +153,7 @@ interface AssistantMessageProps {
 type AssistantRenderItem =
   | { kind: 'block'; index: number }
   | { kind: 'group'; toolName: string; indices: number[] }
+  | { kind: 'execution-run'; run: ToolExecutionRun }
 
 type AssistantRenderItemWithInlineSummary =
   | AssistantRenderItem
@@ -186,15 +186,6 @@ const SPECIAL_TOOLS = new Set([
   DESKTOP_SCREENSHOT_TOOL_NAME,
   DESKTOP_CLICK_TOOL_NAME,
   DESKTOP_TYPE_TOOL_NAME
-])
-const WORKSPACE_PERSISTENT_TOOLS = new Set([
-  'Skill',
-  'AskUserQuestion',
-  'ExitPlanMode',
-  'visualize_show_widget',
-  IMAGE_GENERATE_TOOL_NAME,
-  TASK_TOOL_NAME,
-  ...TEAM_TOOL_NAMES
 ])
 const EMPTY_LIVE_TOOL_CALLS: ToolCallState[] = []
 
@@ -302,174 +293,8 @@ function shouldShowToolInMessageList(name: string): boolean {
   return name !== 'TaskCreate' && name !== 'TaskUpdate' && name !== 'TaskList'
 }
 
-function isWorkspaceCollapsibleTool(name: string): boolean {
-  return shouldShowToolInMessageList(name) && !WORKSPACE_PERSISTENT_TOOLS.has(name)
-}
-
-function isWorkspaceOnlyToolMessage(blocks: ContentBlock[] | null): boolean {
-  return (
-    !!blocks?.length &&
-    blocks.every((block) => block.type === 'tool_use' && isWorkspaceCollapsibleTool(block.name))
-  )
-}
-
-function summarizeWorkspaceTools(
-  blocks: ContentBlock[] | null,
-  t: (key: string, options?: Record<string, unknown>) => string,
-  options: {
-    aggregatedChanges?: AggregatedFileChange[]
-    toolResults?: Map<string, { content: ToolResultContent; isError?: boolean }>
-    liveToolCallMap?: Map<string, ToolCallState> | null
-  } = {}
-): string {
-  if (!blocks) return ''
-
-  const counts = new Map<string, number>()
-  const createdPaths = new Set<string>()
-  const editedPaths = new Set<string>()
-  const deletedPaths = new Set<string>()
-
-  const toolResultText = (content: ToolResultContent | undefined): string | null => {
-    if (!content) return null
-    if (typeof content === 'string') return content
-    const text = content
-      .filter((block) => block.type === 'text')
-      .map((block) => (block.type === 'text' ? block.text : ''))
-      .join('\n')
-      .trim()
-    return text || null
-  }
-
-  const inferWriteKind = (
-    block: Extract<ContentBlock, { type: 'tool_use' }>
-  ): 'create' | 'edit' => {
-    const output =
-      options.liveToolCallMap?.get(block.id)?.output ?? options.toolResults?.get(block.id)?.content
-    const outputText = toolResultText(output)
-    if (outputText) {
-      const decoded = decodeStructuredToolResult(outputText)
-      if (isRecord(decoded) && decoded.op === 'modify') {
-        return 'edit'
-      }
-    }
-    return 'create'
-  }
-
-  const isFailedFileTool = (block: Extract<ContentBlock, { type: 'tool_use' }>): boolean => {
-    const liveToolCall = options.liveToolCallMap?.get(block.id)
-    if (liveToolCall?.status === 'error' || liveToolCall?.error) return true
-
-    const result = options.toolResults?.get(block.id)
-    if (result?.isError) return true
-
-    const outputText = toolResultText(liveToolCall?.output ?? result?.content)
-    if (!outputText) return false
-
-    const decoded = decodeStructuredToolResult(outputText)
-    if (!isRecord(decoded) || typeof decoded.error !== 'string') return false
-
-    return decoded.success === false || Object.keys(decoded).length === 1
-  }
-
-  for (const change of options.aggregatedChanges ?? []) {
-    if (change.op === 'create') {
-      createdPaths.add(change.filePath)
-    } else {
-      editedPaths.add(change.filePath)
-    }
-  }
-
-  for (const block of blocks) {
-    if (block.type !== 'tool_use' || !isWorkspaceCollapsibleTool(block.name)) continue
-    counts.set(block.name, (counts.get(block.name) ?? 0) + 1)
-
-    const filePath = block.input.file_path ?? block.input.path
-    if (typeof filePath !== 'string' || !filePath.trim()) continue
-
-    if (['Write', 'Edit', 'Delete'].includes(block.name) && isFailedFileTool(block)) {
-      continue
-    }
-
-    if (block.name === 'Delete') {
-      deletedPaths.add(filePath)
-      continue
-    }
-
-    if ((options.aggregatedChanges?.length ?? 0) > 0) continue
-
-    if (block.name === 'Edit') {
-      editedPaths.add(filePath)
-      continue
-    }
-
-    if (block.name === 'Write') {
-      if (inferWriteKind(block) === 'edit') {
-        editedPaths.add(filePath)
-      } else {
-        createdPaths.add(filePath)
-      }
-    }
-  }
-
-  const parts: string[] = []
-  const createdCount = createdPaths.size
-  const editedCount = editedPaths.size
-  const deletedCount = deletedPaths.size
-  const changedFileCount = createdCount + editedCount + deletedCount
-
-  if (createdCount > 0) {
-    parts.push(t('assistantMessage.createdFiles', { count: createdCount }))
-  }
-  if (editedCount > 0) {
-    parts.push(t('assistantMessage.editedFiles', { count: editedCount }))
-  }
-  if (deletedCount > 0) {
-    parts.push(t('assistantMessage.deletedFiles', { count: deletedCount }))
-  }
-  if (parts.length === 0 && changedFileCount > 0) {
-    parts.push(t('assistantMessage.changedFiles', { count: changedFileCount }))
-  }
-
-  const toolSummaryMap: Array<[string, string, Record<string, unknown>]> = [
-    ['Bash', 'assistantMessage.ranCommandsInline', {}],
-    ['Read', 'toolGroup.readFiles', {}],
-    ['Grep', 'toolGroup.searchedPatterns', {}],
-    ['Glob', 'toolGroup.globResults', { suffix: '' }],
-    ['LS', 'toolGroup.listedDirs', {}]
-  ]
-
-  for (const [toolName, key, extraOptions] of toolSummaryMap) {
-    const count = counts.get(toolName) ?? 0
-    if (count > 0) parts.push(t(key, { count, ...extraOptions }))
-  }
-
-  const coveredTools = new Set(['Write', 'Edit', 'Delete', 'Bash', 'Read', 'Grep', 'Glob', 'LS'])
-  const fallbackEntries = [...counts.entries()]
-    .filter(([name]) => !coveredTools.has(name))
-    .sort(([a], [b]) => a.localeCompare(b))
-  parts.push(...fallbackEntries.map(([name, count]) => `${name}${count > 1 ? ` x${count}` : ''}`))
-
-  const visibleParts = parts.slice(0, 3)
-  const summary = visibleParts.join(t('assistantMessage.summarySeparator', { defaultValue: ', ' }))
-  const hiddenKinds = parts.length - visibleParts.length
-
-  return hiddenKinds > 0
-    ? `${summary}${t('assistantMessage.summarySeparator', { defaultValue: ', ' })}${t(
-        'assistantMessage.moreKinds',
-        {
-          count: hiddenKinds,
-          defaultValue: `+${hiddenKinds}`
-        }
-      )}`
-    : summary
-}
-
 function stripThinkTagMarkers(text: string): string {
   return text.replace(/<\s*\/?\s*think\s*>/gi, '')
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 function toFiniteNumber(value: unknown): number | null {
@@ -1053,63 +878,6 @@ function ActionIconButton({
       <TooltipContent side="top">{label}</TooltipContent>
     </Tooltip>
   )
-}
-
-function GenerationProcessLine({
-  active,
-  label,
-  detail,
-  expanded,
-  collapsible = false,
-  onClick
-}: {
-  active: boolean
-  label: string
-  detail?: string | null
-  expanded?: boolean
-  collapsible?: boolean
-  onClick?: () => void
-}): React.JSX.Element {
-  const content = (
-    <>
-      <span
-        className={cn(
-          'flex size-5 shrink-0 items-center justify-center rounded-full border bg-transparent',
-          active
-            ? 'border-sky-500/25 text-sky-600 dark:text-sky-300'
-            : 'border-lime-500/25 text-lime-600 dark:text-lime-400'
-        )}
-      >
-        {active ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
-      </span>
-      <span className="shrink-0 font-mono font-medium text-foreground/82">{label}</span>
-      {detail ? (
-        <span className="min-w-0 flex-1 truncate text-muted-foreground/60">({detail})</span>
-      ) : (
-        <span className="min-w-0 flex-1" />
-      )}
-      {collapsible ? (
-        expanded ? (
-          <ChevronDown className="size-3 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
-        ) : (
-          <ChevronRight className="size-3 shrink-0 text-muted-foreground/60 transition-colors group-hover:text-foreground" />
-        )
-      ) : null}
-    </>
-  )
-
-  const className =
-    'group flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[12px] text-muted-foreground transition-colors hover:bg-muted/35 hover:text-foreground dark:hover:bg-white/[0.035]'
-
-  if (collapsible) {
-    return (
-      <button type="button" onClick={onClick} aria-expanded={expanded} className={className}>
-        {content}
-      </button>
-    )
-  }
-
-  return <div className={className}>{content}</div>
 }
 
 function ModelThinkingIndicator({
@@ -1955,10 +1723,6 @@ export function AssistantMessage({
         )
       : undefined
   })
-  const visibleRunChanges = useMemo(
-    () => (runChangeSet ? aggregateDisplayableRunFileChanges(runChangeSet.changes) : []),
-    [runChangeSet]
-  )
   const refreshRunChanges = useAgentStore((s) => s.refreshRunChanges)
   const refreshSessionRunChanges = useAgentStore((s) => s.refreshSessionRunChanges)
 
@@ -2007,39 +1771,31 @@ export function AssistantMessage({
     }
     return map
   }, [runChangeSet])
-  const workspaceToolCount = useMemo(
-    () =>
-      normalizedContent?.filter(
-        (block) => block.type === 'tool_use' && isWorkspaceCollapsibleTool(block.name)
-      ).length ?? 0,
-    [normalizedContent]
+  const collapseExecutionRunsByDefault = useSettingsStore(
+    (state) => state.collapseExecutionRunsByDefault
   )
-  const workspaceOnlyToolMessage = useMemo(
-    () => isWorkspaceOnlyToolMessage(normalizedContent),
-    [normalizedContent]
-  )
-  const workspaceSummary = useMemo(
+  const executionRuns = useMemo(
     () =>
-      summarizeWorkspaceTools(normalizedContent, t, {
-        aggregatedChanges: visibleRunChanges,
+      buildExecutionOutline(normalizedContent, {
+        isStreaming,
+        alwaysExpand: !collapseExecutionRunsByDefault,
         toolResults,
         liveToolCallMap: effectiveLiveToolCallMap
       }),
-    [effectiveLiveToolCallMap, normalizedContent, t, toolResults, visibleRunChanges]
+    [
+      collapseExecutionRunsByDefault,
+      effectiveLiveToolCallMap,
+      isStreaming,
+      normalizedContent,
+      toolResults
+    ]
   )
-  const defaultToolsCollapsed = workspaceOnlyToolMessage && workspaceToolCount > 0
-  const showWorkspaceToggle = workspaceToolCount >= 2 || defaultToolsCollapsed
-  const [toolCollapseState, setToolCollapseState] = useState<{
+  const [executionRunState, setExecutionRunState] = useState<{
     msgId?: string
-    collapsed: boolean | null
-  }>({
-    msgId,
-    collapsed: null
-  })
-  const toolsCollapsed =
-    toolCollapseState.msgId === msgId
-      ? (toolCollapseState.collapsed ?? defaultToolsCollapsed)
-      : defaultToolsCollapsed
+    expandedByRunId: Record<string, boolean>
+  }>({ msgId, expandedByRunId: {} })
+  const expandedRunOverrides =
+    executionRunState.msgId === msgId ? executionRunState.expandedByRunId : {}
   const hasStructuredThinkingBlocks = useMemo(
     () => normalizedContent?.some((block) => block.type === 'thinking') ?? false,
     [normalizedContent]
@@ -2082,8 +1838,18 @@ export function AssistantMessage({
     if (!normalizedContent) return []
 
     const items: AssistantRenderItem[] = []
+    const runByStartIndex = new Map(executionRuns.map((run) => [run.startBlockIndex, run]))
+    const coveredToolIndices = new Set(
+      executionRuns.flatMap((run) => run.items.map((item) => item.blockIndex))
+    )
     for (let i = 0; i < normalizedContent.length; i++) {
       const block = normalizedContent[i]
+      const executionRun = runByStartIndex.get(i)
+      if (executionRun) {
+        items.push({ kind: 'execution-run', run: executionRun })
+        continue
+      }
+      if (block.type === 'tool_use' && coveredToolIndices.has(i)) continue
       if (block.type === 'tool_use' && !shouldShowToolInMessageList(block.name)) {
         continue
       }
@@ -2104,7 +1870,7 @@ export function AssistantMessage({
       items.push({ kind: 'block', index: i })
     }
     return items
-  }, [normalizedContent])
+  }, [executionRuns, normalizedContent])
   const inlineCompactSummaryEntries = useMemo(() => {
     if (!msgId || inlineCompactSummaries.length === 0) return []
 
@@ -2130,7 +1896,11 @@ export function AssistantMessage({
     const summariesByInsertIndex = new Map<number, UnifiedMessage[]>()
 
     const getItemIndices = (item: AssistantRenderItem): number[] =>
-      item.kind === 'block' ? [item.index] : item.indices
+      item.kind === 'block'
+        ? [item.index]
+        : item.kind === 'execution-run'
+          ? item.run.items.map((runItem) => runItem.blockIndex)
+          : item.indices
 
     const itemContainsToolUseId = (item: AssistantRenderItem, toolUseId: string): boolean =>
       getItemIndices(item).some((index) => {
@@ -2416,7 +2186,6 @@ export function AssistantMessage({
         )
       }
       if (['Write', 'Edit', 'Delete'].includes(block.name)) {
-        if (toolsCollapsed) return null
         const result = toolResults?.get(block.id)
         const liveTc = effectiveLiveToolCallMap?.get(block.id)
         const statusValue = resolveToolCallStatus(isStreaming, liveTc, result)
@@ -2452,7 +2221,6 @@ export function AssistantMessage({
         )
       }
       if (isBrowserToolName(block.name)) {
-        if (toolsCollapsed) return null
         const toolCallState = buildToolCallRenderState(block, {
           isStreaming,
           toolResults,
@@ -2477,7 +2245,6 @@ export function AssistantMessage({
         block.name === DESKTOP_SCROLL_TOOL_NAME ||
         block.name === DESKTOP_WAIT_TOOL_NAME
       ) {
-        if (toolsCollapsed) return null
         const result = toolResults?.get(block.id)
         const liveTc = effectiveLiveToolCallMap?.get(block.id)
         const statusValue = resolveToolCallStatus(isStreaming, liveTc, result)
@@ -2514,8 +2281,7 @@ export function AssistantMessage({
           </ScaleIn>
         )
       }
-      // Generic ToolCallCard — hidden with the workspace collapse.
-      if (toolsCollapsed) return null
+      // Generic ToolCallCard — visibility is controlled by the execution run.
       const toolCallState = buildToolCallRenderState(block, {
         isStreaming,
         toolResults,
@@ -2537,49 +2303,11 @@ export function AssistantMessage({
       )
     }
 
-    const activeWorkspaceToolCount = normalizedContent.filter((block) => {
-      if (block.type !== 'tool_use') return false
-      const liveStatus = effectiveLiveToolCallMap?.get(block.id)?.status
-      return (
-        liveStatus === 'streaming' || liveStatus === 'running' || liveStatus === 'pending_approval'
-      )
-    }).length
-    const showProcessLine = showWorkspaceToggle || (isStreaming && workspaceToolCount > 0)
-    const processDetail =
-      workspaceSummary ||
-      (activeWorkspaceToolCount > 0
-        ? t('assistantMessage.activeTools', { count: activeWorkspaceToolCount })
-        : workspaceToolCount > 0
-          ? t('assistantMessage.toolExecutions', { count: workspaceToolCount })
-          : isStreaming
-            ? t('assistantMessage.streamingText')
-            : null)
-
     return (
       <div className="space-y-2">
         {orchestrationRun && orchestrationAnchorIndex < 0 ? (
           <OrchestrationBlock run={orchestrationRun} />
         ) : null}
-        {showProcessLine && (
-          <GenerationProcessLine
-            active={!!isStreaming}
-            label={
-              workspaceToolCount > 0
-                ? t('assistantMessage.processTools')
-                : t('assistantMessage.processResponse')
-            }
-            detail={processDetail}
-            collapsible={showWorkspaceToggle}
-            expanded={!toolsCollapsed}
-            onClick={() => {
-              if (!showWorkspaceToggle) return
-              setToolCollapseState({
-                msgId,
-                collapsed: !toolsCollapsed
-              })
-            }}
-          />
-        )}
         {renderItemsWithInlineSummaries.map((item) => {
           if (item.kind === 'compact-summary') {
             return (
@@ -2753,8 +2481,38 @@ export function AssistantMessage({
             }
           }
 
-          // kind === 'group': render grouped tool calls
-          if (toolsCollapsed) return null
+          if (item.kind === 'execution-run') {
+            const run = item.run
+            const expanded = expandedRunOverrides[run.id] ?? run.defaultExpanded
+            const renderRunItems = (runItems: ToolExecutionItem[]): React.ReactNode =>
+              runItems.map((runItem) => {
+                const block = normalizedContent[runItem.blockIndex]
+                return block?.type === 'tool_use'
+                  ? renderToolBlock(block, block.id, runItem.blockIndex)
+                  : null
+              })
+            return (
+              <ExecutionRunSummary
+                key={run.id}
+                run={run}
+                expanded={expanded}
+                onToggle={() =>
+                  setExecutionRunState((current) => ({
+                    msgId,
+                    expandedByRunId: {
+                      ...(current.msgId === msgId ? current.expandedByRunId : {}),
+                      [run.id]: !expanded
+                    }
+                  }))
+                }
+                collapsedContent={renderRunItems(run.forcedItems)}
+              >
+                {renderRunItems(run.visibleItems)}
+              </ExecutionRunSummary>
+            )
+          }
+
+          // Legacy fallback for tool blocks that are intentionally excluded from the outline.
 
           const groupBlocks = item.indices.map(
             (idx) => normalizedContent[idx] as Extract<ContentBlock, { type: 'tool_use' }>

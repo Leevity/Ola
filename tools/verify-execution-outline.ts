@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import type { ContentBlock } from '../src/renderer/src/lib/api/types.ts'
-import { buildExecutionOutline, classifyTool } from '../src/renderer/src/components/chat/execution-outline.ts'
+import type { ToolCallState } from '../src/renderer/src/lib/agent/types.ts'
+import {
+  buildExecutionOutline,
+  classifyTool
+} from '../src/renderer/src/components/chat/execution-outline.ts'
 
 const tool = (id: string, name: string): ContentBlock => ({ type: 'tool_use', id, name, input: {} })
 
@@ -20,8 +24,18 @@ const splitRuns = buildExecutionOutline([
   tool('bash-1', 'Bash')
 ])
 assert.equal(splitRuns.length, 2)
-assert.deepEqual(splitRuns.map((run) => run.visibleItems.length), [2, 1])
+assert.deepEqual(
+  splitRuns.map((run) => run.visibleItems.length),
+  [2, 1]
+)
 assert.equal(splitRuns[0].defaultExpanded, false)
+assert.equal(buildExecutionOutline([{ type: 'text', text: '纯文本回答' }]).length, 0)
+
+const readRun = buildExecutionOutline(
+  Array.from({ length: 20 }, (_, index) => tool(`read-${index}`, index % 2 ? 'Grep' : 'Read'))
+)[0]
+assert.equal(readRun.visibleItems.length, 20)
+assert.equal(readRun.defaultExpanded, false)
 
 const failed = buildExecutionOutline([tool('unknown-1', 'future_tool')], {
   toolResults: new Map([['unknown-1', { content: '失败详情', isError: true }]])
@@ -49,5 +63,31 @@ assert.equal(internal.length, 0)
 
 const alwaysExpanded = buildExecutionOutline([tool('read-2', 'Read')], { alwaysExpand: true })[0]
 assert.equal(alwaysExpanded.defaultExpanded, true)
+
+const canceledState: ToolCallState = {
+  id: 'cancel-1',
+  name: 'Bash',
+  input: {},
+  status: 'canceled',
+  requiresApproval: false,
+  startedAt: 100,
+  completedAt: 350
+}
+const canceled = buildExecutionOutline([tool('cancel-1', 'Bash')], {
+  liveToolCallMap: new Map([['cancel-1', canceledState]])
+})[0]
+assert.equal(canceled.status, 'canceled')
+assert.equal(canceled.defaultExpanded, true)
+assert.equal(canceled.durationMs, 250)
+
+const startedAt = performance.now()
+const largeRun = buildExecutionOutline(
+  Array.from({ length: 100 }, (_, index) => tool(`large-${index}`, 'Read'))
+)[0]
+assert.equal(largeRun.visibleItems.length, 100)
+assert.ok(
+  performance.now() - startedAt < 100,
+  '100 tool blocks should normalize without visible delay'
+)
 
 console.log('execution-outline verification passed')
