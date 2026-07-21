@@ -47,6 +47,11 @@ internal static class OpenAIChatRuntime
         state.ReplaceParameters(runtimeParameters);
         parameters = runtimeParameters;
         provider = GetObject(parameters, "provider");
+        var compressionProvider = parameters.TryGetProperty("compressionProvider", out var configuredCompressionProvider) &&
+            configuredCompressionProvider.ValueKind == JsonValueKind.Object
+                ? configuredCompressionProvider
+                : provider;
+        ValidateProvider(compressionProvider);
         var compressionConfig = ReadLoopCompressionConfig(parameters);
         var lastInputTokens = compressionConfig is null ? 0 : FindRecentContextUsage(wireConversation);
         var requestedMaxIterations = JsonHelpers.GetInt(parameters, "maxIterations", 1);
@@ -112,7 +117,7 @@ internal static class OpenAIChatRuntime
                         $"messages={originalCount} preserveCount={preserveCount}");
                     var compressed = await AgentRuntimeContextCompression.CompressMessagesAsync(
                         wireConversation,
-                        provider,
+                        compressionProvider,
                         context,
                         focusPrompt: null,
                         preTokens: lastInputTokens,
@@ -173,7 +178,10 @@ internal static class OpenAIChatRuntime
                 return;
             }
 
-            var turn = await ExecuteTurnAsync(parameters, provider, conversation, state, context);
+            var turn = await AgentRuntimeProviderRetryPolicy.ExecuteAsync(
+                () => ExecuteTurnAsync(parameters, provider, conversation, state, context),
+                state,
+                context);
             conversation.Add(turn.AssistantMessage);
             wireConversation.Add(CreateAssistantWireMessage(turn.AssistantMessage, turn.Usage));
             if (turn.Usage?.ContextTokens is > 0)
@@ -255,7 +263,10 @@ internal static class OpenAIChatRuntime
 
         ValidateProvider(provider);
         var conversation = ReadConversation(parameters);
-        return await ExecuteTurnAsync(parameters, provider, conversation, state, context);
+        return await AgentRuntimeProviderRetryPolicy.ExecuteAsync(
+            () => ExecuteTurnAsync(parameters, provider, conversation, state, context),
+            state,
+            context);
     }
 
     private static JsonElement CreateRuntimeParametersWithoutMessages(JsonElement parameters)
@@ -542,9 +553,10 @@ internal static class OpenAIChatRuntime
             state.CancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var errorBody = await response.Content.ReadAsStringAsync(state.CancellationToken);
-            throw new InvalidOperationException(
-                $"OpenAI-compatible chat request failed HTTP {(int)response.StatusCode}: {errorBody}");
+            throw await AgentRuntimeProviderHttpException.CreateAsync(
+                "OpenAI-compatible chat",
+                response,
+                state.CancellationToken);
         }
 
         await using var responseStream = await response.Content.ReadAsStreamAsync(state.CancellationToken);

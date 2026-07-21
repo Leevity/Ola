@@ -56,9 +56,13 @@ export function clampCompressionThreshold(value?: number | null): number {
 }
 
 export function resolveCompressionThreshold(
-  modelConfig?: Pick<AIModelConfig, 'contextCompressionThreshold'> | null
+  modelConfigOrThreshold?: Pick<AIModelConfig, 'contextCompressionThreshold'> | number | null
 ): number {
-  return clampCompressionThreshold(modelConfig?.contextCompressionThreshold)
+  return clampCompressionThreshold(
+    typeof modelConfigOrThreshold === 'number'
+      ? modelConfigOrThreshold
+      : modelConfigOrThreshold?.contextCompressionThreshold
+  )
 }
 
 export function resolveCompressionContextLength(

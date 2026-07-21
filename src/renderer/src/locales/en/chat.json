@@ -913,6 +913,10 @@
     "selectedFileReadFailed": "Read failed"
   },
   "assistantMessage": {
+    "retryingRequest": "Service busy, retrying request",
+    "retryingRequestDetail": "Attempt {{attempt}} / {{maxAttempts}} in {{delay}}{{statusSuffix}}",
+    "retryStatusSuffix": ", status {{statusCode}}",
+    "cancelRetry": "Cancel",
     "changedFiles_one": "Edited {{count}} file",
     "changedFiles_other": "Edited {{count}} files",
     "createdFiles_one": "Created {{count}} file",

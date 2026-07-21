@@ -17,7 +17,7 @@ const workerProject = path.join(
 const frameHeaderBytes = 4
 const maxFrameBytes = 256 * 1024 * 1024
 
-function assert(condition, message) {
+export function assert(condition, message) {
   if (!condition) {
     throw new Error(message)
   }
@@ -37,7 +37,7 @@ function createFrame(payload) {
   return frame
 }
 
-class NativeWorkerClient {
+export class NativeWorkerClient {
   constructor(endpoint, child) {
     this.endpoint = endpoint
     this.child = child
@@ -158,7 +158,7 @@ class NativeWorkerClient {
   }
 }
 
-async function startWorker(tempDir) {
+export async function startWorker(tempDir) {
   const endpoint =
     process.platform === 'win32'
       ? `\\\\.\\pipe\\ola-verify-${process.pid}-${randomUUID()}`
@@ -269,6 +269,15 @@ async function waitForRequestDebug(client, runId) {
   })
 }
 
+async function readRequestDebugBody(client, debugInfo) {
+  if (typeof debugInfo.body === 'string') return debugInfo.body
+  assert(typeof debugInfo.bodyRef === 'string', 'request_debug omitted body and bodyRef')
+  const result = await client.request('agent/debug-body-read', { bodyRef: debugInfo.bodyRef })
+  assert(result.success, `debug body read failed: ${result.error ?? 'unknown error'}`)
+  assert(typeof result.body === 'string', 'debug body read omitted body')
+  return result.body
+}
+
 async function main() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ola-windowing-'))
   const dbPath = path.join(tempDir, 'data.db')
@@ -352,7 +361,9 @@ async function main() {
       includeFullDebugBody: true
     })
     const headTailDebugInfo = await headTailDebugPromise
-    const headTailBody = JSON.stringify(JSON.parse(headTailDebugInfo.body))
+    const headTailBody = JSON.stringify(
+      JSON.parse(await readRequestDebugBody(client, headTailDebugInfo))
+    )
     assert(headTailBody.includes('plain message 0'), 'request context omitted DB head task')
     assert(headTailBody.includes('plain message 79'), 'request context omitted DB tail')
     assert(!headTailBody.includes('plain message 10'), 'request context leaked middle history')
@@ -394,7 +405,9 @@ async function main() {
       includeFullDebugBody: true
     })
     const directDebugInfo = await directDebugPromise
-    const directBody = JSON.stringify(JSON.parse(directDebugInfo.body))
+    const directBody = JSON.stringify(
+      JSON.parse(await readRequestDebugBody(client, directDebugInfo))
+    )
     assert(directBody.includes('direct renderer bounded task context'), 'direct messages omitted')
     assert(!directBody.includes('plain message 79'), 'direct messages were replaced by DB context')
     await client.request('agent/cancel', { runId: 'direct-bounded-run' }).catch(() => {})
@@ -478,7 +491,7 @@ async function main() {
       includeFullDebugBody: true
     })
     const debugInfo = await debugPromise
-    const body = JSON.parse(debugInfo.body)
+    const body = JSON.parse(await readRequestDebugBody(client, debugInfo))
     const serializedBody = JSON.stringify(body)
     assert(
       serializedBody.includes('Summary of messages 0 through 59'),
@@ -505,7 +518,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error)
-  process.exitCode = 1
-})
+if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(import.meta.filename)) {
+  main().catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+}

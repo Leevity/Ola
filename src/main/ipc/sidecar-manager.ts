@@ -48,7 +48,7 @@ import {
 import { getCronExecutionState } from '../cron/cron-agent-background'
 import { executeMcpToolFromMain, readMcpResourceFromMain } from './mcp-handlers'
 import { executeJsExtensionToolInMain } from './extension-js-runtime'
-import { readPermissionPolicySnapshot } from './settings-handlers'
+import { readPermissionPolicySnapshot, readProviderRetryMaxAttempts } from './settings-handlers'
 
 const SIDECAR_RENDERER_REQUEST_TIMEOUT_MS = 10 * 60_000
 const DEBUG_BODY_TEMP_DIR = join(tmpdir(), 'ola-request-debug-bodies')
@@ -872,6 +872,15 @@ export function registerSidecarHandlers(): void {
       if (permissionPolicy) {
         ;(enrichedParams as Record<string, unknown>).permissionPolicy = permissionPolicy
       }
+    }
+    if (
+      enrichedParams &&
+      typeof enrichedParams === 'object' &&
+      !Array.isArray(enrichedParams) &&
+      (enrichedParams as Record<string, unknown>).providerRetryMaxAttempts === undefined
+    ) {
+      ;(enrichedParams as Record<string, unknown>).providerRetryMaxAttempts =
+        readProviderRetryMaxAttempts()
     }
     try {
       const result = (await manager.request('agent/run', enrichedParams, 60_000)) as {

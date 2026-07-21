@@ -38,18 +38,27 @@ import { useChatStore } from '@renderer/stores/chat-store'
 import {
   clampMaxParallelToolCalls,
   clampMaxConcurrentSubAgents,
+  clampProviderRetryMaxAttempts,
   DEFAULT_THEME_MODE,
   DEFAULT_MAX_PARALLEL_TOOL_CALLS,
   DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
+  DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS,
   DEFAULT_SHELL_EXECUTION_ENDPOINT,
   MAX_MAX_PARALLEL_TOOL_CALLS,
   MIN_MAX_PARALLEL_TOOL_CALLS,
   MAX_MAX_CONCURRENT_SUB_AGENTS,
   MIN_MAX_CONCURRENT_SUB_AGENTS,
+  MIN_PROVIDER_RETRY_MAX_ATTEMPTS,
+  MAX_PROVIDER_RETRY_MAX_ATTEMPTS,
   resolveShellExecutable,
   type ShellExecutionEndpoint,
   useSettingsStore
 } from '@renderer/stores/settings-store'
+import {
+  clampCompressionThreshold,
+  MIN_CONTEXT_COMPRESSION_THRESHOLD,
+  MAX_CONTEXT_COMPRESSION_THRESHOLD
+} from '@renderer/lib/agent/context-compression'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
@@ -522,6 +531,22 @@ const menuGroupDefs: Array<{
 function GeneralPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
+  const providers = useProviderStore((state) => state.providers)
+  const compressionModels = providers.flatMap((provider) =>
+    provider.models
+      .filter(
+        (model) =>
+          model.enabled &&
+          (model.category ?? 'chat') === 'chat' &&
+          isProviderAvailableForModelSelection(provider)
+      )
+      .map((model) => ({
+        value: `${provider.id}::${model.id}`,
+        providerId: provider.id,
+        modelId: model.id,
+        label: `${provider.name} · ${model.name || model.id}`
+      }))
+  )
   const { setTheme } = useTheme()
   const currentVersion = normalizeVersion(packageJson.version ?? '0.0.0')
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
@@ -1297,6 +1322,40 @@ function GeneralPanel(): React.JSX.Element {
 
       <Separator />
 
+      {/* Provider Retry */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between max-w-lg">
+          <div>
+            <label className="text-sm font-medium">{t('general.providerRetryMaxAttempts')}</label>
+            <p className="text-xs text-muted-foreground">
+              {t('general.providerRetryMaxAttemptsDesc')}
+            </p>
+          </div>
+          <span className="text-sm font-mono text-muted-foreground">
+            {settings.providerRetryMaxAttempts}
+          </span>
+        </div>
+        <Slider
+          value={[settings.providerRetryMaxAttempts]}
+          onValueChange={([value]) =>
+            settings.updateSettings({
+              providerRetryMaxAttempts: clampProviderRetryMaxAttempts(value)
+            })
+          }
+          min={MIN_PROVIDER_RETRY_MAX_ATTEMPTS}
+          max={MAX_PROVIDER_RETRY_MAX_ATTEMPTS}
+          step={1}
+          className="max-w-lg"
+        />
+        <div className="flex items-center justify-between max-w-lg text-[10px] text-muted-foreground/60">
+          <span>{MIN_PROVIDER_RETRY_MAX_ATTEMPTS}</span>
+          <span>{DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS}</span>
+          <span>{MAX_PROVIDER_RETRY_MAX_ATTEMPTS}</span>
+        </div>
+      </section>
+
+      <Separator />
+
       {/* Context Compression */}
       <section className="space-y-3">
         <div className="flex items-center justify-between max-w-lg">
@@ -1312,9 +1371,76 @@ function GeneralPanel(): React.JSX.Element {
           />
         </div>
         {settings.contextCompressionEnabled && (
-          <p className="text-xs text-muted-foreground/70">
-            {t('general.contextCompressionEnabled')}
-          </p>
+          <div className="max-w-lg space-y-4">
+            <p className="text-xs text-muted-foreground/70">
+              {t('general.contextCompressionEnabled')}
+            </p>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium">
+                    {t('general.contextCompressionThreshold')}
+                  </label>
+                  <p className="text-xs text-muted-foreground">
+                    {t('general.contextCompressionThresholdDesc')}
+                  </p>
+                </div>
+                <span className="font-mono text-sm text-muted-foreground">
+                  {Math.round(settings.contextCompressionThreshold * 100)}%
+                </span>
+              </div>
+              <Slider
+                value={[settings.contextCompressionThreshold * 100]}
+                onValueChange={([value]) =>
+                  settings.updateSettings({
+                    contextCompressionThreshold: clampCompressionThreshold(value / 100)
+                  })
+                }
+                min={MIN_CONTEXT_COMPRESSION_THRESHOLD * 100}
+                max={MAX_CONTEXT_COMPRESSION_THRESHOLD * 100}
+                step={1}
+              />
+            </div>
+            <div className="space-y-2">
+              <div>
+                <label className="text-sm font-medium">
+                  {t('general.contextCompressionModel')}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  {t('general.contextCompressionModelDesc')}
+                </p>
+              </div>
+              <Select
+                value={
+                  settings.contextCompressionModel
+                    ? `${settings.contextCompressionModel.providerId}::${settings.contextCompressionModel.modelId}`
+                    : 'current'
+                }
+                onValueChange={(value) => {
+                  const selected = compressionModels.find((option) => option.value === value)
+                  settings.updateSettings({
+                    contextCompressionModel: selected
+                      ? { providerId: selected.providerId, modelId: selected.modelId }
+                      : null
+                  })
+                }}
+              >
+                <SelectTrigger className="w-full text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="current">
+                    {t('general.contextCompressionModelCurrent')}
+                  </SelectItem>
+                  {compressionModels.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
         )}
       </section>
 

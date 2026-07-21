@@ -89,7 +89,11 @@ internal sealed record AgentRuntimeStreamEvent(
     JsonElement? RequestModel = null,
     string? ThinkingEncryptedContent = null,
     string? ThinkingEncryptedProvider = null,
-    JsonElement? SubAgentToolCallExtraContent = null);
+    JsonElement? SubAgentToolCallExtraContent = null,
+    int? Attempt = null,
+    int? MaxAttempts = null,
+    int? DelayMs = null,
+    int? StatusCode = null);
 
 internal sealed record AgentRuntimeToolUseBlock(
     string Id,

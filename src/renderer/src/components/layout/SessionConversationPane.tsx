@@ -492,6 +492,7 @@ export function SessionConversationPane({
           onContinue={continueLastToolExecution}
           onEditUserMessage={editAndResend}
           onDeleteMessage={deleteMessage}
+          onCancelRequestRetry={stopStreaming}
         />
         <InputArea
           sessionId={resolvedSessionId}

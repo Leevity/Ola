@@ -40,6 +40,7 @@ interface MessageItemProps {
   orchestrationRun?: OrchestrationRun | null
   hiddenToolUseIds?: Set<string>
   requestRetryState?: RequestRetryState | null
+  onCancelRequestRetry?: () => void
 }
 
 // NOTE: getContentSignal / getToolUseInputSignal used to be called by areEqual for
@@ -118,7 +119,8 @@ function MessageItemInner({
   renderMode = 'default',
   orchestrationRun,
   hiddenToolUseIds,
-  requestRetryState
+  requestRetryState,
+  onCancelRequestRetry
 }: MessageItemProps): React.JSX.Element | null {
   if (message.id !== messageId) return null
 
@@ -174,6 +176,7 @@ function MessageItemInner({
             orchestrationRun={orchestrationRun}
             hiddenToolUseIds={hiddenToolUseIds}
             requestRetryState={isLastAssistantMessage ? requestRetryState : null}
+            onCancelRequestRetry={onCancelRequestRetry}
             requestDebugInfo={message.debugInfo}
             meta={message.meta}
           />
