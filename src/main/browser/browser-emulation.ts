@@ -267,6 +267,9 @@ export function getBuiltInBrowserStorageSessions(): Session[] {
 }
 
 export function flushBuiltInBrowserStorage(): void {
+  // A second-instance or very early startup failure can enter before-quit before Electron has
+  // created a session. Accessing session.defaultSession in that window throws synchronously.
+  if (!app.isReady()) return
   for (const browserSession of getBuiltInBrowserStorageSessions()) {
     try {
       browserSession.flushStorageData()

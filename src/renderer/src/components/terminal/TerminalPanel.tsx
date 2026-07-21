@@ -25,9 +25,9 @@ import {
 import { cn } from '@renderer/lib/utils'
 import { useTerminalStore } from '@renderer/stores/terminal-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
+import { useChatStore } from '@renderer/stores/chat-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
-import { useChatStore } from '@renderer/stores/chat-store'
 import { SshConnectionPicker } from './SshConnectionPicker'
 const LocalTerminal = lazy(() =>
   import('./LocalTerminal').then((m) => ({ default: m.LocalTerminal }))

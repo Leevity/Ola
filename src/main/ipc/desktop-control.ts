@@ -1,10 +1,11 @@
-import { desktopCapturer, screen } from 'electron'
+import { desktopCapturer, screen, systemPreferences } from 'electron'
 import { createRequire } from 'module'
 
 export const DESKTOP_SCREENSHOT_CAPTURE = 'desktop:screenshot:capture'
 export const DESKTOP_INPUT_CLICK = 'desktop:input:click'
 export const DESKTOP_INPUT_TYPE = 'desktop:input:type'
 export const DESKTOP_INPUT_SCROLL = 'desktop:input:scroll'
+export const DESKTOP_INPUT_STATUS = 'desktop:input:status'
 
 export interface DesktopScreenshotResult {
   success: boolean
@@ -29,6 +30,8 @@ export interface TypeArgs {
   text?: string | null
   key?: string | null
   hotkey?: string[] | null
+  action?: 'down' | 'up' | null
+  modifiers?: string[] | null
 }
 
 export interface ScrollArgs {
@@ -100,6 +103,16 @@ function getRobotUnavailableResult(): { success: false; error: string } {
   }
 }
 
+function inputPermissionError(): string | null {
+  if (process.platform !== 'darwin') return null
+  try {
+    if (systemPreferences.isTrustedAccessibilityClient(false)) return null
+  } catch {
+    // Treat an unavailable permission API as denied.
+  }
+  return 'Accessibility permission is required. Enable Ola in System Settings > Privacy & Security > Accessibility, then restart Ola.'
+}
+
 function isPointInsideDesktop(x: number, y: number): boolean {
   const bounds = screen.getAllDisplays().reduce(
     (acc, display) => ({
@@ -162,6 +175,8 @@ export function desktopInputClick(
   try {
     const robot = getRobot()
     if (!robot) return getRobotUnavailableResult()
+    const permissionError = inputPermissionError()
+    if (permissionError) return { success: false, error: permissionError }
 
     const x = Number(args.x)
     const y = Number(args.y)
@@ -170,6 +185,12 @@ export function desktopInputClick(
 
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       return { success: false, error: 'Invalid click coordinates.' }
+    }
+    if (!['left', 'right', 'middle'].includes(button)) {
+      return { success: false, error: 'Invalid mouse button.' }
+    }
+    if (!['click', 'double_click', 'down', 'up'].includes(action)) {
+      return { success: false, error: 'Invalid mouse action.' }
     }
 
     if (!isPointInsideDesktop(x, y)) {
@@ -201,16 +222,38 @@ export function desktopInputClick(
   }
 }
 
+export function desktopInputMove(
+  x: number,
+  y: number
+): { success: true } | { success: false; error: string } {
+  try {
+    const robot = getRobot()
+    if (!robot) return getRobotUnavailableResult()
+    const permissionError = inputPermissionError()
+    if (permissionError) return { success: false, error: permissionError }
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !isPointInsideDesktop(x, y)) {
+      return { success: false, error: 'Invalid pointer coordinates.' }
+    }
+    robot.setMouseDelay(0)
+    robot.moveMouse(Math.round(x), Math.round(y))
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
 export function desktopInputType(
   args: TypeArgs
 ):
   | { success: true; mode: 'text'; textLength: number }
-  | { success: true; mode: 'key'; key: string }
+  | { success: true; mode: 'key'; key: string; action?: 'down' | 'up' }
   | { success: true; mode: 'hotkey'; hotkey: string[] | null }
   | { success: false; error: string } {
   try {
     const robot = getRobot()
     if (!robot) return getRobotUnavailableResult()
+    const permissionError = inputPermissionError()
+    if (permissionError) return { success: false, error: permissionError }
 
     if (typeof args.text === 'string') {
       robot.setKeyboardDelay(0)
@@ -222,6 +265,18 @@ export function desktopInputType(
       const resolved = resolveRobotKey(args.key)
       if (!resolved) {
         return { success: false, error: `Unsupported key: ${args.key}.` }
+      }
+      if (args.action) {
+        const modifiers = (args.modifiers ?? []).map(resolveRobotKey)
+        if (modifiers.some((item) => item === null)) {
+          return { success: false, error: 'Key event contains an unsupported modifier.' }
+        }
+        robot.keyToggle(
+          resolved,
+          args.action,
+          modifiers.length === 0 ? undefined : (modifiers as string[])
+        )
+        return { success: true, mode: 'key', key: args.key, action: args.action }
       }
       robot.keyTap(resolved)
       return { success: true, mode: 'key', key: args.key }
@@ -260,6 +315,8 @@ export function desktopInputScroll(
   try {
     const robot = getRobot()
     if (!robot) return getRobotUnavailableResult()
+    const permissionError = inputPermissionError()
+    if (permissionError) return { success: false, error: permissionError }
 
     const x = args.x == null ? null : Number(args.x)
     const y = args.y == null ? null : Number(args.y)
@@ -304,6 +361,8 @@ export function desktopInputScroll(
 export function isDesktopInputAvailable(): { available: boolean; error?: string } {
   const robot = getRobot()
   if (robot) {
+    const permissionError = inputPermissionError()
+    if (permissionError) return { available: false, error: permissionError }
     return { available: true }
   }
 

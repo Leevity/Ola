@@ -20,6 +20,7 @@ import {
 } from '@renderer/lib/settings-route'
 
 export type AppMode = 'chat' | 'clarify' | 'cowork' | 'code' | 'acp'
+export type RemoteWorkspaceSection = 'ssh' | 'direct' | 'managed' | 'mobile'
 
 export type NavItem =
   | 'chat'
@@ -28,6 +29,7 @@ export type NavItem =
   | 'skills'
   | 'souls'
   | 'sync'
+  | 'remote'
   | 'draw'
   | 'translate'
   | 'tasks'
@@ -379,6 +381,11 @@ interface UIStore {
   syncPageOpen: boolean
   openSyncPage: () => void
   closeSyncPage: () => void
+  remotePageOpen: boolean
+  remoteWorkspaceSection: RemoteWorkspaceSection
+  openRemotePage: (section?: RemoteWorkspaceSection) => void
+  setRemoteWorkspaceSection: (section: RemoteWorkspaceSection) => void
+  closeRemotePage: () => void
   resourcesPageOpen: boolean
   openResourcesPage: () => void
   closeResourcesPage: () => void
@@ -676,6 +683,7 @@ const CHAT_SURFACE_NAV_RESET = {
   skillsPageOpen: false,
   soulsPageOpen: false,
   syncPageOpen: false,
+  remotePageOpen: false,
   resourcesPageOpen: false,
   translatePageOpen: false,
   drawPageOpen: false,
@@ -1276,6 +1284,7 @@ export const useUIStore = create<UIStore>()(
           skillsPageOpen: false,
           soulsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           translatePageOpen: false,
           drawPageOpen: false,
@@ -1304,6 +1313,7 @@ export const useUIStore = create<UIStore>()(
           settingsPageOpen: false,
           soulsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           translatePageOpen: false,
           drawPageOpen: false,
@@ -1319,6 +1329,7 @@ export const useUIStore = create<UIStore>()(
           settingsPageOpen: false,
           skillsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           translatePageOpen: false,
           drawPageOpen: false,
@@ -1334,6 +1345,7 @@ export const useUIStore = create<UIStore>()(
           settingsPageOpen: false,
           skillsPageOpen: false,
           soulsPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           translatePageOpen: false,
           drawPageOpen: false,
@@ -1341,6 +1353,25 @@ export const useUIStore = create<UIStore>()(
           ...closeRightSidePanels()
         }),
       closeSyncPage: () => set({ syncPageOpen: false }),
+      remotePageOpen: false,
+      remoteWorkspaceSection: 'ssh',
+      openRemotePage: (section) =>
+        set({
+          activeNavItem: 'remote',
+          remotePageOpen: true,
+          ...(section ? { remoteWorkspaceSection: section } : {}),
+          settingsPageOpen: false,
+          skillsPageOpen: false,
+          soulsPageOpen: false,
+          syncPageOpen: false,
+          resourcesPageOpen: false,
+          translatePageOpen: false,
+          drawPageOpen: false,
+          tasksPageOpen: false,
+          ...closeRightSidePanels()
+        }),
+      setRemoteWorkspaceSection: (remoteWorkspaceSection) => set({ remoteWorkspaceSection }),
+      closeRemotePage: () => set({ remotePageOpen: false }),
       resourcesPageOpen: false,
       openResourcesPage: () =>
         set({
@@ -1350,6 +1381,7 @@ export const useUIStore = create<UIStore>()(
           skillsPageOpen: false,
           soulsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           translatePageOpen: false,
           drawPageOpen: false,
           tasksPageOpen: false,
@@ -1365,6 +1397,7 @@ export const useUIStore = create<UIStore>()(
           skillsPageOpen: false,
           soulsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           drawPageOpen: false,
           tasksPageOpen: false,
@@ -1380,6 +1413,7 @@ export const useUIStore = create<UIStore>()(
           skillsPageOpen: false,
           soulsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           translatePageOpen: false,
           tasksPageOpen: false,
@@ -1395,6 +1429,7 @@ export const useUIStore = create<UIStore>()(
           skillsPageOpen: false,
           soulsPageOpen: false,
           syncPageOpen: false,
+          remotePageOpen: false,
           resourcesPageOpen: false,
           translatePageOpen: false,
           drawPageOpen: false,
@@ -2049,6 +2084,7 @@ export const useUIStore = create<UIStore>()(
         workingFolderPanelWidth: clampWorkingFolderPanelWidth(state.workingFolderPanelWidth),
         agentFilesActiveTabBySurface: state.agentFilesActiveTabBySurface,
         agentFilesChangeSource: state.agentFilesChangeSource,
+        remoteWorkspaceSection: state.remoteWorkspaceSection,
         bottomTerminalDockOpenByProjectId: state.bottomTerminalDockOpenByProjectId,
         bottomTerminalDockHeight: clampBottomTerminalDockHeight(state.bottomTerminalDockHeight)
       }),

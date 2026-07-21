@@ -57,6 +57,7 @@ import { ChannelManager } from './channels/channel-manager'
 import { autoConnectMcpServers, registerMcpHandlers } from './ipc/mcp-handlers'
 import { registerCronHandlers } from './ipc/cron-handlers'
 import { registerInputHandlers } from './ipc/input-handlers'
+import { closeAllRemoteSessions, registerRemoteHandlers } from './ipc/remote-handlers'
 import { registerNotifyHandlers } from './ipc/notify-handlers'
 import {
   installBuiltinPets,
@@ -952,7 +953,7 @@ function createTray(): void {
       click: () => showMainWindow()
     },
     {
-      label: 'Open SSH',
+      label: 'Open Remote Workbench',
 
       click: () => showSshWindow()
     },
@@ -1222,6 +1223,7 @@ app.on('before-quit', (event) => {
   if (quitStateFlushed) {
     flushBuiltInBrowserStorage()
     void flushSettingsSync()
+    closeAllRemoteSessions()
     void stopNativeWorker()
     return
   }
@@ -1236,6 +1238,7 @@ app.on('before-quit', (event) => {
     quitStateFlushed = true
     flushBuiltInBrowserStorage()
     void flushSettingsSync()
+    closeAllRemoteSessions()
     void stopNativeWorker()
     app.quit()
   })()
@@ -1390,6 +1393,7 @@ if (gotSingleInstanceLock) {
     registerCronHandlers()
     registerScreenshotHandlers()
     registerInputHandlers()
+    registerRemoteHandlers()
 
     registerSidecarHandlers()
     registerTeamRuntimeHandlers()
@@ -1532,6 +1536,7 @@ app.on('window-all-closed', () => {
   killAllManagedProcesses()
   killAllTerminalSessions()
   closeAllSshSessions()
+  closeAllRemoteSessions()
   cancelAllJobs()
   void stopNativeWorker()
   getSidecarManager()

@@ -39,6 +39,13 @@ import {
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import { Button } from '@renderer/components/ui/button'
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -796,8 +803,8 @@ function HostsWorkspace({
   return (
     <>
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#141414] text-white">
-        <div className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] border-b border-[#2d2d2d]">
-          <div className="flex items-center gap-2 px-3 py-3">
+        <div className="grid h-14 shrink-0 grid-cols-[auto_minmax(0,1fr)] border-b border-[#2d2d2d]">
+          <div className="flex items-center gap-2 px-3">
             <button
               type="button"
               className="inline-flex items-center gap-1 rounded-[8px] px-2 py-1 text-[13px] text-[#d4d4d8] hover:bg-[#212121] hover:text-white"
@@ -808,7 +815,9 @@ function HostsWorkspace({
               ) : (
                 <PanelLeftClose className="size-4" />
               )}
-              {!sidebarCollapsed ? <span>收起</span> : null}
+              {!sidebarCollapsed ? (
+                <span>{t('workspace.collapse', { defaultValue: 'Collapse' })}</span>
+              ) : null}
             </button>
             <button
               type="button"
@@ -818,85 +827,62 @@ function HostsWorkspace({
               <RefreshCw className="size-4" />
             </button>
             {!sidebarCollapsed ? (
-              <>
-                <button
-                  type="button"
-                  className="rounded-[8px] border border-[#3a3a3a] px-3 py-1.5 text-[13px] text-[#f5f5f5] hover:bg-[#212121]"
-                  onClick={() => {
-                    setEditingGroup(null)
-                    setGroupDialogOpen(true)
-                  }}
-                >
-                  + 分组
-                </button>
-                <button
-                  type="button"
-                  className="rounded-[8px] border border-[#3a3a3a] px-3 py-1.5 text-[13px] text-[#f5f5f5] hover:bg-[#212121]"
-                  onClick={startCreateConnection}
-                >
-                  + SSH
-                </button>
-              </>
+              <button
+                type="button"
+                className="rounded-[8px] bg-[#38b768] px-3 py-1.5 text-[13px] font-medium text-white hover:bg-[#45c874]"
+                onClick={startCreateConnection}
+              >
+                <Plus className="mr-1 inline size-3.5" />
+                {t('newConnection')}
+              </button>
             ) : null}
           </div>
 
-          <div className="flex items-center gap-3 px-4 py-3">
-            <button
-              type="button"
-              className={cn(
-                'rounded-[8px] px-3 py-1.5 text-[13px]',
-                selectedGroupId == null
-                  ? 'bg-[#232323] text-white'
-                  : 'text-[#b6b6b6] hover:bg-[#212121]'
-              )}
-              onClick={() => setSelectedGroupId(null)}
-            >
-              全部
-            </button>
-
-            <div className="relative min-w-[320px] max-w-[520px] flex-1">
+          <div className="flex items-center gap-3 px-4">
+            <div className="relative min-w-[260px] max-w-[560px] flex-1">
               <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#71717a]" />
               <input
                 value={searchQuery}
                 onChange={(event) => setSearchQuery(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
-                placeholder="ssh root@** / 搜索"
+                placeholder={t('workspace.searchOrConnect', {
+                  defaultValue: 'Search hosts or enter ssh user@host'
+                })}
                 className="h-10 w-full rounded-[8px] border border-[#3a3a3a] bg-[#191919] pl-10 pr-4 text-[13px] text-[#f5f5f5] outline-none placeholder:text-[#71717a]"
               />
             </div>
 
-            <button type="button" className="text-[13px] font-medium text-[#30c56b]">
-              查看雨云服务器🔥
-            </button>
-
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-[8px] border border-[#3a3a3a] text-[#d4d4d8] hover:bg-[#212121] hover:text-white"
-                onClick={() => setImportOpen(true)}
-              >
-                <FolderSync className="size-4" />
-              </button>
-              <button
-                type="button"
-                className="inline-flex size-8 items-center justify-center rounded-[8px] border border-[#3a3a3a] text-[#d4d4d8] hover:bg-[#212121] hover:text-white"
-                onClick={() => void handleExportAll()}
-              >
-                <Download className="size-4" />
-              </button>
-              <button
-                type="button"
-                className="rounded-[8px] border border-[#2d7d48] bg-[#173620] px-3 py-1.5 text-[13px] text-[#6ee787]"
-              >
-                本地仓库
-              </button>
-              <button
-                type="button"
-                className="rounded-[8px] px-3 py-1.5 text-[13px] text-[#b6b6b6] hover:bg-[#212121] hover:text-white"
-              >
-                云端仓库
-              </button>
-            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="ml-auto inline-flex size-9 items-center justify-center rounded-[8px] border border-[#3a3a3a] text-[#d4d4d8] hover:bg-[#212121] hover:text-white"
+                  title={t('workspace.moreTools', { defaultValue: 'More tools' })}
+                >
+                  <MoreHorizontal className="size-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setEditingGroup(null)
+                    setGroupDialogOpen(true)
+                  }}
+                >
+                  <Folder className="size-4" />
+                  {t('workspace.newGroup', { defaultValue: 'New group' })}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setImportOpen(true)}>
+                  <FolderSync className="size-4" />
+                  {t('migration.importTitle', { defaultValue: 'Import connections' })}
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => void handleExportAll()}>
+                  <Download className="size-4" />
+                  {t('migration.exportTitle', { defaultValue: 'Export connections' })}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 

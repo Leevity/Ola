@@ -1,0 +1,74 @@
+services:
+  ola-remote:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    environment:
+      OLA_REMOTE_API_ADDR: ':7300'
+      OLA_REMOTE_SIGNAL_ADDR: ':7301'
+      OLA_REMOTE_JWT_SECRET: '${OLA_REMOTE_JWT_SECRET:?set OLA_REMOTE_JWT_SECRET}'
+      OLA_REMOTE_DATABASE_URL: 'postgres://ola:ola_remote_dev@postgres:5432/ola_remote?sslmode=disable'
+      OLA_REMOTE_REDIS_ADDR: 'redis:6379'
+      OLA_REMOTE_STUN_URL: 'stun:stun.l.google.com:19302'
+      OLA_REMOTE_TURN_URL: '${OLA_REMOTE_TURN_URL:?set public OLA_REMOTE_TURN_URL}'
+      OLA_REMOTE_TURN_SECRET: '${OLA_REMOTE_TURN_SECRET:?set OLA_REMOTE_TURN_SECRET}'
+    ports:
+      - '7300:7300'
+      - '7301:7301'
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://127.0.0.1:7300/healthz >/dev/null']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ola_remote
+      POSTGRES_USER: ola
+      POSTGRES_PASSWORD: ola_remote_dev
+    ports:
+      - '7432:5432'
+    volumes:
+      - ola_remote_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ola -d ola_remote']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '7379:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  coturn:
+    image: coturn/coturn:4.6
+    command:
+      [
+        '-c',
+        '/etc/coturn/turnserver.conf',
+        '--use-auth-secret',
+        '--static-auth-secret=${OLA_REMOTE_TURN_SECRET:?set OLA_REMOTE_TURN_SECRET}',
+        '--external-ip=${OLA_REMOTE_TURN_EXTERNAL_IP:?set public TURN IP}'
+      ]
+    volumes:
+      - ./coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+    ports:
+      - '3478:3478/udp'
+      - '3478:3478/tcp'
+      - '49160-49200:49160-49200/udp'
+
+volumes:
+  ola_remote_pg:

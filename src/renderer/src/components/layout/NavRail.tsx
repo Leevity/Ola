@@ -4,7 +4,7 @@ import {
   FolderOpen,
   Image,
   MessageSquare,
-  Monitor,
+  Server,
   Settings,
   Sparkles,
   Wand2
@@ -17,15 +17,15 @@ import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import packageJson from '../../../../../package.json'
 
-const navItems: { value: NavItem | 'ssh'; icon: React.ReactNode; labelKey: string }[] = [
+const navItems: { value: NavItem; icon: React.ReactNode; labelKey: string }[] = [
   { value: 'chat', icon: <MessageSquare className="size-5" />, labelKey: 'navRail.conversations' },
   { value: 'tasks', icon: <CalendarDays className="size-5" />, labelKey: 'navRail.tasks' },
   { value: 'resources', icon: <FolderOpen className="size-5" />, labelKey: 'navRail.resources' },
+  { value: 'remote', icon: <Server className="size-5" />, labelKey: 'navRail.remote' },
   { value: 'skills', icon: <Wand2 className="size-5" />, labelKey: 'navRail.skills' },
   { value: 'souls', icon: <Sparkles className="size-5" />, labelKey: 'navRail.souls' },
   { value: 'sync', icon: <CloudSync className="size-5" />, labelKey: 'navRail.sync' },
-  { value: 'draw', icon: <Image className="size-5" />, labelKey: 'navRail.draw' },
-  { value: 'ssh', icon: <Monitor className="size-5" />, labelKey: 'navRail.ssh' }
+  { value: 'draw', icon: <Image className="size-5" />, labelKey: 'navRail.draw' }
 ]
 
 export function NavRail(): React.JSX.Element {
@@ -36,12 +36,13 @@ export function NavRail(): React.JSX.Element {
   const skillsPageOpen = useUIStore((s) => s.skillsPageOpen)
   const soulsPageOpen = useUIStore((s) => s.soulsPageOpen)
   const syncPageOpen = useUIStore((s) => s.syncPageOpen)
+  const remotePageOpen = useUIStore((s) => s.remotePageOpen)
   const resourcesPageOpen = useUIStore((s) => s.resourcesPageOpen)
   const drawPageOpen = useUIStore((s) => s.drawPageOpen)
   const translatePageOpen = useUIStore((s) => s.translatePageOpen)
   const tasksPageOpen = useUIStore((s) => s.tasksPageOpen)
 
-  const handleNavClick = (item: NavItem | 'ssh'): void => {
+  const handleNavClick = (item: NavItem): void => {
     if (item === 'tasks') {
       useUIStore.getState().openTasksPage()
       return
@@ -62,6 +63,10 @@ export function NavRail(): React.JSX.Element {
       useUIStore.getState().openResourcesPage()
       return
     }
+    if (item === 'remote') {
+      void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
+      return
+    }
     if (item === 'draw') {
       useUIStore.getState().openDrawPage()
       return
@@ -70,16 +75,13 @@ export function NavRail(): React.JSX.Element {
       useUIStore.getState().openTranslatePage()
       return
     }
-    if (item === 'ssh') {
-      void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
-      return
-    }
     // Close skills/settings pages when navigating to chat
     const ui = useUIStore.getState()
     if (ui.settingsPageOpen) ui.closeSettingsPage()
     if (ui.skillsPageOpen) ui.closeSkillsPage()
     if (ui.soulsPageOpen) ui.closeSoulsPage()
     if (ui.syncPageOpen) ui.closeSyncPage()
+    if (ui.remotePageOpen) ui.closeRemotePage()
     if (ui.resourcesPageOpen) ui.closeResourcesPage()
     if (ui.drawPageOpen) ui.closeDrawPage()
     if (ui.translatePageOpen) ui.closeTranslatePage()
@@ -108,6 +110,7 @@ export function NavRail(): React.JSX.Element {
                   'flex size-9 items-center justify-center rounded-lg transition-all duration-200',
                   (item.value === 'tasks' && tasksPageOpen) ||
                     (item.value === 'resources' && resourcesPageOpen) ||
+                    (item.value === 'remote' && remotePageOpen) ||
                     (item.value === 'skills' && skillsPageOpen) ||
                     (item.value === 'souls' && soulsPageOpen) ||
                     (item.value === 'sync' && syncPageOpen) ||
@@ -116,12 +119,12 @@ export function NavRail(): React.JSX.Element {
                     (![
                       'tasks',
                       'resources',
+                      'remote',
                       'skills',
                       'souls',
                       'sync',
                       'draw',
-                      'translate',
-                      'ssh'
+                      'translate'
                     ].includes(item.value) &&
                       activeNavItem === item.value &&
                       leftSidebarOpen)

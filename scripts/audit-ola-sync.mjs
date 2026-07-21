@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
+
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { readFile, readdir, writeFile, mkdir } from 'node:fs/promises'
@@ -102,7 +104,11 @@ function compareFiles(olaFiles, referenceFiles) {
     else if (!reference) buckets.onlyOla.push({ canonicalPath: key, olaPath: ola.path })
     else if (ola.hash === reference.hash) buckets.identical.push({ canonicalPath: key })
     else if (ola.normalizedHash === reference.normalizedHash) {
-      buckets.brandOnly.push({ canonicalPath: key, olaPath: ola.path, referencePath: reference.path })
+      buckets.brandOnly.push({
+        canonicalPath: key,
+        olaPath: ola.path,
+        referencePath: reference.path
+      })
     } else {
       buckets.changed.push({ canonicalPath: key, olaPath: ola.path, referencePath: reference.path })
     }
@@ -139,8 +145,9 @@ function extractCatalog(sources) {
     /type SettingsTab\s*=([\s\S]*?)(?:\n\n|;)/g
   ]).flatMap((block) => [...block.matchAll(/["']([^"']+)["']/g)].map((match) => match[1]))
   const nativeModules = sources
-    .filter(({ relativePath, content }) =>
-      relativePath.includes('/Modules/') && /class\s+\w+Module\b/.test(content)
+    .filter(
+      ({ relativePath, content }) =>
+        relativePath.includes('/Modules/') && /class\s+\w+Module\b/.test(content)
     )
     .map(({ relativePath }) => relativePath.split('/Modules/')[1].split('/')[0])
   return {
@@ -202,7 +209,10 @@ async function buildAudit(referenceRoot) {
   const olaCatalog = extractCatalog(olaSources)
   const referenceCatalog = extractCatalog(referenceSources)
   const catalog = Object.fromEntries(
-    Object.keys(olaCatalog).map((key) => [key, compareLists(olaCatalog[key], referenceCatalog[key])])
+    Object.keys(olaCatalog).map((key) => [
+      key,
+      compareLists(olaCatalog[key], referenceCatalog[key])
+    ])
   )
   return {
     schemaVersion: 1,
@@ -240,7 +250,8 @@ async function main() {
   }
   if (args.check) {
     const current = await readFile(baselinePath, 'utf8')
-    if (current !== json) throw new Error('Sync audit baseline is stale. Run npm run audit:sync:write')
+    if (current !== json)
+      throw new Error('Sync audit baseline is stale. Run npm run audit:sync:write')
     console.log('sync audit baseline is current')
   }
   if (args.json) process.stdout.write(json)

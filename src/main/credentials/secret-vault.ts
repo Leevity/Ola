@@ -10,7 +10,7 @@
 
 import { app, safeStorage } from 'electron'
 import { randomUUID } from 'crypto'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type {
@@ -82,7 +82,22 @@ function readIndex(): CredentialIndex {
 }
 
 function writeIndex(index: CredentialIndex): void {
-  writeFileSync(getIndexPath(), JSON.stringify(index, null, 2), 'utf8')
+  writeAtomic(getIndexPath(), Buffer.from(JSON.stringify(index, null, 2), 'utf8'))
+}
+
+function writeAtomic(target: string, contents: Buffer): void {
+  const temporary = `${target}.${randomUUID()}.tmp`
+  try {
+    writeFileSync(temporary, contents, { mode: 0o600 })
+    renameSync(temporary, target)
+  } catch (error) {
+    try {
+      unlinkSync(temporary)
+    } catch {
+      // The temporary file may not have been created.
+    }
+    throw error
+  }
 }
 
 // In-memory decrypted cache. Loaded lazily on first access.
@@ -123,7 +138,7 @@ function persistPlaintextCache(): void {
   for (const [k, v] of getPlaintextCache().entries()) obj[k] = v
   const json = JSON.stringify(obj)
   const encrypted = safeStorage.encryptString(json)
-  writeFileSync(getVaultPath(), encrypted)
+  writeAtomic(getVaultPath(), encrypted)
 }
 
 export function isSafeStorageAvailable(): boolean {
@@ -221,6 +236,12 @@ export function listCredentials(filter?: { domain?: string; projectId?: string }
       return true
     })
     .map((entry) => toCredentialRef(entry, index))
+}
+
+export function getCredentialRef(id: string): CredentialRef | null {
+  const index = readIndex()
+  const entry = index.entries.find((item) => item.id === id)
+  return entry ? toCredentialRef(entry, index) : null
 }
 
 export function deleteCredential(id: string): boolean {
