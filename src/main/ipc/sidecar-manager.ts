@@ -48,6 +48,7 @@ import {
 import { getCronExecutionState } from '../cron/cron-agent-background'
 import { executeMcpToolFromMain, readMcpResourceFromMain } from './mcp-handlers'
 import { executeJsExtensionToolInMain } from './extension-js-runtime'
+import { readPermissionPolicySnapshot } from './settings-handlers'
 
 const SIDECAR_RENDERER_REQUEST_TIMEOUT_MS = 10 * 60_000
 const DEBUG_BODY_TEMP_DIR = join(tmpdir(), 'ola-request-debug-bodies')
@@ -861,6 +862,17 @@ export function registerSidecarHandlers(): void {
     const ready = await manager.ensureStarted()
     if (!ready) throw new Error('SIDECAR_UNAVAILABLE')
     const enrichedParams = await prepareGoalAwareAgentRunParams(params, manager)
+    if (
+      enrichedParams &&
+      typeof enrichedParams === 'object' &&
+      !Array.isArray(enrichedParams) &&
+      (enrichedParams as Record<string, unknown>).permissionPolicy === undefined
+    ) {
+      const permissionPolicy = readPermissionPolicySnapshot()
+      if (permissionPolicy) {
+        ;(enrichedParams as Record<string, unknown>).permissionPolicy = permissionPolicy
+      }
+    }
     try {
       const result = (await manager.request('agent/run', enrichedParams, 60_000)) as {
         started: boolean

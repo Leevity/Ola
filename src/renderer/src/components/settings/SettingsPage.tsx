@@ -27,11 +27,13 @@ import {
   Code2,
   Network,
   PawPrint,
-  KeyRound
+  KeyRound,
+  ShieldCheck
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { AnimatePresence } from 'motion/react'
 import { useUIStore, type SettingsTab } from '@renderer/stores/ui-store'
+import { PermissionPanel } from './PermissionPanel'
 import { useChatStore } from '@renderer/stores/chat-store'
 import {
   clampMaxParallelToolCalls,
@@ -429,6 +431,12 @@ const menuGroupDefs: Array<{
         icon: <Terminal className="size-4" />,
         labelKey: 'system.title',
         descKey: 'system.subtitle'
+      },
+      {
+        id: 'permission',
+        icon: <ShieldCheck className="size-4" />,
+        labelKey: 'permission.title',
+        descKey: 'permission.subtitle'
       }
     ]
   },
@@ -3602,6 +3610,7 @@ function AboutPanel(): React.JSX.Element {
 const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   general: GeneralPanel,
   system: SystemPanel,
+  permission: PermissionPanel,
   memory: MemoryPanel,
   analytics: AnalyticsPanel,
   provider: ProviderPanel,

@@ -1,6 +1,11 @@
 import { session } from 'electron'
 import { getNativeWorker } from '../lib/native-worker'
 import { registerMessagePackHandler } from './messagepack-handler'
+import {
+  sanitizePermissionPolicy,
+  toPermissionPolicySnapshot,
+  type PermissionPolicySnapshot
+} from '../../shared/permission-policy'
 
 const SETTINGS_NATIVE_TIMEOUT_MS = 60_000
 
@@ -88,6 +93,12 @@ export function readShellEnvironmentVariablesText(): string {
   return typeof persistedSettings.shellEnvironmentVariablesText === 'string'
     ? persistedSettings.shellEnvironmentVariablesText
     : ''
+}
+
+export function readPermissionPolicySnapshot(): PermissionPolicySnapshot | undefined {
+  return toPermissionPolicySnapshot(
+    sanitizePermissionPolicy(readPersistedSettingsState().permissionPolicy)
+  )
 }
 
 export async function flushSettingsSync(): Promise<void> {

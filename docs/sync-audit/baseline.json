@@ -3,7 +3,7 @@
   "baseline": {
     "ola": {
       "version": "1.0.3",
-      "sourceFingerprint": "b818282b279178ca8ef80029e679a523ebf9dfddeff1962097b2c5326eca5e44"
+      "sourceFingerprint": "26666759b47ec518e1a816dce326c1980839ebe0578d6989d19cc35caafc6322"
     },
     "reference": {
       "product": "OpenCowork",
@@ -24,11 +24,11 @@
   ],
   "summary": {
     "files": {
-      "identical": 430,
+      "identical": 434,
       "brandOnly": 26,
-      "changed": 315,
+      "changed": 314,
       "onlyOla": 88,
-      "onlyReference": 394
+      "onlyReference": 391
     }
   },
   "capabilities": {
@@ -1204,7 +1204,7 @@
     "Agent": {
       "decision": "adapt",
       "reason": "Review runtime, history, permissions, retries, drafts, and execution UX as vertical slices.",
-      "count": 23,
+      "count": 20,
       "files": [
         {
           "canonicalPath": "scripts/verify-sub-agent-history.mjs",
@@ -1217,10 +1217,6 @@
         {
           "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIPromptCache.cs",
           "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIPromptCache.cs"
-        },
-        {
-          "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs",
-          "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs"
         },
         {
           "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeProviderRetryPolicy.cs",
@@ -1263,10 +1259,6 @@
           "referencePath": "src/renderer/src/components/layout/sub-agent-visuals.tsx"
         },
         {
-          "canonicalPath": "src/renderer/src/components/settings/PermissionPanel.tsx",
-          "referencePath": "src/renderer/src/components/settings/PermissionPanel.tsx"
-        },
-        {
           "canonicalPath": "src/renderer/src/components/settings/pet/PetAgentTab.tsx",
           "referencePath": "src/renderer/src/components/settings/pet/PetAgentTab.tsx"
         },
@@ -1293,10 +1285,6 @@
         {
           "canonicalPath": "src/shared/input-draft-types.ts",
           "referencePath": "src/shared/input-draft-types.ts"
-        },
-        {
-          "canonicalPath": "src/shared/permission-policy.ts",
-          "referencePath": "src/shared/permission-policy.ts"
         }
       ]
     },
@@ -1740,6 +1728,9 @@
       },
       {
         "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIResponsesImageGeneration.cs"
+      },
+      {
+        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs"
       },
       {
         "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePluginExecutor.cs"
@@ -2270,6 +2261,9 @@
         "canonicalPath": "src/renderer/src/components/cowork/FileTreePanel.tsx"
       },
       {
+        "canonicalPath": "src/renderer/src/components/cowork/PermissionDialog.tsx"
+      },
+      {
         "canonicalPath": "src/renderer/src/components/cowork/PlanPanel.tsx"
       },
       {
@@ -2331,6 +2325,9 @@
       },
       {
         "canonicalPath": "src/renderer/src/components/settings/MigrationPanel.tsx"
+      },
+      {
+        "canonicalPath": "src/renderer/src/components/settings/PermissionPanel.tsx"
       },
       {
         "canonicalPath": "src/renderer/src/components/settings/PluginPanel.tsx"
@@ -2940,6 +2937,9 @@
       },
       {
         "canonicalPath": "src/shared/openai-responses-session.ts"
+      },
+      {
+        "canonicalPath": "src/shared/permission-policy.ts"
       },
       {
         "canonicalPath": "src/shared/shell-output-compactor.ts"
@@ -3818,11 +3818,6 @@
         "canonicalPath": "src/renderer/src/components/cowork/ContextPanel.tsx",
         "olaPath": "src/renderer/src/components/cowork/ContextPanel.tsx",
         "referencePath": "src/renderer/src/components/cowork/ContextPanel.tsx"
-      },
-      {
-        "canonicalPath": "src/renderer/src/components/cowork/PermissionDialog.tsx",
-        "olaPath": "src/renderer/src/components/cowork/PermissionDialog.tsx",
-        "referencePath": "src/renderer/src/components/cowork/PermissionDialog.tsx"
       },
       {
         "canonicalPath": "src/renderer/src/components/cowork/SkillsPanel.tsx",
@@ -5980,10 +5975,6 @@
         "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeOpenAIPromptCache.cs"
       },
       {
-        "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs",
-        "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimePermissionPolicy.cs"
-      },
-      {
         "canonicalPath": "sidecars/{PRODUCT}.Native.Worker/Modules/AgentRuntime/AgentRuntimeProviderRetryPolicy.cs",
         "referencePath": "sidecars/OpenCowork.Native.Worker/Modules/AgentRuntime/AgentRuntimeProviderRetryPolicy.cs"
       },
@@ -6380,10 +6371,6 @@
         "referencePath": "src/renderer/src/components/settings/HooksPanel.tsx"
       },
       {
-        "canonicalPath": "src/renderer/src/components/settings/PermissionPanel.tsx",
-        "referencePath": "src/renderer/src/components/settings/PermissionPanel.tsx"
-      },
-      {
         "canonicalPath": "src/renderer/src/components/settings/pet/PetAgentTab.tsx",
         "referencePath": "src/renderer/src/components/settings/pet/PetAgentTab.tsx"
       },
@@ -6582,10 +6569,6 @@
       {
         "canonicalPath": "src/shared/input-draft-types.ts",
         "referencePath": "src/shared/input-draft-types.ts"
-      },
-      {
-        "canonicalPath": "src/shared/permission-policy.ts",
-        "referencePath": "src/shared/permission-policy.ts"
       },
       {
         "canonicalPath": "src/shared/ssh/contract.ts",
@@ -7198,6 +7181,7 @@
         "memory",
         "model",
         "modelManagement",
+        "permission",
         "pet",
         "plugin",
         "provider",
@@ -7214,7 +7198,6 @@
         "codegraph",
         "hooks",
         "migration",
-        "permission",
         "profile"
       ]
     },

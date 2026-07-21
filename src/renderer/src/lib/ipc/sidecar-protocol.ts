@@ -12,6 +12,10 @@ import type { CompressionConfig } from '../agent/context-compression'
 import { resolveProviderUserAgent } from '../api/api-user-agent'
 import { summarizeToolInputForHistory } from '../tools/tool-input-sanitizer'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import {
+  toPermissionPolicySnapshot,
+  type PermissionPolicySnapshot
+} from '../../../../shared/permission-policy'
 
 export interface SidecarTextBlock {
   type: 'text'
@@ -213,6 +217,7 @@ export interface SidecarAgentRunRequest {
   workingFolder?: string
   maxIterations: number
   forceApproval: boolean
+  permissionPolicy?: PermissionPolicySnapshot
   maxParallelTools?: number
   compression?: CompressionConfig
   sessionMode?: 'agent' | 'chat'
@@ -595,6 +600,7 @@ export function buildSidecarAgentRunRequest(args: {
   }
 
   const maxParallelTools = normalizeMaxParallelTools(args.maxParallelTools)
+  const permissionPolicy = toPermissionPolicySnapshot(useSettingsStore.getState().permissionPolicy)
   const webSearch = mapSidecarWebSearchConfig(args.tools)
   const imagePluginProvider = args.imagePluginProvider
     ? mapSidecarProvider(args.imagePluginProvider)
@@ -626,6 +632,7 @@ export function buildSidecarAgentRunRequest(args: {
     ...(args.compression ? { compression: args.compression } : {}),
     maxIterations: args.maxIterations,
     forceApproval: args.forceApproval,
+    ...(permissionPolicy ? { permissionPolicy } : {}),
     ...(maxParallelTools !== undefined ? { maxParallelTools } : {}),
     ...(args.sessionMode ? { sessionMode: args.sessionMode } : {}),
     ...(args.planMode ? { planMode: true } : {}),
