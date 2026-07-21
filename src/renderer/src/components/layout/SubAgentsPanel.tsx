@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Bot,
@@ -194,6 +194,11 @@ export function SubAgentsPanel({
   const [now, setNow] = React.useState(() => Date.now())
   const [filter, setFilter] = React.useState<SubAgentPanelFilter>('all')
   const [expandedIds, setExpandedIds] = React.useState<Record<string, boolean>>({})
+
+  React.useEffect(() => {
+    if (!activeSessionId) return
+    void useAgentStore.getState().refreshSessionSubAgentHistory(activeSessionId)
+  }, [activeSessionId])
 
   const allAgents = React.useMemo(
     () =>

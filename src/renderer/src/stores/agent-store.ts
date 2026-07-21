@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { RequestRetryState, ToolCallState } from '../lib/agent/types'
@@ -21,6 +21,11 @@ import { compactBashToolResultContent } from '../lib/tools/bash-output'
 import { summarizeToolInputForHistory } from '../lib/tools/tool-input-sanitizer'
 import { calculateCacheReadRatio } from '../lib/agent/cache-shape'
 import { toMessagePackChannel } from '../../../shared/messagepack/binary-ipc'
+import {
+  getSessionSubAgentHistoryRows,
+  migrateLegacySubAgentHistory,
+  parseSubAgentHistorySnapshot
+} from './sub-agent-history-persist'
 
 // Approval resolvers live outside the store — they hold non-serializable
 // callbacks and don't need to trigger React re-renders.
@@ -857,13 +862,75 @@ async function hydrateAgentHistoryPersistence(): Promise<void> {
     if (migratedFromLegacy || agentHistoryPersistencePending) {
       queueAgentHistoryPersistence()
     }
+    void migrateLegacySubAgentHistoryToSqlite()
   } catch (error) {
     console.warn('[AgentStore] Failed to hydrate sub-agent history:', error)
     agentHistoryPersistenceHydrated = true
     if (agentHistoryPersistencePending) {
       queueAgentHistoryPersistence()
     }
+    void migrateLegacySubAgentHistoryToSqlite()
   }
+}
+
+async function migrateLegacySubAgentHistoryToSqlite(): Promise<void> {
+  await migrateLegacySubAgentHistory(async () => {
+    const persisted = await readPersistedAgentHistory()
+    return persisted.snapshot?.sessionSubAgentSummaries ?? {}
+  })
+}
+
+async function refreshSessionSubAgentHistoryFromSqlite(sessionId: string): Promise<void> {
+  if (!sessionId) return
+  const rows = await getSessionSubAgentHistoryRows(sessionId, 50)
+  if (!rows.length && !rows) {
+    return
+  }
+  const live = useAgentStore.getState()
+  const liveToolUseIds = new Set<string>()
+  const cached = live.sessionSubAgentLiveCache[sessionId]
+  if (cached) {
+    for (const key of Object.keys(cached.active)) liveToolUseIds.add(key)
+    for (const key of Object.keys(cached.completed)) liveToolUseIds.add(key)
+  }
+  const existing = live.sessionSubAgentSummaries[sessionId] ?? []
+  const fetchedSummaries: SubAgentState[] = []
+  for (const row of rows) {
+    if (row.status === 'running') continue
+    const snapshot = parseSubAgentHistorySnapshot(row)
+    if (!snapshot) continue
+    const toolUseId =
+      typeof snapshot.toolUseId === 'string' ? snapshot.toolUseId : row.toolUseId
+    if (!toolUseId) continue
+    const hydrated: SubAgentState = {
+      ...(snapshot as unknown as SubAgentState),
+      toolUseId,
+      sessionId
+    }
+    fetchedSummaries.push(hydrated)
+  }
+  if (fetchedSummaries.length === 0) return
+  useAgentStore.setState((state) => {
+    const seen = new Set<string>()
+    const merged: SubAgentState[] = []
+    for (const sa of fetchedSummaries) {
+      if (liveToolUseIds.has(sa.toolUseId)) continue
+      if (seen.has(sa.toolUseId)) continue
+      seen.add(sa.toolUseId)
+      merged.push(sa)
+    }
+    for (const sa of state.sessionSubAgentSummaries[sessionId] ?? existing) {
+      if (sa.isRunning) {
+        merged.unshift(sa)
+        continue
+      }
+      if (liveToolUseIds.has(sa.toolUseId)) continue
+      if (seen.has(sa.toolUseId)) continue
+      seen.add(sa.toolUseId)
+      merged.push(sa)
+    }
+    state.sessionSubAgentSummaries[sessionId] = merged.slice(0, MAX_SUBAGENT_HISTORY)
+  })
 }
 
 function cloneToolCallArray(toolCalls: ToolCallState[]): ToolCallState[] {
@@ -1346,6 +1413,9 @@ interface AgentStore {
   clearSessionData: (sessionId: string) => void
   releaseDormantSessionData: (residentSessionIds: string[]) => void
   compactMemoryFootprint: () => void
+
+  /** Refresh the in-memory session summary list from SQLite (post-reload / fallback). */
+  refreshSessionSubAgentHistory: (sessionId: string) => Promise<void>
 
   // Approval flow
   requestApproval: (toolCallId: string) => Promise<boolean>
@@ -2254,6 +2324,10 @@ export const useAgentStore = create<AgentStore>()(
           resolve(false)
         }
         approvalResolvers.clear()
+      },
+
+      refreshSessionSubAgentHistory: async (sessionId) => {
+        await refreshSessionSubAgentHistoryFromSqlite(sessionId)
       },
 
       requestApproval: (toolCallId) => {
