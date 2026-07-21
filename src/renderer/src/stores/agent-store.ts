@@ -22,9 +22,12 @@ import { summarizeToolInputForHistory } from '../lib/tools/tool-input-sanitizer'
 import { calculateCacheReadRatio } from '../lib/agent/cache-shape'
 import { toMessagePackChannel } from '../../../shared/messagepack/binary-ipc'
 import {
+  buildSubAgentHistoryUpsert,
+  flushSubAgentHistoryApplyNow,
   getSessionSubAgentHistoryRows,
   migrateLegacySubAgentHistory,
-  parseSubAgentHistorySnapshot
+  parseSubAgentHistorySnapshot,
+  scheduleSubAgentHistoryApply
 } from './sub-agent-history-persist'
 
 // Approval resolvers live outside the store — they hold non-serializable
@@ -682,8 +685,30 @@ interface PersistedAgentHistoryState {
 
 let agentHistoryPersistenceHydrated = false
 let agentHistoryPersistencePending = false
-let agentHistoryPersistenceInFlight = false
 let agentHistoryPersistenceTimer: ReturnType<typeof setTimeout> | null = null
+
+function enqueueSubAgentHistoryApply(
+  sa: SubAgentState | null | undefined,
+  sessionId: string | undefined
+): void {
+  if (!sa) return
+  const sid = sa.sessionId ?? sessionId
+  if (!sid) return
+  try {
+    scheduleSubAgentHistoryApply(
+      buildSubAgentHistoryUpsert(
+        sa as unknown as Record<string, unknown>,
+        sid,
+        0
+      )
+    )
+  } catch (err) {
+    console.warn(
+      '[AgentStore] failed to schedule sub-agent history apply:',
+      err
+    )
+  }
+}
 
 function ensureSessionSubAgentLiveState(
   state: { sessionSubAgentLiveCache: Record<string, SessionSubAgentLiveState> },
@@ -806,36 +831,13 @@ async function readPersistedAgentHistory(): Promise<{
   }
 }
 
-function buildAgentHistoryPersistenceSnapshot(): PersistedAgentHistoryState {
-  const state = useAgentStore.getState()
-  return {
-    subAgentHistory: compactSubAgentListForPersistence(state.subAgentHistory),
-    sessionSubAgentSummaries: compactSessionSubAgentSummariesForPersistence(
-      state.sessionSubAgentSummaries
-    )
-  }
-}
-
 async function flushAgentHistoryPersistence(): Promise<void> {
+  // Sub-agent history now persists to the native sub_agent_history table via
+  // the streaming apply helpers in sub-agent-history-persist. The legacy
+  // localStorage write path is intentionally a no-op now; older builds will
+  // continue to mirror data to the IPC storage key until they refresh.
   if (!agentHistoryPersistenceHydrated) return
-  if (agentHistoryPersistenceInFlight) {
-    agentHistoryPersistencePending = true
-    return
-  }
-
-  agentHistoryPersistenceInFlight = true
-  agentHistoryPersistencePending = false
-  try {
-    await ipcStorage.setItem(
-      AGENT_HISTORY_STORAGE_KEY,
-      JSON.stringify(buildAgentHistoryPersistenceSnapshot())
-    )
-  } finally {
-    agentHistoryPersistenceInFlight = false
-    if (agentHistoryPersistencePending) {
-      queueAgentHistoryPersistence()
-    }
-  }
+  await flushSubAgentHistoryApplyNow()
 }
 
 function queueAgentHistoryPersistence(): void {
@@ -2127,6 +2129,7 @@ export const useAgentStore = create<AgentStore>()(
                   sa.currentAssistantMessageId = event.assistantMessage.id
                   sa.transcript.push(event.assistantMessage)
                 }
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2143,6 +2146,7 @@ export const useAgentStore = create<AgentStore>()(
                   event.thinkingEncryptedContent,
                   event.thinkingEncryptedProvider
                 )
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2158,6 +2162,7 @@ export const useAgentStore = create<AgentStore>()(
                     ? { extraContent: event.toolCallExtraContent }
                     : {})
                 })
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2165,17 +2170,24 @@ export const useAgentStore = create<AgentStore>()(
               const sa = findSubAgentState(state, id, sessionId)
               if (sa?.isRunning) {
                 updateToolUseInputInSubAgent(sa, event.toolCallId, event.partialInput)
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
             case 'sub_agent_tool_use_generated': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa?.isRunning) upsertToolUseBlockInSubAgent(sa, event.toolUseBlock)
+              if (sa?.isRunning) {
+                upsertToolUseBlockInSubAgent(sa, event.toolUseBlock)
+                enqueueSubAgentHistoryApply(sa, sessionId)
+              }
               break
             }
             case 'sub_agent_image_generated': {
               const sa = findSubAgentState(state, id, sessionId)
-              if (sa?.isRunning) appendBlockToSubAgent(sa, event.imageBlock)
+              if (sa?.isRunning) {
+                appendBlockToSubAgent(sa, event.imageBlock)
+                enqueueSubAgentHistoryApply(sa, sessionId)
+              }
               break
             }
             case 'sub_agent_image_error': {
@@ -2186,6 +2198,7 @@ export const useAgentStore = create<AgentStore>()(
                   code: event.imageError.code,
                   message: event.imageError.message
                 })
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2203,6 +2216,7 @@ export const useAgentStore = create<AgentStore>()(
                 if (event.usage) {
                   sa.usage = mergeMessageUsage(sa.usage, event.usage)
                 }
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2213,6 +2227,7 @@ export const useAgentStore = create<AgentStore>()(
                 trimSubAgentTranscript(sa)
                 upsertSubAgentHistory(state.subAgentHistory, sa)
                 shouldPersistSubAgentHistory = true
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2224,6 +2239,7 @@ export const useAgentStore = create<AgentStore>()(
                 trimSubAgentTranscript(sa)
                 upsertSubAgentHistory(state.subAgentHistory, sa)
                 shouldPersistSubAgentHistory = true
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2234,6 +2250,7 @@ export const useAgentStore = create<AgentStore>()(
                 sa.reportStatus = event.status
                 upsertSubAgentHistory(state.subAgentHistory, sa)
                 shouldPersistSubAgentHistory = true
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2259,6 +2276,7 @@ export const useAgentStore = create<AgentStore>()(
                 if (sa.toolCalls.length > MAX_TRACKED_SUBAGENT_TOOL_CALLS) {
                   sa.toolCalls.splice(0, sa.toolCalls.length - MAX_TRACKED_SUBAGENT_TOOL_CALLS)
                 }
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2270,6 +2288,7 @@ export const useAgentStore = create<AgentStore>()(
                   MAX_STREAMING_TEXT_CHARS
                 )
                 appendTextToSubAgent(sa, event.text)
+                enqueueSubAgentHistoryApply(sa, sessionId)
               }
               break
             }
@@ -2312,6 +2331,16 @@ export const useAgentStore = create<AgentStore>()(
         })
         if (shouldPersistSubAgentHistory) {
           queueAgentHistoryPersistence()
+          if (event.type === 'sub_agent_end') {
+            // end events flush immediately so the terminal state lands in the
+            // worker before any subsequent cancel races in
+            void flushSubAgentHistoryApplyNow().catch((err) => {
+              console.warn(
+                '[AgentStore] immediate sub-agent flush failed:',
+                err
+              )
+            })
+          }
         }
         if (!isAgentRuntimeSyncSuppressed()) {
           emitAgentRuntimeSync({ kind: 'subagent_event', event, sessionId })
