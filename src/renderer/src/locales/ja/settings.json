@@ -151,6 +151,8 @@
     "systemProxyDesc": "アプリ全体で使うプロキシ URL を設定します。例: http://127.0.0.1:7890 または http://host:port",
     "toolbarCollapsedByDefault": "ツールバーを既定で折りたたむ",
     "toolbarCollapsedByDefaultDesc": "既定ではオフです。アプリ起動時の左ツールバー状態を初期化します。",
+    "collapseExecutionRunsByDefault": "プロセスをデフォルトで折りたたむ",
+    "collapseExecutionRunsByDefaultDesc": "最終回答を目立たせつつ、ツールの詳細を展開可能な状態で保持します。オフにすると常に展開します。",
     "chinese": "ニュース",
     "english": "日本語 English",
     "systemPromptPlaceholder": "カスタム指示を追加...",

@@ -932,6 +932,23 @@
     "collapsedMessage": "メッセージの崩壊",
     "imagesCollapsed": "{{count}}画像"
   },
+  "executionRun": {
+    "title": "プロセス記録",
+    "running": "実行中",
+    "completedSteps": "{{count}} ステップ完了",
+    "reviewedContext": "{{count}} 件のコンテキストを確認",
+    "ranCommands": "{{count}} 件のコマンドを実行",
+    "fileChanges": "{{count}} 件のファイル変更を完了",
+    "externalTools": "{{count}} 件の外部ツールを呼び出し",
+    "browserActions": "{{count}} 件のブラウザまたはデスクトップ操作を完了",
+    "subTasks": "{{count}} 件の委任タスクを完了",
+    "needsAttention": "対応が必要",
+    "failed": "実行に失敗しました",
+    "canceled": "キャンセル済み",
+    "summary": "{{status}} · {{count}} ステップ{{duration}}",
+    "expandDetails": "詳細を展開",
+    "collapseDetails": "詳細を折りたたむ"
+  },
   "toolGroup": {
     "readFiles": "{{count}}ファイルを読む",
     "searchedPatterns": "検索 {{count}} パターン",

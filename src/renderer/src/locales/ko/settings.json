@@ -151,6 +151,8 @@
     "systemProxyDesc": "앱 전체에서 사용할 프록시 URL을 설정합니다. 예: http://127.0.0.1:7890 또는 http://host:port",
     "toolbarCollapsedByDefault": "도구 모음을 기본으로 접기",
     "toolbarCollapsedByDefaultDesc": "기본값은 꺼짐입니다. 앱이 열릴 때 왼쪽 도구 모음 상태를 초기화합니다.",
+    "collapseExecutionRunsByDefault": "실행 과정을 기본적으로 접기",
+    "collapseExecutionRunsByDefaultDesc": "최종 답변을 강조하고 도구 세부 정보는 펼칠 수 있게 유지합니다. 항상 펼치려면 끄세요.",
     "chinese": "한국어",
     "english": "한국어",
     "systemPromptPlaceholder": "사용자 정의 지침 ...",

@@ -932,6 +932,23 @@
     "collapsedMessage": "Mesaj çöktü",
     "imagesCollapsed": "{{count}} görüntüler görüntüler"
   },
+  "executionRun": {
+    "title": "Süreç kaydı",
+    "running": "Çalışıyor",
+    "completedSteps": "{{count}} adım tamamlandı",
+    "reviewedContext": "{{count}} bağlam adımı incelendi",
+    "ranCommands": "{{count}} komut çalıştırıldı",
+    "fileChanges": "{{count}} dosya değişikliği tamamlandı",
+    "externalTools": "{{count}} harici araç çağrıldı",
+    "browserActions": "{{count}} tarayıcı veya masaüstü işlemi tamamlandı",
+    "subTasks": "{{count}} devredilen görev tamamlandı",
+    "needsAttention": "İşlem gerekiyor",
+    "failed": "Yürütme başarısız",
+    "canceled": "İptal edildi",
+    "summary": "{{status}} · {{count}} adım{{duration}}",
+    "expandDetails": "Ayrıntıları aç",
+    "collapseDetails": "Ayrıntıları kapat"
+  },
   "toolGroup": {
     "readFiles": "Read Oku {{count}} dosyaları dosyaları dosyaları dosyaları",
     "searchedPatterns": "Arama {{count}} modeller",

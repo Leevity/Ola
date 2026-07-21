@@ -932,6 +932,23 @@
     "collapsedMessage": "메시지 붕괴",
     "imagesCollapsed": "{{count}} 이미지"
   },
+  "executionRun": {
+    "title": "과정 기록",
+    "running": "실행 중",
+    "completedSteps": "{{count}}개 단계 완료",
+    "reviewedContext": "컨텍스트 {{count}}개 검토",
+    "ranCommands": "명령 {{count}}개 실행",
+    "fileChanges": "파일 변경 {{count}}개 완료",
+    "externalTools": "외부 도구 {{count}}개 호출",
+    "browserActions": "브라우저 또는 데스크톱 작업 {{count}}개 완료",
+    "subTasks": "위임 작업 {{count}}개 완료",
+    "needsAttention": "처리 필요",
+    "failed": "실행 실패",
+    "canceled": "취소됨",
+    "summary": "{{status}} · {{count}}개 단계{{duration}}",
+    "expandDetails": "세부 정보 펼치기",
+    "collapseDetails": "세부 정보 접기"
+  },
   "toolGroup": {
     "readFiles": "{{count}} 파일을 읽으십시오",
     "searchedPatterns": "{{count}} 패턴 검색",

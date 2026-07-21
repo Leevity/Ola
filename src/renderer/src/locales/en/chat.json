@@ -1027,6 +1027,23 @@
     "collapsedMessage": "Message collapsed",
     "imagesCollapsed": "{{count}} images"
   },
+  "executionRun": {
+    "title": "Process log",
+    "running": "Running",
+    "completedSteps": "Completed {{count}} steps",
+    "reviewedContext": "Reviewed {{count}} context steps",
+    "ranCommands": "Ran {{count}} commands",
+    "fileChanges": "Completed {{count}} file changes",
+    "externalTools": "Called {{count}} external tools",
+    "browserActions": "Completed {{count}} browser or desktop actions",
+    "subTasks": "Completed {{count}} delegated tasks",
+    "needsAttention": "Needs attention",
+    "failed": "Execution failed",
+    "canceled": "Canceled",
+    "summary": "{{status}} · {{count}} steps{{duration}}",
+    "expandDetails": "Expand details",
+    "collapseDetails": "Collapse details"
+  },
   "toolGroup": {
     "readFiles": "Read {{count}} files",
     "searchedPatterns": "Searched {{count}} patterns",

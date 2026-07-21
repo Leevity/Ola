@@ -932,6 +932,23 @@
     "collapsedMessage": "Bericht is ingestort",
     "imagesCollapsed": "{{count}} afbeeldingen"
   },
+  "executionRun": {
+    "title": "Proceslogboek",
+    "running": "Wordt uitgevoerd",
+    "completedSteps": "{{count}} stappen voltooid",
+    "reviewedContext": "{{count}} contextstappen bekeken",
+    "ranCommands": "{{count}} opdrachten uitgevoerd",
+    "fileChanges": "{{count}} bestandswijzigingen voltooid",
+    "externalTools": "{{count}} externe tools aangeroepen",
+    "browserActions": "{{count}} browser- of desktopacties voltooid",
+    "subTasks": "{{count}} gedelegeerde taken voltooid",
+    "needsAttention": "Actie vereist",
+    "failed": "Uitvoering mislukt",
+    "canceled": "Geannuleerd",
+    "summary": "{{status}} · {{count}} stappen{{duration}}",
+    "expandDetails": "Details uitklappen",
+    "collapseDetails": "Details inklappen"
+  },
   "toolGroup": {
     "readFiles": "Gelezen {{count}} bestanden",
     "searchedPatterns": "Zoeken {{count}} patronen",

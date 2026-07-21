@@ -932,6 +932,23 @@
     "collapsedMessage": "الرسالة انهارت",
     "imagesCollapsed": "{{count}} الصور"
   },
+  "executionRun": {
+    "title": "سجل العملية",
+    "running": "قيد التنفيذ",
+    "completedSteps": "اكتملت {{count}} خطوات",
+    "reviewedContext": "تمت مراجعة {{count}} عناصر سياق",
+    "ranCommands": "تم تنفيذ {{count}} أوامر",
+    "fileChanges": "اكتملت {{count}} تغييرات ملفات",
+    "externalTools": "تم استدعاء {{count}} أدوات خارجية",
+    "browserActions": "اكتملت {{count}} إجراءات متصفح أو سطح مكتب",
+    "subTasks": "اكتملت {{count}} مهام مفوضة",
+    "needsAttention": "يتطلب إجراءً",
+    "failed": "فشل التنفيذ",
+    "canceled": "أُلغي",
+    "summary": "{{status}} · {{count}} خطوات{{duration}}",
+    "expandDetails": "عرض التفاصيل",
+    "collapseDetails": "إخفاء التفاصيل"
+  },
   "toolGroup": {
     "readFiles": "اقرأ {{count}} الملفات",
     "searchedPatterns": "البحث {{count}} الأنماط",

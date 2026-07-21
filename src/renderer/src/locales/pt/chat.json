@@ -932,6 +932,23 @@
     "collapsedMessage": "Mensagem em colapso",
     "imagesCollapsed": "{{count}} imagens"
   },
+  "executionRun": {
+    "title": "Registo do processo",
+    "running": "Em execução",
+    "completedSteps": "{{count}} passos concluídos",
+    "reviewedContext": "Revistos {{count}} itens de contexto",
+    "ranCommands": "Executados {{count}} comandos",
+    "fileChanges": "Concluídas {{count}} alterações de ficheiros",
+    "externalTools": "Chamadas {{count}} ferramentas externas",
+    "browserActions": "Concluídas {{count}} ações de navegador ou ambiente de trabalho",
+    "subTasks": "Concluídas {{count}} tarefas delegadas",
+    "needsAttention": "Requer atenção",
+    "failed": "Falha na execução",
+    "canceled": "Cancelado",
+    "summary": "{{status}} · {{count}} passos{{duration}}",
+    "expandDetails": "Expandir detalhes",
+    "collapseDetails": "Recolher detalhes"
+  },
   "toolGroup": {
     "readFiles": "Ler {{count}} ficheiros",
     "searchedPatterns": "Procurado {{count}} padrões",

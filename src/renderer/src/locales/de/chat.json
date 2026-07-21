@@ -932,6 +932,23 @@
     "collapsedMessage": "Nachricht zusammengebrochen",
     "imagesCollapsed": "{{count}} Bilder"
   },
+  "executionRun": {
+    "title": "Prozessprotokoll",
+    "running": "Wird ausgeführt",
+    "completedSteps": "{{count}} Schritte abgeschlossen",
+    "reviewedContext": "{{count}} Kontextschritte geprüft",
+    "ranCommands": "{{count}} Befehle ausgeführt",
+    "fileChanges": "{{count}} Dateiänderungen abgeschlossen",
+    "externalTools": "{{count}} externe Werkzeuge aufgerufen",
+    "browserActions": "{{count}} Browser- oder Desktopaktionen abgeschlossen",
+    "subTasks": "{{count}} delegierte Aufgaben abgeschlossen",
+    "needsAttention": "Aktion erforderlich",
+    "failed": "Ausführung fehlgeschlagen",
+    "canceled": "Abgebrochen",
+    "summary": "{{status}} · {{count}} Schritte{{duration}}",
+    "expandDetails": "Details anzeigen",
+    "collapseDetails": "Details ausblenden"
+  },
   "toolGroup": {
     "readFiles": "Lesen {{count}} Dateien",
     "searchedPatterns": "Durchsucht {{count}} Muster",

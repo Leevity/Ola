@@ -151,6 +151,8 @@
     "systemProxyDesc": "Impostare l'URL proxy utilizzato dall'intero processo app, ad esempio http://127.0.0.1:7890 o http://host:port.",
     "toolbarCollapsedByDefault": "Barra degli strumenti di Collapse per impostazione predefinita",
     "toolbarCollapsedByDefaultDesc": "Inizializza lo stato della barra degli strumenti di sinistra quando l'app si apre.",
+    "collapseExecutionRunsByDefault": "Comprimi i processi per impostazione predefinita",
+    "collapseExecutionRunsByDefaultDesc": "Evidenzia la risposta finale mantenendo i dettagli espandibili. Disattiva per mostrare sempre il processo.",
     "chinese": "中文",
     "english": "Inglese",
     "systemPromptPlaceholder": "Aggiungi istruzioni personalizzate...",

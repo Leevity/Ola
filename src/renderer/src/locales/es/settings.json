@@ -151,6 +151,8 @@
     "systemProxyDesc": "Establecer la URL proxy utilizada por todo el proceso de aplicación, por ejemplo http://127.0.0.1:7890 o http://host:port.",
     "toolbarCollapsedByDefault": "Collapse toolbar por defecto",
     "toolbarCollapsedByDefaultDesc": "Inicia el estado de barra de herramientas izquierda cuando se abre la aplicación.",
+    "collapseExecutionRunsByDefault": "Contraer los procesos de forma predeterminada",
+    "collapseExecutionRunsByDefaultDesc": "Destaca la respuesta final y conserva los detalles ampliables. Desactívalo para mostrar siempre el proceso.",
     "chinese": "中文",
     "english": "Inglés",
     "systemPromptPlaceholder": "Añadir instrucciones personalizadas...",

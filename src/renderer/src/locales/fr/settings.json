@@ -151,6 +151,8 @@
     "systemProxyDesc": "Définissez l'URL proxy utilisée par l'ensemble du processus d'application, par exemple http://127.0.0.1:7890 ou http://host:port.",
     "toolbarCollapsedByDefault": "Réduire la barre d'outils par défaut",
     "toolbarCollapsedByDefaultDesc": "Désactive par défaut. Initialise l'état de la barre d'outils de gauche lorsque l'application s'ouvre.",
+    "collapseExecutionRunsByDefault": "Réduire les processus par défaut",
+    "collapseExecutionRunsByDefaultDesc": "Met en avant la réponse finale tout en conservant les détails extensibles. Désactivez pour toujours afficher le processus.",
     "chinese": "中文",
     "english": "changements climatiques",
     "systemPromptPlaceholder": "Ajouter des instructions personnalisées...",

@@ -151,6 +151,8 @@
     "systemProxyDesc": "Legen Sie die Proxy-URL fest, die vom gesamten App-Prozess verwendet wird, z. B. http://127.0.0.1:7890 oder http://host:port.",
     "toolbarCollapsedByDefault": "Collapse Symbolleiste standardmäßig",
     "toolbarCollapsedByDefaultDesc": "Standardmäßig ausschalten. Initialisiert den Status der linken Symbolleiste, wenn die App geöffnet wird.",
+    "collapseExecutionRunsByDefault": "Prozessprotokolle standardmäßig einklappen",
+    "collapseExecutionRunsByDefaultDesc": "Hebt die endgültige Antwort hervor und behält ausklappbare Werkzeugdetails bei. Deaktivieren, um Prozesse immer auszuklappen.",
     "chinese": "中 Zealand",
     "english": "Englisch",
     "systemPromptPlaceholder": "Fügen Sie benutzerdefinierte Anweisungen hinzu...",

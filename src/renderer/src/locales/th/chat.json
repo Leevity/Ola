@@ -932,6 +932,23 @@
     "collapsedMessage": "จดหมายถูกยุบ",
     "imagesCollapsed": "{{count}} รูปภาพ"
   },
+  "executionRun": {
+    "title": "บันทึกกระบวนการ",
+    "running": "กำลังดำเนินการ",
+    "completedSteps": "เสร็จแล้ว {{count}} ขั้นตอน",
+    "reviewedContext": "ตรวจสอบบริบท {{count}} รายการ",
+    "ranCommands": "ดำเนินการคำสั่ง {{count}} รายการ",
+    "fileChanges": "แก้ไขไฟล์เสร็จแล้ว {{count}} รายการ",
+    "externalTools": "เรียกใช้เครื่องมือภายนอก {{count}} รายการ",
+    "browserActions": "ดำเนินการเบราว์เซอร์หรือเดสก์ท็อป {{count}} รายการ",
+    "subTasks": "ทำงานที่มอบหมายเสร็จแล้ว {{count}} รายการ",
+    "needsAttention": "ต้องดำเนินการ",
+    "failed": "การดำเนินการล้มเหลว",
+    "canceled": "ยกเลิกแล้ว",
+    "summary": "{{status}} · {{count}} ขั้นตอน{{duration}}",
+    "expandDetails": "ขยายรายละเอียด",
+    "collapseDetails": "ยุบรายละเอียด"
+  },
   "toolGroup": {
     "readFiles": "อ่าน {{count}} แฟ้ม",
     "searchedPatterns": "สืบค้นแล้ว {{count}} รูปแบบ",
