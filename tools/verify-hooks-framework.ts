@@ -81,4 +81,44 @@ slow.trustState = 'trusted'
 const timed = await runner.run(slow, { version: 1, event: 'stop', sessionId: 'slow' })
 assert.equal(timed.record.status, 'timed-out')
 
+const failingPath = join(configDir, 'failing.sh')
+await writeFile(failingPath, '#!/bin/sh\nprintf failure >&2\nexit 7\n')
+await chmod(failingPath, 0o700)
+await writeFile(
+  configPath,
+  JSON.stringify({ version: 1, hooks: [{ id: 'failing', event: 'stop', command: './failing.sh' }] })
+)
+const failing = (await loadHooksConfig(configPath, 'project'))[0]
+failing.trustState = 'trusted'
+const failed = await runner.run(failing, { version: 1, event: 'stop', sessionId: 'failed' })
+assert.equal(failed.record.status, 'failed')
+assert.match(failed.record.stderrSummary, /failure/)
+
+const floodPath = join(configDir, 'flood.sh')
+await writeFile(floodPath, '#!/bin/sh\nyes x | head -c 300000\n')
+await chmod(floodPath, 0o700)
+await writeFile(
+  configPath,
+  JSON.stringify({ version: 1, hooks: [{ id: 'flood', event: 'stop', command: './flood.sh' }] })
+)
+const flood = (await loadHooksConfig(configPath, 'project'))[0]
+flood.trustState = 'trusted'
+const flooded = await runner.run(flood, { version: 1, event: 'stop', sessionId: 'flood' })
+assert.equal(flooded.record.status, 'failed')
+
+const concurrentRunner = new HooksRunner(1)
+slow.timeoutMs = 5_000
+const activeRun = concurrentRunner.run(slow, {
+  version: 1,
+  event: 'stop',
+  sessionId: 'active',
+  cancellationKey: 'active'
+})
+await assert.rejects(
+  concurrentRunner.run(slow, { version: 1, event: 'stop', sessionId: 'second' }),
+  /concurrency/
+)
+concurrentRunner.cancel('active')
+assert.equal((await activeRun).record.status, 'canceled')
+
 console.log('hooks framework verification passed')

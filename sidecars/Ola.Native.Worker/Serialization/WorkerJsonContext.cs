@@ -21,6 +21,8 @@ using System.Text.Json.Serialization;
 [JsonSerializable(typeof(AgentRuntimeReverseResponseResult))]
 [JsonSerializable(typeof(AgentRuntimeReverseRequestEnvelope))]
 [JsonSerializable(typeof(AgentRuntimeApprovalRequest))]
+[JsonSerializable(typeof(AgentRuntimeHookRequest))]
+[JsonSerializable(typeof(AgentRuntimeHookInvocation))]
 [JsonSerializable(typeof(AgentRuntimeActiveRun))]
 [JsonSerializable(typeof(AgentRuntimeStreamEnvelope))]
 [JsonSerializable(typeof(AgentRuntimeStreamEvent))]

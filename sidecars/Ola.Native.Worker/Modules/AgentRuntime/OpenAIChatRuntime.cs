@@ -922,8 +922,10 @@ internal static class OpenAIChatRuntime
     {
         var toolResults = new List<AgentRuntimeToolResult>(toolCalls.Count);
         var permissionPolicy = AgentRuntimePermissionPolicy.Resolve(parameters);
-        foreach (var call in toolCalls)
+        foreach (var originalCall in toolCalls)
         {
+            var hookResult = await RunPreToolHookAsync(parameters, originalCall, state, context);
+            var call = originalCall with { Input = hookResult.Input };
             var nativeTool = AgentRuntimeNativeToolExecutor.CanExecute(call.Name, parameters);
             WorkerLog.Debug(
                 $"agent tool dispatch runId={state.RunId} tool={call.Name} id={call.Id} " +
@@ -952,6 +954,9 @@ internal static class OpenAIChatRuntime
 
             // Enforce deny in the Worker; it wins over auto-approval and allow rules.
             var permissionDenyReason = permissionPolicy.EvaluateDenyReason(call.Name, call.Input);
+            permissionDenyReason ??= hookResult.BlockReason;
+            if (permissionDenyReason is null && hookResult.PermissionDecision == "deny")
+                permissionDenyReason = "Permission denied by trusted hook";
             if (permissionDenyReason is not null)
             {
                 var rejectedContent = CreateStringElement(permissionDenyReason);
@@ -975,7 +980,7 @@ internal static class OpenAIChatRuntime
                 continue;
             }
 
-            if (requiresApproval)
+            if (requiresApproval && hookResult.PermissionDecision != "allow")
             {
                 await AgentRuntimeTools.EmitAsync(
                     state,
@@ -1032,6 +1037,8 @@ internal static class OpenAIChatRuntime
             var completedAt = NowMs();
             var status = result.IsError ? "error" : "completed";
             var boundedContent = LimitToolResultContent(result.Content);
+            boundedContent = await RunPostToolHookAsync(
+                parameters, call, boundedContent, state, context);
             await AgentRuntimeTools.EmitAsync(
                 state,
                 context,
@@ -1054,6 +1061,83 @@ internal static class OpenAIChatRuntime
         }
 
         return toolResults;
+    }
+
+    private sealed record PreToolHookResult(
+        JsonElement Input,
+        string? BlockReason,
+        string? PermissionDecision);
+
+    private static async Task<PreToolHookResult> RunPreToolHookAsync(
+        JsonElement parameters,
+        AgentRuntimeNativeToolCall call,
+        AgentRuntimeTools.AgentRuntimeRunState state,
+        WorkerRequestContext context)
+    {
+        var payload = JsonSerializer.SerializeToElement(
+            new AgentRuntimeHookRequest(
+                "preToolUse",
+                new AgentRuntimeHookInvocation(
+                    state.SessionId ?? state.RunId,
+                    JsonHelpers.GetString(parameters, "workingFolder"),
+                    call.Name,
+                    call.Input,
+                    null,
+                    state.SessionId ?? state.RunId)),
+            WorkerJsonContext.Default.AgentRuntimeHookRequest);
+        var response = await AgentRuntimeReverseRequests.RequestAsync(
+            context, "hooks/run", payload, state.CancellationToken);
+        var input = call.Input;
+        string? blockReason = null;
+        string? permissionDecision = null;
+        if (response.TryGetProperty("outputs", out var outputs) && outputs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var output in outputs.EnumerateArray())
+            {
+                if (output.TryGetProperty("updatedInput", out var updatedInput) && updatedInput.ValueKind == JsonValueKind.Object)
+                    input = updatedInput.Clone();
+                if (output.TryGetProperty("permissionDecision", out var decision) && decision.ValueKind == JsonValueKind.String)
+                    permissionDecision = decision.GetString();
+                if (output.TryGetProperty("block", out var block) &&
+                    block.ValueKind == JsonValueKind.Object &&
+                    block.TryGetProperty("reason", out var reason) && reason.ValueKind == JsonValueKind.String)
+                    blockReason = reason.GetString();
+            }
+        }
+        return new PreToolHookResult(input, blockReason, permissionDecision);
+    }
+
+    private static async Task<JsonElement> RunPostToolHookAsync(
+        JsonElement parameters,
+        AgentRuntimeNativeToolCall call,
+        JsonElement result,
+        AgentRuntimeTools.AgentRuntimeRunState state,
+        WorkerRequestContext context)
+    {
+        var payload = JsonSerializer.SerializeToElement(
+            new AgentRuntimeHookRequest(
+                "postToolUse",
+                new AgentRuntimeHookInvocation(
+                    state.SessionId ?? state.RunId,
+                    JsonHelpers.GetString(parameters, "workingFolder"),
+                    call.Name,
+                    call.Input,
+                    result,
+                    state.SessionId ?? state.RunId)),
+            WorkerJsonContext.Default.AgentRuntimeHookRequest);
+        var response = await AgentRuntimeReverseRequests.RequestAsync(
+            context, "hooks/run", payload, state.CancellationToken);
+        var feedback = result;
+        if (response.TryGetProperty("outputs", out var outputs) && outputs.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var output in outputs.EnumerateArray())
+            {
+                if (output.TryGetProperty("replacementToolFeedback", out var replacement) &&
+                    replacement.ValueKind == JsonValueKind.String)
+                    feedback = CreateStringElement(replacement.GetString() ?? string.Empty);
+            }
+        }
+        return feedback;
     }
 
     private static async Task<bool> RequestApprovalAsync(
