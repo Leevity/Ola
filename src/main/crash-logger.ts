@@ -1,5 +1,13 @@
 import { app, crashReporter } from 'electron'
-import { appendFileSync, mkdirSync } from 'fs'
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  renameSync,
+  statSync,
+  unlinkSync
+} from 'fs'
 import { release } from 'os'
 import { join } from 'path'
 import { getDataDir } from './db/database'
@@ -10,10 +18,17 @@ const MAX_PAYLOAD_CHARS = 20_000
 const MAX_OBJECT_KEYS = 80
 const MAX_ARRAY_ITEMS = 50
 const MAX_DEPTH = 4
+const MAX_LOG_FILE_BYTES = 10 * 1024 * 1024
+const MAX_LOG_FILES = 7
+const MAX_TOTAL_LOG_BYTES = 50 * 1024 * 1024
+const DUPLICATE_WINDOW_MS = 5_000
 
 type JsonRecord = Record<string, unknown>
 
 let nativeCrashReporterStarted = false
+let crashLogWriteInProgress = false
+let lastLogSignature = ''
+let lastLogTimestamp = 0
 
 function ensureLogDir(): void {
   mkdirSync(LOG_DIR, { recursive: true })
@@ -22,6 +37,38 @@ function ensureLogDir(): void {
 function getLogFilePath(now: Date): string {
   const date = now.toISOString().slice(0, 10)
   return join(LOG_DIR, `crash-${date}.log`)
+}
+
+function getRotatedLogFilePath(now: Date): string {
+  const date = now.toISOString().slice(0, 10)
+  return join(LOG_DIR, `crash-${date}-${now.getTime()}.log`)
+}
+
+function pruneCrashLogs(): void {
+  const logs = readdirSync(LOG_DIR)
+    .filter((name) => /^crash-\d{4}-\d{2}-\d{2}(?:-\d+)?\.log$/.test(name))
+    .map((name) => {
+      const path = join(LOG_DIR, name)
+      const stats = statSync(path)
+      return { path, size: stats.size, modifiedAt: stats.mtimeMs }
+    })
+    .sort((a, b) => b.modifiedAt - a.modifiedAt)
+
+  let retainedBytes = 0
+  for (const [index, log] of logs.entries()) {
+    retainedBytes += log.size
+    if (index >= MAX_LOG_FILES || retainedBytes > MAX_TOTAL_LOG_BYTES) {
+      unlinkSync(log.path)
+    }
+  }
+}
+
+function rotateLogIfNeeded(path: string, incomingBytes: number, now: Date): void {
+  if (!existsSync(path)) return
+  if (statSync(path).size + incomingBytes <= MAX_LOG_FILE_BYTES) return
+
+  renameSync(path, getRotatedLogFilePath(now))
+  pruneCrashLogs()
 }
 
 function getAppVersionSafe(): string {
@@ -100,9 +147,21 @@ export interface CrashLogEntry {
 }
 
 export function writeCrashLog(event: string, payload?: unknown): void {
+  if (crashLogWriteInProgress) return
+
+  crashLogWriteInProgress = true
   try {
     ensureLogDir()
     const now = new Date()
+    const normalizedPayload =
+      payload === undefined ? undefined : truncatePayload(normalizeUnknown(payload))
+    const signature = `${event}:${JSON.stringify(normalizedPayload)}`
+    if (signature === lastLogSignature && now.getTime() - lastLogTimestamp < DUPLICATE_WINDOW_MS) {
+      return
+    }
+    lastLogSignature = signature
+    lastLogTimestamp = now.getTime()
+
     const entry: CrashLogEntry = {
       timestamp: now.toISOString(),
       event,
@@ -117,11 +176,18 @@ export function writeCrashLog(event: string, payload?: unknown): void {
         chrome: process.versions.chrome,
         v8: process.versions.v8
       },
-      ...(payload === undefined ? {} : { payload: truncatePayload(normalizeUnknown(payload)) })
+      ...(normalizedPayload === undefined ? {} : { payload: normalizedPayload })
     }
-    appendFileSync(getLogFilePath(now), `${JSON.stringify(entry)}\n`, 'utf8')
-  } catch (err) {
-    console.error('[CrashLogger] Failed to write crash log:', err)
+    const serializedEntry = `${JSON.stringify(entry)}\n`
+    const logPath = getLogFilePath(now)
+    rotateLogIfNeeded(logPath, Buffer.byteLength(serializedEntry), now)
+    appendFileSync(logPath, serializedEntry, { encoding: 'utf8', mode: 0o600 })
+    pruneCrashLogs()
+  } catch {
+    // Never report a crash-log failure through console or the global error handlers:
+    // stderr and the log filesystem may be the source of the original failure.
+  } finally {
+    crashLogWriteInProgress = false
   }
 }
 
