@@ -20,6 +20,7 @@ interface HooksState {
 
 const MAX_HISTORY = 500
 const HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const HISTORY_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000
 
 export class HooksService {
   private state: HooksState = { version: 1, trustedKeys: [], history: [] }
@@ -32,6 +33,10 @@ export class HooksService {
     maxConcurrency = 4
   ) {
     this.runner = new HooksRunner(maxConcurrency)
+    const cleanupTimer = setInterval(() => {
+      void this.cleanupHistory()
+    }, HISTORY_CLEANUP_INTERVAL_MS)
+    cleanupTimer.unref()
   }
 
   private async initialize(): Promise<void> {
@@ -56,6 +61,13 @@ export class HooksService {
     this.state.history = this.state.history
       .filter((record) => record.startedAt >= cutoff)
       .slice(-MAX_HISTORY)
+  }
+
+  private async cleanupHistory(): Promise<void> {
+    await this.initialize()
+    const previousLength = this.state.history.length
+    this.pruneHistory()
+    if (this.state.history.length !== previousLength) await this.persist()
   }
 
   private async persist(): Promise<void> {
