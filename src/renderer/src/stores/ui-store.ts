@@ -211,6 +211,7 @@ export interface BrowserPanelSessionState {
 export type SettingsTab =
   | 'general'
   | 'system'
+  | 'permission'
   | 'memory'
   | 'analytics'
   | 'provider'

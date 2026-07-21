@@ -909,6 +909,7 @@ internal static class OpenAIChatRuntime
         WorkerRequestContext context)
     {
         var toolResults = new List<AgentRuntimeToolResult>(toolCalls.Count);
+        var permissionPolicy = AgentRuntimePermissionPolicy.Resolve(parameters);
         foreach (var call in toolCalls)
         {
             var nativeTool = AgentRuntimeNativeToolExecutor.CanExecute(call.Name, parameters);
@@ -916,7 +917,9 @@ internal static class OpenAIChatRuntime
                 $"agent tool dispatch runId={state.RunId} tool={call.Name} id={call.Id} " +
                 $"executionPath={(nativeTool ? "native-aot" : "native-missing")}");
             var requiresApproval = JsonHelpers.GetBool(parameters, "forceApproval", false) ||
-                (nativeTool && AgentRuntimeNativeToolExecutor.RequiresApproval(call.Name, call.Input, parameters));
+                (nativeTool &&
+                    AgentRuntimeNativeToolExecutor.RequiresApproval(call.Name, call.Input, parameters) &&
+                    !permissionPolicy.SkipsApproval(call.Name, call.Input));
             var pendingCall = new AgentRuntimeToolCallState(
                 call.Id,
                 call.Name,
@@ -934,6 +937,31 @@ internal static class OpenAIChatRuntime
                         call.Name,
                         call.Input,
                         call.ExtraContent)));
+
+            // Enforce deny in the Worker; it wins over auto-approval and allow rules.
+            var permissionDenyReason = permissionPolicy.EvaluateDenyReason(call.Name, call.Input);
+            if (permissionDenyReason is not null)
+            {
+                var rejectedContent = CreateStringElement(permissionDenyReason);
+                var rejectedAt = NowMs();
+                await AgentRuntimeTools.EmitAsync(
+                    state,
+                    context,
+                    new AgentRuntimeStreamEvent(
+                        "tool_call_result",
+                        ToolCall: new AgentRuntimeToolCallState(
+                            call.Id,
+                            call.Name,
+                            call.Input,
+                            "error",
+                            rejectedContent,
+                            permissionDenyReason,
+                            requiresApproval,
+                            rejectedAt,
+                            rejectedAt)));
+                toolResults.Add(new AgentRuntimeToolResult(call.Id, rejectedContent, true));
+                continue;
+            }
 
             if (requiresApproval)
             {

@@ -10,11 +10,11 @@
 
 | Classification | Count |
 | --- | ---: |
-| identical | 430 |
+| identical | 434 |
 | brandOnly | 26 |
-| changed | 315 |
+| changed | 314 |
 | onlyOla | 88 |
-| onlyReference | 394 |
+| onlyReference | 391 |
 
 ## Reference-only capability candidates
 
@@ -23,7 +23,7 @@
 | CodeGraph | adapt | 246 | Adopt as an opt-in Ola worker with verified assets and a staged rollout. |
 | Hooks | adapt | 9 | Adopt only after permission policy, with hash-bound trust and local execution defaults. |
 | SSH | adapt | 32 | Reuse modular state and management capabilities inside the Ola remote workbench. |
-| Agent | adapt | 23 | Review runtime, history, permissions, retries, drafts, and execution UX as vertical slices. |
+| Agent | adapt | 20 | Review runtime, history, permissions, retries, drafts, and execution UX as vertical slices. |
 | Media | defer | 12 | Defer video generation until the Ola product roadmap explicitly requires it. |
 | Distribution | adapt | 3 | Adopt asset integrity and updater improvements while preserving Ola packaging and channels. |
 | Other | defer | 69 | Requires an explicit capability review before adoption. |

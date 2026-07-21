@@ -1,4 +1,44 @@
 {
+  "permission": {
+    "title": "Permissions",
+    "subtitle": "Tool whitelist & shell command rules",
+    "master": {
+      "title": "Enable permission whitelist",
+      "description": "Whitelisted tools and matching shell commands skip confirmation; denied commands are always rejected. Other dangerous operations still ask for confirmation."
+    },
+    "precedence": {
+      "description": "Order: command deny rules → tool/command allow rules → normal confirmation. Deny rules also override global auto-approval."
+    },
+    "wildcardHelp": "Wildcards match the whole command; * matches any text. Regex allow rules match the whole command, while regex deny rules may match anywhere. Every segment of a compound command must be allowed.",
+    "tools": {
+      "title": "Tool whitelist",
+      "description": "These tools run without confirmation. Wildcards are supported.",
+      "placeholder": "Tool name, e.g. Write",
+      "add": "Add",
+      "suggestions": "Suggestions:",
+      "empty": "No whitelisted tools yet",
+      "duplicate": "This tool is already whitelisted",
+      "remove": "Remove {{tool}}",
+      "commandToolWarning": "A shell tool is whitelisted; all its commands skip confirmation unless denied."
+    },
+    "bashAllow": {
+      "title": "Command allow rules",
+      "description": "Matching shell commands run without confirmation."
+    },
+    "bashDeny": {
+      "title": "Command deny rules",
+      "description": "Matching commands are always rejected."
+    },
+    "rules": {
+      "add": "Add rule",
+      "patternPlaceholder": "e.g. npm run *",
+      "modeWildcard": "Wildcard",
+      "modeRegex": "Regex",
+      "empty": "No rules yet",
+      "invalidPattern": "Invalid pattern: {{error}}",
+      "delete": "Delete rule"
+    }
+  },
   "page": {
     "title": "Settings",
     "subtitle": "Preferences & Model Settings",

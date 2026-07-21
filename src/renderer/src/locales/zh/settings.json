@@ -1,4 +1,44 @@
 {
+  "permission": {
+    "title": "权限管理",
+    "subtitle": "工具白名单与命令允许/拒绝规则",
+    "master": {
+      "title": "启用权限策略",
+      "description": "白名单工具和匹配命令跳过确认；拒绝规则命令始终被阻止，其他危险操作仍需确认。"
+    },
+    "precedence": {
+      "description": "生效顺序：命令拒绝规则 → 工具/命令允许规则 → 常规确认。拒绝规则同样优先于全局自动批准。"
+    },
+    "wildcardHelp": "通配符匹配完整命令，* 匹配任意文本。正则允许规则匹配完整命令，正则拒绝规则可匹配任意位置；复合命令每一段都必须被允许。",
+    "tools": {
+      "title": "工具白名单",
+      "description": "这些工具无需确认即可运行，支持通配符。",
+      "placeholder": "工具名称，例如 Write",
+      "add": "添加",
+      "suggestions": "建议：",
+      "empty": "暂无白名单工具",
+      "duplicate": "该工具已在白名单中",
+      "remove": "移除 {{tool}}",
+      "commandToolWarning": "Shell 类工具已加入白名单；除拒绝规则外，其所有命令都会跳过确认。"
+    },
+    "bashAllow": {
+      "title": "命令允许规则",
+      "description": "匹配的 Shell 命令无需确认即可运行。"
+    },
+    "bashDeny": {
+      "title": "命令拒绝规则",
+      "description": "匹配的命令始终会被拒绝。"
+    },
+    "rules": {
+      "add": "添加规则",
+      "patternPlaceholder": "例如 npm run *",
+      "modeWildcard": "通配符",
+      "modeRegex": "正则",
+      "empty": "暂无规则",
+      "invalidPattern": "无效规则：{{error}}",
+      "delete": "删除规则"
+    }
+  },
   "page": {
     "title": "设置",
     "subtitle": "偏好与模型设置",

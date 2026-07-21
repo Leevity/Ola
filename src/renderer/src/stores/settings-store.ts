@@ -23,6 +23,11 @@ import {
   normalizeLanguageCode,
   type AppLanguage
 } from '@renderer/lib/i18n-language'
+import {
+  DEFAULT_PERMISSION_POLICY,
+  sanitizePermissionPolicy,
+  type PermissionPolicy
+} from '../../../shared/permission-policy'
 
 export interface ModelBinding {
   providerId: string
@@ -246,6 +251,7 @@ interface SettingsStore {
   sshTerminalThemePreset: SshTerminalThemePreset
   language: AppLanguage
   autoApprove: boolean
+  permissionPolicy: PermissionPolicy
   autoUpdateEnabled: boolean
   clarifyAutoAcceptRecommended: boolean
   clarifyPlanModeAutoSwitchTarget: ClarifyPlanModeAutoSwitchTarget
@@ -361,6 +367,7 @@ export const useSettingsStore = create<SettingsStore>()(
       sshTerminalThemePreset: 'graphite' as const,
       language: detectSystemLanguage(),
       autoApprove: false,
+      permissionPolicy: { ...DEFAULT_PERMISSION_POLICY },
       autoUpdateEnabled: false,
       clarifyAutoAcceptRecommended: false,
       clarifyPlanModeAutoSwitchTarget: 'off',
@@ -478,7 +485,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'ola-settings',
-      version: 25,
+      version: 26,
       storage: createJSONStorage(() => ipcStorage),
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>
@@ -503,6 +510,7 @@ export const useSettingsStore = create<SettingsStore>()(
         } else {
           state.language = detectSystemLanguage()
         }
+        state.permissionPolicy = sanitizePermissionPolicy(state.permissionPolicy)
         // Add web search settings if missing
         if (state.webSearchEnabled === undefined) {
           state.webSearchEnabled = false
@@ -750,6 +758,7 @@ export const useSettingsStore = create<SettingsStore>()(
         sshTerminalThemePreset: state.sshTerminalThemePreset,
         language: state.language,
         autoApprove: state.autoApprove,
+        permissionPolicy: state.permissionPolicy,
         autoUpdateEnabled: state.autoUpdateEnabled,
         clarifyAutoAcceptRecommended: state.clarifyAutoAcceptRecommended,
         clarifyPlanModeAutoSwitchTarget: state.clarifyPlanModeAutoSwitchTarget,

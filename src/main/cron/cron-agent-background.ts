@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import { readConfig } from '../ipc/secure-key-store'
-import { readSettings } from '../ipc/settings-handlers'
+import { readPermissionPolicySnapshot, readSettings } from '../ipc/settings-handlers'
 import type {
   ToolCallState,
   InteractiveAgentEvent,
@@ -974,6 +974,7 @@ async function* runNativeAgentLoop(args: {
       throw new Error(`SSH connection not found for cron agent: ${args.toolCtx.sshConnectionId}`)
     }
 
+    const permissionPolicy = readPermissionPolicySnapshot()
     const runRequest = {
       runId: args.runId,
       sessionId: args.toolCtx.sessionId ?? args.runId,
@@ -985,6 +986,7 @@ async function* runNativeAgentLoop(args: {
       ...(connection ? { connection } : {}),
       maxIterations: args.config.maxIterations,
       forceApproval: args.config.forceApproval === true,
+      ...(permissionPolicy ? { permissionPolicy } : {}),
       maxParallelTools: args.config.maxParallelTools,
       callerAgent: 'CronAgent',
       pluginId: args.toolCtx.pluginId,
