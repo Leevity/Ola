@@ -1,5 +1,6 @@
 {
   "input": {
+    "sendFailedDraftRetained": "Send failed. Your draft was kept.",
     "placeholder": "Type a message...",
     "placeholderClarify": "Describe your idea and I will keep probing until the requirements are clear...",
     "placeholderCowork": "Ask the assistant to help with your project...",
@@ -913,6 +914,7 @@
     "selectedFileReadFailed": "Read failed"
   },
   "assistantMessage": {
+    "extensionContent": "Extended content · {{kind}}",
     "retryingRequest": "Service busy, retrying request",
     "retryingRequestDetail": "Attempt {{attempt}} / {{maxAttempts}} in {{delay}}{{statusSuffix}}",
     "retryStatusSuffix": ", status {{statusCode}}",

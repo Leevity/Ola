@@ -14,6 +14,7 @@ import type {
 } from '@renderer/lib/api/types'
 import { cn } from '@renderer/lib/utils'
 import { stopSessionStreaming, useChatActions } from '@renderer/hooks/use-chat-actions'
+import { getSubagentInputDraftKey } from '@renderer/stores/input-draft-store'
 import { parseSubAgentMeta } from '@renderer/lib/agent/sub-agents/create-tool'
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import {
@@ -307,7 +308,7 @@ export function SubAgentExecutionDetail({
     [toolCalls]
   )
   const composerDraftKey = resolvedSessionId
-    ? `subagent:${resolvedSessionId}:${toolUseId ?? 'overview'}`
+    ? getSubagentInputDraftKey(resolvedSessionId, toolUseId ?? 'overview')
     : null
 
   if (!agent && transcript.length === 0) {
@@ -343,15 +344,7 @@ export function SubAgentExecutionDetail({
         <InputArea
           sessionId={resolvedSessionId}
           onSend={(text, images, options) =>
-            void sendMessage(
-              text,
-              images,
-              undefined,
-              resolvedSessionId,
-              undefined,
-              undefined,
-              options
-            )
+            sendMessage(text, images, undefined, resolvedSessionId, undefined, undefined, options)
           }
           onStop={() => stopSessionStreaming(resolvedSessionId)}
           workingFolder={sessionWorkingFolder}

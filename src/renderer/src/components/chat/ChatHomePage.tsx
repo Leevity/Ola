@@ -176,29 +176,29 @@ export function ChatHomePage(): React.JSX.Element {
   )
 
   const handleSend = React.useCallback(
-    (text: string, images?: ImageAttachment[], options?: SendMessageOptions): void => {
-      void (async () => {
-        const chatStore = useChatStore.getState()
-        const chatWorkingFolder =
-          mode === 'chat' ? await ensureDefaultChatWorkingFolder() : undefined
-        const projectIdForSession =
-          selectedProjectId &&
-          chatStore.projects.some((project) => project.id === selectedProjectId)
-            ? selectedProjectId
-            : null
-        const sessionId =
-          mode === 'chat' && !projectIdForSession
-            ? chatStore.createSession(mode, null, {
-                preserveProjectless: true,
-                workingFolder: chatWorkingFolder
-              })
-            : chatStore.createSession(mode, projectIdForSession ?? activeProject?.id ?? undefined)
-        useUIStore.getState().navigateToSession(sessionId)
-        void sendMessage(text, images, undefined, sessionId, undefined, undefined, {
-          ...options,
-          clearCompletedTasksOnTurnStart: true
-        })
-      })()
+    async (
+      text: string,
+      images?: ImageAttachment[],
+      options?: SendMessageOptions
+    ): Promise<void> => {
+      const chatStore = useChatStore.getState()
+      const chatWorkingFolder = mode === 'chat' ? await ensureDefaultChatWorkingFolder() : undefined
+      const projectIdForSession =
+        selectedProjectId && chatStore.projects.some((project) => project.id === selectedProjectId)
+          ? selectedProjectId
+          : null
+      const sessionId =
+        mode === 'chat' && !projectIdForSession
+          ? chatStore.createSession(mode, null, {
+              preserveProjectless: true,
+              workingFolder: chatWorkingFolder
+            })
+          : chatStore.createSession(mode, projectIdForSession ?? activeProject?.id ?? undefined)
+      useUIStore.getState().navigateToSession(sessionId)
+      await sendMessage(text, images, undefined, sessionId, undefined, undefined, {
+        ...options,
+        clearCompletedTasksOnTurnStart: true
+      })
     },
     [activeProject?.id, mode, selectedProjectId, sendMessage]
   )

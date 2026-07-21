@@ -497,7 +497,7 @@ export function SessionConversationPane({
         <InputArea
           sessionId={resolvedSessionId}
           onSend={(text, images, options) =>
-            void sendMessage(text, images, undefined, resolvedSessionId, undefined, undefined, {
+            sendMessage(text, images, undefined, resolvedSessionId, undefined, undefined, {
               ...options,
               clearCompletedTasksOnTurnStart: true
             })
