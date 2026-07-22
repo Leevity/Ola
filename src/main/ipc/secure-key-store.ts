@@ -1,5 +1,10 @@
 import { getNativeWorker } from '../lib/native-worker'
 import { registerMessagePackHandler } from './messagepack-handler'
+import {
+  getProviderMainMirrorSnapshot,
+  hydrateProviderMainMirror,
+  updateProviderMainMirror
+} from '../providers/provider-main-store'
 
 const CONFIG_TIMEOUT_MS = 60_000
 
@@ -10,11 +15,13 @@ type MutationResult = {
 
 export async function readConfig(): Promise<Record<string, unknown>> {
   try {
-    return await getNativeWorker().request<Record<string, unknown>>(
+    const config = await getNativeWorker().request<Record<string, unknown>>(
       'config/read',
       {},
       CONFIG_TIMEOUT_MS
     )
+    hydrateProviderMainMirror(config)
+    return config
   } catch (err) {
     console.error('[ConfigStore] Read error:', err)
     return {}
@@ -37,7 +44,13 @@ export async function getConfigValue(key?: string): Promise<unknown> {
 }
 
 export async function setConfigValue(key: string, value: unknown): Promise<MutationResult> {
-  return await getNativeWorker().request('config/set', { key, value }, CONFIG_TIMEOUT_MS)
+  const result = await getNativeWorker().request<MutationResult>(
+    'config/set',
+    { key, value },
+    CONFIG_TIMEOUT_MS
+  )
+  if (result.success) updateProviderMainMirror(key, value)
+  return result
 }
 
 export async function deleteConfigValue(key: string): Promise<MutationResult> {
@@ -51,5 +64,10 @@ export function registerConfigHandlers(): void {
 
   registerMessagePackHandler<{ key: string; value: unknown }>('config:set', async (args) => {
     return await setConfigValue(args.key, args.value)
+  })
+
+  registerMessagePackHandler('provider:mirror-snapshot', async () => {
+    await readConfig()
+    return getProviderMainMirrorSnapshot()
   })
 }
