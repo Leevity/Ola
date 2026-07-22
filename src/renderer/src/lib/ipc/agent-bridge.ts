@@ -91,6 +91,32 @@ class AgentBridgeClient {
     return result.running
   }
 
+  async recycleWorker(
+    target: 'native' | 'codegraph' = 'native',
+    reason?: string
+  ): Promise<{ ok: boolean; target: 'native' | 'codegraph'; reason?: string | null }> {
+    return await invokeMessagePackBinary(toMessagePackChannel('sidecar:recycle'), {
+      target,
+      reason
+    })
+  }
+
+  async requestCodeGraph<T = unknown>(
+    method: string,
+    params?: unknown,
+    timeoutMs?: number
+  ): Promise<T> {
+    return await invokeMessagePackBinary<T>(toMessagePackChannel('codegraph:request'), {
+      method,
+      params,
+      timeoutMs
+    })
+  }
+
+  async stopCodeGraph(): Promise<void> {
+    await invokeMessagePackBinary(toMessagePackChannel('codegraph:stop'), {})
+  }
+
   async runAgent(params: unknown): Promise<{ started: boolean; runId: string }> {
     return await invokeMessagePackBinary<{ started: boolean; runId: string }>(
       toMessagePackChannel('agent:run'),

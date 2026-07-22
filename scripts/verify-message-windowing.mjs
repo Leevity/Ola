@@ -158,16 +158,17 @@ export class NativeWorkerClient {
   }
 }
 
-export async function startWorker(tempDir) {
+export async function startWorker(tempDir, project = workerProject, extraEnv = {}) {
   const endpoint =
     process.platform === 'win32'
       ? `\\\\.\\pipe\\ola-verify-${process.pid}-${randomUUID()}`
       : path.join(tempDir, `ocw-${process.pid}.sock`)
-  const child = spawn('dotnet', ['run', '--project', workerProject, '--', '--ipc', endpoint], {
+  const child = spawn('dotnet', ['run', '--project', project, '--', '--ipc', endpoint], {
     cwd: repoRoot,
     env: {
       ...process.env,
-      OLA_NATIVE_DEBUG_BODY_PREVIEW_CHARS: '200000'
+      OLA_NATIVE_DEBUG_BODY_PREVIEW_CHARS: '200000',
+      ...extraEnv
     },
     stdio: ['ignore', 'ignore', 'pipe']
   })

@@ -29,6 +29,7 @@ import {
   desktopInputType
 } from './desktop-control'
 import { getNativeAgentRuntimeManager } from './native-agent-runtime'
+import { getCodeGraphWorker } from '../lib/codegraph-worker'
 import { getNativeSshConnectionPayload } from './ssh-handlers'
 import { hooksService } from '../hooks/hooks-service'
 import type { HookEvent, HookInvocation } from '../../shared/hooks/types'
@@ -833,6 +834,19 @@ export function registerSidecarHandlers(): void {
     await manager.stop()
     return { ok: true }
   })
+
+  registerSidecarMessagePackHandler<{ target?: 'native' | 'codegraph'; reason?: string }>(
+    'sidecar:recycle',
+    async (_event, args) => {
+      if (args?.target === 'codegraph') {
+        await getCodeGraphWorker().recycle()
+        return { ok: true, target: 'codegraph', reason: args.reason ?? null }
+      }
+      await manager.stop()
+      const ok = await manager.ensureStarted()
+      return { ok, target: 'native', reason: args?.reason ?? null }
+    }
+  )
 
   registerMessagePackInvokeHandler<{
     method: string

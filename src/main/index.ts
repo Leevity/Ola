@@ -78,7 +78,9 @@ import { registerGitHandlers } from './ipc/git-handlers'
 import { registerMigrationHandlers } from './ipc/migration-handlers'
 import { registerSyncHandlers } from './ipc/sync-handlers'
 import { registerSidecarHandlers, getSidecarManager } from './ipc/sidecar-manager'
+import { registerCodeGraphHandlers } from './ipc/codegraph-handlers'
 import { getNativeWorker, stopNativeWorker } from './lib/native-worker'
+import { getCodeGraphWorker } from './lib/codegraph-worker'
 import { registerTeamRuntimeHandlers } from './ipc/team-runtime-handlers'
 import { loadPersistedJobs, cancelAllJobs } from './cron/cron-scheduler'
 import { McpManager } from './mcp/mcp-manager'
@@ -1236,6 +1238,7 @@ app.on('before-quit', (event) => {
     void flushSettingsSync()
     closeAllRemoteSessions()
     void stopNativeWorker()
+    void getCodeGraphWorker().stop()
     return
   }
 
@@ -1251,6 +1254,7 @@ app.on('before-quit', (event) => {
     void flushSettingsSync()
     closeAllRemoteSessions()
     void stopNativeWorker()
+    void getCodeGraphWorker().stop()
     app.quit()
   })()
 })
@@ -1410,6 +1414,7 @@ if (gotSingleInstanceLock) {
     registerRemoteHandlers()
 
     registerSidecarHandlers()
+    registerCodeGraphHandlers()
     registerTeamRuntimeHandlers()
 
     try {
@@ -1553,6 +1558,7 @@ app.on('window-all-closed', () => {
   closeAllRemoteSessions()
   cancelAllJobs()
   void stopNativeWorker()
+  void getCodeGraphWorker().stop()
   getSidecarManager()
     .stop()
     .catch(() => {})

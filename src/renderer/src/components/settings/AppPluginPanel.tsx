@@ -46,6 +46,8 @@ import {
   BROWSER_SCROLL_TOOL_NAME,
   BROWSER_SNAPSHOT_TOOL_NAME,
   BROWSER_TYPE_TOOL_NAME,
+  CODEGRAPH_PLUGIN_ID,
+  CODEGRAPH_EXPLORE_TOOL_NAME,
   DESKTOP_CLICK_TOOL_NAME,
   DESKTOP_CONTROL_PLUGIN_ID,
   DESKTOP_SCREENSHOT_TOOL_NAME,
@@ -91,7 +93,8 @@ const TOOL_ARG_LABELS: Record<AppPluginToolName, string[]> = {
   [DESKTOP_CLICK_TOOL_NAME]: ['x', 'y', 'button', 'action'],
   [DESKTOP_TYPE_TOOL_NAME]: ['text', 'key', 'hotkey'],
   [DESKTOP_SCROLL_TOOL_NAME]: ['x', 'y', 'scrollX', 'scrollY'],
-  [DESKTOP_WAIT_TOOL_NAME]: ['delayMs']
+  [DESKTOP_WAIT_TOOL_NAME]: ['delayMs'],
+  [CODEGRAPH_EXPLORE_TOOL_NAME]: ['query', 'projectPath']
 }
 
 function resolveDefaultImageModelId(providerId: string): string | null {
@@ -159,6 +162,7 @@ function getToolStatusDescriptionKey(descriptor: AppPluginDescriptor): string {
   if (descriptor.requiresModelConfig) return 'plugin.toolStatusDesc'
   if (descriptor.id === BROWSER_PLUGIN_ID) return 'plugin.toolStatusDescBrowser'
   if (descriptor.id === PRODUCT_DESIGN_PLUGIN_ID) return 'plugin.toolStatusDescProductDesign'
+  if (descriptor.id === CODEGRAPH_PLUGIN_ID) return 'plugin.toolStatusDescCodeGraph'
   return 'plugin.toolStatusDescDesktop'
 }
 

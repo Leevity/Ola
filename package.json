@@ -33,6 +33,7 @@
     "worker:assets:status": "node ./scripts/validate-worker-assets.mjs",
     "worker:assets:verify": "node ./scripts/validate-worker-assets.mjs --strict",
     "codegraph:grammars:validate": "node ./scripts/validate-codegraph-grammars.mjs",
+    "verify:codegraph-worker": "node ./scripts/verify-codegraph-worker.mjs",
     "start": "electron-vite preview",
     "dev": "node ./scripts/launch-dev.mjs",
     "dev:raw": "electron-vite dev",
