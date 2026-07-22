@@ -54,8 +54,15 @@ async function ensureNativeWorker(projectDir) {
   const workerDir = path.join(projectDir, 'resources', 'native-worker')
   const workerExe = path.join(workerDir, 'Ola.Native.Worker.exe')
   const workerBin = path.join(workerDir, 'Ola.Native.Worker')
+  const codeGraphDir = path.join(workerDir, 'codegraph-worker')
+  const codeGraphExe = path.join(codeGraphDir, 'Ola.CodeGraph.Worker.exe')
+  const codeGraphBin = path.join(codeGraphDir, 'Ola.CodeGraph.Worker')
+  const nativeReady =
+    existsSync(workerBin) || (process.platform === 'win32' && existsSync(workerExe))
+  const codeGraphReady =
+    existsSync(codeGraphBin) || (process.platform === 'win32' && existsSync(codeGraphExe))
 
-  if (existsSync(workerBin) || (process.platform === 'win32' && existsSync(workerExe))) {
+  if (nativeReady && codeGraphReady) {
     return
   }
 
@@ -75,8 +82,12 @@ async function ensureNativeWorker(projectDir) {
     return
   }
 
-  if (!existsSync(workerBin)) {
-    console.error('[predev] Native worker build completed but binary not found at:', workerBin)
+  const builtNativeReady =
+    existsSync(workerBin) || (process.platform === 'win32' && existsSync(workerExe))
+  const builtCodeGraphReady =
+    existsSync(codeGraphBin) || (process.platform === 'win32' && existsSync(codeGraphExe))
+  if (!builtNativeReady || !builtCodeGraphReady) {
+    console.error('[predev] Worker build completed but required binaries are missing.')
     process.exitCode = 1
     return
   }

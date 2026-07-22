@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
+import { spawnSync } from 'node:child_process'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -71,6 +72,13 @@ export function loadGrammarManifest(manifestPath = grammarManifestPath) {
   return validateGrammarManifest(JSON.parse(readFileSync(manifestPath, 'utf8')))
 }
 
+export function requiredGrammarLibraries(manifest) {
+  return {
+    runtime: manifest.runtime.library,
+    grammars: manifest.grammars.map((grammar) => grammar.library)
+  }
+}
+
 export function nativeLibraryFileName(library, rid) {
   if (/^win-(?:x64|arm64)$/.test(rid)) return `${library}.dll`
   if (/^osx-(?:x64|arm64)$/.test(rid)) return `lib${library}.dylib`
@@ -90,4 +98,73 @@ export function resolveGrammarFiles(sourceDir, rid, manifest) {
     )
   }
   return expected.map((item) => ({ ...item, absolutePath: join(sourceDir, item.file) }))
+}
+
+function symbolToolCandidates(rid, file) {
+  if (rid.startsWith('osx-')) {
+    return [
+      { command: 'nm', args: ['-gU', file] },
+      { command: 'llvm-nm', args: ['--extern-only', '--defined-only', file] },
+      { command: 'objdump', args: ['--syms', file] }
+    ]
+  }
+  if (rid.startsWith('linux-')) {
+    return [
+      { command: 'nm', args: ['-D', '--defined-only', file] },
+      { command: 'llvm-nm', args: ['--dynamic', '--extern-only', '--defined-only', file] },
+      { command: 'objdump', args: ['-T', file] }
+    ]
+  }
+  if (rid.startsWith('win-')) {
+    return [
+      { command: 'dumpbin', args: ['/nologo', '/exports', file] },
+      { command: 'llvm-nm', args: ['--extern-only', '--defined-only', file] },
+      { command: 'objdump', args: ['-p', file] }
+    ]
+  }
+  throw new Error(`unsupported CodeGraph grammar RID: ${rid}`)
+}
+
+function inspectNativeSymbols(file, rid) {
+  const attempts = []
+  for (const candidate of symbolToolCandidates(rid, file)) {
+    const result = spawnSync(candidate.command, candidate.args, {
+      encoding: 'utf8',
+      windowsHide: true
+    })
+    if (result.error?.code === 'ENOENT') {
+      attempts.push(`${candidate.command}: not found`)
+      continue
+    }
+    if (result.error || result.status !== 0) {
+      attempts.push(
+        `${candidate.command}: ${result.error?.message ?? result.stderr ?? result.status}`
+      )
+      continue
+    }
+    return { tool: candidate.command, output: `${result.stdout}\n${result.stderr}` }
+  }
+  throw new Error(`cannot inspect exports for ${file} (${rid}): ${attempts.join('; ')}`)
+}
+
+function hasExportedSymbol(output, entryPoint) {
+  const escaped = entryPoint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(?:^|[^A-Za-z0-9_])_?${escaped}(?:$|[^A-Za-z0-9_])`, 'm').test(output)
+}
+
+export function validateGrammarEntryPoints(sourceDir, rid, manifest) {
+  const files = resolveGrammarFiles(sourceDir, rid, manifest)
+  const filesByLibrary = new Map(files.map((file) => [file.library, file]))
+  return manifest.grammars.map((grammar) => {
+    const nativeLibrary = filesByLibrary.get(grammar.library)
+    const symbols = inspectNativeSymbols(join(sourceDir, nativeLibrary.file), rid)
+    const entryPoints = [...new Set(grammar.languages.map((language) => language.entryPoint))]
+    const missing = entryPoints.filter(
+      (entryPoint) => !hasExportedSymbol(symbols.output, entryPoint)
+    )
+    if (missing.length > 0) {
+      throw new Error(`${nativeLibrary.file} does not export ${missing.join(', ')}`)
+    }
+    return { library: grammar.library, file: nativeLibrary.file, entryPoints, tool: symbols.tool }
+  })
 }

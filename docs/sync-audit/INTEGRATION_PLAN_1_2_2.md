@@ -7,33 +7,34 @@
 
 ## 0. 完成度快照（以代码现状为准）
 
-| 顺序 | 分支建议 | 内容 | 状态 | 证据 / 备注 |
-| ---: | --- | --- | --- | --- |
-| 0 | `codex/sync-audit-1-2-2` | 审计工具 + baseline | ✅ 完成 | `docs/sync-audit/*`、`scripts/audit-opencowork-sync.mjs` |
-| 1 | `codex/permission-policy` | 权限策略 | ✅ 完成 | `docs/sync-audit/PHASE_1_PERMISSION_POLICY.md` |
-| 2 | `codex/provider-retry` | 重试与压缩设置 | ✅ 完成 | `AgentRuntimeProviderRetryPolicy.cs` |
-| 3 | `codex/input-drafts` | 输入草稿 | ✅ 完成 | 跨会话草稿持久化已存在 |
-| 4 | `codex/content-blocks` | 内容块 | ✅ 完成 | 用户确认：自动验证 + 生产构建 + 桌面验收通过 |
-| 5 | `codex/hooks-runtime` | Hooks 核心 | ✅ 基本完成 | `src/main/hooks/*`、`src/main/ipc/hooks-handlers.ts`、sidecar 触发点 |
-| 6 | `codex/hooks-ui` | Hooks 管理 UI | ✅ 基本完成 | `HooksPanel.tsx`、`hooks-store.ts`、settings 入口 |
-| 7 | `codex/subagent-history-cancel` | 子 Agent 历史 + 精确取消 | ✅ 自动验收完成 | 专项验证、生产构建、桌面启动通过；真实并行取消保留发布前交互验收 |
-| 8 | `codex/codegraph-assets` | Worker/CodeGraph manifest + 缺失检测 | ✅ 已完成 | 主 Worker 校验通过；检测确认 CodeGraph Worker 与语法资产尚未装入 |
-| 8B | `codex/codegraph-worker` | CodeGraph Core/Worker + 语法资产发布 | 🟡 下一阶段 | 目标是让 `worker:assets:verify` 在所有 RID 转绿 |
-| 9 | `codex/release-update` | 绿色 zip + 更新 UI + Worker recycle | ⬜ 待开始 | 保持 Ola 包名、升级通道和 shutdown 语义 |
-| 10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力 | ⬜ 待审计 | SSH 已有大量能力，禁止按“从零开始”估算 |
+| 顺序 | 分支建议                            | 内容                                 | 状态             | 证据 / 备注                                                          |
+| ---: | ----------------------------------- | ------------------------------------ | ---------------- | -------------------------------------------------------------------- |
+|    0 | `codex/sync-audit-1-2-2`            | 审计工具 + baseline                  | ✅ 完成          | `docs/sync-audit/*`、`scripts/audit-opencowork-sync.mjs`             |
+|    1 | `codex/permission-policy`           | 权限策略                             | ✅ 完成          | `docs/sync-audit/PHASE_1_PERMISSION_POLICY.md`                       |
+|    2 | `codex/provider-retry`              | 重试与压缩设置                       | ✅ 完成          | `AgentRuntimeProviderRetryPolicy.cs`                                 |
+|    3 | `codex/input-drafts`                | 输入草稿                             | ✅ 完成          | 跨会话草稿持久化已存在                                               |
+|    4 | `codex/content-blocks`              | 内容块                               | ✅ 完成          | 用户确认：自动验证 + 生产构建 + 桌面验收通过                         |
+|    5 | `codex/hooks-runtime`               | Hooks 核心                           | ✅ 基本完成      | `src/main/hooks/*`、`src/main/ipc/hooks-handlers.ts`、sidecar 触发点 |
+|    6 | `codex/hooks-ui`                    | Hooks 管理 UI                        | ✅ 基本完成      | `HooksPanel.tsx`、`hooks-store.ts`、settings 入口                    |
+|    7 | `codex/subagent-history-cancel`     | 子 Agent 历史 + 精确取消             | ✅ 自动验收完成  | 专项验证、生产构建、桌面启动通过；真实并行取消保留发布前交互验收     |
+|    8 | `codex/codegraph-assets`            | Worker/CodeGraph manifest + 缺失检测 | ✅ 已完成        | 主 Worker 校验通过；检测确认 CodeGraph Worker 与语法资产尚未装入     |
+|   8B | `codex/codegraph-worker`            | CodeGraph Core/Worker + 语法资产发布 | ✅ 当前 RID 完成 | Core/Worker 自检、329 项测试、AOT 发布及 17 个语法导出校验通过       |
+|   8C | `codex/codegraph-runtime`           | Worker 管理、索引、Agent 工具和 UI   | 🟡 下一阶段      | 默认关闭，启用后懒启动独立 Worker                                    |
+|    9 | `codex/release-update`              | 绿色 zip + 更新 UI + Worker recycle  | ⬜ 待开始        | 保持 Ola 包名、升级通道和 shutdown 语义                              |
+|  10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力                             | ⬜ 待审计        | SSH 已有大量能力，禁止按“从零开始”估算                               |
 
 ### 阶段 7 完成状态
 
 已注册 Worker 路由：
 
-| Route | 用途 |
-| --- | --- |
-| `db/sub-agent-history-index` | session 轻量索引（无 snapshot） |
-| `db/sub-agent-history-list` | 分页列表（含 snapshot / hasMore） |
-| `db/sub-agent-history-apply` | 单条 upsert（`session_id + tool_use_id`） |
-| `db/sub-agent-history-replace` | 整批替换 |
-| `db/sub-agent-history-migration-status` | 迁移状态 |
-| `db/sub-agent-history-migration-mark` | 幂等标记迁移 |
+| Route                                   | 用途                                      |
+| --------------------------------------- | ----------------------------------------- |
+| `db/sub-agent-history-index`            | session 轻量索引（无 snapshot）           |
+| `db/sub-agent-history-list`             | 分页列表（含 snapshot / hasMore）         |
+| `db/sub-agent-history-apply`            | 单条 upsert（`session_id + tool_use_id`） |
+| `db/sub-agent-history-replace`          | 整批替换                                  |
+| `db/sub-agent-history-migration-status` | 迁移状态                                  |
+| `db/sub-agent-history-migration-mark`   | 幂等标记迁移                              |
 
 完成证据：共享契约、Main DAO/IPC、旧历史幂等迁移与清理、分页快照恢复、流式增量写入、`toolUseId` 精确取消和显式 `cancelled` 状态均已闭环。`npm run verify:sub-agent-history` 使用真实 Worker 与临时 SQLite 验证 260 条历史分页、并发会话、失败迁移和幂等标记。
 
@@ -53,28 +54,28 @@
 
 基于 `scripts/audit-opencowork-sync.mjs` 最近一次摘要（`docs/sync-audit/SUMMARY.md`）：
 
-| 分类 | 数量 | 含义 |
-| --- | ---: | --- |
-| identical | 434 | 实现相同，无需处理 |
-| brandOnly | 26 | 仅品牌差异，保持 Ola 命名 |
-| changed | 314 | 同路径但行为已分叉，需要逐项审查 |
-| onlyOla | 88 | Ola 独有，默认保留 |
-| onlyReference | 391 | 参考独有候选（大量属 CodeGraph） |
+| 分类          | 数量 | 含义                             |
+| ------------- | ---: | -------------------------------- |
+| identical     |  434 | 实现相同，无需处理               |
+| brandOnly     |   26 | 仅品牌差异，保持 Ola 命名        |
+| changed       |  314 | 同路径但行为已分叉，需要逐项审查 |
+| onlyOla       |   88 | Ola 独有，默认保留               |
+| onlyReference |  391 | 参考独有候选（大量属 CodeGraph） |
 
 ## 3. 融合优先级与用户效果
 
-| 优先级 | 能力 | 状态 | 预期用户效果 |
-| --- | --- | --- | --- |
-| P0 | 权限策略 | ✅ | 可配置工具白名单 / 命令规则 |
-| P0 | Provider 重试与压缩状态 | ✅ | 429/5xx 自动重试并显示等待 |
-| P0 | 输入草稿 | ✅ | 切换会话后输入不丢 |
-| P1 | Hooks | ✅ 主链路 | 可信脚本挂接事件前后 |
-| P1 | 子 Agent 历史与取消 | 🟡 | 重启可回看；可取消单个子 Agent |
-| P1 | SSH Store 模块化 | ⬜ | 远控状态更稳 |
-| P1 | 浏览器 Cookie 导入 | ⬜ | 授权后导入登录态到 Ola Vault |
-| P2 | CodeGraph | ⬜ | 项目索引与结构化检索 |
-| P2 | AI Coding Terminal | ⬜ | 远控标签内托管 coding CLI |
-| P3 | Draw Graph / 视频 / 发布增强 | ⬜ | 非核心，最后评估 |
+| 优先级 | 能力                         | 状态      | 预期用户效果                   |
+| ------ | ---------------------------- | --------- | ------------------------------ |
+| P0     | 权限策略                     | ✅        | 可配置工具白名单 / 命令规则    |
+| P0     | Provider 重试与压缩状态      | ✅        | 429/5xx 自动重试并显示等待     |
+| P0     | 输入草稿                     | ✅        | 切换会话后输入不丢             |
+| P1     | Hooks                        | ✅ 主链路 | 可信脚本挂接事件前后           |
+| P1     | 子 Agent 历史与取消          | 🟡        | 重启可回看；可取消单个子 Agent |
+| P1     | SSH Store 模块化             | ⬜        | 远控状态更稳                   |
+| P1     | 浏览器 Cookie 导入           | ⬜        | 授权后导入登录态到 Ola Vault   |
+| P2     | CodeGraph                    | ⬜        | 项目索引与结构化检索           |
+| P2     | AI Coding Terminal           | ⬜        | 远控标签内托管 coding CLI      |
+| P3     | Draw Graph / 视频 / 发布增强 | ⬜        | 非核心，最后评估               |
 
 ## 4. 明确保留且不接受覆盖的 Ola 能力
 
@@ -170,13 +171,13 @@ Renderer agent-store / SubAgentsPanel
 
 **行为：**
 
-| 事件 | status | snapshot |
-| --- | --- | --- |
-| `sub_agent_queued` / `start` | `running` | 轻量摘要 |
-| progress / tool / report | `running` | 节流更新（≥500ms） |
-| `sub_agent_end` success | `completed` | 最终摘要 |
-| end error | `failed` | error + 摘要 |
-| 用户取消 | `cancelled` | 取消时摘要 |
+| 事件                         | status      | snapshot           |
+| ---------------------------- | ----------- | ------------------ |
+| `sub_agent_queued` / `start` | `running`   | 轻量摘要           |
+| progress / tool / report     | `running`   | 节流更新（≥500ms） |
+| `sub_agent_end` success      | `completed` | 最终摘要           |
+| end error                    | `failed`    | error + 摘要       |
+| 用户取消                     | `cancelled` | 取消时摘要         |
 
 唯一键：`(sessionId, toolUseId)`。`subAgentId` 可用 `subagent-{toolUseId}-...` 或 name+id 稳定值。
 
