@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+    <IsAotCompatible>true</IsAotCompatible>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Shared worker runtime + transport + host, SOURCE-LINKED from the main worker
+       (single source of truth stays in Ola.Native.Worker; that project is
+       UNTOUCHED and keeps compiling its own copies). Both the main worker and the
+       CodeGraph worker thus speak the identical IPC/dispatch/host contract.
+       Excluded: the 3 agent/catalog-coupled files (they reference Modules/*) — the
+       CodeGraph worker supplies its own single-module catalog. See reference/04 §3. -->
+  <ItemGroup>
+    <Compile Include="..\Ola.Native.Worker\Runtime\**\*.cs" Link="Runtime\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Ola.Native.Worker\Hosting\**\*.cs" Link="Hosting\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="..\Ola.Native.Worker\Contracts\**\*.cs" Link="Contracts\%(RecursiveDir)%(Filename)%(Extension)" />
+    <!-- SystemModule provides worker/ping · worker/routes · worker/memory — the base
+         methods every worker needs to be supervisable by NativeWorkerManager. Shared. -->
+    <Compile Include="..\Ola.Native.Worker\Modules\SystemModule.cs" Link="SystemModule.cs" />
+    <Compile Remove="..\Ola.Native.Worker\Runtime\AgentStreamMessagePackEmitter.cs" />
+    <Compile Remove="..\Ola.Native.Worker\Runtime\ApiUserAgent.cs" />
+    <Compile Remove="..\Ola.Native.Worker\Runtime\WorkerHttpClientFactory.cs" />
+    <Compile Remove="..\Ola.Native.Worker\Hosting\WorkerModuleCatalog.cs" />
+  </ItemGroup>
+
+  <!-- Internals are visible to the two CodeGraph assemblies (all-internal convention). -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ola.CodeGraph.Core" />
+    <InternalsVisibleTo Include="Ola.CodeGraph.Worker" />
+  </ItemGroup>
+</Project>
