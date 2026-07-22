@@ -12,6 +12,31 @@ interface CodeGraphRequestArgs {
   timeoutMs?: number
 }
 
+const RECOVERABLE_DASHBOARD_METHODS = new Set(['codegraph/index-status', 'codegraph/stats'])
+
+function isStalledWorkerError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.message.includes('request timed out') || error.message === 'CodeGraph worker stopped'
+}
+
+async function requestCodeGraph(args: CodeGraphRequestArgs): Promise<unknown> {
+  const worker = getCodeGraphWorker()
+  try {
+    return await worker.request(args.method, args.params, args.timeoutMs)
+  } catch (error) {
+    if (!RECOVERABLE_DASHBOARD_METHODS.has(args.method) || !isStalledWorkerError(error)) {
+      throw error
+    }
+
+    console.warn('[CodeGraphWorker] recycling stalled dashboard request', {
+      method: args.method,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    await worker.stop()
+    return await worker.request(args.method, args.params, args.timeoutMs)
+  }
+}
+
 let forwardingRegistered = false
 
 function broadcast(channel: string, payload: unknown): void {
@@ -42,7 +67,7 @@ export function registerCodeGraphHandlers(): void {
     if (!args.method?.startsWith('codegraph/')) {
       throw new Error('Only codegraph/* methods may use the CodeGraph worker')
     }
-    const result = await getCodeGraphWorker().request(args.method, args.params, args.timeoutMs)
+    const result = await requestCodeGraph(args)
     return encodeMessagePackPayload(result)
   })
   ipcMain.handle(toMessagePackChannel('codegraph:status'), async () => {

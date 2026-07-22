@@ -66,8 +66,8 @@ export function CodeGraphDashboard(): React.JSX.Element {
     if (!nextWorkerStatus.workerReady) return
     try {
       const [nextStatus, nextStats] = await Promise.all([
-        agentBridge.requestCodeGraph<Status>('codegraph/index-status', params),
-        agentBridge.requestCodeGraph<Stats>('codegraph/stats', params)
+        agentBridge.requestCodeGraph<Status>('codegraph/index-status', params, 10_000),
+        agentBridge.requestCodeGraph<Stats>('codegraph/stats', params, 10_000)
       ])
       setStatus(nextStatus)
       setStats(nextStats)
