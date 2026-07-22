@@ -70,6 +70,22 @@ async function saveProject(project: DrawGraphProject): Promise<{ success: true }
 }
 
 export function registerDrawGraphHandlers(): void {
+  registerMessagePackHandler('draw-graph:list', async () => {
+    const directory = path.join(app.getPath('userData'), 'draw-projects')
+    try {
+      const files = await fs.readdir(directory)
+      const projects = await Promise.all(
+        files
+          .filter((file) => file.endsWith('.json'))
+          .map((file) => readProjectFile(path.join(directory, file)))
+      )
+      return projects
+        .filter(isProject)
+        .map((project) => ({ id: project.id, name: project.name, updatedAt: project.updatedAt }))
+    } catch {
+      return []
+    }
+  })
   registerMessagePackHandler<{ id?: string }>('draw-graph:load', async ({ id }) =>
     loadProject(safeProjectId(id))
   )

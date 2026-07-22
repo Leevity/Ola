@@ -60,6 +60,7 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'codegraph:status',
   'provider:mirror-snapshot',
   'draw-graph:load',
+  'draw-graph:list',
   'draw-graph:save',
   'notify:desktop',
   'notify:session',

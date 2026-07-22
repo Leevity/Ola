@@ -776,6 +776,10 @@
       "mask": "Mask",
       "expand": "Expand",
       "upscale": "Upscale",
+      "project": "Canvas",
+      "promptLibrary": "Prompt Library",
+      "assetLibrary": "Asset Library",
+      "assets": "assets",
       "minimap": "Minimap",
       "node": { "image": "Image Node", "text": "Text Node", "config": "Config Node" },
       "placeholder": {
