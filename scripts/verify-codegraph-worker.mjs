@@ -14,15 +14,24 @@ const project = path.join(
 
 async function main() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ola-codegraph-verify-'))
-  const sourceRoot = path.join(tempDir, 'project')
+  const requestedRoot = process.env.OLA_CODEGRAPH_VERIFY_ROOT?.trim()
+  const sourceRoot = requestedRoot ? path.resolve(requestedRoot) : path.join(tempDir, 'project')
   let client
   let child
   try {
-    await mkdir(sourceRoot, { recursive: true })
-    await writeFile(
-      path.join(sourceRoot, 'sample.ts'),
-      'export function greet(name: string) { return `Hello ${name}` }\n'
-    )
+    if (!requestedRoot) {
+      await mkdir(sourceRoot, { recursive: true })
+      await writeFile(
+        path.join(sourceRoot, 'sample.ts'),
+        'export function greet(name: string) { return `Hello ${name}` }\n'
+      )
+      for (let index = 0; index < 600; index += 1) {
+        await writeFile(
+          path.join(sourceRoot, `module-${index}.ts`),
+          `export function symbol${index}(value: number) { return value + ${index} }\n`
+        )
+      }
+    }
     ;({ client, child } = await startWorker(tempDir, project, {
       OLA_CODEGRAPH_GRAMMARS_DIR: path.join(
         repoRoot,
@@ -40,11 +49,30 @@ async function main() {
     )
     const status = await client.request('codegraph/status', { workingFolder: sourceRoot })
     assert(status.success, `CodeGraph status failed: ${JSON.stringify(status)}`)
-    const indexed = await client.request('codegraph/index', { workingFolder: sourceRoot }, 120_000)
+    const progressStarted = new Promise((resolve) => {
+      const unsubscribe = client.onEvent('codegraph/index-progress', () => {
+        unsubscribe()
+        resolve()
+      })
+    })
+    const indexPromise = client.request('codegraph/index', { workingFolder: sourceRoot }, 120_000)
+    await Promise.race([progressStarted, new Promise((resolve) => setTimeout(resolve, 2_000))])
+    const liveStatus = await client.request(
+      'codegraph/index-status',
+      { workingFolder: sourceRoot },
+      5_000
+    )
+    assert(
+      liveStatus.success && liveStatus.indexed,
+      `CodeGraph live index status failed: ${JSON.stringify(liveStatus)}`
+    )
+    const liveStats = await client.request('codegraph/stats', { workingFolder: sourceRoot }, 5_000)
+    assert(liveStats.success, `CodeGraph live stats failed: ${JSON.stringify(liveStats)}`)
+    const indexed = await indexPromise
     assert(indexed.success, `CodeGraph index failed: ${JSON.stringify(indexed)}`)
     const searched = await client.request('codegraph/search', {
       workingFolder: sourceRoot,
-      query: 'greet'
+      query: requestedRoot ? 'App' : 'greet'
     })
     assert(searched.success, `CodeGraph search failed: ${JSON.stringify(searched)}`)
     const indexStatus = await client.request('codegraph/index-status', {
@@ -61,7 +89,7 @@ async function main() {
     )
     const neighbors = await client.request('codegraph/query-neighbors', {
       workingFolder: sourceRoot,
-      symbol: 'greet',
+      symbol: requestedRoot ? 'App' : 'greet',
       depth: 1,
       limit: 80
     })
