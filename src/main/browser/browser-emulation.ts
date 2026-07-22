@@ -14,7 +14,7 @@ import {
   type ConcreteBrowserUserDataSource
 } from '../../shared/browser-plugin'
 
-interface BrowserProfileCandidate {
+export interface BrowserProfileCandidate {
   browserId: ConcreteBrowserUserDataSource
   browserName: string
   dataRoot: string
@@ -102,6 +102,25 @@ function listProfileDirs(dataRoot: string): string[] {
   } catch {
     return []
   }
+}
+
+export function listDetectedBrowserProfiles(): BrowserProfileCandidate[] {
+  return getBrowserInstallLocations().flatMap((location) =>
+    listProfileDirs(location.dataRoot).flatMap((profileDirName) => {
+      const profilePath = join(location.dataRoot, profileDirName)
+      const cookiesPath = existsSync(join(profilePath, 'Network', 'Cookies'))
+        ? join(profilePath, 'Network', 'Cookies')
+        : join(profilePath, 'Cookies')
+      if (!existsSync(cookiesPath)) return []
+      return [
+        {
+          ...location,
+          profilePath,
+          profileDisplayName: getProfileDisplayName(profileDirName)
+        }
+      ]
+    })
+  )
 }
 
 function resolveProfileDirName(dataRoot: string): string | null {

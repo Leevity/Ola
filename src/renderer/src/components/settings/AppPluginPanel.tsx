@@ -8,12 +8,14 @@ import {
   MonitorSmartphone,
   Palette,
   Puzzle,
-  Trash2
+  Trash2,
+  Download
 } from 'lucide-react'
 import { Switch } from '@renderer/components/ui/switch'
 import { Button } from '@renderer/components/ui/button'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { Badge } from '@renderer/components/ui/badge'
+import { Checkbox } from '@renderer/components/ui/checkbox'
 import {
   Select,
   SelectContent,
@@ -67,6 +69,13 @@ import {
   BROWSER_USER_DATA_SOURCES,
   type BrowserUserDataSource
 } from '../../../../shared/browser-plugin'
+
+interface BrowserCookieProfile {
+  id: string
+  browserName: string
+  profileName: string
+  profilePath: string
+}
 
 interface BrowserEmulationStatus {
   reuseEnabled: boolean
@@ -205,6 +214,10 @@ export function AppPluginPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const [selectedPluginId, setSelectedPluginId] = useState<AppPluginId>(IMAGE_PLUGIN_ID)
   const [clearingCookies, setClearingCookies] = useState(false)
+  const [cookieProfiles, setCookieProfiles] = useState<BrowserCookieProfile[]>([])
+  const [selectedCookieProfileId, setSelectedCookieProfileId] = useState('')
+  const [cookiePrivacyConfirmed, setCookiePrivacyConfirmed] = useState(false)
+  const [importingCookies, setImportingCookies] = useState(false)
   const [browserEmulationStatus, setBrowserEmulationStatus] =
     useState<BrowserEmulationStatus | null>(null)
   const activeProjectId = useChatStore((state) => state.activeProjectId)
@@ -332,6 +345,22 @@ export function AppPluginPanel(): React.JSX.Element {
     }
   }, [browserUserDataReuseEnabled, browserUserDataSource])
 
+  useEffect(() => {
+    let cancelled = false
+    void ipcClient
+      .invoke(IPC.BROWSER_COOKIE_PROFILES)
+      .then((result) => {
+        const response = result as { success?: boolean; profiles?: BrowserCookieProfile[] }
+        if (cancelled || !response.success || !Array.isArray(response.profiles)) return
+        setCookieProfiles(response.profiles)
+        setSelectedCookieProfileId((current) => current || response.profiles?.[0]?.id || '')
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const handleClearBrowserCookies = async (): Promise<void> => {
     setClearingCookies(true)
     try {
@@ -348,6 +377,43 @@ export function AppPluginPanel(): React.JSX.Element {
       toast.error(t('plugin.browser.cookiesClearFailed'), { description: message })
     } finally {
       setClearingCookies(false)
+    }
+  }
+
+  const handleImportBrowserCookies = async (): Promise<void> => {
+    if (!selectedCookieProfileId || !cookiePrivacyConfirmed) return
+    setImportingCookies(true)
+    try {
+      const result = (await ipcClient.invoke(IPC.BROWSER_IMPORT_COOKIES, {
+        profileId: selectedCookieProfileId,
+        privacyConfirmed: true
+      })) as {
+        success: boolean
+        imported: number
+        skipped: number
+        failed: number
+        errorKind?: string
+        error?: string
+      }
+      if (result.success) {
+        toast.success(
+          t('plugin.browser.cookieImportComplete', {
+            imported: result.imported,
+            skipped: result.skipped,
+            failed: result.failed
+          })
+        )
+      } else {
+        toast.error(t(`plugin.browser.cookieImportErrors.${result.errorKind ?? 'unknown'}`), {
+          description: result.error
+        })
+      }
+    } catch (error) {
+      toast.error(t('plugin.browser.cookieImportErrors.unknown'), {
+        description: error instanceof Error ? error.message : String(error)
+      })
+    } finally {
+      setImportingCookies(false)
     }
   }
 
@@ -751,6 +817,54 @@ export function AppPluginPanel(): React.JSX.Element {
                     ) : null}
                     <p>{t('plugin.browser.restartRequired')}</p>
                   </div>
+                </div>
+
+                <div className="rounded-lg border bg-muted/10 p-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-sm font-medium">{t('plugin.browser.cookieImport')}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {t('plugin.browser.cookieImportDesc')}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-2"
+                      disabled={
+                        importingCookies || !selectedCookieProfileId || !cookiePrivacyConfirmed
+                      }
+                      onClick={() => void handleImportBrowserCookies()}
+                    >
+                      <Download className="size-3.5" />
+                      {importingCookies
+                        ? t('plugin.browser.importingCookies')
+                        : t('plugin.browser.importCookies')}
+                    </Button>
+                  </div>
+                  <Select
+                    value={selectedCookieProfileId}
+                    onValueChange={setSelectedCookieProfileId}
+                  >
+                    <SelectTrigger className="mt-3 h-8 text-xs">
+                      <SelectValue placeholder={t('plugin.browser.noCookieProfiles')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cookieProfiles.map((profile) => (
+                        <SelectItem key={profile.id} value={profile.id} className="text-xs">
+                          {profile.browserName} · {profile.profileName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-muted-foreground">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={cookiePrivacyConfirmed}
+                      onCheckedChange={(checked) => setCookiePrivacyConfirmed(checked === true)}
+                    />
+                    <span>{t('plugin.browser.cookiePrivacyConfirm')}</span>
+                  </label>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">

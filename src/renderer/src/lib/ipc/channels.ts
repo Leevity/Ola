@@ -336,6 +336,8 @@ export const IPC = {
   // Built-in Browser
   BROWSER_CLEAR_COOKIES: 'browser:clear-cookies',
   BROWSER_EMULATION_STATUS: 'browser:emulation-status',
+  BROWSER_COOKIE_PROFILES: 'browser:cookie-profiles',
+  BROWSER_IMPORT_COOKIES: 'browser:import-cookies',
 
   // Credentials
   CREDENTIALS_VAULT_STATUS: 'credentials:vault-status',
