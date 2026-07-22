@@ -3,12 +3,34 @@ import {
   getBuiltInBrowserStorageSessions
 } from '../browser/browser-emulation'
 import { registerMessagePackHandler } from './messagepack-handler'
+import { importBrowserCookies, listBrowserCookieProfiles } from '../browser/browser-cookie-import'
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
 export function registerBrowserHandlers(): void {
+  registerMessagePackHandler<undefined>('browser:cookie-profiles', async () => ({
+    success: true,
+    profiles: listBrowserCookieProfiles()
+  }))
+
+  registerMessagePackHandler<{ profileId: string; privacyConfirmed: boolean }>(
+    'browser:import-cookies',
+    async (input) => {
+      if (!input?.privacyConfirmed) {
+        return {
+          success: false,
+          imported: 0,
+          skipped: 0,
+          failed: 0,
+          errorKind: 'privacy_confirmation_required'
+        }
+      }
+      return importBrowserCookies(input.profileId)
+    }
+  )
+
   registerMessagePackHandler<undefined>('browser:clear-cookies', async () => {
     try {
       await Promise.all(
