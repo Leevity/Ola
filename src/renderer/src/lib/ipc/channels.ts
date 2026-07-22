@@ -343,6 +343,7 @@ export const IPC = {
   AI_CODING_CONFIGS_LIST: 'ai-coding:configs-list',
   AI_CODING_CONFIGS_SAVE: 'ai-coding:configs-save',
   AI_CODING_CONFIGS_DELETE: 'ai-coding:configs-delete',
+  AI_CODING_TERMINAL_LAUNCH: 'ai-coding:terminal-launch',
 
   // Credentials
   CREDENTIALS_VAULT_STATUS: 'credentials:vault-status',

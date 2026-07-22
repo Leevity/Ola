@@ -1327,9 +1327,16 @@
   "terminalDock": {
     "sshContext": "SSH 工作区",
     "newTerminal": "新建终端",
-    "newClaude": "新建 Claude",
-    "newCodex": "新建 Codex",
-    "newGemini": "新建 Gemini",
+    "newAiCoding": "启动 {{name}}",
+    "aiCodingLaunchFailed": "无法启动 AI 编程终端",
+    "aiCodingErrors": {
+      "config_unavailable": "此配置已停用或不可用。",
+      "provider_unavailable": "所选服务商已停用或不可用。",
+      "model_unavailable": "所选模型已停用或不可用。",
+      "credential_unavailable": "服务商凭据不可用。",
+      "cli_missing": "所需 CLI 未安装或无法启动。",
+      "unknown": "无法启动终端。"
+    },
     "closeTerminal": "关闭当前终端",
     "collapse": "收起终端",
     "empty": "当前还没有打开终端。",
