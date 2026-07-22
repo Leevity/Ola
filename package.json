@@ -42,6 +42,7 @@
     "codegraph:grammars:validate": "node ./scripts/validate-codegraph-grammars.mjs",
     "verify:codegraph-worker": "node ./scripts/verify-codegraph-worker.mjs",
     "verify:codegraph-dashboard": "esbuild tools/verify-codegraph-dashboard.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-codegraph-dashboard.mjs && node node_modules/.cache/ola-verify-codegraph-dashboard.mjs",
+    "verify:provider-main-store": "esbuild tools/verify-provider-main-store.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-provider-main-store.mjs && node node_modules/.cache/ola-verify-provider-main-store.mjs",
     "start": "electron-vite preview",
     "dev": "node ./scripts/launch-dev.mjs",
     "dev:raw": "electron-vite dev",
