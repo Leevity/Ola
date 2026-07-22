@@ -3,141 +3,28 @@ import { toast } from 'sonner'
 import i18n from '@renderer/locales'
 import { ipcClient } from '../lib/ipc/ipc-client'
 import { IPC } from '../lib/ipc/channels'
+import type {
+  SftpConflictPolicy,
+  SftpConnectionState,
+  SftpInspectorTab,
+  SftpPaneId,
+  SftpPaneState,
+  SftpTransferProgress,
+  SftpTransferStage,
+  SftpTransferTask,
+  SftpTransferTaskType,
+  SshConnection,
+  SshFileEntry,
+  SshGroup,
+  SshSession,
+  SshTab,
+  SshUploadProgress,
+  SshUploadStage,
+  SshUploadTask,
+  SshWorkspaceSection
+} from '../../../shared/ssh-contract'
 
-// ── Types ──
-
-export interface SshGroup {
-  id: string
-  name: string
-  sortOrder: number
-  createdAt: number
-  updatedAt: number
-}
-
-export interface SshConnection {
-  id: string
-  groupId: string | null
-  name: string
-  host: string
-  port: number
-  username: string
-  authType: 'password' | 'privateKey' | 'agent'
-  privateKeyPath: string | null
-  startupCommand: string | null
-  defaultDirectory: string | null
-  proxyJump: string | null
-  keepAliveInterval: number
-  sortOrder: number
-  lastConnectedAt: number | null
-  createdAt: number
-  updatedAt: number
-}
-
-export interface SshSession {
-  id: string
-  connectionId: string
-  status: 'connecting' | 'connected' | 'disconnected' | 'error'
-  error?: string
-}
-
-export interface SshTab {
-  id: string
-  type: 'terminal' | 'file'
-  sessionId: string | null
-  connectionId: string
-  connectionName: string
-  title: string
-  projectId?: string | null
-  filePath?: string
-  status?: 'connecting' | 'connected' | 'error'
-  error?: string
-}
-
-export interface SshFileEntry {
-  name: string
-  path: string
-  type: 'file' | 'directory' | 'symlink'
-  size: number
-  modifyTime: number
-}
-
-export type SshWorkspaceSection =
-  | 'hosts'
-  | 'keychain'
-  | 'forwarding'
-  | 'snippets'
-  | 'knownHosts'
-  | 'logs'
-  | 'sftp'
-  | 'terminal'
-
-export type SshUploadStage = 'upload' | 'cleanup' | 'done' | 'error' | 'canceled'
-
-export type SshUploadProgress = {
-  current?: number
-  total?: number
-  percent?: number
-}
-
-export type SshUploadTask = {
-  taskId: string
-  connectionId: string
-  stage: SshUploadStage
-  progress?: SshUploadProgress
-  message?: string
-  updatedAt: number
-}
-
-export type SftpPaneId = 'left' | 'right'
-
-export type SftpConflictPolicy = 'skip' | 'overwrite' | 'duplicate'
-
-export type SftpTransferTaskType = 'upload' | 'download' | 'remote-copy'
-
-export type SftpTransferStage =
-  | 'preparing'
-  | 'transferring'
-  | 'cleanup'
-  | 'done'
-  | 'error'
-  | 'canceled'
-
-export type SftpTransferProgress = {
-  currentBytes?: number
-  totalBytes?: number
-  percent?: number
-  processedItems?: number
-  totalItems?: number
-}
-
-export type SftpTransferTask = {
-  taskId: string
-  type: SftpTransferTaskType
-  stage: SftpTransferStage
-  sourceConnectionId?: string | null
-  targetConnectionId?: string | null
-  progress?: SftpTransferProgress
-  message?: string
-  currentItem?: string
-  updatedAt: number
-  conflictPolicy?: SftpConflictPolicy
-}
-
-export type SftpConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
-
-export type SftpConnectionState = {
-  status: SftpConnectionStatus
-  error?: string
-  homeDir?: string | null
-  lastConnectedAt?: number
-}
-
-export type SftpPaneState = {
-  connectionId: string | null
-  currentPath: string | null
-}
-
-export type SftpInspectorTab = 'details' | 'tasks'
+export type * from '../../../shared/ssh-contract'
 
 interface SshGroupRow {
   id: string
@@ -498,7 +385,7 @@ function areStringSetsEqual(left: Set<string> | undefined, right: Set<string>): 
 
 // ── Store ──
 
-interface SshStore {
+export interface SshStore {
   groups: SshGroup[]
   connections: SshConnection[]
   sessions: Record<string, SshSession>
