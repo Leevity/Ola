@@ -90,6 +90,7 @@ import {
 import { ModelManagementPanel, ProviderPanel } from './ProviderPanel'
 import { ChannelPanel } from './PluginPanel'
 import { AppPluginPanel } from './AppPluginPanel'
+import { AiCodingConfigPanel } from './AiCodingConfigPanel'
 import { ExtensionPanel } from './ExtensionPanel'
 import { McpPanel } from './McpPanel'
 import { WebSearchPanel } from './WebSearchPanel'
@@ -477,6 +478,12 @@ const menuGroupDefs: Array<{
         icon: <BrainCircuit className="size-4" />,
         labelKey: 'model.title',
         descKey: 'model.subtitle'
+      },
+      {
+        id: 'aiCoding',
+        icon: <Code2 className="size-4" />,
+        labelKey: 'aiCoding.title',
+        descKey: 'aiCoding.subtitle'
       }
     ]
   },
@@ -3772,6 +3779,7 @@ const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   channel: ChannelPanel,
   mcp: McpPanel,
   model: ModelPanel,
+  aiCoding: AiCodingConfigPanel,
   websearch: WebSearchPanel,
   skillsmarket: SkillsMarketPanel,
   pet: PetPanel,
@@ -3864,6 +3872,7 @@ export function SettingsPage(): React.JSX.Element {
           <AnimatePresence mode="wait">
             {effectiveSettingsTab === 'provider' ||
             effectiveSettingsTab === 'modelManagement' ||
+            effectiveSettingsTab === 'aiCoding' ||
             effectiveSettingsTab === 'plugin' ||
             effectiveSettingsTab === 'extension' ||
             effectiveSettingsTab === 'mcp' ||

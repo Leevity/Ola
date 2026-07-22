@@ -670,6 +670,39 @@
     "maxTokens": "最大 Token 数",
     "maxTokensDesc": "单次响应的最大 Token 限制"
   },
+  "aiCoding": {
+    "title": "AI Coding",
+    "subtitle": "管理 CLI 模型与权限配置",
+    "name": "配置名称",
+    "tool": "编程 CLI",
+    "provider": "Ola Provider",
+    "model": "模型",
+    "permissionMode": "权限模式",
+    "enabled": "启用",
+    "mapping": "最终映射",
+    "credential": "凭据",
+    "notConfigured": "未配置",
+    "copy": "复制",
+    "delete": "删除",
+    "save": "保存",
+    "saving": "保存中...",
+    "saved": "AI Coding 配置已保存",
+    "saveFailed": "AI Coding 配置保存失败",
+    "permissions": {
+      "standard": "标准",
+      "approve-edits": "编辑前确认",
+      "read-only": "只读",
+      "full-access": "完全访问"
+    },
+    "validation": {
+      "providerMissing": "请选择 Provider",
+      "providerDisabled": "所选 Provider 未启用",
+      "protocolMismatch": "所选 Provider 协议与当前 CLI 不兼容",
+      "baseUrlMissing": "Provider Base URL 缺失",
+      "authMissing": "Provider 认证尚未配置",
+      "modelMissing": "请选择兼容且已启用的模型"
+    }
+  },
   "plugin": {
     "title": "插件",
     "subtitle": "配置可选 Tool 插件及其访问规则",

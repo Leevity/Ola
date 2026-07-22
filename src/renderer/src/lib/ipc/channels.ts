@@ -339,6 +339,11 @@ export const IPC = {
   BROWSER_COOKIE_PROFILES: 'browser:cookie-profiles',
   BROWSER_IMPORT_COOKIES: 'browser:import-cookies',
 
+  // AI Coding
+  AI_CODING_CONFIGS_LIST: 'ai-coding:configs-list',
+  AI_CODING_CONFIGS_SAVE: 'ai-coding:configs-save',
+  AI_CODING_CONFIGS_DELETE: 'ai-coding:configs-delete',
+
   // Credentials
   CREDENTIALS_VAULT_STATUS: 'credentials:vault-status',
   CREDENTIALS_STORE: 'credentials:store',
