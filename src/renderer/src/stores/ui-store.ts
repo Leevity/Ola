@@ -218,6 +218,7 @@ export type SettingsTab =
   | 'provider'
   | 'modelManagement'
   | 'model'
+  | 'aiCoding'
   | 'plugin'
   | 'extension'
   | 'channel'

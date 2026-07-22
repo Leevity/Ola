@@ -15,6 +15,7 @@
     "verify:message-windowing": "node ./scripts/verify-message-windowing.mjs",
     "verify:chat-experience": "esbuild tools/verify-chat-experience.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-chat-experience.mjs && node node_modules/.cache/ola-verify-chat-experience.mjs",
     "verify:browser-cookie-import": "esbuild tools/verify-browser-cookie-import.ts --bundle --platform=node --format=esm --external:electron --external:better-sqlite3 --outfile=node_modules/.cache/ola-verify-browser-cookie-import.mjs && node node_modules/.cache/ola-verify-browser-cookie-import.mjs",
+    "verify:ai-coding-config": "esbuild tools/verify-ai-coding-config.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-ai-coding-config.mjs && node node_modules/.cache/ola-verify-ai-coding-config.mjs",
     "verify:provider-retry": "node ./scripts/verify-provider-retry.mjs",
     "verify:input-drafts": "esbuild tools/verify-input-drafts.ts --bundle --platform=node --format=esm --external:electron --outfile=node_modules/.cache/ola-verify-input-drafts.mjs && node node_modules/.cache/ola-verify-input-drafts.mjs",
     "verify:execution-outline": "esbuild tools/verify-execution-outline.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-execution-outline.mjs && node node_modules/.cache/ola-verify-execution-outline.mjs",

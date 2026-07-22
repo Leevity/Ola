@@ -71,6 +71,7 @@ import {
 import { registerScreenshotHandlers } from './ipc/screenshot-handlers'
 import { registerWebSearchHandlers } from './ipc/web-search-handlers'
 import { registerBrowserHandlers } from './ipc/browser-handlers'
+import { registerAiCodingHandlers } from './ipc/ai-coding-handlers'
 import { registerCredentialsHandlers } from './ipc/credentials-handlers'
 import { registerOauthHandlers } from './ipc/oauth-handlers'
 import { registerImageGifHandlers } from './ipc/image-gif-handlers'
@@ -1432,6 +1433,7 @@ if (gotSingleInstanceLock) {
     registerNotifyHandlers()
     registerWebSearchHandlers()
     registerBrowserHandlers()
+    registerAiCodingHandlers()
     registerCredentialsHandlers()
     registerOauthHandlers()
     registerImageGifHandlers()

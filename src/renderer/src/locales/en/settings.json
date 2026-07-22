@@ -670,6 +670,39 @@
     "maxTokens": "Max Tokens",
     "maxTokensDesc": "Maximum token limit per response"
   },
+  "aiCoding": {
+    "title": "AI Coding",
+    "subtitle": "Manage CLI model and permission profiles",
+    "name": "Configuration name",
+    "tool": "Coding CLI",
+    "provider": "Ola Provider",
+    "model": "Model",
+    "permissionMode": "Permission mode",
+    "enabled": "Enabled",
+    "mapping": "Effective mapping",
+    "credential": "Credential",
+    "notConfigured": "Not configured",
+    "copy": "Copy",
+    "delete": "Delete",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "AI Coding configuration saved",
+    "saveFailed": "Failed to save AI Coding configuration",
+    "permissions": {
+      "standard": "Standard",
+      "approve-edits": "Approve edits",
+      "read-only": "Read only",
+      "full-access": "Full access"
+    },
+    "validation": {
+      "providerMissing": "Select a Provider",
+      "providerDisabled": "The selected Provider is disabled",
+      "protocolMismatch": "This Provider protocol is not compatible with the selected CLI",
+      "baseUrlMissing": "The Provider Base URL is missing",
+      "authMissing": "The Provider authentication is not configured",
+      "modelMissing": "Select a compatible enabled model"
+    }
+  },
   "plugin": {
     "title": "Plugins",
     "subtitle": "Configure optional Tool plugins and their access rules",
