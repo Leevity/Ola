@@ -58,6 +58,9 @@ import {
   type CompactToolHeaderModel
 } from './CompactToolCallHeader'
 import { parseExtensionToolResult } from '@renderer/lib/extensions/extension-result'
+import { BashArtifactsCard } from './BashArtifactsCard'
+import { CodeGraphToolCard } from './CodeGraphToolCard'
+import { WebSearchBlock } from './WebSearchBlock'
 
 interface ToolCallCardProps {
   toolUseId?: string
@@ -3483,6 +3486,15 @@ function ToolCallCardInner({
                       status={status}
                     />
                   )}
+                {shouldRenderOutputPanels && isCommandTool && outputText ? (
+                  <BashArtifactsCard output={outputText} />
+                ) : null}
+                {shouldRenderOutputPanels && name === 'WebSearch' && outputText ? (
+                  <WebSearchBlock output={outputText} />
+                ) : null}
+                {shouldRenderOutputPanels && name === 'codegraph_explore' && outputText ? (
+                  <CodeGraphToolCard output={outputText} />
+                ) : null}
                 {shouldRenderOutputPanels && output && name === 'Grep' && outputText && (
                   <GrepOutputBlock output={outputText} pattern={String(input.pattern ?? '')} />
                 )}
@@ -3542,7 +3554,9 @@ function ToolCallCardInner({
                     'Delete',
                     'AskUserQuestion',
                     'Skill',
-                    'visualize_show_widget'
+                    'visualize_show_widget',
+                    'WebSearch',
+                    'codegraph_explore'
                   ].includes(name) &&
                   (hasImageBlocks(output) ? (
                     <ImageOutputBlock output={output} />

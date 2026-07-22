@@ -87,6 +87,10 @@ export function getUserMessages(sessionId: string): Promise<MessageRow[]> {
   return getNativeWorker().request<MessageRow[]>('db/messages-list-user', { sessionId }, 120_000)
 }
 
+export function getMessageMarkers(sessionId: string): Promise<MessageRow[]> {
+  return getNativeWorker().request<MessageRow[]>('db/messages-list-markers', { sessionId }, 120_000)
+}
+
 export function getMessagesPage(
   sessionId: string,
   limit: number,

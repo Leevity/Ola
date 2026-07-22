@@ -776,6 +776,10 @@
       "imageMessage": "{{count}} 张图片",
       "emptyMessage": "空消息"
     },
+    "messageRail": {
+      "title": "消息轨道",
+      "jumpLabel": "跳转到第 {{index}} 条消息：{{preview}}"
+    },
     "imageCopied": "图片已复制到剪贴板",
     "imageCopiedDesc": "可直接粘贴到聊天或文档中",
     "exportImageFailed": "导出图片失败",

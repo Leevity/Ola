@@ -24,6 +24,38 @@ internal static class DbMessageTools
         return ReadRows(parameters, role: "user", paged: false);
     }
 
+    public static WorkerResponse ListMarkers(JsonElement parameters)
+    {
+        try
+        {
+            var sessionId = RequireString(parameters, "sessionId");
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            NormalizeSessionMessageSortOrders(connection, sessionId);
+            using var command = connection.CreateCommand();
+            command.CommandText =
+                """
+                SELECT id, session_id, role, substr(content, 1, 512) AS content, meta,
+                       created_at, NULL AS usage, sort_order
+                  FROM messages
+                 WHERE session_id = $sessionId AND role IN ('user', 'assistant')
+                 ORDER BY sort_order ASC, created_at ASC
+                """;
+            command.Parameters.AddWithValue("$sessionId", sessionId);
+
+            var rows = new List<MessageRow>();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add(ReadMessageRow(reader));
+            }
+            return WorkerResponse.Json(rows, WorkerJsonContext.Default.ListMessageRow);
+        }
+        catch
+        {
+            return WorkerResponse.Json(new List<MessageRow>(), WorkerJsonContext.Default.ListMessageRow);
+        }
+    }
+
     public static WorkerResponse ListPage(JsonElement parameters)
     {
         return ReadRows(parameters, role: null, paged: true);

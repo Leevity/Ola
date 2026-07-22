@@ -207,6 +207,20 @@ function buildSeedMessages(sessionId) {
   return messages
 }
 
+function buildLongTranscript(sessionId, count = 5000) {
+  const now = Date.now() + 50_000
+  return Array.from({ length: count }, (_, index) => ({
+    id: `long-${index}`,
+    sessionId,
+    role: index % 2 === 0 ? 'user' : 'assistant',
+    content: messageContent(`${'x'.repeat(2000)} marker ${index}`),
+    meta: null,
+    createdAt: now + index,
+    usage: null,
+    sortOrder: index
+  }))
+}
+
 function buildCompactArtifacts(sessionId, insertSortOrder) {
   const now = Date.now() + 10_000
   return [
@@ -311,6 +325,36 @@ async function main() {
       dbPath,
       messages: buildSeedMessages(sessionId)
     })
+
+    const markers = await client.request('db/messages-list-markers', { dbPath, sessionId })
+    assert(markers.length === 80, `expected 80 message markers, got ${markers.length}`)
+    assert(markers[0].role === 'user', 'message markers omitted user role')
+    assert(markers[1].role === 'assistant', 'message markers omitted assistant role')
+
+    const longSessionId = 'session-windowing-5000'
+    await client.request('db/sessions-create', {
+      dbPath,
+      id: longSessionId,
+      title: 'Long transcript',
+      mode: 'chat',
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    })
+    await client.request(
+      'db/messages-add-batch',
+      { dbPath, messages: buildLongTranscript(longSessionId) },
+      120_000
+    )
+    const longMarkers = await client.request(
+      'db/messages-list-markers',
+      { dbPath, sessionId: longSessionId },
+      120_000
+    )
+    assert(longMarkers.length === 5000, `expected 5000 message markers, got ${longMarkers.length}`)
+    assert(
+      longMarkers.every((row) => row.content.length <= 512),
+      'message marker query loaded unbounded transcript content'
+    )
 
     const around = await client.request('db/messages-window-around', {
       dbPath,
