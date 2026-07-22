@@ -1327,9 +1327,16 @@
   "terminalDock": {
     "sshContext": "SSH workspace",
     "newTerminal": "New terminal",
-    "newClaude": "New Claude",
-    "newCodex": "New Codex",
-    "newGemini": "New Gemini",
+    "newAiCoding": "Start {{name}}",
+    "aiCodingLaunchFailed": "Could not start AI coding terminal",
+    "aiCodingErrors": {
+      "config_unavailable": "This configuration is disabled or unavailable.",
+      "provider_unavailable": "The selected provider is disabled or unavailable.",
+      "model_unavailable": "The selected model is disabled or unavailable.",
+      "credential_unavailable": "The provider credential is unavailable.",
+      "cli_missing": "The required CLI is not installed or cannot be started.",
+      "unknown": "The terminal could not be started."
+    },
     "closeTerminal": "Close current terminal",
     "collapse": "Collapse terminal",
     "empty": "No terminal is open yet.",

@@ -160,7 +160,8 @@ function toCreatedEvent(result: CreateTerminalSessionResult): TerminalSessionLis
 
 export async function createTerminalSession(
   args: CreateTerminalSessionArgs,
-  sender?: WebContents | null
+  sender?: WebContents | null,
+  extraEnvironment?: Record<string, string>
 ): Promise<CreateTerminalSessionResult> {
   ensureNativeTerminalEventBridge()
   const ownerWindowId = resolveOwnerWindowId(sender)
@@ -173,7 +174,7 @@ export async function createTerminalSession(
       rows: Math.max(5, Math.floor(args.rows ?? 24)),
       ...(args.title ? { title: args.title } : {}),
       ...(args.command ? { command: args.command } : {}),
-      env: serializeShellEnvironment()
+      env: { ...serializeShellEnvironment(), ...extraEnvironment }
     },
     120_000
   )

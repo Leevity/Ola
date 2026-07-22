@@ -65,6 +65,7 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'ai-coding:configs-list',
   'ai-coding:configs-save',
   'ai-coding:configs-delete',
+  'ai-coding:terminal-launch',
   'browser:emulation-status',
   'credentials:vault-status',
   'credentials:store',

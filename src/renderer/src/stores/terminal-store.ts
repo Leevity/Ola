@@ -56,6 +56,12 @@ interface TerminalStore {
     initialCommand?: string,
     projectId?: string | null
   ) => Promise<string | null>
+  createAiCodingTab: (
+    configId: string,
+    cwd: string,
+    title: string,
+    projectId?: string | null
+  ) => Promise<{ id?: string; error?: string }>
   closeTab: (id: string) => Promise<void>
   closeSession: (id: string) => Promise<void>
   setActiveTab: (id: string | null) => void
@@ -231,6 +237,34 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
     }
 
     return tab.id
+  },
+  createAiCodingTab: async (configId, cwd, preferredTitle, projectId) => {
+    const title = buildNextTitle(get().tabs, preferredTitle, projectId)
+    const result = (await ipcClient.invoke(IPC.AI_CODING_TERMINAL_LAUNCH, {
+      configId,
+      cwd,
+      projectId
+    })) as { success?: boolean; terminal?: TerminalListEntry; error?: string } | undefined
+    const terminal = result?.terminal
+    if (!result?.success || !terminal?.id || result.error)
+      return { error: result?.error || 'unknown' }
+
+    const tab: LocalTerminalTab = {
+      id: terminal.id,
+      projectId: projectId ?? null,
+      title: terminal.title || title,
+      cwd: terminal.cwd || cwd,
+      shell: terminal.shell || '',
+      createdAt: terminal.createdAt || Date.now(),
+      status: 'running'
+    }
+    const session = normalizeTerminalSession({ ...terminal, title: tab.title })
+    set((state) => ({
+      tabs: [...state.tabs, tab],
+      sessions: session ? { ...state.sessions, [session.id]: session } : state.sessions,
+      activeTabId: tab.id
+    }))
+    return { id: tab.id }
   },
   closeTab: async (id) => {
     await get().closeSession(id)

@@ -30,6 +30,8 @@ import {
 import { useSshStore } from '@renderer/stores/ssh-store'
 import { useTerminalStore } from '@renderer/stores/terminal-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { toast } from 'sonner'
+import type { AiCodingConfig } from '../../../../shared/ai-coding-config'
 
 const LocalTerminal = lazy(() =>
   import('./LocalTerminal').then((m) => ({ default: m.LocalTerminal }))
@@ -86,6 +88,7 @@ export function ProjectTerminalDock({
   const localActiveTabId = useTerminalStore((s) => s.activeTabId)
   const initTerminal = useTerminalStore((s) => s.init)
   const createLocalTab = useTerminalStore((s) => s.createTab)
+  const createAiCodingTab = useTerminalStore((s) => s.createAiCodingTab)
   const closeLocalTab = useTerminalStore((s) => s.closeTab)
   const setLocalActiveTab = useTerminalStore((s) => s.setActiveTab)
 
@@ -105,6 +108,7 @@ export function ProjectTerminalDock({
   const setBottomTerminalDockHeight = useUIStore((s) => s.setBottomTerminalDockHeight)
   const [isEnsuringTerminal, setIsEnsuringTerminal] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const [aiCodingConfigs, setAiCodingConfigs] = useState<AiCodingConfig[]>([])
   const resizeActiveRef = useRef(false)
   const resizeStartYRef = useRef(0)
   const resizeStartHeightRef = useRef(bottomTerminalDockHeight)
@@ -112,6 +116,17 @@ export function ProjectTerminalDock({
   useEffect(() => {
     initTerminal()
   }, [initTerminal])
+
+  useEffect(() => {
+    if (sshConnectionId || !workingFolder) {
+      setAiCodingConfigs([])
+      return
+    }
+    void ipcClient.invoke(IPC.AI_CODING_CONFIGS_LIST).then((result) => {
+      const data = result as { configs?: AiCodingConfig[] } | undefined
+      setAiCodingConfigs((data?.configs || []).filter((config) => config.enabled))
+    })
+  }, [sshConnectionId, workingFolder])
 
   useEffect(() => {
     if (!sshLoaded) {
@@ -264,45 +279,47 @@ export function ProjectTerminalDock({
       buildSshTerminalTitle(currentConnection, projectName || t('terminalDock.sshContext'))
     : getProjectTerminalBaseTitle(projectName, workingFolder)
 
-  const handleCreateTerminal = useCallback(
-    (initialCommand?: string): void => {
-      hasManuallyCreatedTerminalRef.current = true
+  const handleCreateTerminal = useCallback((): void => {
+    hasManuallyCreatedTerminalRef.current = true
 
-      if (sshConnectionId) {
-        activateLocalTab(null)
-        void (async () => {
-          const tabId = await openSshTerminal(sshConnectionId, projectId)
-          if (!tabId || !initialCommand) return
-          const command = initialCommand.trim()
-          if (!command) return
-          const sessionId = tabId.startsWith('tab-') ? tabId.slice(4) : null
-          if (!sessionId) return
-          setTimeout(() => {
-            ipcClient.send(IPC.SSH_DATA, { sessionId, data: `${command}\r` })
-          }, 600)
-        })()
-        return
-      }
+    if (sshConnectionId) {
+      activateLocalTab(null)
+      void openSshTerminal(sshConnectionId, projectId)
+      return
+    }
 
-      if (!workingFolder) return
-      activateSshTab(null)
-      void createLocalTab(
-        workingFolder,
-        getProjectTerminalBaseTitle(projectName, workingFolder),
-        initialCommand,
-        projectId
-      )
-    },
-    [
-      sshConnectionId,
-      activateLocalTab,
-      openSshTerminal,
-      projectId,
+    if (!workingFolder) return
+    activateSshTab(null)
+    void createLocalTab(
       workingFolder,
-      activateSshTab,
-      createLocalTab,
-      projectName
-    ]
+      getProjectTerminalBaseTitle(projectName, workingFolder),
+      undefined,
+      projectId
+    )
+  }, [
+    sshConnectionId,
+    activateLocalTab,
+    openSshTerminal,
+    projectId,
+    workingFolder,
+    activateSshTab,
+    createLocalTab,
+    projectName
+  ])
+
+  const handleCreateAiCodingTerminal = useCallback(
+    async (config: AiCodingConfig): Promise<void> => {
+      if (sshConnectionId || !workingFolder) return
+      hasManuallyCreatedTerminalRef.current = true
+      activateSshTab(null)
+      const result = await createAiCodingTab(config.id, workingFolder, config.name, projectId)
+      if (!result.id) {
+        toast.error(t('terminalDock.aiCodingLaunchFailed'), {
+          description: t(`terminalDock.aiCodingErrors.${result.error || 'unknown'}`)
+        })
+      }
+    },
+    [activateSshTab, createAiCodingTab, projectId, sshConnectionId, t, workingFolder]
   )
 
   const handleSetActive = useCallback(
@@ -415,15 +432,15 @@ export function ProjectTerminalDock({
                   <DropdownMenuItem onClick={() => handleCreateTerminal()}>
                     {t('terminalDock.newTerminal')}
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleCreateTerminal('claude')}>
-                    {t('terminalDock.newClaude')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleCreateTerminal('codex')}>
-                    {t('terminalDock.newCodex')}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleCreateTerminal('gemini')}>
-                    {t('terminalDock.newGemini')}
-                  </DropdownMenuItem>
+                  {!sshConnectionId &&
+                    aiCodingConfigs.map((config) => (
+                      <DropdownMenuItem
+                        key={config.id}
+                        onClick={() => void handleCreateAiCodingTerminal(config)}
+                      >
+                        {t('terminalDock.newAiCoding', { name: config.name })}
+                      </DropdownMenuItem>
+                    ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
