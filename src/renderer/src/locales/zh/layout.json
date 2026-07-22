@@ -769,6 +769,7 @@
       "open": "节点画布",
       "backToGenerate": "AI 绘图",
       "image": "图片",
+      "video": "视频",
       "text": "文本",
       "config": "配置",
       "connect": "连接",
@@ -780,9 +781,23 @@
       "promptLibrary": "提示词库",
       "assetLibrary": "资产库",
       "assets": "项资产",
+      "videoProviderDisabled": "视频供应商为可选插件，当前默认关闭",
+      "estimatedCost": "预计费用",
+      "outputSize": "输出大小",
+      "deleteOutput": "删除输出",
       "minimap": "小地图",
-      "node": { "image": "图片节点", "text": "文本节点", "config": "配置节点" },
-      "placeholder": { "image": "图片路径或 URL", "text": "输入文本", "config": "输入配置" }
+      "node": {
+        "image": "图片节点",
+        "video": "视频节点",
+        "text": "文本节点",
+        "config": "配置节点"
+      },
+      "placeholder": {
+        "image": "图片路径或 URL",
+        "video": "描述视频任务",
+        "text": "输入文本",
+        "config": "输入配置"
+      }
     },
     "title": "AI 绘图",
     "subtitle": "聚合所有服务商的图片模型，支持 Gemini 官方图像生成",

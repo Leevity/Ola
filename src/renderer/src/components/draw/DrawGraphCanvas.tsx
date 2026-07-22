@@ -12,6 +12,7 @@ import {
   Redo2,
   Settings2,
   Type,
+  Video,
   Undo2
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -169,6 +170,10 @@ export function DrawGraphCanvas(): React.JSX.Element {
           <Image className="size-4" />
           {t('drawPage.graph.image')}
         </Button>
+        <Button size="sm" variant="outline" onClick={() => addNode('video')}>
+          <Video className="size-4" />
+          {t('drawPage.graph.video')}
+        </Button>
         <Button size="sm" variant="outline" onClick={() => addNode('text')}>
           <Type className="size-4" />
           {t('drawPage.graph.text')}
@@ -317,6 +322,17 @@ export function DrawGraphCanvas(): React.JSX.Element {
               {node.kind === 'image' && node.imageOperations?.length ? (
                 <div className="mt-2 text-[10px] text-muted-foreground">
                   {node.imageOperations.map((operation) => operation.type).join(' → ')}
+                </div>
+              ) : null}
+              {node.kind === 'video' ? (
+                <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+                  <div>{t('drawPage.graph.videoProviderDisabled')}</div>
+                  <div>
+                    {t('drawPage.graph.estimatedCost')}: — · {t('drawPage.graph.outputSize')}: —
+                  </div>
+                  <Button size="sm" variant="ghost" disabled>
+                    {t('drawPage.graph.deleteOutput')}
+                  </Button>
                 </div>
               ) : null}
             </div>
