@@ -17,7 +17,8 @@
 | 5 | `codex/hooks-runtime` | Hooks 核心 | ✅ 基本完成 | `src/main/hooks/*`、`src/main/ipc/hooks-handlers.ts`、sidecar 触发点 |
 | 6 | `codex/hooks-ui` | Hooks 管理 UI | ✅ 基本完成 | `HooksPanel.tsx`、`hooks-store.ts`、settings 入口 |
 | 7 | `codex/subagent-history-cancel` | 子 Agent 历史 + 精确取消 | ✅ 自动验收完成 | 专项验证、生产构建、桌面启动通过；真实并行取消保留发布前交互验收 |
-| 8 | `codex/codegraph-assets` | Worker/CodeGraph manifest + 缺失检测 | 🟡 下一阶段 | 先建立资产闭环，再接索引、Agent 工具和 UI |
+| 8 | `codex/codegraph-assets` | Worker/CodeGraph manifest + 缺失检测 | ✅ 已完成 | 主 Worker 校验通过；检测确认 CodeGraph Worker 与语法资产尚未装入 |
+| 8B | `codex/codegraph-worker` | CodeGraph Core/Worker + 语法资产发布 | 🟡 下一阶段 | 目标是让 `worker:assets:verify` 在所有 RID 转绿 |
 | 9 | `codex/release-update` | 绿色 zip + 更新 UI + Worker recycle | ⬜ 待开始 | 保持 Ola 包名、升级通道和 shutdown 语义 |
 | 10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力 | ⬜ 待审计 | SSH 已有大量能力，禁止按“从零开始”估算 |
 

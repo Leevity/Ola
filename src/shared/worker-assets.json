@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "assets": [
+    { "id": "native-worker", "directory": ".", "kind": "executable", "required": true },
+    {
+      "id": "codegraph-worker",
+      "directory": "codegraph-worker",
+      "kind": "executable",
+      "required": true
+    },
+    {
+      "id": "codegraph-grammars",
+      "directory": "codegraph-worker/grammars",
+      "kind": "grammar-set",
+      "required": true
+    }
+  ]
+}
