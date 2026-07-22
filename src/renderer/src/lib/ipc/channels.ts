@@ -399,6 +399,7 @@ export const IPC = {
   SSH_RESIZE: 'ssh:resize',
   SSH_STATUS: 'ssh:status',
   SSH_SESSION_LIST: 'ssh:session:list',
+  SSH_DIAGNOSTICS_LIST: 'ssh:diagnostics:list',
 
   // SSH File Operations (SFTP)
   SSH_FS_READ_FILE: 'ssh:fs:read-file',

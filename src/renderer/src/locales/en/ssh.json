@@ -439,7 +439,9 @@
       "connections": "Recent connections",
       "noConnections": "No connection history.",
       "uploads": "Upload activity",
-      "noUploads": "No upload activity yet."
+      "noUploads": "No upload activity yet.",
+      "diagnostics": "Connection diagnostics",
+      "noDiagnostics": "No diagnostics recorded."
     }
   }
 }

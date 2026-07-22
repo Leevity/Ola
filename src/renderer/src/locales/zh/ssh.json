@@ -439,7 +439,9 @@
       "connections": "最近连接",
       "noConnections": "暂无连接历史。",
       "uploads": "上传活动",
-      "noUploads": "尚无上传活动。"
+      "noUploads": "尚无上传活动。",
+      "diagnostics": "连接诊断",
+      "noDiagnostics": "暂无诊断记录。"
     }
   }
 }

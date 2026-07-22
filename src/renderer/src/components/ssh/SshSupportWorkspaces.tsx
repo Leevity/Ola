@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ArrowLeftRight,
@@ -15,6 +15,9 @@ import {
 import { toast } from 'sonner'
 import { cn } from '@renderer/lib/utils'
 import { useSshStore } from '@renderer/stores/ssh-store'
+import type { SshDiagnosticEntry } from '../../../../shared/ssh-contract'
+import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { IPC } from '@renderer/lib/ipc/channels'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
@@ -1062,6 +1065,16 @@ export function SshLogsWorkspace(): React.JSX.Element {
   const connections = useSshStore((state) => state.connections)
   const sessions = useSshStore((state) => state.sessions)
   const transferTasks = useSshStore((state) => state.transferTasks)
+  const [diagnostics, setDiagnostics] = useState<SshDiagnosticEntry[]>([])
+
+  const loadDiagnostics = useCallback((): void => {
+    void ipcClient.invoke(IPC.SSH_DIAGNOSTICS_LIST, {}).then((result) => {
+      const entries = (result as { entries?: SshDiagnosticEntry[] } | undefined)?.entries
+      setDiagnostics(Array.isArray(entries) ? entries.slice(-100).reverse() : [])
+    })
+  }, [])
+
+  useEffect(loadDiagnostics, [loadDiagnostics])
 
   const liveSessions = useMemo(
     () =>
@@ -1100,7 +1113,10 @@ export function SshLogsWorkspace(): React.JSX.Element {
             variant="outline"
             size="icon-sm"
             className="size-10 rounded-[14px] border-border bg-card text-foreground shadow-none hover:bg-accent"
-            onClick={() => void useSshStore.getState().loadAll()}
+            onClick={() => {
+              void useSshStore.getState().loadAll()
+              loadDiagnostics()
+            }}
             title={t('list.refresh')}
           >
             <RefreshCw className="size-4" />
@@ -1190,6 +1206,34 @@ export function SshLogsWorkspace(): React.JSX.Element {
                     {task.stage}
                     {task.message ? ` · ${task.message}` : ''}
                   </div>
+                </div>
+              ))
+            )}
+          </SectionCard>
+        </div>
+        <div className="mt-4">
+          <SectionCard
+            title={t('workspace.logs.diagnostics', { defaultValue: 'Connection diagnostics' })}
+          >
+            {diagnostics.length === 0 ? (
+              <div className="text-[0.84rem] text-muted-foreground">
+                {t('workspace.logs.noDiagnostics', { defaultValue: 'No diagnostics recorded.' })}
+              </div>
+            ) : (
+              diagnostics.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="grid grid-cols-[150px_90px_1fr] gap-3 rounded-[14px] border border-border bg-muted/45 px-3 py-2 text-[0.78rem]"
+                >
+                  <span className="text-muted-foreground">
+                    {new Date(entry.timestamp).toLocaleTimeString()}
+                  </span>
+                  <span
+                    className={entry.level === 'error' ? 'text-destructive' : 'text-foreground'}
+                  >
+                    {entry.stage}
+                  </span>
+                  <span className="break-all text-muted-foreground">{entry.message}</span>
                 </div>
               ))
             )}

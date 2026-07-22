@@ -28,8 +28,19 @@ export interface SshConnection {
 export interface SshSession {
   id: string
   connectionId: string
-  status: 'connecting' | 'connected' | 'disconnected' | 'error'
+  status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
   error?: string
+}
+
+export type SshDiagnosticStage = 'dial' | 'handshake' | 'auth' | 'shell' | 'reconnect'
+export interface SshDiagnosticEntry {
+  id: number
+  sessionId: string
+  connectionId: string
+  stage: SshDiagnosticStage
+  level: 'info' | 'error'
+  message: string
+  timestamp: number
 }
 
 export interface SshTab {
