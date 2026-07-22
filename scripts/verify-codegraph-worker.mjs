@@ -47,6 +47,28 @@ async function main() {
       query: 'greet'
     })
     assert(searched.success, `CodeGraph search failed: ${JSON.stringify(searched)}`)
+    const indexStatus = await client.request('codegraph/index-status', {
+      workingFolder: sourceRoot
+    })
+    assert(
+      indexStatus.success && indexStatus.indexed && indexStatus.nodeCount > 0,
+      `CodeGraph index status failed: ${JSON.stringify(indexStatus)}`
+    )
+    const stats = await client.request('codegraph/stats', { workingFolder: sourceRoot })
+    assert(
+      stats.success && stats.filesByLanguage.some((bucket) => bucket.key === 'typescript'),
+      `CodeGraph stats failed: ${JSON.stringify(stats)}`
+    )
+    const neighbors = await client.request('codegraph/query-neighbors', {
+      workingFolder: sourceRoot,
+      symbol: 'greet',
+      depth: 1,
+      limit: 80
+    })
+    assert(
+      neighbors.success && neighbors.nodes.length > 0,
+      `CodeGraph neighbors failed: ${JSON.stringify(neighbors)}`
+    )
     console.log('codegraph worker verification passed')
   } finally {
     client?.close()

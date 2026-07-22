@@ -57,6 +57,7 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'sidecar:stop',
   'sidecar:request',
   'sidecar:can-handle',
+  'codegraph:status',
   'notify:desktop',
   'notify:session',
   'browser:clear-cookies',

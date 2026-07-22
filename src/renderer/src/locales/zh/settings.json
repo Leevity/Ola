@@ -824,6 +824,25 @@
       }
     },
     "toolStatusDescProductDesign": "Product Design 是工作流插件，不新增底层 Tool；它通过 product-design skill 编排已启用的图片、浏览器、搜索、文件、终端、MCP 和部署工具。",
+    "codegraph": {
+      "dashboard": "代码分析面板",
+      "noProject": "请选择本地项目目录以查看代码索引。",
+      "refresh": "刷新",
+      "index": "建立项目索引",
+      "indexing": "正在建立索引…",
+      "fileCount": "文件",
+      "nodeCount": "符号",
+      "edgeCount": "关系",
+      "searchPlaceholder": "搜索符号",
+      "workerRunning": "分析 Worker 运行中",
+      "workerReady": "分析 Worker 已就绪",
+      "workerChecking": "正在检查分析 Worker…",
+      "workerMissing": "缺少分析 Worker 资产",
+      "callers": "调用方",
+      "callees": "被调用方",
+      "localGraph": "局部关系图",
+      "relationCount": "{{count}} 条关系"
+    },
     "productDesign": {
       "workflowTitle": "工作流插件",
       "workflowDesc": "提供 Product Design 路由、设计上下文记忆、视觉探索、原型脚手架、URL 克隆、图转代码、审查、设计 QA 和分享交付流程。",

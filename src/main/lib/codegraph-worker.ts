@@ -65,10 +65,10 @@ function resolveGrammarsDir(workerPath: string): string | null {
 }
 
 function endpointPath(): string {
-  const id = `${process.pid}-${randomUUID()}`
+  const id = `${process.pid}-${randomUUID().slice(0, 12)}`
   return process.platform === 'win32'
     ? `\\\\.\\pipe\\ola-codegraph-${id}`
-    : path.join(os.tmpdir(), `ola-codegraph-${id}.sock`)
+    : path.join(process.platform === 'darwin' ? '/tmp' : os.tmpdir(), `ola-cg-${id}.sock`)
 }
 
 function createFrame(payload: Uint8Array): Buffer {

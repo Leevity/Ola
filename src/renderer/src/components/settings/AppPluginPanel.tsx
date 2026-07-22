@@ -37,6 +37,7 @@ import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { parseBrowserDomainList } from '@renderer/lib/app-plugin/browser-access'
+import { CodeGraphDashboard } from './CodeGraphDashboard'
 import { refreshDynamicToolCatalog } from '@renderer/lib/tools/dynamic-tool-catalog'
 import {
   APP_PLUGIN_DESCRIPTORS,
@@ -942,6 +943,10 @@ export function AppPluginPanel(): React.JSX.Element {
                   ))}
                 </div>
               </section>
+            ) : null}
+
+            {selectedPlugin.id === CODEGRAPH_PLUGIN_ID && selectedPlugin.enabled ? (
+              <CodeGraphDashboard />
             ) : null}
 
             <Separator />
