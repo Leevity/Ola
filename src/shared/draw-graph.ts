@@ -11,6 +11,11 @@ export interface DrawGraphNode {
   height: number
   title: string
   content: string
+  imageOperations?: Array<{
+    id: string
+    type: 'crop' | 'mask' | 'expand' | 'upscale'
+    value: number
+  }>
 }
 
 export interface DrawGraphEdge {

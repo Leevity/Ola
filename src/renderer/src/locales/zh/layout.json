@@ -772,6 +772,10 @@
       "text": "文本",
       "config": "配置",
       "connect": "连接",
+      "crop": "裁剪",
+      "mask": "遮罩",
+      "expand": "扩图",
+      "upscale": "放大",
       "minimap": "小地图",
       "node": { "image": "图片节点", "text": "文本节点", "config": "配置节点" },
       "placeholder": { "image": "图片路径或 URL", "text": "输入文本", "config": "输入配置" }

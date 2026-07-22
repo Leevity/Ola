@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import {
+  Crop,
+  Expand,
   Image,
   Link2,
   Map as MapIcon,
@@ -97,6 +99,24 @@ export function DrawGraphCanvas(): React.JSX.Element {
       edges: [...current.edges, { id: nanoid(), source, target }]
     }))
   }
+  const applyImageOperation = (type: 'crop' | 'mask' | 'expand' | 'upscale'): void => {
+    const nodeId = selected[0]
+    if (!nodeId || nodeMap.get(nodeId)?.kind !== 'image') return
+    commit((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) =>
+        node.id === nodeId
+          ? {
+              ...node,
+              imageOperations: [
+                ...(node.imageOperations ?? []),
+                { id: nanoid(), type, value: type === 'upscale' ? 2 : 1 }
+              ]
+            }
+          : node
+      )
+    }))
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
@@ -117,6 +137,24 @@ export function DrawGraphCanvas(): React.JSX.Element {
           <Link2 className="size-4" />
           {t('drawPage.graph.connect')}
         </Button>
+        {nodeMap.get(selected[0])?.kind === 'image' ? (
+          <>
+            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('crop')}>
+              <Crop className="size-4" />
+              {t('drawPage.graph.crop')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('mask')}>
+              {t('drawPage.graph.mask')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('expand')}>
+              <Expand className="size-4" />
+              {t('drawPage.graph.expand')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('upscale')}>
+              {t('drawPage.graph.upscale')}
+            </Button>
+          </>
+        ) : null}
         <div className="ml-auto flex gap-1">
           <Button size="icon" variant="ghost" disabled={!history.length} onClick={undo}>
             <Undo2 className="size-4" />
@@ -229,6 +267,11 @@ export function DrawGraphCanvas(): React.JSX.Element {
                   }))
                 }
               />
+              {node.kind === 'image' && node.imageOperations?.length ? (
+                <div className="mt-2 text-[10px] text-muted-foreground">
+                  {node.imageOperations.map((operation) => operation.type).join(' → ')}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>
