@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import {
   Crop,
   Expand,
+  FolderPlus,
   Image,
   Link2,
   Map as MapIcon,
@@ -32,15 +33,41 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [zoom, setZoom] = useState(1)
   const [history, setHistory] = useState<Snapshot[]>([])
   const [future, setFuture] = useState<Snapshot[]>([])
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
   const loaded = useRef(false)
 
   useEffect(() => {
+    void ipcClient
+      .invoke('draw-graph:list')
+      .then((value) => setProjects(value as Array<{ id: string; name: string }>))
     void ipcClient.invoke('draw-graph:load', { id: 'default' }).then((value) => {
       const result = value as { project?: DrawGraphProject }
       if (result.project) setProject(result.project)
       loaded.current = true
     })
   }, [])
+
+  const openProject = (id: string): void => {
+    loaded.current = false
+    void ipcClient.invoke('draw-graph:load', { id }).then((value) => {
+      const result = value as { project: DrawGraphProject }
+      setProject(result.project)
+      setHistory([])
+      setFuture([])
+      loaded.current = true
+    })
+  }
+
+  const createProject = (): void => {
+    const id = `canvas-${Date.now()}`
+    const next = {
+      ...createEmptyDrawGraphProject(id),
+      name: `${t('drawPage.graph.project')} ${projects.length + 1}`
+    }
+    setProject(next)
+    setProjects((items) => [...items, { id, name: next.name }])
+    loaded.current = true
+  }
 
   useEffect(() => {
     if (!loaded.current) return
@@ -121,6 +148,23 @@ export function DrawGraphCanvas(): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
       <div className="flex flex-wrap items-center gap-2 border-b p-2">
+        <select
+          className="h-8 rounded-md border bg-background px-2 text-xs"
+          value={project.id}
+          onChange={(event) => openProject(event.target.value)}
+        >
+          {projects.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+          {!projects.some((item) => item.id === project.id) ? (
+            <option value={project.id}>{project.name}</option>
+          ) : null}
+        </select>
+        <Button size="icon" variant="ghost" onClick={createProject}>
+          <FolderPlus className="size-4" />
+        </Button>
         <Button size="sm" variant="outline" onClick={() => addNode('image')}>
           <Image className="size-4" />
           {t('drawPage.graph.image')}
@@ -132,6 +176,9 @@ export function DrawGraphCanvas(): React.JSX.Element {
         <Button size="sm" variant="outline" onClick={() => addNode('config')}>
           <Settings2 className="size-4" />
           {t('drawPage.graph.config')}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => addNode('text')}>
+          {t('drawPage.graph.promptLibrary')}
         </Button>
         <Button size="sm" variant="outline" disabled={selected.length !== 2} onClick={connect}>
           <Link2 className="size-4" />
@@ -292,6 +339,13 @@ export function DrawGraphCanvas(): React.JSX.Element {
               />
             ))}
           </div>
+        </div>
+      </div>
+      <div className="absolute bottom-3 left-3 rounded-lg border bg-background/90 p-2 shadow">
+        <div className="text-[10px] font-medium">{t('drawPage.graph.assetLibrary')}</div>
+        <div className="mt-1 text-[10px] text-muted-foreground">
+          {project.nodes.filter((node) => node.kind === 'image').length}{' '}
+          {t('drawPage.graph.assets')}
         </div>
       </div>
     </div>
