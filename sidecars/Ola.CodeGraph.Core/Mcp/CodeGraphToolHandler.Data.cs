@@ -81,38 +81,64 @@ internal static partial class CodeGraphToolHandler
                 ErrorKind: target.ErrorKind);
         }
 
-        target.Handle.Gate.Wait();
+        var indexing = target.Handle.Engine.IsIndexing || IsAutoIndexing(target.Handle.Root);
         try
         {
-            var engine = target.Handle.Engine;
-            var stats = engine.GetStats();
-            var state = engine.GetIndexState();
-            return new CodeGraphIndexStatus(
-                Success: true,
-                Indexed: true,
-                State: state,
-                Indexing: state == "indexing" || IsAutoIndexing(engine.ProjectRoot),
-                LastIndexedAt: engine.GetLastIndexedAt(),
-                FileCount: stats.FileCount,
-                NodeCount: stats.NodeCount,
-                EdgeCount: stats.EdgeCount,
-                PendingReferenceCount: engine.GetPendingReferenceCount(),
-                DbSizeBytes: stats.DbSizeBytes,
-                Backend: SqliteBackend,
-                JournalMode: engine.GetJournalMode(),
-                Stale: engine.IsIndexStale(),
-                IndexedWithVersion: engine.GetIndexBuildInfo().Version);
+            if (target.Handle.TryWithReader(
+                engine => BuildIndexStatus(engine, indexing),
+                out var snapshot))
+            {
+                return snapshot;
+            }
+
+            // A first index can briefly precede the first readable WAL snapshot.
+            // Never queue a dashboard health request behind the long-running writer.
+            if (indexing)
+            {
+                return EmptyIndexingStatus();
+            }
+
+            target.Handle.Gate.Wait();
+            try
+            {
+                return BuildIndexStatus(target.Handle.Engine, indexing: false);
+            }
+            finally
+            {
+                target.Handle.Gate.Release();
+            }
         }
         catch (Exception ex)
         {
             return new CodeGraphIndexStatus(
                 false, false, null, false, null, 0, 0, 0, 0, 0, SqliteBackend, "wal", false, null, ex.Message, CodeGraphErrorKind.Internal);
         }
-        finally
-        {
-            target.Handle.Gate.Release();
-        }
     }
+
+    private static CodeGraphIndexStatus BuildIndexStatus(CodeGraphEngine engine, bool indexing)
+    {
+        var stats = engine.GetStats();
+        var state = engine.GetIndexState();
+        return new CodeGraphIndexStatus(
+            Success: true,
+            Indexed: true,
+            State: state,
+            Indexing: indexing || state == "indexing",
+            LastIndexedAt: engine.GetLastIndexedAt(),
+            FileCount: stats.FileCount,
+            NodeCount: stats.NodeCount,
+            EdgeCount: stats.EdgeCount,
+            PendingReferenceCount: engine.GetPendingReferenceCount(),
+            DbSizeBytes: stats.DbSizeBytes,
+            Backend: SqliteBackend,
+            JournalMode: engine.GetJournalMode(),
+            Stale: engine.IsIndexStale(),
+            IndexedWithVersion: engine.GetIndexBuildInfo().Version);
+    }
+
+    private static CodeGraphIndexStatus EmptyIndexingStatus() => new(
+        true, true, "indexing", true, null, 0, 0, 0, 0, 0,
+        SqliteBackend, "wal", false, null);
 
     private static bool IsAutoIndexing(string projectRoot) =>
         AutoIndexTasks.TryGetValue(Path.GetFullPath(projectRoot), out var task) && !task.IsCompleted;
@@ -130,20 +156,27 @@ internal static partial class CodeGraphToolHandler
                 0, 0, IsSuccessShaped(target.ErrorKind) ? null : target.Message, target.ErrorKind);
         }
 
-        target.Handle.Gate.Wait();
         try
         {
-            var stats = target.Handle.Engine.GetStats();
-            return new CodeGraphStatsResult(
-                Success: true,
-                NodeCount: stats.NodeCount,
-                EdgeCount: stats.EdgeCount,
-                FileCount: stats.FileCount,
-                NodesByKind: ToBuckets(stats.NodesByKind),
-                EdgesByKind: ToBuckets(stats.EdgesByKind),
-                FilesByLanguage: ToBuckets(stats.FilesByLanguage),
-                DbSizeBytes: stats.DbSizeBytes,
-                LastUpdated: stats.LastUpdated);
+            if (target.Handle.TryWithReader(BuildStats, out var snapshot))
+            {
+                return snapshot;
+            }
+
+            if (target.Handle.Engine.IsIndexing || IsAutoIndexing(target.Handle.Root))
+            {
+                return EmptyStats();
+            }
+
+            target.Handle.Gate.Wait();
+            try
+            {
+                return BuildStats(target.Handle.Engine);
+            }
+            finally
+            {
+                target.Handle.Gate.Release();
+            }
         }
         catch (Exception ex)
         {
@@ -152,11 +185,27 @@ internal static partial class CodeGraphToolHandler
                 Array.Empty<CodeGraphCountBucket>(), Array.Empty<CodeGraphCountBucket>(), Array.Empty<CodeGraphCountBucket>(),
                 0, 0, ex.Message, CodeGraphErrorKind.Internal);
         }
-        finally
-        {
-            target.Handle.Gate.Release();
-        }
     }
+
+    private static CodeGraphStatsResult BuildStats(CodeGraphEngine engine)
+    {
+        var stats = engine.GetStats();
+        return new CodeGraphStatsResult(
+            Success: true,
+            NodeCount: stats.NodeCount,
+            EdgeCount: stats.EdgeCount,
+            FileCount: stats.FileCount,
+            NodesByKind: ToBuckets(stats.NodesByKind),
+            EdgesByKind: ToBuckets(stats.EdgesByKind),
+            FilesByLanguage: ToBuckets(stats.FilesByLanguage),
+            DbSizeBytes: stats.DbSizeBytes,
+            LastUpdated: stats.LastUpdated);
+    }
+
+    private static CodeGraphStatsResult EmptyStats() => new(
+        true, 0, 0, 0,
+        Array.Empty<CodeGraphCountBucket>(), Array.Empty<CodeGraphCountBucket>(),
+        Array.Empty<CodeGraphCountBucket>(), 0, 0);
 
     // Dictionary -> array of {key,count}, descending by count (charts want ranked bars;
     // no Map crosses the wire — reference/02 §2.3).
