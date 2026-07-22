@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Net.Sockets;
@@ -5,6 +6,7 @@ using System.Text.Json;
 
 internal sealed class LocalIpcWorkerServer
 {
+    private static readonly int MaxConcurrentRequests = Math.Clamp(Environment.ProcessorCount, 4, 12);
     private readonly WorkerDispatcher dispatcher;
     private readonly WorkerEndpoint endpoint;
 
@@ -79,7 +81,8 @@ internal sealed class LocalIpcWorkerServer
     {
         using var clientCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var writeLock = new SemaphoreSlim(1, 1);
-        var dispatchTasks = new List<Task>();
+        using var dispatchSlots = new SemaphoreSlim(MaxConcurrentRequests, MaxConcurrentRequests);
+        var dispatchTasks = new ConcurrentDictionary<Task, byte>();
 
         try
         {
@@ -91,9 +94,29 @@ internal sealed class LocalIpcWorkerServer
                     break;
                 }
 
-                var task = HandleFrameAsync(stream, writeLock, frame, clientCts.Token);
-                dispatchTasks.Add(task);
-                dispatchTasks.RemoveAll(static item => item.IsCompleted);
+                // A synchronous handler must never run inline on the socket read loop. CodeGraph
+                // status reads and other SQLite calls can block briefly; running them on a worker
+                // task keeps the transport able to accept health and cancellation requests.
+                var task = Task.Run(
+                    async () =>
+                    {
+                        await dispatchSlots.WaitAsync(clientCts.Token);
+                        try
+                        {
+                            await HandleFrameAsync(stream, writeLock, frame, clientCts.Token);
+                        }
+                        finally
+                        {
+                            dispatchSlots.Release();
+                        }
+                    },
+                    CancellationToken.None);
+                dispatchTasks.TryAdd(task, 0);
+                _ = task.ContinueWith(
+                    completed => dispatchTasks.TryRemove(completed, out _),
+                    CancellationToken.None,
+                    TaskContinuationOptions.ExecuteSynchronously,
+                    TaskScheduler.Default);
             }
         }
         finally
@@ -101,7 +124,7 @@ internal sealed class LocalIpcWorkerServer
             await clientCts.CancelAsync();
             try
             {
-                await Task.WhenAll(dispatchTasks);
+                await Task.WhenAll(dispatchTasks.Keys);
             }
             catch (Exception ex)
             {

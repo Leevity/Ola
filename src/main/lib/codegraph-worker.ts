@@ -121,7 +121,14 @@ class CodeGraphWorkerManager {
     return await new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id)
-        reject(new Error(`CodeGraph request timed out: ${method}`))
+        const error = new Error(`CodeGraph request timed out: ${method}`)
+        reject(error)
+        // A timed-out request means the IPC stream can no longer be trusted: its late response
+        // may arrive after callers have moved on and a blocked worker would make every refresh
+        // time out in turn. Recycle it so the next request starts from a clean transport.
+        void this.stop().catch((stopError) => {
+          console.warn('[CodeGraphWorker] failed to stop after request timeout', stopError)
+        })
       }, timeoutMs)
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject, timer })
       this.socket?.write(createFrame(payload), (error) => {
