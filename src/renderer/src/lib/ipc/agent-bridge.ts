@@ -60,7 +60,7 @@ class AgentBridgeClient {
         console.error(`[AgentBridge] Initialize failed (attempt ${attempt}/${maxAttempts}):`, err)
 
         if (attempt < maxAttempts) {
-          await ipcClient.invoke('sidecar:stop').catch(() => {})
+          await this.recycleWorker('native', 'initialize-retry').catch(() => {})
           await new Promise((resolve) => setTimeout(resolve, 250))
           continue
         }

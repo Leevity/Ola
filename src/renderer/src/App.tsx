@@ -191,7 +191,9 @@ function App(): React.JSX.Element {
   const changelogDialogOpen = useUIStore((s) => s.changelogDialogOpen)
   const [updateDownloadPending, setUpdateDownloadPending] = useState(false)
   const [updateDownloadProgress, setUpdateDownloadProgress] = useState<number | null>(null)
+  const [updateDownloadBytes, setUpdateDownloadBytes] = useState({ transferred: 0, total: 0 })
   const [downloadedUpdateVersion, setDownloadedUpdateVersion] = useState<string | null>(null)
+  const [downloadedUpdateChecksum, setDownloadedUpdateChecksum] = useState<string | null>(null)
   const [installingUpdate, setInstallingUpdate] = useState(false)
   const appView = useMemo(() => getAppView(), [])
   const detachedSessionId = useMemo(() => getDetachedSessionId(), [])
@@ -711,22 +713,26 @@ function App(): React.JSX.Element {
       setInstallingUpdate(false)
       setUpdateDownloadPending(false)
       setUpdateDownloadProgress(null)
+      setUpdateDownloadBytes({ transferred: 0, total: 0 })
+      setDownloadedUpdateChecksum(null)
     })
 
     const offUpdateProgress = ipcClient.on('update:download-progress', (data: unknown) => {
-      const d = data as { percent: number }
+      const d = data as { percent: number; transferred?: number; total?: number }
       setDownloadedUpdateVersion(null)
       setUpdateDownloadPending(true)
       setUpdateDownloadProgress(typeof d.percent === 'number' ? d.percent : null)
+      setUpdateDownloadBytes({ transferred: d.transferred ?? 0, total: d.total ?? 0 })
     })
 
     const offUpdateDownloaded = ipcClient.on('update:downloaded', (data: unknown) => {
-      const d = data as { version: string }
+      const d = data as { version: string; checksum?: string; checksumVerified?: boolean }
       const version = normalizeVersion(d.version) || d.version
       setUpdateDownloadPending(false)
       setUpdateDownloadProgress(null)
       setInstallingUpdate(false)
       setDownloadedUpdateVersion(version)
+      setDownloadedUpdateChecksum(d.checksumVerified ? (d.checksum ?? null) : null)
       setUpdateDialogOpen(true)
       toast.success(t('app.update.downloadedTitle'), {
         description: t('app.update.downloadedDescription', { version })
@@ -743,13 +749,19 @@ function App(): React.JSX.Element {
 
     void (async () => {
       const result = (await ipcClient.invoke(IPC.UPDATE_STATUS)) as
-        | { success: true; downloadedVersion: string | null }
+        | {
+            success: true
+            downloadedVersion: string | null
+            checksum: string | null
+            checksumVerified: boolean
+          }
         | { success: false; error: string }
 
       if (!result.success || !result.downloadedVersion) return
 
       const version = normalizeVersion(result.downloadedVersion) || result.downloadedVersion
       setDownloadedUpdateVersion(version)
+      setDownloadedUpdateChecksum(result.checksumVerified ? result.checksum : null)
     })()
 
     return () => {
@@ -969,6 +981,16 @@ function App(): React.JSX.Element {
               ) : (
                 <p className="text-sm text-muted-foreground">{t('app.update.noReleaseNotes')}</p>
               )}
+              {downloadedUpdateChecksum && (
+                <div className="mt-4 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+                  <div className="font-medium text-foreground">
+                    {t('app.update.checksumVerified')}
+                  </div>
+                  <div className="mt-1 break-all font-mono text-muted-foreground">
+                    SHA-512 {downloadedUpdateChecksum}
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter className="border-t px-6 py-4 sm:justify-between">
@@ -976,7 +998,9 @@ function App(): React.JSX.Element {
                 {updateDownloadPending
                   ? typeof updateDownloadProgress === 'number'
                     ? t('app.update.downloadingProgress', {
-                        progress: Math.round(updateDownloadProgress)
+                        progress: Math.round(updateDownloadProgress),
+                        transferred: (updateDownloadBytes.transferred / 1024 / 1024).toFixed(1),
+                        total: (updateDownloadBytes.total / 1024 / 1024).toFixed(1)
                       })
                     : t('app.update.downloading')
                   : downloadedUpdateVersion
@@ -1012,11 +1036,13 @@ function App(): React.JSX.Element {
                   {downloadedUpdateVersion
                     ? installingUpdate
                       ? t('app.update.installing')
-                      : t('app.update.actions.installNow')
+                      : t('app.update.actions.restartAndInstall')
                     : updateDownloadPending
                       ? typeof updateDownloadProgress === 'number'
                         ? t('app.update.downloadingProgress', {
-                            progress: Math.round(updateDownloadProgress)
+                            progress: Math.round(updateDownloadProgress),
+                            transferred: (updateDownloadBytes.transferred / 1024 / 1024).toFixed(1),
+                            total: (updateDownloadBytes.total / 1024 / 1024).toFixed(1)
                           })
                         : t('app.update.downloading')
                       : t('app.update.actions.updateNow')}
