@@ -7,10 +7,12 @@ const dashboard = readFileSync(
 )
 const panel = readFileSync('src/renderer/src/components/settings/AppPluginPanel.tsx', 'utf8')
 const routing = readFileSync('src/renderer/src/lib/ipc/messagepack-channel-routing.ts', 'utf8')
+const handlers = readFileSync('src/main/ipc/codegraph-handlers.ts', 'utf8')
 
 for (const method of [
   'codegraph/index-status',
   'codegraph/stats',
+  '10_000',
   'codegraph/search',
   'codegraph/callers',
   'codegraph/callees',
@@ -23,6 +25,8 @@ assert.match(dashboard, /workingFolder: projectPath/)
 assert.match(dashboard, /openFilePreview/)
 assert.match(panel, /selectedPlugin\.id === CODEGRAPH_PLUGIN_ID && selectedPlugin\.enabled/)
 assert.match(routing, /'codegraph:status'/)
+assert.match(handlers, /RECOVERABLE_DASHBOARD_METHODS/)
+assert.match(handlers, /recycling stalled dashboard request/)
 assert.doesNotMatch(dashboard, /new Worker|WebSocket|canvas|getContext\(/)
 
 console.log('CodeGraph dashboard verification passed')
