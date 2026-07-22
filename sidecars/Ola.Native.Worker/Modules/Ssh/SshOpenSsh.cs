@@ -155,7 +155,8 @@ internal static class SshOpenSsh
         int timeoutMs,
         Action<Process>? processStarted = null,
         CancellationToken cancellationToken = default,
-        int maxStderrChars = DefaultMaxStderrChars)
+        int maxStderrChars = DefaultMaxStderrChars,
+        long existingPrefixBytes = 0)
     {
         var startedAt = Stopwatch.GetTimestamp();
         var stderr = new OutputCollector(maxStderrChars);
@@ -199,6 +200,17 @@ internal static class SshOpenSsh
                 bufferSize: 1024 * 1024,
                 useAsync: true))
             {
+                if (existingPrefixBytes > 0 && File.Exists(targetPath))
+                {
+                    await using var existing = new FileStream(
+                        targetPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read,
+                        bufferSize: 1024 * 1024,
+                        useAsync: true);
+                    await CopyPrefixAsync(existing, output, existingPrefixBytes, cancellationToken);
+                }
                 var stdoutTask = process.StandardOutput.BaseStream.CopyToAsync(output, cancellationToken);
                 var stderrTask = ReadStreamAsync(process.StandardError, stderr);
 
@@ -291,7 +303,8 @@ internal static class SshOpenSsh
         Func<long, long, ValueTask>? reportProgressAsync = null,
         Action<Process>? processStarted = null,
         CancellationToken cancellationToken = default,
-        int maxStderrChars = DefaultMaxStderrChars)
+        int maxStderrChars = DefaultMaxStderrChars,
+        long sourceOffset = 0)
     {
         var startedAt = Stopwatch.GetTimestamp();
         var stderr = new OutputCollector(maxStderrChars);
@@ -321,7 +334,8 @@ internal static class SshOpenSsh
             sourcePath,
             totalBytes,
             reportProgressAsync,
-            cancellationToken);
+            cancellationToken,
+            sourceOffset);
 
         using var timeoutCts = new CancellationTokenSource();
         var timeoutTask = Task.Delay(normalizedTimeoutMs, timeoutCts.Token);
@@ -386,7 +400,8 @@ internal static class SshOpenSsh
         int timeoutMs,
         Action<Process>? processStarted = null,
         CancellationToken cancellationToken = default,
-        int maxStderrChars = DefaultMaxStderrChars)
+        int maxStderrChars = DefaultMaxStderrChars,
+        long resumeOffset = 0)
     {
         var startedAt = Stopwatch.GetTimestamp();
         var sourceStderr = new OutputCollector(maxStderrChars);
@@ -409,11 +424,14 @@ internal static class SshOpenSsh
 
         using var sourceProcess = CreateProcess(
             sourceLaunch,
-            $"cat -- {ShellPathExpr(sourcePath)}",
+            resumeOffset > 0
+                ? $"tail -c +{resumeOffset + 1} -- {ShellPathExpr(sourcePath)}"
+                : $"cat -- {ShellPathExpr(sourcePath)}",
             redirectStdin: false);
         using var targetProcess = CreateProcess(
             targetLaunch,
-            $"mkdir -p -- {ShellPathExpr(PosixDirname(targetPath))} && cat > {ShellPathExpr(targetPath)}",
+            $"mkdir -p -- {ShellPathExpr(PosixDirname(targetPath))} && " +
+            $"cat {(resumeOffset > 0 ? ">>" : ">")} {ShellPathExpr(targetPath)}",
             redirectStdin: true);
 
         var spawnStartedAt = Stopwatch.GetTimestamp();
@@ -550,9 +568,10 @@ internal static class SshOpenSsh
         string localPath,
         long totalBytes,
         Func<long, long, ValueTask>? reportProgressAsync,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        long sourceOffset)
     {
-        var written = 0L;
+        var written = Math.Clamp(sourceOffset, 0, totalBytes);
         var lastReportAt = Stopwatch.GetTimestamp();
         await using var input = new FileStream(
             localPath,
@@ -561,6 +580,11 @@ internal static class SshOpenSsh
             FileShare.Read,
             bufferSize: 1024 * 1024,
             useAsync: true);
+
+        if (written > 0)
+        {
+            input.Seek(written, SeekOrigin.Begin);
+        }
 
         await ReportProgressAsync(reportProgressAsync, written, totalBytes);
         var buffer = new byte[1024 * 1024];
@@ -604,6 +628,25 @@ internal static class SshOpenSsh
 
         await ReportProgressAsync(reportProgressAsync, written, totalBytes);
         return written;
+    }
+
+    private static async Task CopyPrefixAsync(
+        Stream input,
+        Stream output,
+        long bytes,
+        CancellationToken cancellationToken)
+    {
+        var remaining = bytes;
+        var buffer = new byte[1024 * 1024];
+        while (remaining > 0)
+        {
+            var read = await input.ReadAsync(
+                buffer.AsMemory(0, (int)Math.Min(buffer.Length, remaining)),
+                cancellationToken);
+            if (read <= 0) break;
+            await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            remaining -= read;
+        }
     }
 
     private static async ValueTask ReportProgressAsync(

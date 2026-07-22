@@ -173,10 +173,12 @@ function HostSidebar({
 function TransferTaskList({
   tasks,
   onCancel,
+  onRetry,
   onClear
 }: {
   tasks: SftpTransferTask[]
   onCancel: (taskId: string) => void
+  onRetry: (taskId: string) => void
   onClear: (taskId: string) => void
 }): React.JSX.Element {
   const { t } = useTranslation('ssh')
@@ -213,16 +215,28 @@ function TransferTaskList({
                 </div>
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
-                onClick={() => (active ? onCancel(task.taskId) : onClear(task.taskId))}
-              >
-                {active
-                  ? t('workspace.sftp.cancelTask', { defaultValue: 'Cancel' })
-                  : t('workspace.sftp.clearTask', { defaultValue: 'Clear' })}
-              </Button>
+              <div className="flex gap-2">
+                {task.stage === 'error' && task.request ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
+                    onClick={() => onRetry(task.taskId)}
+                  >
+                    {t('sftp.retryTask', { defaultValue: 'Resume' })}
+                  </Button>
+                ) : null}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
+                  onClick={() => (active ? onCancel(task.taskId) : onClear(task.taskId))}
+                >
+                  {active
+                    ? t('workspace.sftp.cancelTask', { defaultValue: 'Cancel' })
+                    : t('workspace.sftp.clearTask', { defaultValue: 'Clear' })}
+                </Button>
+              </div>
             </div>
 
             <div className="mt-4">
@@ -257,6 +271,7 @@ function InspectorPanel({
   setTab,
   tasks,
   onCancelTask,
+  onRetryTask,
   onClearTask,
   activePane,
   activeConnection,
@@ -271,6 +286,7 @@ function InspectorPanel({
   setTab: (tab: SftpInspectorTab) => void
   tasks: SftpTransferTask[]
   onCancelTask: (taskId: string) => void
+  onRetryTask: (taskId: string) => void
   onClearTask: (taskId: string) => void
   activePane: SftpPaneId
   activeConnection: SshConnection | null
@@ -309,7 +325,12 @@ function InspectorPanel({
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         {tab === 'tasks' ? (
-          <TransferTaskList tasks={tasks} onCancel={onCancelTask} onClear={onClearTask} />
+          <TransferTaskList
+            tasks={tasks}
+            onCancel={onCancelTask}
+            onRetry={onRetryTask}
+            onClear={onClearTask}
+          />
         ) : singleEntry && singleEntry.type === 'file' && activeConnection ? (
           <div className="flex h-full min-h-0 flex-col">
             <div className="border-b border-border px-4 py-4">
@@ -459,6 +480,7 @@ export function SshSftpWorkspace(): React.JSX.Element {
   const setSftpInspectorTab = useSshStore((state) => state.setSftpInspectorTab)
   const startTransfer = useSshStore((state) => state.startTransfer)
   const cancelTransfer = useSshStore((state) => state.cancelTransfer)
+  const retryTransfer = useSshStore((state) => state.retryTransfer)
   const clearTransferTask = useSshStore((state) => state.clearTransferTask)
 
   const [compactPane, setCompactPane] = useState<SftpPaneId>('left')
@@ -1078,6 +1100,7 @@ export function SshSftpWorkspace(): React.JSX.Element {
                       setTab={setSftpInspectorTab}
                       tasks={orderedTasks}
                       onCancelTask={(taskId) => void cancelTransfer(taskId)}
+                      onRetryTask={(taskId) => void retryTransfer(taskId)}
                       onClearTask={clearTransferTask}
                       activePane={activePaneId}
                       activeConnection={activeConnection}
@@ -1123,6 +1146,7 @@ export function SshSftpWorkspace(): React.JSX.Element {
                 setTab={setSftpInspectorTab}
                 tasks={orderedTasks}
                 onCancelTask={(taskId) => void cancelTransfer(taskId)}
+                onRetryTask={(taskId) => void retryTransfer(taskId)}
                 onClearTask={clearTransferTask}
                 activePane={activePaneId}
                 activeConnection={activeConnection}

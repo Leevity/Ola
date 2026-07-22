@@ -1626,6 +1626,7 @@ export async function registerSshHandlers(): Promise<void> {
         remoteDir: string
         localPaths: string[]
         conflictPolicy?: SshConflictPolicy
+        resume?: boolean
       }
     | {
         type: 'download'
@@ -1633,6 +1634,7 @@ export async function registerSshHandlers(): Promise<void> {
         remotePaths: string[]
         localDir: string
         conflictPolicy?: SshConflictPolicy
+        resume?: boolean
       }
     | {
         type: 'remote-copy'
@@ -1641,6 +1643,7 @@ export async function registerSshHandlers(): Promise<void> {
         sourcePaths: string[]
         targetDir: string
         conflictPolicy?: SshConflictPolicy
+        resume?: boolean
       }
   >('ssh:fs:transfer:start', async (args) => {
     const taskId = `ssh-transfer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -1731,7 +1734,8 @@ export async function registerSshHandlers(): Promise<void> {
                 connectionId: args.connectionId,
                 localPaths: args.localPaths,
                 remoteDir: args.remoteDir,
-                conflictPolicy
+                conflictPolicy,
+                resume: args.resume === true
               },
               2 * 60 * 60_000
             )
@@ -1778,7 +1782,8 @@ export async function registerSshHandlers(): Promise<void> {
                 connectionId: args.connectionId,
                 remotePaths: args.remotePaths,
                 localDir: args.localDir,
-                conflictPolicy
+                conflictPolicy,
+                resume: args.resume === true
               },
               2 * 60 * 60_000
             )
@@ -1823,7 +1828,8 @@ export async function registerSshHandlers(): Promise<void> {
                 taskId,
                 sourcePaths: args.sourcePaths,
                 targetDir: args.targetDir,
-                conflictPolicy
+                conflictPolicy,
+                resume: args.resume === true
               },
               2 * 60 * 60_000
             )
