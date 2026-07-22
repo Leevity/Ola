@@ -7,6 +7,7 @@ import { useChatStore } from './chat-store'
 import {
   APP_PLUGIN_DESCRIPTORS,
   BROWSER_PLUGIN_ID,
+  CODEGRAPH_PLUGIN_ID,
   DESKTOP_CONTROL_PLUGIN_ID,
   IMAGE_PLUGIN_ID,
   isAppPluginEnabledByDefault,
@@ -172,6 +173,7 @@ interface AppPluginStore {
   isImageToolAvailable: (projectId?: string | null) => boolean
   isBrowserToolAvailable: (projectId?: string | null) => boolean
   isDesktopControlToolAvailable: () => boolean
+  isCodeGraphToolAvailable: (projectId?: string | null) => boolean
 }
 
 export const useAppPluginStore = create<AppPluginStore>()(
@@ -240,11 +242,15 @@ export const useAppPluginStore = create<AppPluginStore>()(
         return Boolean(plugin?.enabled)
       },
 
-      isDesktopControlToolAvailable: () => false
+      isDesktopControlToolAvailable: () => false,
+      isCodeGraphToolAvailable: (projectId) => {
+        const plugin = get().getPlugin(CODEGRAPH_PLUGIN_ID, projectId)
+        return Boolean(plugin?.enabled)
+      }
     }),
     {
       name: 'ola-app-plugins',
-      version: 4,
+      version: 5,
       storage: createJSONStorage(() => configStorage),
       migrate: (persisted, version) => {
         const state = (persisted ?? {}) as {

@@ -11,6 +11,8 @@ import {
   unregisterBrowserTool,
   isBrowserToolRegistered
 } from '../tools/browser-tool'
+import { registerCodeGraphTool, unregisterCodeGraphTool } from '../tools/codegraph-tool'
+import { agentBridge } from '../ipc/agent-bridge'
 import {
   DESKTOP_CLICK_TOOL_NAME,
   DESKTOP_SCREENSHOT_TOOL_NAME,
@@ -22,6 +24,7 @@ import {
 
 let imageToolRegistered = false
 let desktopControlToolsRegistered = false
+let codeGraphWasEnabled = false
 
 export function registerImagePluginTools(): void {
   if (imageToolRegistered) return
@@ -78,5 +81,18 @@ export function updateAppPluginToolRegistration(): void {
     registerDesktopControlTools()
   } else {
     unregisterDesktopControlTools()
+  }
+
+  if (store.isCodeGraphToolAvailable()) {
+    registerCodeGraphTool()
+    codeGraphWasEnabled = true
+  } else {
+    unregisterCodeGraphTool()
+    if (codeGraphWasEnabled) {
+      codeGraphWasEnabled = false
+      void agentBridge.stopCodeGraph().catch((error) => {
+        console.warn('[CodeGraph] failed to stop disabled worker:', error)
+      })
+    }
   }
 }

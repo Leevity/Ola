@@ -2,6 +2,7 @@ export const IMAGE_PLUGIN_ID = 'image' as const
 export const BROWSER_PLUGIN_ID = 'browser' as const
 export const PRODUCT_DESIGN_PLUGIN_ID = 'product-design' as const
 export const DESKTOP_CONTROL_PLUGIN_ID = 'desktop-control' as const
+export const CODEGRAPH_PLUGIN_ID = 'codegraph' as const
 
 export const IMAGE_GENERATE_TOOL_NAME = 'ImageGenerate' as const
 export const BROWSER_NAVIGATE_TOOL_NAME = 'BrowserNavigate' as const
@@ -16,12 +17,14 @@ export const DESKTOP_CLICK_TOOL_NAME = 'DesktopClick' as const
 export const DESKTOP_TYPE_TOOL_NAME = 'DesktopType' as const
 export const DESKTOP_SCROLL_TOOL_NAME = 'DesktopScroll' as const
 export const DESKTOP_WAIT_TOOL_NAME = 'DesktopWait' as const
+export const CODEGRAPH_EXPLORE_TOOL_NAME = 'codegraph_explore' as const
 
 export type AppPluginId =
   | typeof IMAGE_PLUGIN_ID
   | typeof BROWSER_PLUGIN_ID
   | typeof PRODUCT_DESIGN_PLUGIN_ID
   | typeof DESKTOP_CONTROL_PLUGIN_ID
+  | typeof CODEGRAPH_PLUGIN_ID
 export type AppPluginToolName =
   | typeof IMAGE_GENERATE_TOOL_NAME
   | typeof BROWSER_NAVIGATE_TOOL_NAME
@@ -36,9 +39,10 @@ export type AppPluginToolName =
   | typeof DESKTOP_TYPE_TOOL_NAME
   | typeof DESKTOP_SCROLL_TOOL_NAME
   | typeof DESKTOP_WAIT_TOOL_NAME
+  | typeof CODEGRAPH_EXPLORE_TOOL_NAME
 
 export function isAppPluginEnabledByDefault(id: AppPluginId): boolean {
-  if (id === DESKTOP_CONTROL_PLUGIN_ID) return false
+  if (id === DESKTOP_CONTROL_PLUGIN_ID || id === CODEGRAPH_PLUGIN_ID) return false
   return true
 }
 
@@ -85,6 +89,12 @@ export const APP_PLUGIN_DESCRIPTORS: AppPluginDescriptor[] = [
     id: PRODUCT_DESIGN_PLUGIN_ID,
     builtin: true,
     toolNames: [],
+    requiresModelConfig: false
+  },
+  {
+    id: CODEGRAPH_PLUGIN_ID,
+    builtin: true,
+    toolNames: [CODEGRAPH_EXPLORE_TOOL_NAME],
     requiresModelConfig: false
   },
   {

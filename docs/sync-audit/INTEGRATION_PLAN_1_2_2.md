@@ -7,21 +7,21 @@
 
 ## 0. 完成度快照（以代码现状为准）
 
-| 顺序 | 分支建议                            | 内容                                 | 状态             | 证据 / 备注                                                          |
-| ---: | ----------------------------------- | ------------------------------------ | ---------------- | -------------------------------------------------------------------- |
-|    0 | `codex/sync-audit-1-2-2`            | 审计工具 + baseline                  | ✅ 完成          | `docs/sync-audit/*`、`scripts/audit-opencowork-sync.mjs`             |
-|    1 | `codex/permission-policy`           | 权限策略                             | ✅ 完成          | `docs/sync-audit/PHASE_1_PERMISSION_POLICY.md`                       |
-|    2 | `codex/provider-retry`              | 重试与压缩设置                       | ✅ 完成          | `AgentRuntimeProviderRetryPolicy.cs`                                 |
-|    3 | `codex/input-drafts`                | 输入草稿                             | ✅ 完成          | 跨会话草稿持久化已存在                                               |
-|    4 | `codex/content-blocks`              | 内容块                               | ✅ 完成          | 用户确认：自动验证 + 生产构建 + 桌面验收通过                         |
-|    5 | `codex/hooks-runtime`               | Hooks 核心                           | ✅ 基本完成      | `src/main/hooks/*`、`src/main/ipc/hooks-handlers.ts`、sidecar 触发点 |
-|    6 | `codex/hooks-ui`                    | Hooks 管理 UI                        | ✅ 基本完成      | `HooksPanel.tsx`、`hooks-store.ts`、settings 入口                    |
-|    7 | `codex/subagent-history-cancel`     | 子 Agent 历史 + 精确取消             | ✅ 自动验收完成  | 专项验证、生产构建、桌面启动通过；真实并行取消保留发布前交互验收     |
-|    8 | `codex/codegraph-assets`            | Worker/CodeGraph manifest + 缺失检测 | ✅ 已完成        | 主 Worker 校验通过；检测确认 CodeGraph Worker 与语法资产尚未装入     |
-|   8B | `codex/codegraph-worker`            | CodeGraph Core/Worker + 语法资产发布 | ✅ 当前 RID 完成 | Core/Worker 自检、329 项测试、AOT 发布及 17 个语法导出校验通过       |
-|   8C | `codex/codegraph-runtime`           | Worker 管理、索引、Agent 工具和 UI   | 🟡 下一阶段      | 默认关闭，启用后懒启动独立 Worker                                    |
-|    9 | `codex/release-update`              | 绿色 zip + 更新 UI + Worker recycle  | ⬜ 待开始        | 保持 Ola 包名、升级通道和 shutdown 语义                              |
-|  10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力                             | ⬜ 待审计        | SSH 已有大量能力，禁止按“从零开始”估算                               |
+| 顺序 | 分支建议                            | 内容                                   | 状态             | 证据 / 备注                                                          |
+| ---: | ----------------------------------- | -------------------------------------- | ---------------- | -------------------------------------------------------------------- |
+|    0 | `codex/sync-audit-1-2-2`            | 审计工具 + baseline                    | ✅ 完成          | `docs/sync-audit/*`、`scripts/audit-opencowork-sync.mjs`             |
+|    1 | `codex/permission-policy`           | 权限策略                               | ✅ 完成          | `docs/sync-audit/PHASE_1_PERMISSION_POLICY.md`                       |
+|    2 | `codex/provider-retry`              | 重试与压缩设置                         | ✅ 完成          | `AgentRuntimeProviderRetryPolicy.cs`                                 |
+|    3 | `codex/input-drafts`                | 输入草稿                               | ✅ 完成          | 跨会话草稿持久化已存在                                               |
+|    4 | `codex/content-blocks`              | 内容块                                 | ✅ 完成          | 用户确认：自动验证 + 生产构建 + 桌面验收通过                         |
+|    5 | `codex/hooks-runtime`               | Hooks 核心                             | ✅ 基本完成      | `src/main/hooks/*`、`src/main/ipc/hooks-handlers.ts`、sidecar 触发点 |
+|    6 | `codex/hooks-ui`                    | Hooks 管理 UI                          | ✅ 基本完成      | `HooksPanel.tsx`、`hooks-store.ts`、settings 入口                    |
+|    7 | `codex/subagent-history-cancel`     | 子 Agent 历史 + 精确取消               | ✅ 自动验收完成  | 专项验证、生产构建、桌面启动通过；真实并行取消保留发布前交互验收     |
+|    8 | `codex/codegraph-assets`            | Worker/CodeGraph manifest + 缺失检测   | ✅ 已完成        | 主 Worker 校验通过；检测确认 CodeGraph Worker 与语法资产尚未装入     |
+|   8B | `codex/codegraph-worker`            | CodeGraph Core/Worker + 语法资产发布   | ✅ 当前 RID 完成 | Core/Worker 自检、329 项测试、AOT 发布及 17 个语法导出校验通过       |
+|   8C | `codex/codegraph-runtime`           | Worker 管理、索引、Agent 工具和插件 UI | ✅ 已完成        | 默认关闭、懒启动、自动首索引、停用回收；图谱 Dashboard 后续独立切片  |
+|    9 | `codex/release-update`              | 绿色 zip + 更新 UI + Worker recycle    | ⬜ 待开始        | 保持 Ola 包名、升级通道和 shutdown 语义                              |
+|  10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力                               | ⬜ 待审计        | SSH 已有大量能力，禁止按“从零开始”估算                               |
 
 ### 阶段 7 完成状态
 

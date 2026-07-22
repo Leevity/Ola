@@ -73,6 +73,13 @@ export const IPC = {
   SUB_AGENT_HISTORY_MIGRATION_STATUS: 'agent:sub-agent-history:migration-status',
   SUB_AGENT_HISTORY_MIGRATION_MARK: 'agent:sub-agent-history:migration-mark',
 
+  // CodeGraph worker
+  CODEGRAPH_REQUEST: 'codegraph:request',
+  CODEGRAPH_STATUS: 'codegraph:status',
+  CODEGRAPH_STOP: 'codegraph:stop',
+  CODEGRAPH_RECYCLE: 'codegraph:recycle',
+  CODEGRAPH_INDEX_PROGRESS: 'codegraph:index-progress',
+
   // Memory Automation
   MEMORY_AUTOMATION_LIST: 'memory-automation:list',
   MEMORY_AUTOMATION_RECORD: 'memory-automation:record',

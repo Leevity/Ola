@@ -691,6 +691,7 @@
     "toolStatusDesc": "The image Tool is only exposed when the plugin is enabled and the model is valid.",
     "toolStatusDescBrowser": "Browser tools are only exposed when the browser plugin is enabled. Domain rules apply to manual browsing and Agent navigation.",
     "toolStatusDescDesktop": "Desktop-control tools are only exposed when the plugin is enabled. Every call still requires approval. If the active model also enables Computer Use, OpenAI Computer Use will proxy these capabilities first.",
+    "toolStatusDescCodeGraph": "CodeGraph tools are exposed only when the plugin is enabled. The isolated analysis Worker starts lazily on the first request.",
     "toolArgs": "Available args: prompt, count",
     "toolArgsMap": {
       "ImageGenerate": "Available args: prompt, count, reference_images, size, quality",
@@ -705,7 +706,8 @@
       "DesktopClick": "Available args: x, y, button, action",
       "DesktopType": "Available args: text, key, hotkey",
       "DesktopScroll": "Available args: x, y, scrollX, scrollY",
-      "DesktopWait": "Available args: delayMs"
+      "DesktopWait": "Available args: delayMs",
+      "codegraph_explore": "Available args: query, projectPath"
     },
     "status": {
       "disabled": "The plugin is disabled, so its tools are not exposed to the Agent.",
@@ -765,6 +767,12 @@
         "description": "Explore design directions, build prototypes, audit flows, and QA visual fidelity.",
         "promptTitle": "Workflow constraints",
         "promptDesc": "Product Design starts by confirming the brief, uses visual targets before builds, generates three directions when no target exists, and requires design QA before prototype handoff."
+      },
+      "codegraph": {
+        "title": "CodeGraph Analysis",
+        "description": "Index the active codebase and expose structural code navigation to the Agent.",
+        "promptTitle": "Analysis scope",
+        "promptDesc": "Disabled by default. When enabled, the isolated analysis Worker starts on demand and stores its index locally."
       }
     },
     "toolStatusDescProductDesign": "Product Design is a workflow plugin. It exposes no new low-level Tool; it coordinates enabled image, browser, search, file, shell, MCP, and deployment tools through the product-design skill.",

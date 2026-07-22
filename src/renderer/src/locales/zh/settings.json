@@ -691,6 +691,7 @@
     "toolStatusDesc": "只有在插件启用且模型有效时，图片 Tool 才会暴露给 Agent。",
     "toolStatusDescBrowser": "浏览器工具仅在浏览器插件启用后才会暴露给 Agent。手动浏览和 Agent 导航都会遵守域名规则。",
     "toolStatusDescDesktop": "桌面控制工具仅在插件启用后才会暴露给 Agent，但每次调用仍需审批；若模型同时启用 Computer Use，则会优先通过 Computer Use 代理这些能力。",
+    "toolStatusDescCodeGraph": "仅在插件启用后向 Agent 暴露 CodeGraph 工具；独立分析 Worker 会在首次请求时按需启动。",
     "toolArgs": "可用参数：prompt、count",
     "toolArgsMap": {
       "ImageGenerate": "可用参数：prompt、count、reference_images、size、quality",
@@ -705,7 +706,8 @@
       "DesktopClick": "可用参数：x、y、button、action",
       "DesktopType": "可用参数：text、key、hotkey",
       "DesktopScroll": "可用参数：x、y、scrollX、scrollY",
-      "DesktopWait": "可用参数：delayMs"
+      "DesktopWait": "可用参数：delayMs",
+      "codegraph_explore": "可用参数：query、projectPath"
     },
     "status": {
       "disabled": "插件未启用，因此其工具不会暴露给 Agent。",
@@ -765,6 +767,12 @@
         "description": "探索设计方向、构建原型、审查流程并检查视觉还原度。",
         "promptTitle": "工作流约束",
         "promptDesc": "Product Design 会先确认 brief；构建前必须有视觉目标；没有目标时先生成三个方向；原型交付前必须通过设计 QA。"
+      },
+      "codegraph": {
+        "title": "CodeGraph 代码分析",
+        "description": "为当前代码库建立索引，并向 Agent 提供结构化代码导航能力。",
+        "promptTitle": "分析范围",
+        "promptDesc": "默认关闭。启用后独立分析 Worker 按需启动，索引仅保存在本机。"
       }
     },
     "toolStatusDescProductDesign": "Product Design 是工作流插件，不新增底层 Tool；它通过 product-design skill 编排已启用的图片、浏览器、搜索、文件、终端、MCP 和部署工具。",
