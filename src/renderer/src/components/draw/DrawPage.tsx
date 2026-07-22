@@ -100,6 +100,7 @@ import {
   useDrawStore
 } from '@renderer/stores/draw-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { DrawGraphCanvas } from './DrawGraphCanvas'
 
 interface ProviderModelGroup {
   provider: AIProvider
@@ -566,6 +567,7 @@ function isNoImageOutputErrorMessage(message: string): boolean {
 }
 
 export function DrawPage(): React.JSX.Element {
+  const [pageMode, setPageMode] = useState<'generate' | 'graph'>('generate')
   const { t } = useTranslation('layout')
   const closeDrawPage = useUIStore((state) => state.closeDrawPage)
   const openSettingsPage = useUIStore((state) => state.openSettingsPage)
@@ -1855,7 +1857,7 @@ export function DrawPage(): React.JSX.Element {
     )
   }
 
-  if (providerModelGroups.length === 0) {
+  if (providerModelGroups.length === 0 && pageMode === 'generate') {
     return (
       <div className="flex h-full flex-col overflow-hidden bg-background">
         <div className="flex items-center gap-3 border-b px-4 py-2.5 shrink-0">
@@ -1874,6 +1876,14 @@ export function DrawPage(): React.JSX.Element {
             <h1 className="truncate text-sm font-semibold">{t('drawPage.title')}</h1>
             <p className="truncate text-xs text-muted-foreground">{t('drawPage.subtitle')}</p>
           </div>
+          <Button
+            className="ml-auto"
+            size="sm"
+            variant="outline"
+            onClick={() => setPageMode('graph')}
+          >
+            {t('drawPage.graph.open')}
+          </Button>
         </div>
         <div className="flex flex-1 items-center justify-center p-6">
           <div className="max-w-md rounded-2xl border border-dashed border-border/70 bg-card/40 p-6 text-center">
@@ -1918,6 +1928,13 @@ export function DrawPage(): React.JSX.Element {
         </div>
 
         <Button
+          variant={pageMode === 'graph' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setPageMode((mode) => (mode === 'graph' ? 'generate' : 'graph'))}
+        >
+          {pageMode === 'graph' ? t('drawPage.graph.backToGenerate') : t('drawPage.graph.open')}
+        </Button>
+        <Button
           variant="outline"
           size="sm"
           className="gap-1.5"
@@ -1928,7 +1945,14 @@ export function DrawPage(): React.JSX.Element {
         </Button>
       </div>
 
-      <div className="flex flex-1 min-h-0 flex-col gap-4 p-4 md:flex-row">
+      {pageMode === 'graph' ? <DrawGraphCanvas /> : null}
+
+      <div
+        className={cn(
+          'flex flex-1 min-h-0 flex-col gap-4 p-4 md:flex-row',
+          pageMode === 'graph' && 'hidden'
+        )}
+      >
         <div className="flex min-h-0 min-w-0 flex-col gap-4 md:w-[500px] md:shrink-0 md:overflow-hidden lg:w-[560px]">
           <div className="flex min-h-0 flex-col rounded-2xl border bg-card/50 p-4 shadow-sm md:flex-1 md:overflow-hidden">
             <div className="flex items-start justify-between gap-3">
