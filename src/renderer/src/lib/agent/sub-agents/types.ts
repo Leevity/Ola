@@ -68,6 +68,8 @@ export interface SubAgentRunConfig {
 
 export interface SubAgentResult {
   success: boolean
+  /** Whether execution ended because cancellation was requested. */
+  cancelled?: boolean
   /** Final text output resolved from the sub-agent's actual assistant messages. */
   output: string
   /** Whether a non-empty final result was captured. */

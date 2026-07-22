@@ -1,39 +1,12 @@
 ﻿import { getNativeWorker } from '../lib/native-worker'
 
-export interface SubAgentHistoryRow {
-  id: string
-  sessionId: string
-  subAgentId: string
-  toolUseId: string
-  name: string
-  status: string
-  startedAt: number
-  completedAt: number | null
-  updatedAt: number
-  sortOrder: number
-}
-
-export interface SubAgentHistoryPage {
-  items: SubAgentHistoryRow[]
-  offset: number
-  limit: number
-  hasMore: boolean
-}
-
-export interface SubAgentHistoryMutation {
-  success: boolean
-  changed: number
-  error?: string | null
-}
-
-export interface SubAgentHistoryMigrationStatus {
-  applied: boolean
-  appliedAt: number | null
-}
-
-export interface SubAgentHistoryUpsertItem extends SubAgentHistoryRow {
-  snapshotJson: string
-}
+import type {
+  SubAgentHistoryMigrationStatus,
+  SubAgentHistoryMutation,
+  SubAgentHistoryPage,
+  SubAgentHistoryRow,
+  SubAgentHistoryUpsertItem
+} from '../../shared/sub-agent-history-types'
 
 const DEFAULT_TIMEOUT_MS = 30_000
 const REPLACE_TIMEOUT_MS = 60_000
@@ -50,7 +23,10 @@ function clampOffset(value: number | undefined): number {
   return Math.max(0, Math.floor(value as number))
 }
 
-function assertMutation(result: SubAgentHistoryMutation | undefined, op: string): asserts result is SubAgentHistoryMutation {
+function assertMutation(
+  result: SubAgentHistoryMutation | undefined,
+  op: string
+): asserts result is SubAgentHistoryMutation {
   if (!result || !result.success) {
     throw new Error(result?.error || `Native sub-agent history ${op} failed`)
   }

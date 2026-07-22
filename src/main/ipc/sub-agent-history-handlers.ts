@@ -10,9 +10,9 @@ import {
   indexSubAgentHistory,
   listSubAgentHistory,
   markSubAgentHistoryMigration,
-  replaceSubAgentHistory,
-  type SubAgentHistoryUpsertItem
+  replaceSubAgentHistory
 } from '../db/sub-agent-history-dao'
+import type { SubAgentHistoryUpsertItem } from '../../shared/sub-agent-history-types'
 
 function registerSubAgentHistoryMessagePackHandler<TArgs>(
   channel: string,
