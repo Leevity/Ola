@@ -59,6 +59,8 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'sidecar:can-handle',
   'codegraph:status',
   'provider:mirror-snapshot',
+  'draw-graph:load',
+  'draw-graph:save',
   'notify:desktop',
   'notify:session',
   'browser:clear-cookies',

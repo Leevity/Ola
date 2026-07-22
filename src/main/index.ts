@@ -75,6 +75,7 @@ import { registerAiCodingHandlers } from './ipc/ai-coding-handlers'
 import { registerCredentialsHandlers } from './ipc/credentials-handlers'
 import { registerOauthHandlers } from './ipc/oauth-handlers'
 import { registerImageGifHandlers } from './ipc/image-gif-handlers'
+import { registerDrawGraphHandlers } from './ipc/draw-graph-handlers'
 import { registerGitHandlers } from './ipc/git-handlers'
 import { registerMigrationHandlers } from './ipc/migration-handlers'
 import { registerSyncHandlers } from './ipc/sync-handlers'
@@ -1437,6 +1438,7 @@ if (gotSingleInstanceLock) {
     registerCredentialsHandlers()
     registerOauthHandlers()
     registerImageGifHandlers()
+    registerDrawGraphHandlers()
     registerGitHandlers()
     registerMigrationHandlers()
     registerSyncHandlers()

@@ -765,6 +765,17 @@
     }
   },
   "drawPage": {
+    "graph": {
+      "open": "节点画布",
+      "backToGenerate": "AI 绘图",
+      "image": "图片",
+      "text": "文本",
+      "config": "配置",
+      "connect": "连接",
+      "minimap": "小地图",
+      "node": { "image": "图片节点", "text": "文本节点", "config": "配置节点" },
+      "placeholder": { "image": "图片路径或 URL", "text": "输入文本", "config": "输入配置" }
+    },
     "title": "AI 绘图",
     "subtitle": "聚合所有服务商的图片模型，支持 Gemini 官方图像生成",
     "back": "返回",
