@@ -47,6 +47,7 @@
     "verify:draw-image-ops": "esbuild tools/verify-draw-image-ops.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-draw-image-ops.mjs && node node_modules/.cache/ola-verify-draw-image-ops.mjs",
     "verify:draw-projects": "esbuild tools/verify-draw-projects.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-draw-projects.mjs && node node_modules/.cache/ola-verify-draw-projects.mjs",
     "verify:draw-canvas-assistant": "esbuild tools/verify-draw-canvas-assistant.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-draw-canvas-assistant.mjs && node node_modules/.cache/ola-verify-draw-canvas-assistant.mjs",
+    "verify:media-runtime": "esbuild tools/verify-media-runtime.ts --bundle --platform=node --format=esm --outfile=node_modules/.cache/ola-verify-media-runtime.mjs && node node_modules/.cache/ola-verify-media-runtime.mjs",
     "start": "electron-vite preview",
     "dev": "node ./scripts/launch-dev.mjs",
     "dev:raw": "electron-vite dev",

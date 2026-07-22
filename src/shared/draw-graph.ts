@@ -1,6 +1,6 @@
 export const DRAW_GRAPH_SCHEMA_VERSION = 1
 
-export type DrawGraphNodeKind = 'image' | 'text' | 'config'
+export type DrawGraphNodeKind = 'image' | 'video' | 'text' | 'config'
 
 export interface DrawGraphNode {
   id: string

@@ -769,6 +769,7 @@
       "open": "Node Canvas",
       "backToGenerate": "AI Drawing",
       "image": "Image",
+      "video": "Video",
       "text": "Text",
       "config": "Config",
       "connect": "Connect",
@@ -780,10 +781,20 @@
       "promptLibrary": "Prompt Library",
       "assetLibrary": "Asset Library",
       "assets": "assets",
+      "videoProviderDisabled": "Video providers are optional and currently disabled",
+      "estimatedCost": "Estimated cost",
+      "outputSize": "Output size",
+      "deleteOutput": "Delete output",
       "minimap": "Minimap",
-      "node": { "image": "Image Node", "text": "Text Node", "config": "Config Node" },
+      "node": {
+        "image": "Image Node",
+        "video": "Video Node",
+        "text": "Text Node",
+        "config": "Config Node"
+      },
       "placeholder": {
         "image": "Image path or URL",
+        "video": "Describe the video task",
         "text": "Enter text",
         "config": "Enter configuration"
       }
