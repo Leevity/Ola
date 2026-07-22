@@ -772,6 +772,10 @@
       "text": "Text",
       "config": "Config",
       "connect": "Connect",
+      "crop": "Crop",
+      "mask": "Mask",
+      "expand": "Expand",
+      "upscale": "Upscale",
       "minimap": "Minimap",
       "node": { "image": "Image Node", "text": "Text Node", "config": "Config Node" },
       "placeholder": {
