@@ -288,7 +288,8 @@
       "connectHint": "SFTP 页面会复用或创建 SSH 会话，并在终端输出之外管理文件树。",
       "session": "会话状态",
       "transfers": "传输总览",
-      "uploadPanel": "当前上传"
+      "uploadPanel": "当前上传",
+      "retryTask": "续传"
     },
     "uploads": {
       "title": "上传",

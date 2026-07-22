@@ -65,6 +65,11 @@ internal static class SshTransferRemoteCopyTools
 
             counters.TotalItems = roots.Sum(root => root.ItemCount);
             counters.TotalBytes = roots.Sum(root => root.TotalBytes);
+            await EnsureTargetDiskSpaceAsync(
+                parameters,
+                resolvedTargetDir,
+                counters.TotalBytes,
+                timeoutMs);
             WorkerLog.Debug(
                 $"ssh transfer remote-copy plan taskId={taskId} roots={roots.Count} " +
                 $"items={counters.TotalItems} bytes={counters.TotalBytes} targetDir={resolvedTargetDir}");
@@ -230,12 +235,23 @@ internal static class SshTransferRemoteCopyTools
             return;
         }
 
-        var fileTargetPath = await ResolveTargetConflictAsync(
-            parameters,
-            requestedTargetPath,
-            isDirectory: false,
-            conflictPolicy,
-            timeoutMs);
+        var resume = parameters.TryGetProperty("resume", out var resumeElement) &&
+            resumeElement.ValueKind == JsonValueKind.True;
+        var existingTarget = resume
+            ? await StatTargetPathAsync(parameters, requestedTargetPath, timeoutMs)
+            : new SshTargetStat(false, null, 0);
+        var resumeOffset = existingTarget.Exists && existingTarget.Type == "file" &&
+            existingTarget.Size > 0 && existingTarget.Size < node.Size
+                ? existingTarget.Size
+                : 0;
+        var fileTargetPath = resumeOffset > 0
+            ? requestedTargetPath
+            : await ResolveTargetConflictAsync(
+                parameters,
+                requestedTargetPath,
+                isDirectory: false,
+                conflictPolicy,
+                timeoutMs);
         if (fileTargetPath is null)
         {
             await MarkSkippedAsync(
@@ -261,7 +277,8 @@ internal static class SshTransferRemoteCopyTools
             node.Size,
             counters,
             timeoutMs,
-            conflictPolicy);
+            conflictPolicy,
+            resumeOffset);
     }
 
     private static async Task CopyFileAsync(
@@ -276,7 +293,8 @@ internal static class SshTransferRemoteCopyTools
         long size,
         TransferCounters counters,
         int timeoutMs,
-        string conflictPolicy)
+        string conflictPolicy,
+        long resumeOffset)
     {
         await EmitTransferEventAsync(
             context,
@@ -295,7 +313,8 @@ internal static class SshTransferRemoteCopyTools
             targetPath,
             timeoutMs,
             copyTask.TrackProcess,
-            copyTask.Token);
+            copyTask.Token,
+            resumeOffset: resumeOffset);
 
         copyTask.ThrowIfCanceled();
         if (result.ExitCode != 0)
@@ -368,6 +387,28 @@ internal static class SshTransferRemoteCopyTools
         return targetPath;
     }
 
+    private static async Task EnsureTargetDiskSpaceAsync(
+        JsonElement parameters,
+        string targetDir,
+        long requiredBytes,
+        int timeoutMs)
+    {
+        var result = await SshOpenSsh.ExecuteAsync(
+            parameters,
+            "targetConnection",
+            $"df -Pk -- {SshOpenSsh.ShellPathExpr(targetDir)} | awk 'END {{print $4}}'",
+            timeoutMs,
+            maxStdoutChars: 1024);
+        if (result.ExitCode != 0 || !long.TryParse(result.Stdout.Trim(), out var availableKb)) return;
+        var availableBytes = availableKb * 1024;
+        if (availableBytes < requiredBytes)
+        {
+            throw new IOException(
+                $"Insufficient remote disk space: need {requiredBytes} bytes, " +
+                $"available {availableBytes} bytes");
+        }
+    }
+
     private static async Task<SshTargetStat> StatTargetPathAsync(
         JsonElement parameters,
         string targetPath,
@@ -379,9 +420,9 @@ internal static class SshTransferRemoteCopyTools
             try:
                 st = os.lstat(p)
                 typ = "directory" if os.path.isdir(p) else ("symlink" if os.path.islink(p) else "file")
-                print(json.dumps({"exists": True, "type": typ}, separators=(",", ":")))
+                print(json.dumps({"exists": True, "type": typ, "size": st.st_size}, separators=(",", ":")))
             except FileNotFoundError:
-                print(json.dumps({"exists": False, "type": None}, separators=(",", ":")))
+                print(json.dumps({"exists": False, "type": None, "size": 0}, separators=(",", ":")))
             """;
         var result = await SshOpenSsh.ExecuteAsync(
             parameters,
@@ -402,7 +443,8 @@ internal static class SshTransferRemoteCopyTools
             typeElement.ValueKind == JsonValueKind.String
                 ? typeElement.GetString()
                 : null;
-        return new SshTargetStat(exists, type);
+        var size = root.TryGetProperty("size", out var sizeElement) ? sizeElement.GetInt64() : 0;
+        return new SshTargetStat(exists, type, size);
     }
 
     private static async Task<string> ResolveTargetPathAsync(
@@ -599,7 +641,7 @@ internal static class SshTransferRemoteCopyTools
         return (long)Math.Round(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
     }
 
-    private sealed record SshTargetStat(bool Exists, string? Type);
+    private sealed record SshTargetStat(bool Exists, string? Type, long Size);
 
     private sealed class TransferCounters
     {

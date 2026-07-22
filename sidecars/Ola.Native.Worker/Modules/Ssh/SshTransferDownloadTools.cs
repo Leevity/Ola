@@ -61,6 +61,17 @@ internal static class SshTransferDownloadTools
 
             counters.TotalItems = roots.Sum(root => root.ItemCount);
             counters.TotalBytes = roots.Sum(root => root.TotalBytes);
+            var driveRoot = Path.GetPathRoot(targetRoot);
+            if (!string.IsNullOrWhiteSpace(driveRoot))
+            {
+                var availableBytes = new DriveInfo(driveRoot).AvailableFreeSpace;
+                if (availableBytes < counters.TotalBytes)
+                {
+                    throw new IOException(
+                        $"Insufficient local disk space: need {counters.TotalBytes} bytes, " +
+                        $"available {availableBytes} bytes");
+                }
+            }
             WorkerLog.Debug(
                 $"ssh transfer download plan taskId={taskId} roots={roots.Count} " +
                 $"items={counters.TotalItems} bytes={counters.TotalBytes}");
@@ -217,7 +228,15 @@ internal static class SshTransferDownloadTools
             return;
         }
 
-        var fileTargetPath = ResolveLocalConflict(requestedTargetPath, isDirectory: false, conflictPolicy);
+        var resume = parameters.TryGetProperty("resume", out var resumeElement) &&
+            resumeElement.ValueKind == JsonValueKind.True;
+        var existingSize = resume && File.Exists(requestedTargetPath)
+            ? new FileInfo(requestedTargetPath).Length
+            : 0;
+        var resumeOffset = existingSize > 0 && existingSize < node.Size ? existingSize : 0;
+        var fileTargetPath = resumeOffset > 0
+            ? requestedTargetPath
+            : ResolveLocalConflict(requestedTargetPath, isDirectory: false, conflictPolicy);
         if (fileTargetPath is null)
         {
             await MarkSkippedAsync(context, taskId, connectionId, node, counters, conflictPolicy);
@@ -235,7 +254,8 @@ internal static class SshTransferDownloadTools
             node.Size,
             counters,
             timeoutMs,
-            conflictPolicy);
+            conflictPolicy,
+            resumeOffset);
     }
 
     private static async Task DownloadFileAsync(
@@ -249,7 +269,8 @@ internal static class SshTransferDownloadTools
         long size,
         TransferCounters counters,
         int timeoutMs,
-        string conflictPolicy)
+        string conflictPolicy,
+        long resumeOffset)
     {
         var targetDir = Path.GetDirectoryName(localPath);
         if (!string.IsNullOrWhiteSpace(targetDir))
@@ -269,11 +290,14 @@ internal static class SshTransferDownloadTools
 
         var result = await SshOpenSsh.ExecuteToFileAsync(
             parameters,
-            $"cat -- {SshOpenSsh.ShellPathExpr(remotePath)}",
+            resumeOffset > 0
+                ? $"tail -c +{resumeOffset + 1} -- {SshOpenSsh.ShellPathExpr(remotePath)}"
+                : $"cat -- {SshOpenSsh.ShellPathExpr(remotePath)}",
             localPath,
             timeoutMs,
             transferTask.TrackProcess,
-            transferTask.Token);
+            transferTask.Token,
+            existingPrefixBytes: resumeOffset);
 
         transferTask.ThrowIfCanceled();
         if (result.ExitCode != 0)

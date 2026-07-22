@@ -10,6 +10,7 @@ import type {
   SftpPaneId,
   SftpPaneState,
   SftpTransferProgress,
+  SftpTransferRequest,
   SftpTransferStage,
   SftpTransferTask,
   SftpTransferTaskType,
@@ -527,31 +528,8 @@ export interface SshStore {
   clearSftpSelection: (paneId: SftpPaneId) => void
   setSftpConflictPolicy: (policy: SftpConflictPolicy) => void
   setSftpInspectorTab: (tab: SftpInspectorTab) => void
-  startTransfer: (
-    args:
-      | {
-          type: 'upload'
-          connectionId: string
-          remoteDir: string
-          localPaths: string[]
-          conflictPolicy?: SftpConflictPolicy
-        }
-      | {
-          type: 'download'
-          connectionId: string
-          remotePaths: string[]
-          localDir: string
-          conflictPolicy?: SftpConflictPolicy
-        }
-      | {
-          type: 'remote-copy'
-          sourceConnectionId: string
-          targetConnectionId: string
-          sourcePaths: string[]
-          targetDir: string
-          conflictPolicy?: SftpConflictPolicy
-        }
-  ) => Promise<string | null>
+  startTransfer: (args: SftpTransferRequest) => Promise<string | null>
+  retryTransfer: (taskId: string) => Promise<string | null>
   cancelTransfer: (taskId: string) => Promise<void>
   clearTransferTask: (taskId: string) => void
 }
@@ -1146,6 +1124,7 @@ export const useSshStore = create<SshStore>()((set, get) => ({
                 ? args.targetConnectionId
                 : null,
           conflictPolicy: args.conflictPolicy,
+          request: { ...args, resume: true },
           message: 'Preparing transfer...',
           updatedAt: Date.now()
         }
@@ -1157,6 +1136,12 @@ export const useSshStore = create<SshStore>()((set, get) => ({
 
   cancelTransfer: async (taskId) => {
     await ipcClient.invoke(IPC.SSH_FS_TRANSFER_CANCEL, { taskId })
+  },
+
+  retryTransfer: async (taskId) => {
+    const request = get().transferTasks[taskId]?.request
+    if (!request) return null
+    return await get().startTransfer({ ...request, resume: true })
   },
 
   clearTransferTask: (taskId) => {

@@ -288,7 +288,8 @@
       "connectHint": "The SFTP page reuses or creates an SSH session and keeps file-tree management outside terminal output.",
       "session": "Session status",
       "transfers": "Transfer overview",
-      "uploadPanel": "Current uploads"
+      "uploadPanel": "Current uploads",
+      "retryTask": "Resume"
     },
     "uploads": {
       "title": "Uploads",

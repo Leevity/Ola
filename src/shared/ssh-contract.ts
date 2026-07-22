@@ -88,6 +88,32 @@ export type SshUploadTask = {
 export type SftpPaneId = 'left' | 'right'
 export type SftpConflictPolicy = 'skip' | 'overwrite' | 'duplicate'
 export type SftpTransferTaskType = 'upload' | 'download' | 'remote-copy'
+export type SftpTransferRequest =
+  | {
+      type: 'upload'
+      connectionId: string
+      remoteDir: string
+      localPaths: string[]
+      conflictPolicy?: SftpConflictPolicy
+      resume?: boolean
+    }
+  | {
+      type: 'download'
+      connectionId: string
+      remotePaths: string[]
+      localDir: string
+      conflictPolicy?: SftpConflictPolicy
+      resume?: boolean
+    }
+  | {
+      type: 'remote-copy'
+      sourceConnectionId: string
+      targetConnectionId: string
+      sourcePaths: string[]
+      targetDir: string
+      conflictPolicy?: SftpConflictPolicy
+      resume?: boolean
+    }
 export type SftpTransferStage =
   | 'preparing'
   | 'transferring'
@@ -113,6 +139,7 @@ export type SftpTransferTask = {
   currentItem?: string
   updatedAt: number
   conflictPolicy?: SftpConflictPolicy
+  request?: SftpTransferRequest
 }
 export type SftpConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 export type SftpConnectionState = {
