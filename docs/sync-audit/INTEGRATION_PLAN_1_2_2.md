@@ -21,7 +21,8 @@
 |   8B | `codex/codegraph-worker`            | CodeGraph Core/Worker + 语法资产发布   | ✅ 当前 RID 完成 | Core/Worker 自检、329 项测试、AOT 发布及 17 个语法导出校验通过       |
 |   8C | `codex/codegraph-runtime`           | Worker 管理、索引、Agent 工具和插件 UI | ✅ 已完成        | 默认关闭、懒启动、自动首索引、停用回收；图谱 Dashboard 后续独立切片  |
 |    9 | `codex/release-update`              | 绿色 zip + 更新 UI + Worker recycle    | ✅ 自动验收完成  | Ola 绿色包、字节进度、SHA-512 门禁、明确重启及崩溃恢复已完成         |
-|  10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力                               | ⬜ 待审计        | SSH 已有大量能力，禁止按“从零开始”估算                               |
+|   10 | `codex/ssh-audit`                   | SSH 现状与缺口审计                     | ✅ 完成          | 功能主体已具备；真实缺口是 store/契约、重连日志和传输续传            |
+|  11+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力                               | ⬜ 待实施        | 依照 SSH 审计拆分，不重复移植现有工作区                              |
 
 ### 阶段 7 完成状态
 
@@ -266,6 +267,15 @@ node scripts/verify-sub-agent-history.mjs   # 可新增
 - Windows 绿色 zip 使用 `olaDistribution=green` 和独立 `dist-green` 输出，不改变 `com.ola.app`、`Ola` 产品名、GitHub 发布仓库或正式升级通道。
 - 更新下载展示百分比与字节进度；主进程对下载文件执行 SHA-512 复核，校验失败时阻止安装，校验成功后 UI 显示摘要并提供“重启并安装”。
 - `sidecar:recycle` 可分别回收 native / CodeGraph Worker；native 初始化失败重试使用 recycle，正常退出仍使用既有 stop/shutdown。
+
+### 阶段 10 SSH 审计结论
+
+详见 `docs/sync-audit/SSH_GAP_AUDIT.md`。Ola 已具备 SSH 主机与分组、导入导出、终端、文件编辑、双栏 SFTP、跨主机传输、密钥、known_hosts、转发模板、命令片段、日志及监控。后续顺序调整为：
+
+1. shared contract + store 模块化（行为保持不变）
+2. 重连状态 + 分阶段连接日志
+3. 传输 retry/resume
+4. 按真实需求评估端口隧道执行器
 
 ## 13. 跨阶段测试与门禁
 
