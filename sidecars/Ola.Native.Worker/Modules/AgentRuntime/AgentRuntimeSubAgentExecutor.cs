@@ -195,6 +195,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
         }
         catch (OperationCanceledException)
         {
+            collector.SetCancelled();
             childState.RequestStop("aborted");
         }
         catch (Exception ex)
@@ -844,6 +845,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
         private int iterations;
         private int toolCallCount;
         private string? error;
+        private bool cancelled;
 
         public SubAgentRunCollector(
             string subAgentName,
@@ -877,6 +879,12 @@ internal static partial class AgentRuntimeSubAgentExecutor
             error = message;
         }
 
+        public void SetCancelled()
+        {
+            cancelled = true;
+            error = "Sub-agent was cancelled.";
+        }
+
         public SubAgentResultNative BuildResult(string? submittedReport)
         {
             var output = submittedReport?.Trim();
@@ -901,6 +909,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
                 toolCallCount,
                 iterations,
                 usage,
+                cancelled,
                 error);
         }
 
@@ -1151,6 +1160,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
         int ToolCallCount,
         int Iterations,
         AgentRuntimeTokenUsage Usage,
+        bool Cancelled,
         string? Error)
     {
         public JsonElement ToJson()
@@ -1162,6 +1172,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
                 writer.WriteBoolean("reportSubmitted", ReportSubmitted);
                 writer.WriteNumber("toolCallCount", ToolCallCount);
                 writer.WriteNumber("iterations", Iterations);
+                writer.WriteBoolean("cancelled", Cancelled);
                 writer.WritePropertyName("usage");
                 WriteUsage(writer, Usage);
                 if (!string.IsNullOrWhiteSpace(Error))

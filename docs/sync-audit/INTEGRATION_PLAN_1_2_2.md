@@ -1,6 +1,6 @@
 ﻿# Ola × 1.2.2 能力融合计划
 
-> 状态：阶段 0–4 与 Hooks 主链路已落地；当前续做点是「子 Agent 历史 + 精确取消」。
+> 状态：阶段 0–7 代码与自动门禁已落地；当前优先处理 Worker/CodeGraph 资产与发布更新。
 > Ola 基线 HEAD（工作区）：以本地 `git` 为准；此前叙述基线 `d5f6bfb`，后续已有 hooks / drafts / retry 等提交。
 > 参考指纹锁定：`docs/sync-audit/baseline.json`（`18413c22` / 1.2.2）。
 > 目标：按垂直切片吸收成熟能力，不覆盖 Ola 产品身份、凭据体系、多宠物模型、远控工作台和 Windows 开发稳定性。
@@ -16,19 +16,14 @@
 | 4 | `codex/content-blocks` | 内容块 | ✅ 完成 | 用户确认：自动验证 + 生产构建 + 桌面验收通过 |
 | 5 | `codex/hooks-runtime` | Hooks 核心 | ✅ 基本完成 | `src/main/hooks/*`、`src/main/ipc/hooks-handlers.ts`、sidecar 触发点 |
 | 6 | `codex/hooks-ui` | Hooks 管理 UI | ✅ 基本完成 | `HooksPanel.tsx`、`hooks-store.ts`、settings 入口 |
-| 7 | `codex/subagent-history-cancel` | 子 Agent 历史 + 精确取消 | 🟡 进行中 | **当前续做主线** |
-| 8+ | `codex/ssh-*` / `codegraph-*` / … | 后续能力 | ⬜ 未开始 | 本轮不跨阶段 |
+| 7 | `codex/subagent-history-cancel` | 子 Agent 历史 + 精确取消 | ✅ 自动验收完成 | 专项验证、生产构建、桌面启动通过；真实并行取消保留发布前交互验收 |
+| 8 | `codex/codegraph-assets` | Worker/CodeGraph manifest + 缺失检测 | 🟡 下一阶段 | 先建立资产闭环，再接索引、Agent 工具和 UI |
+| 9 | `codex/release-update` | 绿色 zip + 更新 UI + Worker recycle | ⬜ 待开始 | 保持 Ola 包名、升级通道和 shutdown 语义 |
+| 10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力 | ⬜ 待审计 | SSH 已有大量能力，禁止按“从零开始”估算 |
 
-### 阶段 7 当前进度（本轮起点）
+### 阶段 7 完成状态
 
-**已完成（Native Worker，工作区未提交）：**
-
-- `sidecars/Ola.Native.Worker/Modules/Db/DbSubAgentHistoryTools.cs`（新）
-- `sidecars/Ola.Native.Worker/Modules/Db/DbSchemaMigrator.cs`（`sub_agent_history` + `app_migrations`）
-- `sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs`（6 条 route 注册）
-- `sidecars/Ola.Native.Worker/Serialization/WorkerJsonContext.cs`（序列化上下文）
-
-**已注册 Worker 路由：**
+已注册 Worker 路由：
 
 | Route | 用途 |
 | --- | --- |
@@ -39,30 +34,7 @@
 | `db/sub-agent-history-migration-status` | 迁移状态 |
 | `db/sub-agent-history-migration-mark` | 幂等标记迁移 |
 
-**未完成：**
-
-1. Main DAO + IPC + shared 类型 + preload/channels
-2. Renderer：从 `ola-agent-history`（ipcStorage）一次性迁移到 SQLite
-3. 流式增量写入（`sub_agent_start` / progress / `sub_agent_end`）
-4. 单个子 Agent 精确取消（当前仅父 run 取消会连带子 run）
-5. UI 取消入口 + 重启后历史恢复
-6. 自动验证脚本与桌面烟测
-
-### 旧路径（必须迁移，不可丢）
-
-Renderer 现状：
-
-- 存储键：`ola-agent-history`（`AGENT_HISTORY_STORAGE_KEY`）
-- 状态：`sessionSubAgentSummaries` / `subAgentHistory`
-- 文件：`src/renderer/src/stores/agent-store.ts`
-- UI：`SubAgentsPanel.tsx`、`SubAgentCard.tsx`、`SubAgentExecutionDetail.tsx`
-
-取消现状：
-
-- Renderer：`agentBridge.cancelAgent(runId)` → `agent:cancel`
-- Main：`sidecar-manager` → Worker `agent/cancel`
-- Worker：`AgentRuntimeTools.Cancel` 只按 **父 runId** 取消
-- 子 Agent：`AgentRuntimeSubAgentExecutor` 通过 `parentState.CancellationToken.Register` 连带取消，**无 toolUseId 级取消**
+完成证据：共享契约、Main DAO/IPC、旧历史幂等迁移与清理、分页快照恢复、流式增量写入、`toolUseId` 精确取消和显式 `cancelled` 状态均已闭环。`npm run verify:sub-agent-history` 使用真实 Worker 与临时 SQLite 验证 260 条历史分页、并发会话、失败迁移和幂等标记。
 
 ---
 
@@ -275,15 +247,15 @@ node scripts/verify-sub-agent-history.mjs   # 可新增
 - 不删除现有 Renderer 内存态（active/completed）只替换其持久化后端
 - 不做跨设备同步 sub-agent history（除非已有通用 sync 钩子且无额外风险）
 
-## 12. 阶段 8+（暂缓，仅占位）
+## 12. 阶段 8+（发布更新优先）
 
-顺序保持原计划：
-
-1. SSH store slices → SSH workspaces
-2. Browser cookie import（依赖权限策略，写入 Ola Vault）
-3. CodeGraph assets → index → agent tools → UI
-4. AI Coding terminal
-5. distribution/update；Media/Draw graph 默认 defer
+1. Worker/CodeGraph 资产 manifest、RID 缺失检测和发布校验
+2. Windows 绿色 zip，保持 Ola 包名、应用 ID和既有升级通道
+3. 更新 UI：版本说明、下载进度、校验结果和明确的重启动作
+4. `sidecar:recycle`：只用于 Worker 更新与崩溃恢复，不替换现有 shutdown
+5. CodeGraph 索引 → Agent 工具 → UI
+6. 审计现有 SSH 能力后再拆 store/workspace 缺口
+7. Browser cookie import、AI Coding terminal；Media/Draw graph 默认 defer
 
 ## 13. 跨阶段测试与门禁
 
@@ -300,9 +272,9 @@ npm run build
 ## 14. 分支策略（续做时）
 
 1. 确认当前分支 `codex/subagent-history-cancel` 相对可合入基线的 rebase/merge 状态
-2. **本轮只做阶段 7**，不切去 SSH/CodeGraph
-3. Worker 未提交改动先纳入 Slice A 提交，避免丢失
-4. 合并后回到最新 main，再开下一阶段分支
+2. 阶段 7 自动门禁完成后，将累计分支快进到本地 `main`
+3. 从阶段 8 开始，每个阶段从最新 `main` 新建独立 `codex/` 分支
+4. 阶段 8 只做 Worker/CodeGraph 资产闭环，不混入完整索引和 UI
 
 ## 15. 完成定义（每个切片）
 

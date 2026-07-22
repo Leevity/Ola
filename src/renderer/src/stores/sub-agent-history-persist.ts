@@ -1,41 +1,13 @@
 ﻿import { invokeMessagePackBinary } from '../lib/ipc/messagepack-ipc-client'
 import { IPC } from '../lib/ipc/channels'
 import { toMessagePackChannel } from '../../../shared/messagepack/binary-ipc'
-
-export type SubAgentHistoryStoredStatus = 'running' | 'completed' | 'failed' | 'cancelled'
-
-export interface SubAgentHistoryUpsertItem {
-  id: string
-  sessionId: string
-  subAgentId: string
-  toolUseId: string
-  name: string
-  status: SubAgentHistoryStoredStatus
-  startedAt: number
-  completedAt: number | null
-  updatedAt: number
-  sortOrder: number
-  snapshotJson: string
-}
-
-export interface StoredSubAgentHistoryRowWire {
-  id: string
-  sessionId: string
-  subAgentId: string
-  toolUseId: string
-  name: string
-  status: SubAgentHistoryStoredStatus
-  startedAt: number
-  completedAt: number | null
-  updatedAt: number
-  sortOrder: number
-  snapshotJson: string | null
-}
-
-interface MigrationStatusWire {
-  applied: boolean
-  appliedAt: number | null
-}
+import type {
+  SubAgentHistoryMigrationStatus,
+  SubAgentHistoryPage,
+  SubAgentHistoryRow,
+  SubAgentHistoryStoredStatus,
+  SubAgentHistoryUpsertItem
+} from '../../../shared/sub-agent-history-types'
 
 export const SUB_AGENT_HISTORY_MIGRATION_KEY = 'sub_agent_history.bootstrap.v1'
 const APPLY_DEBOUNCE_MS = 750
@@ -46,8 +18,10 @@ function normalizeStatus(sa: {
   isRunning?: boolean
   success?: boolean | null
   errorMessage?: string | null
+  cancelled?: boolean
 }): SubAgentHistoryStoredStatus {
   if (sa.isRunning) return 'running'
+  if (sa.cancelled) return 'cancelled'
   if (sa.errorMessage && sa.errorMessage.trim().length > 0) return 'failed'
   if (sa.success === false) return 'failed'
   return 'completed'
@@ -75,7 +49,8 @@ export function buildSubAgentHistoryUpsert(
   const status = normalizeStatus({
     isRunning: Boolean(snapshot.isRunning),
     success: (snapshot.success as boolean | null | undefined) ?? null,
-    errorMessage: (snapshot.errorMessage as string | null | undefined) ?? null
+    errorMessage: (snapshot.errorMessage as string | null | undefined) ?? null,
+    cancelled: Boolean(snapshot.cancelled)
   })
   const normalizedForSnapshot = {
     ...snapshot,
@@ -112,10 +87,7 @@ async function flushApplyQueue(): Promise<void> {
   applyQueue.clear()
   for (const item of items) {
     try {
-      await invokeMessagePackBinary(
-        toMessagePackChannel(IPC.SUB_AGENT_HISTORY_APPLY),
-        item
-      )
+      await invokeMessagePackBinary(toMessagePackChannel(IPC.SUB_AGENT_HISTORY_APPLY), item)
     } catch (err) {
       console.warn('[SubAgentHistory] apply failed:', err)
     }
@@ -123,7 +95,7 @@ async function flushApplyQueue(): Promise<void> {
 }
 
 export function scheduleSubAgentHistoryApply(item: SubAgentHistoryUpsertItem): void {
-  applyQueue.set(item.toolUseId, item)
+  applyQueue.set(`${item.sessionId}:${item.toolUseId}`, item)
   if (applyTimer) return
   applyTimer = setTimeout(() => {
     void flushApplyQueue()
@@ -144,7 +116,7 @@ export async function migrateLegacySubAgentHistory(
   if (migrationInFlight) return { applied: true, reason: 'in-flight' }
   migrationInFlight = true
   try {
-    const status = await invokeMessagePackBinary<MigrationStatusWire>(
+    const status = await invokeMessagePackBinary<SubAgentHistoryMigrationStatus>(
       toMessagePackChannel(IPC.SUB_AGENT_HISTORY_MIGRATION_STATUS),
       { key: SUB_AGENT_HISTORY_MIGRATION_KEY }
     )
@@ -158,31 +130,26 @@ export async function migrateLegacySubAgentHistory(
       items.forEach((raw, idx) => {
         if (!raw || typeof raw !== 'object') return
         try {
-          upserts.push(buildSubAgentHistoryUpsert(raw as Record<string, unknown>, sessionId, items.length - idx))
-        } catch (err) {
-          console.warn(
-            `[SubAgentHistory] dropped legacy entry (sessionId=${sessionId}):`,
-            err
+          upserts.push(
+            buildSubAgentHistoryUpsert(
+              raw as Record<string, unknown>,
+              sessionId,
+              items.length - idx
+            )
           )
+        } catch (err) {
+          console.warn(`[SubAgentHistory] dropped legacy entry (sessionId=${sessionId}):`, err)
         }
       })
       if (upserts.length === 0) continue
-      try {
-        await invokeMessagePackBinary(
-          toMessagePackChannel(IPC.SUB_AGENT_HISTORY_REPLACE),
-          { sessionId, items: upserts }
-        )
-      } catch (err) {
-        console.warn(
-          `[SubAgentHistory] replace failed for sessionId=${sessionId}:`,
-          err
-        )
-      }
+      await invokeMessagePackBinary(toMessagePackChannel(IPC.SUB_AGENT_HISTORY_REPLACE), {
+        sessionId,
+        items: upserts
+      })
     }
-    await invokeMessagePackBinary(
-      toMessagePackChannel(IPC.SUB_AGENT_HISTORY_MIGRATION_MARK),
-      { key: SUB_AGENT_HISTORY_MIGRATION_KEY }
-    )
+    await invokeMessagePackBinary(toMessagePackChannel(IPC.SUB_AGENT_HISTORY_MIGRATION_MARK), {
+      key: SUB_AGENT_HISTORY_MIGRATION_KEY
+    })
     return { applied: true }
   } catch (err) {
     console.warn('[SubAgentHistory] migration failed:', err)
@@ -195,25 +162,23 @@ export async function migrateLegacySubAgentHistory(
 export async function getSessionSubAgentHistoryRows(
   sessionId: string,
   limit: number = MAX_FETCHED_ROWS
-): Promise<StoredSubAgentHistoryRowWire[]> {
+): Promise<SubAgentHistoryRow[]> {
   if (!sessionId) return []
   try {
     const safeLimit = Math.min(Math.max(1, Math.floor(limit)), MAX_INDEX_LIMIT)
-    return await invokeMessagePackBinary<StoredSubAgentHistoryRowWire[]>(
-      toMessagePackChannel(IPC.SUB_AGENT_HISTORY_INDEX),
-      { sessionId, limit: safeLimit }
+    const page = await invokeMessagePackBinary<SubAgentHistoryPage>(
+      toMessagePackChannel(IPC.SUB_AGENT_HISTORY_LIST),
+      { sessionId, limit: safeLimit, offset: 0 }
     )
+    return page.items
   } catch (err) {
-    console.warn(
-      `[SubAgentHistory] index fetch failed (sessionId=${sessionId}):`,
-      err
-    )
+    console.warn(`[SubAgentHistory] list fetch failed (sessionId=${sessionId}):`, err)
     return []
   }
 }
 
 export function parseSubAgentHistorySnapshot(
-  row: StoredSubAgentHistoryRowWire
+  row: SubAgentHistoryRow
 ): Record<string, unknown> | null {
   if (!row.snapshotJson) return null
   try {
@@ -223,11 +188,7 @@ export function parseSubAgentHistorySnapshot(
     }
     return null
   } catch (err) {
-    console.warn(
-      '[SubAgentHistory] failed to parse snapshot row:',
-      row.id,
-      err
-    )
+    console.warn('[SubAgentHistory] failed to parse snapshot row:', row.id, err)
     return null
   }
 }

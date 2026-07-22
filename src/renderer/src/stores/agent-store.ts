@@ -267,6 +267,7 @@ export interface SubAgentState {
   /** True while waiting on the sub-agent concurrency limiter, before the inner loop starts. */
   isQueued?: boolean
   success: boolean | null
+  cancelled?: boolean
   errorMessage: string | null
   iteration: number
   toolCalls: ToolCallState[]
@@ -696,17 +697,10 @@ function enqueueSubAgentHistoryApply(
   if (!sid) return
   try {
     scheduleSubAgentHistoryApply(
-      buildSubAgentHistoryUpsert(
-        sa as unknown as Record<string, unknown>,
-        sid,
-        0
-      )
+      buildSubAgentHistoryUpsert(sa as unknown as Record<string, unknown>, sid, 0)
     )
   } catch (err) {
-    console.warn(
-      '[AgentStore] failed to schedule sub-agent history apply:',
-      err
-    )
+    console.warn('[AgentStore] failed to schedule sub-agent history apply:', err)
   }
 }
 
@@ -853,18 +847,11 @@ function queueAgentHistoryPersistence(): void {
 
 async function hydrateAgentHistoryPersistence(): Promise<void> {
   try {
-    const { snapshot, migratedFromLegacy } = await readPersistedAgentHistory()
-    if (snapshot) {
-      useAgentStore.setState({
-        subAgentHistory: snapshot.subAgentHistory,
-        sessionSubAgentSummaries: snapshot.sessionSubAgentSummaries
-      })
-    }
+    await migrateLegacySubAgentHistoryToSqlite()
     agentHistoryPersistenceHydrated = true
-    if (migratedFromLegacy || agentHistoryPersistencePending) {
+    if (agentHistoryPersistencePending) {
       queueAgentHistoryPersistence()
     }
-    void migrateLegacySubAgentHistoryToSqlite()
   } catch (error) {
     console.warn('[AgentStore] Failed to hydrate sub-agent history:', error)
     agentHistoryPersistenceHydrated = true
@@ -876,18 +863,34 @@ async function hydrateAgentHistoryPersistence(): Promise<void> {
 }
 
 async function migrateLegacySubAgentHistoryToSqlite(): Promise<void> {
-  await migrateLegacySubAgentHistory(async () => {
+  const result = await migrateLegacySubAgentHistory(async () => {
     const persisted = await readPersistedAgentHistory()
     return persisted.snapshot?.sessionSubAgentSummaries ?? {}
   })
+  if (!result.applied) {
+    throw new Error(result.reason ?? 'Sub-agent history migration failed')
+  }
+  await clearLegacyAgentHistory()
+}
+
+async function clearLegacyAgentHistory(): Promise<void> {
+  await ipcStorage.removeItem(AGENT_HISTORY_STORAGE_KEY)
+  const raw = await ipcStorage.getItem(AGENT_STORE_STORAGE_KEY)
+  if (!raw) return
+  const parsed = JSON.parse(raw) as Record<string, unknown>
+  const state =
+    parsed.state && typeof parsed.state === 'object' && !Array.isArray(parsed.state)
+      ? (parsed.state as Record<string, unknown>)
+      : parsed
+  delete state.subAgentHistory
+  delete state.sessionSubAgentSummaries
+  await ipcStorage.setItem(AGENT_STORE_STORAGE_KEY, JSON.stringify(parsed))
 }
 
 async function refreshSessionSubAgentHistoryFromSqlite(sessionId: string): Promise<void> {
   if (!sessionId) return
   const rows = await getSessionSubAgentHistoryRows(sessionId, 50)
-  if (!rows.length && !rows) {
-    return
-  }
+  if (rows.length === 0) return
   const live = useAgentStore.getState()
   const liveToolUseIds = new Set<string>()
   const cached = live.sessionSubAgentLiveCache[sessionId]
@@ -901,8 +904,7 @@ async function refreshSessionSubAgentHistoryFromSqlite(sessionId: string): Promi
     if (row.status === 'running') continue
     const snapshot = parseSubAgentHistorySnapshot(row)
     if (!snapshot) continue
-    const toolUseId =
-      typeof snapshot.toolUseId === 'string' ? snapshot.toolUseId : row.toolUseId
+    const toolUseId = typeof snapshot.toolUseId === 'string' ? snapshot.toolUseId : row.toolUseId
     if (!toolUseId) continue
     const hydrated: SubAgentState = {
       ...(snapshot as unknown as SubAgentState),
@@ -2297,6 +2299,7 @@ export const useAgentStore = create<AgentStore>()(
               if (sa) {
                 sa.isRunning = false
                 sa.success = event.result.success
+                sa.cancelled = event.result.cancelled === true
                 sa.errorMessage = event.result.error ?? null
                 sa.completedAt = Date.now()
                 finalizeAssistantMessage(sa)
@@ -2335,10 +2338,7 @@ export const useAgentStore = create<AgentStore>()(
             // end events flush immediately so the terminal state lands in the
             // worker before any subsequent cancel races in
             void flushSubAgentHistoryApplyNow().catch((err) => {
-              console.warn(
-                '[AgentStore] immediate sub-agent flush failed:',
-                err
-              )
+              console.warn('[AgentStore] immediate sub-agent flush failed:', err)
             })
           }
         }

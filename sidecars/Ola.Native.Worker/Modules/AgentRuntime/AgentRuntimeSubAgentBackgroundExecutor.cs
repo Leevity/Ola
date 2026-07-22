@@ -372,6 +372,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
                 toolCallCount,
                 iterations,
                 usage,
+                false,
                 error);
         }
 
