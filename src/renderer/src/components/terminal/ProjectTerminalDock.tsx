@@ -51,7 +51,14 @@ function getViewportTerminalDockMaxHeight(): number {
 function StatusDot({
   status
 }: {
-  status: 'running' | 'exited' | 'error' | 'connecting' | 'connected' | 'disconnected'
+  status:
+    | 'running'
+    | 'exited'
+    | 'error'
+    | 'connecting'
+    | 'reconnecting'
+    | 'connected'
+    | 'disconnected'
 }): React.JSX.Element {
   return (
     <div
@@ -59,7 +66,7 @@ function StatusDot({
         'size-1.5 shrink-0 rounded-full',
         status === 'running' || status === 'connected'
           ? 'bg-emerald-500'
-          : status === 'connecting'
+          : status === 'connecting' || status === 'reconnecting'
             ? 'bg-amber-500'
             : status === 'error'
               ? 'bg-red-500'

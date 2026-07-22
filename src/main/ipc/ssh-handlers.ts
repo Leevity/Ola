@@ -49,12 +49,15 @@ interface SshSession {
   connectionId: string
   client: Client
   shell: ClientChannel | null
-  status: 'connecting' | 'connected' | 'disconnected' | 'error'
+  status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
   error?: string
   outputSeq: number
   outputBuffer: { seq: number; data: Buffer }[]
   outputBufferSize: number
   jumpClient?: Client
+  userInitiatedDisconnect: boolean
+  reconnectAttempts: number
+  reconnectTimer?: ReturnType<typeof setTimeout>
 }
 
 interface ResolvedJumpTarget {
@@ -75,6 +78,18 @@ const sshSessions = new Map<string, SshSession>()
 ).__openCoworkSshSessions = sshSessions
 let nextSessionId = 1
 const MAX_OUTPUT_BUFFER_BYTES = 1024 * 1024
+const MAX_SSH_DIAGNOSTIC_ENTRIES = 500
+const MAX_SSH_RECONNECT_ATTEMPTS = 3
+const sshDiagnostics: Array<{
+  id: number
+  sessionId: string
+  connectionId: string
+  stage: 'dial' | 'handshake' | 'auth' | 'shell' | 'reconnect'
+  level: 'info' | 'error'
+  message: string
+  timestamp: number
+}> = []
+let nextSshDiagnosticId = 1
 const DEFAULT_TEXT_LINE_READ_LIMIT = 1_000
 const TEXT_READ_BLOCKED_EXTENSIONS = new Set([
   '.png',
@@ -921,6 +936,108 @@ function recordOutput(session: SshSession, data: Buffer): void {
     data: chunk.toString('base64'),
     seq
   })
+}
+
+function redactSshDiagnostic(message: string): string {
+  return message
+    .replace(/(password|passphrase|token|private[_ -]?key)\s*[:=]\s*\S+/gi, '$1=[redacted]')
+    .replace(/-----BEGIN[\s\S]*?PRIVATE KEY-----/gi, '[redacted private key]')
+    .slice(0, 500)
+}
+
+function recordSshDiagnostic(
+  session: SshSession,
+  stage: 'dial' | 'handshake' | 'auth' | 'shell' | 'reconnect',
+  level: 'info' | 'error',
+  message: string
+): void {
+  sshDiagnostics.push({
+    id: nextSshDiagnosticId++,
+    sessionId: session.id,
+    connectionId: session.connectionId,
+    stage,
+    level,
+    message: redactSshDiagnostic(message),
+    timestamp: Date.now()
+  })
+  if (sshDiagnostics.length > MAX_SSH_DIAGNOSTIC_ENTRIES) {
+    sshDiagnostics.splice(0, sshDiagnostics.length - MAX_SSH_DIAGNOSTIC_ENTRIES)
+  }
+}
+
+function scheduleSshReconnect(session: SshSession, connection: SshConfigConnection): void {
+  if (session.userInitiatedDisconnect || session.reconnectTimer) return
+  if (session.reconnectAttempts >= MAX_SSH_RECONNECT_ATTEMPTS) {
+    session.status = 'error'
+    session.error = 'Connection lost after 3 reconnect attempts'
+    recordSshDiagnostic(session, 'reconnect', 'error', session.error)
+    broadcastToRenderer('ssh:status', {
+      sessionId: session.id,
+      connectionId: session.connectionId,
+      status: 'error',
+      error: session.error
+    })
+    sshSessions.delete(session.id)
+    return
+  }
+
+  session.status = 'reconnecting'
+  session.reconnectAttempts += 1
+  const attempt = session.reconnectAttempts
+  recordSshDiagnostic(session, 'reconnect', 'info', `Reconnect attempt ${attempt}`)
+  broadcastToRenderer('ssh:status', {
+    sessionId: session.id,
+    connectionId: session.connectionId,
+    status: 'reconnecting'
+  })
+  session.reconnectTimer = setTimeout(
+    () => {
+      session.reconnectTimer = undefined
+      void (async () => {
+        try {
+          const connected = await connectWithProxyJump(connection)
+          if (session.userInitiatedDisconnect) {
+            connected.client.end()
+            connected.jumpClient?.end()
+            return
+          }
+          session.client = connected.client
+          session.jumpClient = connected.jumpClient
+          session.client.on('error', (error) => {
+            recordSshDiagnostic(session, 'handshake', 'error', error.message)
+            scheduleSshReconnect(session, connection)
+          })
+          session.client.on('close', () => scheduleSshReconnect(session, connection))
+          session.client.shell(
+            { term: 'xterm-256color', cols: 120, rows: 30, modes: {} },
+            (err, stream) => {
+              if (err) {
+                recordSshDiagnostic(session, 'shell', 'error', err.message)
+                scheduleSshReconnect(session, connection)
+                return
+              }
+              session.shell = stream
+              session.status = 'connected'
+              session.reconnectAttempts = 0
+              recordSshDiagnostic(session, 'shell', 'info', 'Shell restored')
+              stream.on('data', (data: Buffer) => recordOutput(session, data))
+              stream.stderr?.on('data', (data: Buffer) => recordOutput(session, data))
+              stream.on('close', () => scheduleSshReconnect(session, connection))
+              broadcastToRenderer('ssh:status', {
+                sessionId: session.id,
+                connectionId: session.connectionId,
+                status: 'connected'
+              })
+            }
+          )
+        } catch (error) {
+          recordSshDiagnostic(session, 'reconnect', 'error', formatLayeredError(error))
+          scheduleSshReconnect(session, connection)
+        }
+      })()
+    },
+    Math.min(1000 * attempt, 3000)
+  )
 }
 
 type SshOutputBufferArgs = { sessionId: string; sinceSeq?: number }
@@ -1886,6 +2003,8 @@ export async function registerSshHandlers(): Promise<void> {
       // Disconnect any active sessions for this connection
       for (const [sessionId, session] of sshSessions) {
         if (session.connectionId === args.id) {
+          session.userInitiatedDisconnect = true
+          if (session.reconnectTimer) clearTimeout(session.reconnectTimer)
           session.client.end()
           sshSessions.delete(sessionId)
         }
@@ -1967,9 +2086,12 @@ export async function registerSshHandlers(): Promise<void> {
         status: 'connecting',
         outputSeq: 0,
         outputBuffer: [],
-        outputBufferSize: 0
+        outputBufferSize: 0,
+        userInitiatedDisconnect: false,
+        reconnectAttempts: 0
       }
       sshSessions.set(sessionId, session)
+      recordSshDiagnostic(session, 'dial', 'info', 'Connection started')
 
       broadcastToRenderer('ssh:status', {
         sessionId,
@@ -1999,29 +2121,17 @@ export async function registerSshHandlers(): Promise<void> {
             session.client = connected.client
             session.jumpClient = connected.jumpClient
             session.status = 'connected'
+            recordSshDiagnostic(session, 'handshake', 'info', 'Secure connection established')
 
             session.client.on('error', (err) => {
-              session.status = 'error'
               session.error = formatLayeredError(err, connection.authType)
-              broadcastToRenderer('ssh:status', {
-                sessionId,
-                connectionId: args.connectionId,
-                status: 'error',
-                error: session.error
-              })
+              recordSshDiagnostic(session, 'handshake', 'error', session.error)
+              scheduleSshReconnect(session, connection)
             })
 
             session.client.on('close', () => {
-              if (session.status === 'connected' || session.status === 'connecting') {
-                session.status = 'disconnected'
-                broadcastToRenderer('ssh:status', {
-                  sessionId,
-                  connectionId: args.connectionId,
-                  status: 'disconnected'
-                })
-              }
               session.jumpClient?.end()
-              sshSessions.delete(sessionId)
+              scheduleSshReconnect(session, connection)
             })
 
             await updateSshConnection(args.connectionId, {
@@ -2051,6 +2161,7 @@ export async function registerSshHandlers(): Promise<void> {
                 }
 
                 session.shell = stream
+                recordSshDiagnostic(session, 'shell', 'info', 'Interactive shell opened')
 
                 stream.on('data', (data: Buffer) => {
                   recordOutput(session, data)
@@ -2061,15 +2172,9 @@ export async function registerSshHandlers(): Promise<void> {
                 })
 
                 stream.on('close', () => {
-                  session.status = 'disconnected'
-                  broadcastToRenderer('ssh:status', {
-                    sessionId,
-                    connectionId: args.connectionId,
-                    status: 'disconnected'
-                  })
                   session.client.end()
                   session.jumpClient?.end()
-                  sshSessions.delete(sessionId)
+                  scheduleSshReconnect(session, connection)
                 })
 
                 broadcastToRenderer('ssh:status', {
@@ -2092,6 +2197,12 @@ export async function registerSshHandlers(): Promise<void> {
             clearTimeout(connectTimeout)
             session.status = 'error'
             session.error = formatLayeredError(err, connection.authType)
+            recordSshDiagnostic(
+              session,
+              isAuthFailureMessage(session.error) ? 'auth' : 'dial',
+              'error',
+              session.error
+            )
             sshSessions.delete(sessionId)
             broadcastToRenderer('ssh:status', {
               sessionId,
@@ -2142,7 +2253,9 @@ export async function registerSshHandlers(): Promise<void> {
     const session = sshSessions.get(args.sessionId)
     if (!session) return { error: 'Session not found' }
 
+    session.userInitiatedDisconnect = true
     session.status = 'disconnected'
+    if (session.reconnectTimer) clearTimeout(session.reconnectTimer)
     if (session.shell) session.shell.end()
     session.client.end()
     sshSessions.delete(args.sessionId)
@@ -2170,6 +2283,15 @@ export async function registerSshHandlers(): Promise<void> {
     }
     return list
   })
+
+  registerSshMessagePackHandler<{ connectionId?: string }>(
+    'ssh:diagnostics:list',
+    async (args) => ({
+      entries: args?.connectionId
+        ? sshDiagnostics.filter((entry) => entry.connectionId === args.connectionId)
+        : sshDiagnostics.slice()
+    })
+  )
 
   // ── Terminal Session: Output buffer ──
 
@@ -2329,6 +2451,8 @@ async function deleteSshFile(connectionId: string, filePath: string): Promise<vo
 export function closeAllSshSessions(): void {
   for (const session of sshSessions.values()) {
     try {
+      session.userInitiatedDisconnect = true
+      if (session.reconnectTimer) clearTimeout(session.reconnectTimer)
       if (session.shell) session.shell.end()
       session.client.end()
     } catch {

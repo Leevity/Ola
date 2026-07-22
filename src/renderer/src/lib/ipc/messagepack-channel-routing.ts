@@ -126,6 +126,7 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'ssh:connect',
   'ssh:disconnect',
   'ssh:session:list',
+  'ssh:diagnostics:list',
   'ssh:output:buffer',
   'ssh:fs:read-file',
   'ssh:fs:read-text-file-lines',
