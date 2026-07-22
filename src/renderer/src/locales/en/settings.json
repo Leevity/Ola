@@ -824,6 +824,25 @@
       }
     },
     "toolStatusDescProductDesign": "Product Design is a workflow plugin. It exposes no new low-level Tool; it coordinates enabled image, browser, search, file, shell, MCP, and deployment tools through the product-design skill.",
+    "codegraph": {
+      "dashboard": "Code analysis dashboard",
+      "noProject": "Select a local project folder to inspect its code index.",
+      "refresh": "Refresh",
+      "index": "Index project",
+      "indexing": "Indexing…",
+      "fileCount": "Files",
+      "nodeCount": "Symbols",
+      "edgeCount": "Relations",
+      "searchPlaceholder": "Search symbols",
+      "workerRunning": "Analysis Worker running",
+      "workerReady": "Analysis Worker ready",
+      "workerChecking": "Checking Analysis Worker…",
+      "workerMissing": "Analysis Worker assets missing",
+      "callers": "Callers",
+      "callees": "Callees",
+      "localGraph": "Local relation graph",
+      "relationCount": "{{count}} relations"
+    },
     "productDesign": {
       "workflowTitle": "Workflow plugin",
       "workflowDesc": "Adds Product Design routing, saved design context, visual exploration, prototype scaffolding, URL cloning, image-to-code, audits, design QA, and sharing handoff.",
