@@ -257,12 +257,14 @@
       "noReleaseNotes": "No release notes were provided for this version.",
       "downloading": "Downloading update...",
       "downloadingShort": "{{progress}}%",
-      "downloadingProgress": "Downloading update {{progress}}%",
+      "downloadingProgress": "Downloading {{progress}}% · {{transferred}} / {{total}} MB",
+      "checksumVerified": "SHA-512 checksum verified",
       "installing": "Installing…",
       "actions": {
         "updateNow": "Update now",
         "remindLater": "Remind me later",
         "installNow": "Install now",
+        "restartAndInstall": "Restart and install",
         "updateLater": "Install later"
       },
       "readyTitle": "Update v{{version}} is ready to install",

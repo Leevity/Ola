@@ -1,6 +1,6 @@
 ﻿# Ola × 1.2.2 能力融合计划
 
-> 状态：阶段 0–7 代码与自动门禁已落地；当前优先处理 Worker/CodeGraph 资产与发布更新。
+> 状态：阶段 0–9 代码与自动门禁已落地；下一步先审计现有 SSH 能力，再确定后续真实缺口。
 > Ola 基线 HEAD（工作区）：以本地 `git` 为准；此前叙述基线 `d5f6bfb`，后续已有 hooks / drafts / retry 等提交。
 > 参考指纹锁定：`docs/sync-audit/baseline.json`（`18413c22` / 1.2.2）。
 > 目标：按垂直切片吸收成熟能力，不覆盖 Ola 产品身份、凭据体系、多宠物模型、远控工作台和 Windows 开发稳定性。
@@ -20,7 +20,7 @@
 |    8 | `codex/codegraph-assets`            | Worker/CodeGraph manifest + 缺失检测   | ✅ 已完成        | 主 Worker 校验通过；检测确认 CodeGraph Worker 与语法资产尚未装入     |
 |   8B | `codex/codegraph-worker`            | CodeGraph Core/Worker + 语法资产发布   | ✅ 当前 RID 完成 | Core/Worker 自检、329 项测试、AOT 发布及 17 个语法导出校验通过       |
 |   8C | `codex/codegraph-runtime`           | Worker 管理、索引、Agent 工具和插件 UI | ✅ 已完成        | 默认关闭、懒启动、自动首索引、停用回收；图谱 Dashboard 后续独立切片  |
-|    9 | `codex/release-update`              | 绿色 zip + 更新 UI + Worker recycle    | ⬜ 待开始        | 保持 Ola 包名、升级通道和 shutdown 语义                              |
+|    9 | `codex/release-update`              | 绿色 zip + 更新 UI + Worker recycle    | ✅ 自动验收完成  | Ola 绿色包、字节进度、SHA-512 门禁、明确重启及崩溃恢复已完成         |
 |  10+ | `codex/ssh-*` / `codex/codegraph-*` | 后续能力                               | ⬜ 待审计        | SSH 已有大量能力，禁止按“从零开始”估算                               |
 
 ### 阶段 7 完成状态
@@ -258,6 +258,14 @@ node scripts/verify-sub-agent-history.mjs   # 可新增
 5. CodeGraph 索引 → Agent 工具 → UI
 6. 审计现有 SSH 能力后再拆 store/workspace 缺口
 7. Browser cookie import、AI Coding terminal；Media/Draw graph 默认 defer
+
+### 阶段 8–9 落地状态
+
+- Worker 资产 manifest 会按当前 RID 检测主 Worker、CodeGraph Worker 和 17 种 Tree-sitter 语法库，并输出文件大小与 SHA-256。
+- CodeGraph 使用独立进程和存储，插件默认关闭；启用后由 Agent 工具按需启动并在首次使用时自动索引。
+- Windows 绿色 zip 使用 `olaDistribution=green` 和独立 `dist-green` 输出，不改变 `com.ola.app`、`Ola` 产品名、GitHub 发布仓库或正式升级通道。
+- 更新下载展示百分比与字节进度；主进程对下载文件执行 SHA-512 复核，校验失败时阻止安装，校验成功后 UI 显示摘要并提供“重启并安装”。
+- `sidecar:recycle` 可分别回收 native / CodeGraph Worker；native 初始化失败重试使用 recycle，正常退出仍使用既有 stop/shutdown。
 
 ## 13. 跨阶段测试与门禁
 

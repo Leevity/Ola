@@ -1,4 +1,6 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
 import { dirname } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
@@ -22,6 +24,7 @@ let downloadUpdatePromise: Promise<unknown> | null = null
 let macUpdaterUnsupportedReason: string | null | undefined
 let lastReportedUpdaterError: { message: string; at: number } | null = null
 let downloadedUpdateVersion: string | null = null
+let downloadedUpdateChecksum: string | null = null
 
 interface UpdaterLogger {
   info?: (...args: unknown[]) => void
@@ -358,6 +361,8 @@ async function handleUpdateAvailable(
   }
 
   const releaseNotes = getReleaseNotesText(info.releaseNotes)
+  downloadedUpdateVersion = null
+  downloadedUpdateChecksum = null
 
   const payload = {
     currentVersion,
@@ -371,7 +376,10 @@ async function handleUpdateAvailable(
   console.log(`[Updater] Sent update notification to renderer: ${newVersion}`)
 }
 
-function handleDownloadProgress(progress: { percent: number }, getMainWindow: WindowGetter): void {
+function handleDownloadProgress(
+  progress: { percent: number; transferred?: number; total?: number; bytesPerSecond?: number },
+  getMainWindow: WindowGetter
+): void {
   const win = getValidWindow(getMainWindow)
   if (!win) return
 
@@ -380,7 +388,10 @@ function handleDownloadProgress(progress: { percent: number }, getMainWindow: Wi
 
   // Send progress to renderer
   const payload = {
-    percent: progress.percent
+    percent: progress.percent,
+    transferred: progress.transferred ?? 0,
+    total: progress.total ?? 0,
+    bytesPerSecond: progress.bytesPerSecond ?? 0
   }
   safeSendMessagePackToWindow(win, 'update:download-progress', payload)
 }
@@ -391,15 +402,70 @@ function clearWindowProgress(getMainWindow: WindowGetter): void {
   win.setProgressBar(-1)
 }
 
-function handleUpdateDownloaded(info: { version: string }, options: AutoUpdateOptions): void {
+interface DownloadedUpdateInfo {
+  version: string
+  downloadedFile?: string
+  files?: Array<{ url?: string; sha512?: string }>
+  sha512?: string
+}
+
+async function calculateSha512(filePath: string): Promise<string> {
+  const hash = createHash('sha512')
+  for await (const chunk of createReadStream(filePath)) {
+    hash.update(chunk)
+  }
+  return hash.digest('base64')
+}
+
+function expectedChecksum(info: DownloadedUpdateInfo): string | null {
+  if (info.sha512) return info.sha512
+  if (!info.files?.length) return null
+
+  const downloadedName = info.downloadedFile?.split(/[\\/]/).pop()
+  const matched = downloadedName
+    ? info.files.find((file) => file.url?.split('/').pop() === downloadedName)
+    : undefined
+  return matched?.sha512 ?? info.files.find((file) => file.sha512)?.sha512 ?? null
+}
+
+async function handleUpdateDownloaded(
+  info: DownloadedUpdateInfo,
+  options: AutoUpdateOptions
+): Promise<void> {
   console.log(`[Updater] Update ${info.version} downloaded. Waiting for user confirmation.`)
+  const expected = expectedChecksum(info)
+
+  if (!info.downloadedFile || !expected) {
+    downloadedUpdateVersion = null
+    downloadedUpdateChecksum = null
+    const message = 'The downloaded update has no verifiable SHA-512 metadata.'
+    writeCrashLog('updater_checksum_unavailable', { version: info.version })
+    clearWindowProgress(options.getMainWindow)
+    const win = getValidWindow(options.getMainWindow)
+    if (win) safeSendMessagePackToWindow(win, 'update:error', { error: message })
+    return
+  }
+
+  const actual = await calculateSha512(info.downloadedFile)
+  if (actual !== expected) {
+    downloadedUpdateVersion = null
+    downloadedUpdateChecksum = null
+    const message = 'The downloaded update failed SHA-512 verification. Installation was blocked.'
+    writeCrashLog('updater_checksum_mismatch', { version: info.version })
+    clearWindowProgress(options.getMainWindow)
+    const win = getValidWindow(options.getMainWindow)
+    if (win) safeSendMessagePackToWindow(win, 'update:error', { error: message })
+    return
+  }
+
   downloadedUpdateVersion = normalizeVersion(info.version) || info.version
+  downloadedUpdateChecksum = actual
   writeCrashLog('updater_update_downloaded', { version: info.version })
   clearWindowProgress(options.getMainWindow)
 
   const win = getValidWindow(options.getMainWindow)
   if (win) {
-    const payload = { version: info.version }
+    const payload = { version: info.version, checksum: actual, checksumVerified: true }
     safeSendMessagePackToWindow(win, 'update:downloaded', payload)
   }
 }
@@ -497,7 +563,9 @@ export function setupAutoUpdater(options: AutoUpdateOptions): void {
 
   registerMessagePackHandler<void>('update:status', async () => ({
     success: true,
-    downloadedVersion: downloadedUpdateVersion
+    downloadedVersion: downloadedUpdateVersion,
+    checksum: downloadedUpdateChecksum,
+    checksumVerified: !!downloadedUpdateChecksum
   }))
 
   registerMessagePackHandler<void>('update:install', async () => installDownloadedUpdate(options))
@@ -565,7 +633,13 @@ export function setupAutoUpdater(options: AutoUpdateOptions): void {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    handleUpdateDownloaded(info, options)
+    void handleUpdateDownloaded(info, options).catch((error) => {
+      const message = formatErrorMessage(error)
+      console.error('[Updater] Checksum verification failed:', error)
+      writeCrashLog('updater_checksum_failed', { message, error })
+      const win = getValidWindow(options.getMainWindow)
+      if (win) safeSendMessagePackToWindow(win, 'update:error', { error: message })
+    })
   })
 
   autoUpdater.on('error', (error) => {
