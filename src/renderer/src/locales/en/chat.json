@@ -776,6 +776,10 @@
       "imageMessage": "{{count}} images",
       "emptyMessage": "Empty message"
     },
+    "messageRail": {
+      "title": "Message rail",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}"
+    },
     "imageCopied": "Image copied to clipboard",
     "imageCopiedDesc": "You can paste it into chat or documents",
     "exportImageFailed": "Export image failed",

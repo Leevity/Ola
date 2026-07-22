@@ -31,6 +31,7 @@ import {
   DB_MESSAGES_DELETE_MSGPACK_CHANNEL,
   DB_MESSAGES_INSERT_ARTIFACTS_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_MSGPACK_CHANNEL,
+  DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL,
   DB_MESSAGES_REQUEST_CONTEXT_MSGPACK_CHANNEL,
@@ -409,6 +410,11 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const sessionId = decodeMessagePackPayload<string>(bytes)
     return encodeMessagePackPayload(await messagesDao.getUserMessages(sessionId))
+  })
+
+  ipcMain.handle(DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const sessionId = decodeMessagePackPayload<string>(bytes)
+    return encodeMessagePackPayload(await messagesDao.getMessageMarkers(sessionId))
   })
 
   ipcMain.handle(DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {

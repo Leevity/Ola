@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
 import { MessageSquare, CircleHelp, Briefcase, Code2, ShieldCheck, ArrowDown } from 'lucide-react'
 import type { ContentBlock, ToolResultContent, UnifiedMessage } from '@renderer/lib/api/types'
 import { useChatStore } from '@renderer/stores/chat-store'
@@ -26,7 +26,11 @@ import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-clien
 import { selectSessionScopedAgentState } from '@renderer/lib/agent/session-scoped-agent-state'
 import { resolveActiveCompactArtifacts } from '@renderer/lib/agent/context-compression'
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
-import { DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL } from '../../../../shared/messagepack/binary-ipc'
+import {
+  preserveViewportOffsetAfterPrepend,
+  shouldCompensateTranscriptRowResize
+} from './chat-scroll-policy'
+import { DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL } from '../../../../shared/messagepack/binary-ipc'
 
 const modeHints = {
   chat: {
@@ -178,6 +182,7 @@ interface UserMessageLocatorItem {
   time: string
   position: number
   sortOrder: number
+  kind: 'user' | 'assistant' | 'streaming' | 'summary'
 }
 
 interface UserMessageLocatorSource {
@@ -187,6 +192,7 @@ interface UserMessageLocatorSource {
   createdAt: number
   sortOrder: number
   source?: UnifiedMessage['source']
+  role: UnifiedMessage['role']
 }
 
 interface UserMessageIndexRow {
@@ -249,6 +255,7 @@ const OLDER_MESSAGE_LOAD_SCROLL_THRESHOLD = 72
 const MIN_RENDERABLE_HISTORY_ROWS = 3
 const VIRTUAL_ROW_ESTIMATED_HEIGHT = 180
 const VIRTUAL_ROW_OVERSCAN = 8
+const INITIAL_TAIL_RENDER_COUNT = 12
 const EMPTY_ORCHESTRATION_STATE = { runs: [], byId: new Map(), byMessageId: new Map() }
 const MESSAGE_COLUMN_CLASS = 'mx-auto w-full max-w-[820px] px-5'
 const MESSAGE_COLUMN_COMPACT_CLASS = 'mx-auto w-full max-w-[720px] px-5'
@@ -572,7 +579,7 @@ function isSystemPromptText(text: string): boolean {
   return text.trim().toLowerCase().startsWith('<system')
 }
 
-function getUserMessageText(content: UnifiedMessage['content']): string {
+function getMessageLocatorText(content: UnifiedMessage['content']): string {
   if (typeof content === 'string') return isSystemPromptText(content) ? '' : content
   return content
     .filter(
@@ -643,10 +650,10 @@ function buildUserLocatorItem(
   messageCount: number,
   t: TFunction
 ): UserMessageLocatorItem | null {
-  if (source.source === 'team' || source.meta?.compactSummary) return null
+  if (source.source === 'team') return null
 
   const textPreview = truncateLocatorPreview(
-    normalizeLocatorPreview(getUserMessageText(source.content))
+    normalizeLocatorPreview(getMessageLocatorText(source.content))
   )
   const imageCount = countImageBlocks(source.content)
   if (!textPreview && imageCount === 0) return null
@@ -667,7 +674,12 @@ function buildUserLocatorItem(
     preview: textPreview || fallbackPreview,
     time: formatLocatorTime(source.createdAt),
     position: messageCount > 1 ? source.sortOrder / (messageCount - 1) : 0,
-    sortOrder: source.sortOrder
+    sortOrder: source.sortOrder,
+    kind: source.meta?.compactSummary
+      ? 'summary'
+      : source.role === 'assistant'
+        ? 'assistant'
+        : 'user'
   }
 }
 
@@ -724,10 +736,10 @@ function UserMessageLocator({
               <button
                 key={item.id}
                 type="button"
-                aria-label={t('messageList.userLocator.jumpLabel', {
+                aria-label={t('messageList.messageRail.jumpLabel', {
                   index: item.index,
                   preview: item.preview,
-                  defaultValue: 'Jump to user message {{index}}: {{preview}}'
+                  defaultValue: 'Jump to message {{index}}: {{preview}}'
                 })}
                 title={item.preview}
                 className="pointer-events-auto group/marker absolute right-0 flex h-6 w-11 -translate-y-1/2 items-center justify-end rounded-sm outline-none"
@@ -737,11 +749,25 @@ function UserMessageLocator({
                 onFocus={() => setPreviewMessageId(item.id)}
                 onBlur={() => setPreviewMessageId(null)}
                 onClick={() => onJump(item)}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return
+                  event.preventDefault()
+                  const nextIndex = Math.max(
+                    0,
+                    Math.min(items.length - 1, itemIndex + (event.key === 'ArrowDown' ? 1 : -1))
+                  )
+                  const nextButton =
+                    event.currentTarget.parentElement?.querySelectorAll('button')[nextIndex]
+                  if (nextButton instanceof HTMLButtonElement) nextButton.focus()
+                }}
               >
                 <span
                   className={cn(
                     'block h-px rounded-full bg-muted-foreground/35 transition-all duration-150 group-hover/marker:bg-foreground/80 group-focus-visible/marker:bg-foreground/90',
                     active ? 'w-4 bg-muted-foreground/70' : 'w-2.5',
+                    item.kind === 'assistant' && 'bg-sky-500/55',
+                    item.kind === 'summary' && 'h-0.5 bg-amber-500/70',
+                    item.kind === 'streaming' && 'h-0.5 animate-pulse bg-emerald-500/80',
                     previewing && 'h-0.5 w-8 bg-foreground/95'
                   )}
                 />
@@ -1190,13 +1216,14 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   const userLocatorRowSources = React.useMemo(() => {
     const sourcesById = new Map<string, UserMessageLocatorSource>()
     for (const row of userLocatorRows) {
-      if (row.role !== 'user') continue
+      if (row.role !== 'user' && row.role !== 'assistant') continue
       sourcesById.set(row.id, {
         id: row.id,
         content: parseLocatorContent(row.content),
         meta: parseLocatorMeta(row.meta),
         createdAt: row.created_at,
-        sortOrder: row.sort_order
+        sortOrder: row.sort_order,
+        role: row.role
       })
     }
     return sourcesById
@@ -1206,7 +1233,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     const sourcesById = new Map(userLocatorRowSources)
 
     messages.forEach((message, messageIndex) => {
-      if (message.role !== 'user') return
+      if (message.role !== 'user' && message.role !== 'assistant') return
       const existing = sourcesById.get(message.id)
       sourcesById.set(message.id, {
         id: message.id,
@@ -1214,17 +1241,31 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         meta: message.meta,
         createdAt: message.createdAt,
         sortOrder: existing?.sortOrder ?? loadedRangeStart + messageIndex,
-        source: message.source
+        source: message.source,
+        role: message.role
       })
     })
 
     const items: UserMessageLocatorItem[] = []
     for (const source of [...sourcesById.values()].sort((a, b) => a.sortOrder - b.sortOrder)) {
       const item = buildUserLocatorItem(source, items.length + 1, activeSessionMessageCount, t)
-      if (item) items.push(item)
+      if (item) {
+        items.push(
+          source.id === streamingMessageId && item.kind === 'assistant'
+            ? { ...item, kind: 'streaming' }
+            : item
+        )
+      }
     }
     return items
-  }, [activeSessionMessageCount, loadedRangeStart, messages, t, userLocatorRowSources])
+  }, [
+    activeSessionMessageCount,
+    loadedRangeStart,
+    messages,
+    streamingMessageId,
+    t,
+    userLocatorRowSources
+  ])
 
   React.useEffect(() => {
     let cancelled = false
@@ -1237,7 +1278,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     const loadUserLocatorRows = async (): Promise<void> => {
       try {
         const rows = await invokeMessagePackBinary<UserMessageIndexRow[] | null>(
-          DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL,
+          DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL,
           activeSessionId
         )
         if (!cancelled) {
@@ -1272,17 +1313,46 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   }, [inlineCompactSummaryState.summaryIds, renderableMessages])
   const hasLoadOlderRow = loadedRangeStart > 0
   const virtualRowCount = rows.length + (hasLoadOlderRow ? 1 : 0)
+  const canAutoScroll = React.useCallback(() => {
+    const mode = autoScrollModeRef.current
+    return mode === 'user' || (mode === 'stream' && canSessionTriggerStreamingAutoScroll)
+  }, [canSessionTriggerStreamingAutoScroll])
+
+  const shouldAdjustScrollPositionOnItemSizeChange = React.useCallback(
+    (item: { end: number }, _delta: number, instance: { scrollOffset: number | null }): boolean => {
+      return shouldCompensateTranscriptRowResize({
+        itemEnd: item.end,
+        scrollOffset: instance.scrollOffset ?? 0,
+        followingOutput: canAutoScroll()
+      })
+    },
+    [canAutoScroll]
+  )
+
   const rowVirtualizer = useVirtualizer({
     count: virtualRowCount,
     getScrollElement: () => listRef.current,
     estimateSize: () => VIRTUAL_ROW_ESTIMATED_HEIGHT,
+    initialOffset: () => virtualRowCount * VIRTUAL_ROW_ESTIMATED_HEIGHT,
     overscan: VIRTUAL_ROW_OVERSCAN,
+    rangeExtractor: (range) => {
+      if (pendingInitialScrollSessionIdRef.current !== activeSessionId || range.count === 0) {
+        return defaultRangeExtractor(range)
+      }
+
+      const startIndex = Math.max(0, range.count - INITIAL_TAIL_RENDER_COUNT)
+      return Array.from({ length: range.count - startIndex }, (_, offset) => startIndex + offset)
+    },
     getItemKey: (index) => {
       if (hasLoadOlderRow && index === 0) return `load-older:${activeSessionId ?? 'none'}`
       const row = rows[index - (hasLoadOlderRow ? 1 : 0)]
       return row?.key ?? `row:${index}`
     }
   })
+  // Visible transcript rows grow in place. Only compensate rows that are fully above the
+  // viewport; bottom-following remains owned by the chat scroll state machine.
+  rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
+    shouldAdjustScrollPositionOnItemSizeChange
   const pendingAskUserQuestion = React.useMemo(
     () => findPendingAskUserQuestion(rows, toolResultsLookup, messageLookup),
     [messageLookup, rows, toolResultsLookup]
@@ -1297,11 +1367,6 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     () => new Map(userLocatorItems.map((item) => [item.id, item])),
     [userLocatorItems]
   )
-
-  const canAutoScroll = React.useCallback(() => {
-    const mode = autoScrollModeRef.current
-    return mode === 'user' || (mode === 'stream' && canSessionTriggerStreamingAutoScroll)
-  }, [canSessionTriggerStreamingAutoScroll])
 
   const markProgrammaticScroll = React.useCallback(() => {
     programmaticScrollUntilRef.current = window.performance.now() + PROGRAMMATIC_SCROLL_GUARD_MS
@@ -1481,7 +1546,11 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         const scrollDelta = nextRef.scrollHeight - previousScrollHeight
         if (scrollDelta !== 0) {
           markProgrammaticScroll()
-          nextRef.scrollTop = Math.max(0, previousScrollTop + scrollDelta)
+          nextRef.scrollTop = preserveViewportOffsetAfterPrepend({
+            previousScrollTop,
+            previousScrollHeight,
+            nextScrollHeight: nextRef.scrollHeight
+          })
         }
       }
       syncBottomState()

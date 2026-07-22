@@ -51,6 +51,7 @@ import {
   MIN_CONTEXT_COMPRESSION_THRESHOLD
 } from '@renderer/lib/agent/context-compression'
 import { resolveSessionModelSelection } from '@renderer/lib/session-model-resolution'
+import { ReasoningEffortSlider } from './ReasoningEffortSlider'
 
 function formatContextLength(length?: number): string | null {
   if (!length) return null
@@ -601,43 +602,13 @@ function ModelSettingsPopover({
                         <div className="text-[10px] text-muted-foreground">reasoning_effort</div>
                       </div>
                     </div>
-                    <div
-                      className="relative grid gap-1"
-                      style={{ gridTemplateColumns: `repeat(${levels.length}, minmax(0, 1fr))` }}
-                    >
-                      <span className="absolute left-4 right-4 top-2.5 h-px bg-border" />
-                      {levels.map((level) => {
-                        const active = effectiveReasoningEffort === level && thinkingEnabled
-                        return (
-                          <button
-                            key={level}
-                            type="button"
-                            className="relative z-10 flex min-w-0 flex-col items-center gap-1 text-[10px]"
-                            title={tChat(`input.effortDesc.${level}`)}
-                            onClick={() => setEffort(level)}
-                          >
-                            <span
-                              className={cn(
-                                'flex size-5 items-center justify-center rounded-full border-2 bg-popover transition-colors',
-                                active
-                                  ? 'border-violet-400 text-violet-400'
-                                  : 'border-border text-muted-foreground'
-                              )}
-                            >
-                              {active && <span className="size-2 rounded-full bg-violet-400" />}
-                            </span>
-                            <span
-                              className={cn(
-                                'max-w-full truncate uppercase',
-                                active ? 'font-semibold text-foreground' : 'text-muted-foreground'
-                              )}
-                            >
-                              {level}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
+                    <ReasoningEffortSlider
+                      levels={levels}
+                      value={effectiveReasoningEffort}
+                      disabled={!thinkingEnabled}
+                      getDescription={(level) => tChat(`input.effortDesc.${level}`)}
+                      onChange={setEffort}
+                    />
                   </div>
                 )}
 
