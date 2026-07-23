@@ -1,8 +1,11 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import Markdown from 'react-markdown'
 import {
   CheckCircle2,
   ClipboardList,
+  Copy,
+  Download,
+  FileText,
   Loader2,
   MessageSquarePlus,
   Play,
@@ -167,6 +170,32 @@ export function PlanReviewCard({
   const displayStatus: PlanStatus =
     plan?.status ?? (payload?.awaitingUserReview ? 'awaiting_review' : 'drafting')
   const statusAppearance = getStatusAppearance(displayStatus)
+  const planContent = payload?.content ?? ''
+  const planTitle = payload?.title ?? 'plan'
+  const planFilePath = payload?.filePath
+
+  const handleCopyPlan = React.useCallback((): void => {
+    if (planContent.trim()) void navigator.clipboard.writeText(planContent)
+  }, [planContent])
+
+  const handleDownloadPlan = React.useCallback((): void => {
+    if (!planContent.trim()) return
+    const filename =
+      planTitle
+        .replace(/[^a-zA-Z0-9-_ ]/g, '')
+        .slice(0, 50)
+        .trim() || 'plan'
+    const url = URL.createObjectURL(new Blob([planContent], { type: 'text/markdown' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${filename}.md`
+    link.click()
+    URL.revokeObjectURL(url)
+  }, [planContent, planTitle])
+
+  const handleOpenPlanFile = React.useCallback((): void => {
+    if (planFilePath) useUIStore.getState().openFilePreview(planFilePath)
+  }, [planFilePath])
 
   if (isProcessing) {
     return (
@@ -239,6 +268,32 @@ export function PlanReviewCard({
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          disabled={!payload.content.trim()}
+          onClick={handleCopyPlan}
+        >
+          <Copy className="size-3.5" />
+          {t('planReview.copyPlan', { defaultValue: 'Copy Markdown' })}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 gap-1.5"
+          disabled={!payload.content.trim()}
+          onClick={handleDownloadPlan}
+        >
+          <Download className="size-3.5" />
+          {t('planReview.downloadPlan', { defaultValue: 'Download Markdown' })}
+        </Button>
+        {payload.filePath ? (
+          <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={handleOpenPlanFile}>
+            <FileText className="size-3.5" />
+            {t('planReview.openPlanFile', { defaultValue: 'Open plan file' })}
+          </Button>
+        ) : null}
         {displayStatus === 'awaiting_review' && (
           <>
             <Button

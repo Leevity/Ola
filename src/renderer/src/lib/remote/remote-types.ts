@@ -6,6 +6,8 @@ export type {
   RemoteConnectionCreateRequest,
   RemoteConnectionKind,
   RemoteConnectInput,
+  RemoteConnectResult,
+  RemoteCredentialClaimRequest,
   RemoteConnectionListResult,
   RemoteConnectionTestResult,
   RemoteConnectionUpdateInput,

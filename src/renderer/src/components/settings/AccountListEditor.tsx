@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactElement } from 'react'
+﻿import { useState, type ReactElement } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronDown,
@@ -76,7 +76,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
   const [editingEmailId, setEditingEmailId] = useState<string | null>(null)
   const [emailDraft, setEmailDraft] = useState('')
 
-  const sorted = useMemo(() => accounts, [accounts])
+  const sorted = accounts
 
   async function handleAddAccount(): Promise<void> {
     setAddingAccount(true)

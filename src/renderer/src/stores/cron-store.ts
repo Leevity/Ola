@@ -53,7 +53,7 @@ export interface CronRunEntry {
   jobId: string
   startedAt: number
   finishedAt: number | null
-  status: 'running' | 'success' | 'error' | 'aborted'
+  status: 'running' | 'success' | 'error' | 'aborted' | 'skipped'
   toolCallCount: number
   outputSummary: string | null
   error: string | null

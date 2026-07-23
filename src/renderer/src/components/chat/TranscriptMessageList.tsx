@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import type { ToolResultContent, UnifiedMessage } from '@renderer/lib/api/types'
 import type { ToolCallState } from '@renderer/lib/agent/types'
 import { cn } from '@renderer/lib/utils'
@@ -69,7 +69,7 @@ function TranscriptMessageListInner({
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const transcriptAnalysis = React.useMemo(
     () => buildTranscriptStaticAnalysis(messages),
-    [messages, revisionKey]
+    [messages]
   )
   const { messageLookup, toolResultsLookup } = transcriptAnalysis
   const renderableMeta = React.useMemo(

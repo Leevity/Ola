@@ -425,6 +425,15 @@
     "whitelistInvalidPattern": "无效规则：{{error}}",
     "whitelistAddedTool": "{{tool}} 已加入白名单",
     "whitelistAddedRule": "已添加规则：{{pattern}}",
+    "mode": {
+      "label": "权限模式",
+      "default": "逐次确认",
+      "whitelist": "白名单",
+      "fullAccess": "完全访问",
+      "fullAccessConfirmTitle": "启用完全访问？",
+      "fullAccessConfirmDescription": "工具调用将不再逐次确认；Worker 仍会执行命令拒绝规则。",
+      "fullAccessConfirmAction": "启用完全访问"
+    },
     "toolLabels": {
       "Read": "读取文件",
       "Write": "写入文件",

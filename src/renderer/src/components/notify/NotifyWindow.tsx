@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useRef, useState } from 'react'
 import { Bell, X, CheckCircle2, AlertCircle, Info, XCircle, Pin } from 'lucide-react'
 import { useNotifyStore, type NotifyItem, type NotifyType } from '@renderer/stores/notify-store'
 
@@ -9,6 +9,13 @@ function ToastCard({ item }: { item: NotifyItem }): React.JSX.Element {
   const [visible, setVisible] = useState(false)
   const [progress, setProgress] = useState(100)
   const closingRef = useRef(false)
+
+  const handleClose = useCallback((): void => {
+    if (closingRef.current) return
+    closingRef.current = true
+    setVisible(false)
+    setTimeout(() => dismiss(item.id), 350)
+  }, [dismiss, item.id])
 
   useEffect(() => {
     const t = setTimeout(() => setVisible(true), 30)
@@ -23,19 +30,12 @@ function ToastCard({ item }: { item: NotifyItem }): React.JSX.Element {
       setProgress(pct)
       if (pct <= 0) clearInterval(interval)
     }, 16)
-    const timer = setTimeout(() => handleClose(), item.duration)
+    const timer = setTimeout(handleClose, item.duration)
     return () => {
       clearInterval(interval)
       clearTimeout(timer)
     }
-  }, [])
-
-  const handleClose = (): void => {
-    if (closingRef.current) return
-    closingRef.current = true
-    setVisible(false)
-    setTimeout(() => dismiss(item.id), 350)
-  }
+  }, [handleClose, item.duration, item.persistent])
 
   const icons: Record<NotifyType, React.ReactNode> = {
     info: <Info className="size-4 text-blue-400" />,

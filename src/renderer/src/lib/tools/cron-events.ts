@@ -38,7 +38,7 @@ type CronRunProgressEvent = {
 type CronRunFinishedEvent = {
   jobId: string
   runId: string
-  status: 'success' | 'error' | 'aborted'
+  status: 'success' | 'error' | 'aborted' | 'skipped'
   toolCallCount: number
   jobName?: string
   sessionId?: string | null

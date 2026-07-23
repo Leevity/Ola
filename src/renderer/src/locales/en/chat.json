@@ -425,6 +425,15 @@
     "whitelistInvalidPattern": "Invalid pattern: {{error}}",
     "whitelistAddedTool": "{{tool}} added to whitelist",
     "whitelistAddedRule": "Rule added: {{pattern}}",
+    "mode": {
+      "label": "Permission mode",
+      "default": "Ask each time",
+      "whitelist": "Whitelist",
+      "fullAccess": "Full access",
+      "fullAccessConfirmTitle": "Enable full access?",
+      "fullAccessConfirmDescription": "Tool calls will be approved without a prompt. Command deny rules remain enforced by the Worker.",
+      "fullAccessConfirmAction": "Enable full access"
+    },
     "toolLabels": {
       "Read": "Read File",
       "Write": "Write File",

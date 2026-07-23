@@ -81,11 +81,12 @@ export function attachRendererToolBridge(): void {
   const bridgeWindow = getBridgeWindow()
   bridgeWindow.__openCoworkRendererToolBridgeCleanup?.()
   bridgeWindow.__openCoworkRendererToolBridgeCleanup = undefined
-  window.electron.ipcRenderer.removeAllListeners(SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL)
+  window.ola.ipc.removeAllListeners(SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL)
 
-  const msgpackCleanup = window.electron.ipcRenderer.on(
+  const msgpackCleanup = window.ola.ipc.on(
     SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL,
-    async (_event: unknown, bytes: ArrayBuffer | ArrayBufferView) => {
+    async (bytes: unknown) => {
+      if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return
       await handleRendererToolRequest(decodeIpcMessagePack<RendererToolRequestPayload>(bytes))
     }
   )

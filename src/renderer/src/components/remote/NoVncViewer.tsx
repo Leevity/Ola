@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import RFB from '@novnc/novnc'
 import { useTranslation } from 'react-i18next'
-import { ipcClient } from '@renderer/lib/ipc/ipc-client'
-import { IPC } from '@renderer/lib/ipc/channels'
 import type { RemoteViewerCredential } from '@renderer/lib/remote/remote-types'
+import { useRemoteStore } from '@renderer/stores/remote-store'
 
 export function NoVncViewer({
   sessionId,
@@ -16,6 +15,7 @@ export function NoVncViewer({
 }): React.JSX.Element {
   const { t } = useTranslation('layout')
   const targetRef = useRef<HTMLDivElement | null>(null)
+  const credentialPromiseRef = useRef<Promise<RemoteViewerCredential | null> | null>(null)
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>(
     'connecting'
   )
@@ -48,10 +48,9 @@ export function NoVncViewer({
       )
     }
     const credentialsRequired = (): void => {
-      void ipcClient
-        .invoke(IPC.REMOTE_SESSION_CREDENTIAL, { sessionId })
-        .then((value) => {
-          const credential = value as RemoteViewerCredential | null
+      credentialPromiseRef.current ??= useRemoteStore.getState().claimViewerCredential(sessionId)
+      void credentialPromiseRef.current
+        .then((credential) => {
           if (!credential?.password) throw new Error('VNC credentials are unavailable')
           ;(
             rfb as unknown as {

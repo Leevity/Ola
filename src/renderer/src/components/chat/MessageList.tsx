@@ -581,13 +581,41 @@ function isSystemPromptText(text: string): boolean {
 
 function getMessageLocatorText(content: UnifiedMessage['content']): string {
   if (typeof content === 'string') return isSystemPromptText(content) ? '' : content
-  return content
+
+  const text = content
     .filter(
       (block) =>
         block.type === 'text' && typeof block.text === 'string' && !isSystemPromptText(block.text)
     )
     .map((block) => (block.type === 'text' ? block.text : ''))
     .join('\n')
+
+  const toolNames = content
+    .filter(
+      (block): block is Extract<ContentBlock, { type: 'tool_use' }> => block.type === 'tool_use'
+    )
+    .map((block) => block.name)
+  const toolPreview = toolNames.length
+    ? `Tool: ${toolNames.slice(0, 3).join(', ')}${toolNames.length > 3 ? ` (+${toolNames.length - 3})` : ''}`
+    : ''
+
+  const toolResults = content.filter(
+    (block): block is Extract<ContentBlock, { type: 'tool_result' }> => block.type === 'tool_result'
+  )
+  const failedToolResultCount = toolResults.filter((block) => block.isError).length
+  const toolResultPreview = toolResults.length
+    ? `Tool result: ${
+        failedToolResultCount > 0
+          ? `${failedToolResultCount} failed${
+              toolResults.length > failedToolResultCount
+                ? `, ${toolResults.length - failedToolResultCount} completed`
+                : ''
+            }`
+          : `${toolResults.length} completed`
+      }`
+    : ''
+
+  return [text, toolPreview, toolResultPreview].filter(Boolean).join('\n')
 }
 
 function countImageBlocks(content: UnifiedMessage['content']): number {

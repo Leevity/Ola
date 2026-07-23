@@ -39,6 +39,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -1551,6 +1558,8 @@ export function InputArea({
   const [showOptimizationDialog, setShowOptimizationDialog] = React.useState(false)
   const [selectedOptionIndex, setSelectedOptionIndex] = React.useState(0)
   const currentLanguage = useSettingsStore((state) => state.language)
+  const permissionPolicy = useSettingsStore((state) => state.permissionPolicy)
+  const autoApprove = useSettingsStore((state) => state.autoApprove)
   const mainModelSelectionMode = useSettingsStore((state) => state.mainModelSelectionMode)
   const clarifyAutoAcceptRecommended = useSettingsStore(
     (state) => state.clarifyAutoAcceptRecommended
@@ -1897,6 +1906,36 @@ export function InputArea({
     activeProjectId,
     workingFolder
   })
+  const permissionMode = autoApprove
+    ? 'full-access'
+    : permissionPolicy.enabled
+      ? 'whitelist'
+      : 'default'
+  const showPermissionModeControl = projectScoped && (mode === 'cowork' || mode === 'code')
+  const handlePermissionModeChange = React.useCallback(
+    (nextMode: 'default' | 'whitelist' | 'full-access'): void => {
+      if (nextMode === 'full-access') {
+        if (!autoApprove) setFullAccessConfirmOpen(true)
+        return
+      }
+
+      const settings = useSettingsStore.getState()
+      if (nextMode === 'default') {
+        settings.updateSettings({
+          autoApprove: false,
+          permissionPolicy: { ...settings.permissionPolicy, enabled: false }
+        })
+        return
+      }
+
+      settings.updateSettings({
+        autoApprove: false,
+        permissionPolicy: { ...settings.permissionPolicy, enabled: true }
+      })
+      openSettingsPage('permission')
+    },
+    [autoApprove, openSettingsPage]
+  )
   const activeDraftKey = React.useMemo(
     () =>
       draftKeyOverride ??
@@ -1955,6 +1994,7 @@ export function InputArea({
   const [isWorkspaceAgentsMissing, setIsWorkspaceAgentsMissing] = React.useState(false)
   const [pendingPlanMode, setPendingPlanMode] = React.useState(false)
   const [pendingGoalMode, setPendingGoalMode] = React.useState(false)
+  const [fullAccessConfirmOpen, setFullAccessConfirmOpen] = React.useState(false)
 
   React.useLayoutEffect(() => {
     if (inputHeight === null) return
@@ -2377,6 +2417,26 @@ export function InputArea({
   React.useEffect(() => {
     setSelectedFileSearchIndex(0)
   }, [fileQuery])
+
+  React.useEffect(() => {
+    if (!fileMenuOpen || fileSearchResults.length === 0) return
+    const frame = requestAnimationFrame(() => {
+      rootRef.current
+        ?.querySelector<HTMLElement>(`[data-file-suggestion-index="${selectedFileSearchIndex}"]`)
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [fileMenuOpen, fileSearchResults.length, selectedFileSearchIndex])
+
+  React.useEffect(() => {
+    if (!slashMenuOpen || filteredSlashSuggestions.length === 0) return
+    const frame = requestAnimationFrame(() => {
+      rootRef.current
+        ?.querySelector<HTMLElement>(`[data-slash-suggestion-index="${selectedSlashIndex}"]`)
+        ?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [filteredSlashSuggestions.length, selectedSlashIndex, slashMenuOpen])
 
   React.useEffect(() => {
     if (!fileMenuOpen) {
@@ -4372,6 +4432,7 @@ export function InputArea({
                           <button
                             key={file.path}
                             type="button"
+                            data-file-suggestion-index={index}
                             className={`flex w-full items-start gap-2 rounded-lg px-2.5 py-2 text-left transition-colors ${
                               isSelected
                                 ? 'bg-accent text-accent-foreground'
@@ -4435,6 +4496,7 @@ export function InputArea({
                           <button
                             key={item.key}
                             type="button"
+                            data-slash-suggestion-index={index}
                             className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${
                               isSelected
                                 ? 'bg-accent text-accent-foreground'
@@ -4497,6 +4559,33 @@ export function InputArea({
           />
 
           {/* Bottom toolbar */}
+          <AlertDialog open={fullAccessConfirmOpen} onOpenChange={setFullAccessConfirmOpen}>
+            <AlertDialogContent size="sm">
+              <AlertDialogHeader>
+                <AlertDialogTitle>{t('permission.mode.fullAccessConfirmTitle')}</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {t('permission.mode.fullAccessConfirmDescription')}
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>{t('action.cancel', { ns: 'common' })}</AlertDialogCancel>
+                <AlertDialogAction
+                  variant="destructive"
+                  onClick={() => {
+                    const settings = useSettingsStore.getState()
+                    settings.updateSettings({
+                      autoApprove: true,
+                      permissionPolicy: { ...settings.permissionPolicy, enabled: true }
+                    })
+                  }}
+                >
+                  {t('permission.mode.fullAccessConfirmAction')}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+
+          {/* Bottom toolbar */}
           <div
             ref={bottomToolbarRef}
             className="composer-toolbar relative z-20 mt-1 shrink-0 flex items-center justify-between gap-2 px-2 pb-2"
@@ -4510,6 +4599,27 @@ export function InputArea({
                     <ModelSwitcher modelRoute={modelRoute} sessionId={draftSessionId} />
                   )}
                 </div>
+                {showPermissionModeControl && (
+                  <Select
+                    value={permissionMode}
+                    onValueChange={(value) =>
+                      handlePermissionModeChange(value as 'default' | 'whitelist' | 'full-access')
+                    }
+                  >
+                    <SelectTrigger
+                      className="composer-control h-8 w-[7.5rem] shrink-0 rounded-lg px-2 text-xs"
+                      aria-label={t('permission.mode.label')}
+                    >
+                      <ShieldAlert className="mr-1 size-3.5 shrink-0" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">{t('permission.mode.default')}</SelectItem>
+                      <SelectItem value="whitelist">{t('permission.mode.whitelist')}</SelectItem>
+                      <SelectItem value="full-access">{t('permission.mode.fullAccess')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 {webSearchToggleControl}
                 {skillsMenuControl}
                 {activeMcpBadge}

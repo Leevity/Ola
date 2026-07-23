@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+﻿import { useState, useCallback, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -67,30 +67,38 @@ export function ArtifactsPanel(): React.JSX.Element {
   const [fileContent, setFileContent] = useState<string | null>(null)
   const [loadingContent, setLoadingContent] = useState(false)
   const [showPreview, setShowPreview] = useState(true)
-  const fileOps = fileOpIdsSig
-    ? fileOpIdsSig.split('\u0000').reduce(
-        (list, id) => {
-          const toolCall = useAgentStore
-            .getState()
-            .executedToolCalls.find((entry) => entry.id === id)
-          if (toolCall) list.push(toolCall)
-          return list
-        },
-        [] as ReturnType<typeof useAgentStore.getState>['executedToolCalls']
-      )
-    : []
-  const deleteOps = deleteOpIdsSig
-    ? deleteOpIdsSig.split('\u0000').reduce(
-        (list, id) => {
-          const toolCall = useAgentStore
-            .getState()
-            .executedToolCalls.find((entry) => entry.id === id)
-          if (toolCall) list.push(toolCall)
-          return list
-        },
-        [] as ReturnType<typeof useAgentStore.getState>['executedToolCalls']
-      )
-    : []
+  const fileOps = useMemo(
+    () =>
+      fileOpIdsSig
+        ? fileOpIdsSig.split('\u0000').reduce(
+            (list, id) => {
+              const toolCall = useAgentStore
+                .getState()
+                .executedToolCalls.find((entry) => entry.id === id)
+              if (toolCall) list.push(toolCall)
+              return list
+            },
+            [] as ReturnType<typeof useAgentStore.getState>['executedToolCalls']
+          )
+        : [],
+    [fileOpIdsSig]
+  )
+  const deleteOps = useMemo(
+    () =>
+      deleteOpIdsSig
+        ? deleteOpIdsSig.split('\u0000').reduce(
+            (list, id) => {
+              const toolCall = useAgentStore
+                .getState()
+                .executedToolCalls.find((entry) => entry.id === id)
+              if (toolCall) list.push(toolCall)
+              return list
+            },
+            [] as ReturnType<typeof useAgentStore.getState>['executedToolCalls']
+          )
+        : [],
+    [deleteOpIdsSig]
+  )
 
   const handleCopyPath = useCallback((id: string, path: string) => {
     navigator.clipboard.writeText(path)

@@ -7,8 +7,12 @@ import type {
   RemoteConnectionListResult,
   RemoteConnectionTestResult,
   RemoteConnectionUpdateRequest,
-  RemoteSession
+  RemoteConnectResult,
+  RemoteSession,
+  RemoteViewerCredential
 } from '@renderer/lib/remote/remote-types'
+
+const viewerCredentialLeases = new Map<string, string>()
 
 export type RemoteClientStatus = {
   available: boolean
@@ -36,6 +40,7 @@ type RemoteStore = {
   testConnection: (id: string) => Promise<RemoteConnectionTestResult>
   deleteConnection: (id: string) => Promise<void>
   connect: (connectionId: string) => Promise<RemoteSession>
+  claimViewerCredential: (sessionId: string) => Promise<RemoteViewerCredential | null>
   disconnect: (sessionId: string) => Promise<void>
   detectClients: () => Promise<void>
 }
@@ -101,17 +106,34 @@ export const useRemoteStore = create<RemoteStore>((set, get) => ({
   connect: async (connectionId) => {
     set({ connectingConnectionId: connectionId })
     try {
-      const session = (await ipcClient.invoke(IPC.REMOTE_CONNECT, {
+      const result = (await ipcClient.invoke(IPC.REMOTE_CONNECT, {
         connectionId
-      })) as RemoteSession
-      set({ sessions: [...get().sessions.filter((item) => item.id !== session.id), session] })
+      })) as RemoteConnectResult
+      if (result.credentialLease)
+        viewerCredentialLeases.set(result.session.id, result.credentialLease)
+      set({
+        sessions: [
+          ...get().sessions.filter((item) => item.id !== result.session.id),
+          result.session
+        ]
+      })
       await get().loadConnections()
-      return session
+      return result.session
     } finally {
       set({ connectingConnectionId: null })
     }
   },
+  claimViewerCredential: async (sessionId) => {
+    const lease = viewerCredentialLeases.get(sessionId)
+    if (!lease) return null
+    viewerCredentialLeases.delete(sessionId)
+    return (await ipcClient.invoke(IPC.REMOTE_SESSION_CLAIM_CREDENTIAL, {
+      sessionId,
+      lease
+    })) as RemoteViewerCredential | null
+  },
   disconnect: async (sessionId) => {
+    viewerCredentialLeases.delete(sessionId)
     const result = (await ipcClient.invoke(IPC.REMOTE_DISCONNECT, { sessionId })) as {
       session: RemoteSession | null
     }

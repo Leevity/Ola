@@ -82,7 +82,10 @@ export function registerMcpTools(
         requiresApproval: () => true
       }
 
-      toolRegistry.register(handler)
+      toolRegistry.register(handler, {
+        namespace: 'mcp',
+        owner: `mcp:${server.id}`
+      })
       newNames.push(name)
     }
   }
@@ -123,7 +126,10 @@ export function registerMcpResources(
         requiresApproval: () => true
       }
 
-      toolRegistry.register(handler)
+      toolRegistry.register(handler, {
+        namespace: 'mcp',
+        owner: `mcp:${server.id}`
+      })
       _registeredMcpNames.push(name)
     }
   }
@@ -132,7 +138,8 @@ export function registerMcpResources(
 /** Unregister all previously registered MCP tools and resources */
 export function unregisterMcpTools(): void {
   for (const name of _registeredMcpNames) {
-    toolRegistry.unregister(name)
+    const parsed = parseMcpToolName(name)
+    if (parsed) toolRegistry.unregister(name, `mcp:${parsed.serverId}`)
   }
   _registeredMcpNames = []
 }

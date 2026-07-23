@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
 import {
@@ -724,16 +724,12 @@ export function SshPage({ embedded = false }: { embedded?: boolean } = {}): Reac
     activeConnection,
     activeConnectionAddress,
     activeSession?.error,
-    activeSession?.id,
-    activeSession?.status,
     activeTab,
-    activeTabId,
     workspaceSession?.id,
     handleCloseTab,
     handleConnect,
     handleRetryActive,
     handleShowList,
-    openTabs,
     showTerminalView,
     stageStatus,
     terminalConnected,

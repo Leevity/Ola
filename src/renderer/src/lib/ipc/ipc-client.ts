@@ -13,11 +13,11 @@ import {
 
 /**
  * IPC Client wrapper for renderer process.
- * Wraps Electron's ipcRenderer with typed interface.
+ * Uses the domain-scoped Ola preload bridge.
  */
 class ElectronIPCClient implements IPCClient {
-  private get ipcRenderer(): typeof window.electron.ipcRenderer | null {
-    return window.electron?.ipcRenderer ?? null
+  private get ipcRenderer(): typeof window.ola.ipc | null {
+    return window.ola?.ipc ?? null
   }
 
   async invoke(channel: string, ...args: unknown[]): Promise<unknown> {
@@ -51,23 +51,18 @@ class ElectronIPCClient implements IPCClient {
     if (!ipcRenderer) return () => {}
 
     if (shouldUseMessagePackEvent(channel)) {
-      const handler = (_event: unknown, bytes: ArrayBuffer | ArrayBufferView): void => {
+      const handler = (bytes: unknown): void => {
+        if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return
         callback(decodeMessagePackPayload(bytes))
       }
       const binaryChannel = toMessagePackChannel(channel)
-      ipcRenderer.on(binaryChannel, handler)
-      return () => {
-        ipcRenderer.removeListener(binaryChannel, handler)
-      }
+      return ipcRenderer.on(binaryChannel, handler)
     }
 
-    const handler = (_event: unknown, ...args: unknown[]): void => {
+    const handler = (...args: unknown[]): void => {
       callback(...args)
     }
-    ipcRenderer.on(channel, handler)
-    return () => {
-      ipcRenderer.removeListener(channel, handler)
-    }
+    return ipcRenderer.on(channel, handler)
   }
 }
 
