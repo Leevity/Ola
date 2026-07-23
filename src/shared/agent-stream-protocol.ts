@@ -1,4 +1,4 @@
-// Agent stream protocol — canonical wire format for main→renderer event streaming.
+﻿// Agent stream protocol — canonical wire format for main→renderer event streaming.
 // Both processes import these types directly. No normalization layer needed.
 
 // ---- Protocol version ----
@@ -305,7 +305,7 @@ export type AgentStreamEvent =
     }
   | { type: 'sub_agent_end'; subAgentName: string; toolUseId: string; result: SubAgentResultWire }
 
-export type LoopEndReasonWire = 'completed' | 'max_iterations' | 'aborted' | 'error'
+export type LoopEndReasonWire = 'completed' | 'max_iterations' | 'aborted' | 'error' | 'interrupted'
 export type ThinkingProviderWire = 'anthropic' | 'openai-responses' | 'google'
 
 export interface SubAgentResultWire {

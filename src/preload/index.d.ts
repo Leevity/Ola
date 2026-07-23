@@ -12,6 +12,13 @@ import type {
   TeamRuntimeSnapshot
 } from '../shared/team-runtime-types'
 
+interface OlaIpcBridge {
+  invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+  send: (channel: string, ...args: unknown[]) => void
+  on: (channel: string, listener: (...args: unknown[]) => void) => () => void
+  removeAllListeners: (channel: string) => void
+}
+
 interface OlaAPI {
   downloadImage: (args: {
     url: string
@@ -32,8 +39,23 @@ interface OlaAPI {
   ) => Promise<TeamRuntimeMessageRecord[]>
 }
 
+interface OlaBridge {
+  ipc: OlaIpcBridge
+  media: Pick<OlaAPI, 'downloadImage' | 'fetchImageBase64' | 'writeImageToClipboard'>
+  teamRuntime: {
+    create: OlaAPI['teamRuntimeCreate']
+    delete: OlaAPI['teamRuntimeDelete']
+    appendMessage: OlaAPI['teamRuntimeAppendMessage']
+    getSnapshot: OlaAPI['teamRuntimeGetSnapshot']
+    updateMember: OlaAPI['teamRuntimeUpdateMember']
+    updateManifest: OlaAPI['teamRuntimeUpdateManifest']
+    consumeMessages: OlaAPI['teamRuntimeConsumeMessages']
+  }
+}
+
 declare global {
   interface Window {
+    ola: OlaBridge
     electron: ElectronAPI
     api: OlaAPI
   }

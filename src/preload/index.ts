@@ -23,7 +23,18 @@ async function invokeMessagePackBinary<T>(channel: string, payload: unknown): Pr
   return decodeMessagePackPayload<T>(response as ArrayBuffer | ArrayBufferView)
 }
 
-// Custom APIs for renderer
+const olaIpc = {
+  invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
+  send: (channel: string, ...args: unknown[]) => ipcRenderer.send(channel, ...args),
+  on: (channel: string, listener: (...args: unknown[]) => void) => {
+    const handler = (_event: unknown, ...args: unknown[]): void => listener(...args)
+    ipcRenderer.on(channel, handler)
+    return () => ipcRenderer.removeListener(channel, handler)
+  },
+  removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel)
+}
+
+// Legacy custom APIs for renderer. New callers should use window.ola by domain.
 const api = {
   downloadImage: (args: { url: string; defaultName?: string }) =>
     invokeMessagePackBinary('image:download', args),
@@ -49,14 +60,35 @@ const api = {
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
+const ola = {
+  ipc: olaIpc,
+  media: {
+    downloadImage: api.downloadImage,
+    fetchImageBase64: api.fetchImageBase64,
+    writeImageToClipboard: api.writeImageToClipboard
+  },
+  teamRuntime: {
+    create: api.teamRuntimeCreate,
+    delete: api.teamRuntimeDelete,
+    appendMessage: api.teamRuntimeAppendMessage,
+    getSnapshot: api.teamRuntimeGetSnapshot,
+    updateMember: api.teamRuntimeUpdateMember,
+    updateManifest: api.teamRuntimeUpdateManifest,
+    consumeMessages: api.teamRuntimeConsumeMessages
+  }
+}
+
 if (process.contextIsolated) {
   try {
+    contextBridge.exposeInMainWorld('ola', ola)
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
+  // @ts-ignore (define in dts)
+  window.ola = ola
   // @ts-ignore (define in dts)
   window.electron = electronAPI
   // @ts-ignore (define in dts)

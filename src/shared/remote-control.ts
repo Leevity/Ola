@@ -112,6 +112,21 @@ export type RemoteConnectInput = {
   connectionId: string
 }
 
+/**
+ * Returned only from the connection-creation call. The lease is purpose-bound to one
+ * embedded viewer authentication, the creating WebContents, and a short expiration.
+ * It is never part of RemoteSession or persisted renderer state.
+ */
+export type RemoteConnectResult = {
+  session: RemoteSession
+  credentialLease: string | null
+}
+
+export type RemoteCredentialClaimRequest = {
+  sessionId: string
+  lease: string
+}
+
 export type RemoteConnectionTestResult = {
   success: boolean
   host: string
