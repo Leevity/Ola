@@ -1,4 +1,4 @@
-name: Build & Release
+﻿name: Build & Release
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -48,8 +48,21 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
       - name: Install dependencies
         run: npm ci
+
+      # TreeSitter grammar natives are gitignored; restore NuGet so verify:codegraph-worker
+      # can fall back to ~/.nuget/packages/.../runtimes/linux-x64/native on clean CI hosts.
+      - name: Restore CodeGraph NuGet packages
+        run: |
+          dotnet restore sidecars/Ola.CodeGraph.Core/Ola.CodeGraph.Core.csproj \
+            --source https://api.nuget.org/v3/index.json \
+            --source https://nuget.azure.cn/v3/index.json
 
       - name: Quality gates
         run: |
@@ -57,7 +70,8 @@ jobs:
           npm run lint:ci
           npm run format:check
           npm run verify:ci-core
-          npm run worker:assets:verify
+        env:
+          OLA_NATIVE_WORKER_RID: linux-x64
 
   # ── 准备阶段：提取版本号与发布内容 ──
   prepare:
@@ -221,6 +235,11 @@ jobs:
 
       - name: Publish native worker (${{ matrix.native_worker_rid }})
         run: npm run native:publish
+        env:
+          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
+
+      - name: Verify published worker assets
+        run: npm run worker:assets:verify
         env:
           OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
 
@@ -496,6 +515,11 @@ jobs:
 
       - name: Publish native worker (${{ matrix.native_worker_rid }})
         run: npm run native:publish
+        env:
+          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
+
+      - name: Verify published worker assets
+        run: npm run worker:assets:verify
         env:
           OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
 
