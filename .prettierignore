@@ -1,5 +1,7 @@
 out
 dist
+dist-local-release-smoke
+release-local-smoke
 pnpm-lock.yaml
 LICENSE.md
 tsconfig.json

@@ -1,0 +1,33 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+
+const scheduler = await readFile('src/main/cron/cron-scheduler.ts', 'utf8')
+const handlers = await readFile('src/main/ipc/cron-handlers.ts', 'utf8')
+const dao = await readFile('src/main/db/cron-dao.ts', 'utf8')
+const store = await readFile('src/renderer/src/stores/cron-store.ts', 'utf8')
+const cronPanel = await readFile('src/renderer/src/components/cowork/CronPanel.tsx', 'utf8')
+const tasksPage = await readFile('src/renderer/src/components/tasks/TasksPage.tsx', 'utf8')
+const app = await readFile('src/renderer/src/App.tsx', 'utf8')
+const cronEvents = await readFile('src/renderer/src/lib/tools/cron-events.ts', 'utf8')
+
+assert.match(dao, /CronRunStatus = 'running' \| 'success' \| 'error' \| 'aborted' \| 'skipped'/)
+assert.match(store, /status: 'running' \| 'success' \| 'error' \| 'aborted' \| 'skipped'/)
+assert.match(scheduler, /export async function recordSkippedCronRun\(/)
+assert.match(scheduler, /startedAt: scheduledFor/)
+assert.match(scheduler, /scheduledFor,/)
+assert.match(scheduler, /jobNameSnapshot: job\.name/)
+assert.match(scheduler, /deliveryTargetSnapshot: job\.delivery_target/)
+assert.match(scheduler, /finishedAt: Date\.now\(\)/)
+assert.match(scheduler, /status: 'skipped'/)
+assert.match(scheduler, /error: reason/)
+assert.match(scheduler, /safeSendMessagePackToAllWindows\('cron:run-finished'/)
+assert.match(scheduler, /await recordSkippedCronRun\(job, firedAt\)/)
+assert.match(handlers, /await recordSkippedCronRun\(row, firedAt\)/)
+assert.match(handlers, /status: 'running' \| 'success' \| 'error' \| 'aborted' \| 'skipped'/)
+assert.match(app, /status: 'success' \| 'error' \| 'aborted' \| 'skipped'/)
+assert.match(cronEvents, /status: 'success' \| 'error' \| 'aborted' \| 'skipped'/)
+assert.match(cronPanel, /run\.status === 'skipped'/)
+assert.match(tasksPage, /\| 'skipped'/)
+assert.match(tasksPage, /<option value="skipped">/)
+
+console.log('cron skipped runs verification passed')

@@ -48,6 +48,11 @@ const source = await readFile(
   path.join(process.cwd(), 'src/main/browser/browser-cookie-import.ts'),
   'utf8'
 )
+const handlers = await readFile(
+  path.join(process.cwd(), 'src/main/ipc/browser-handlers.ts'),
+  'utf8'
+)
+const packageJson = await readFile(path.join(process.cwd(), 'package.json'), 'utf8')
 assert(
   source.includes("mkdtemp(join(tmpdir(), 'ola-cookie-import-'))"),
   'isolated temp copy missing'
@@ -58,5 +63,31 @@ assert(
 )
 assert(!source.includes('console.log'), 'cookie importer must not log cookie data')
 assert(!source.includes('console.error'), 'cookie importer must not log cookie data')
+assert(
+  /function isTrustedBrowserIpcSender\(event: IpcMainInvokeEvent\): boolean/.test(handlers),
+  'browser IPC sender authorization helper missing'
+)
+assert(
+  /ownerWindow\.webContents === event\.sender/.test(handlers) &&
+    /event\.senderFrame === event\.sender\.mainFrame/.test(handlers),
+  'browser IPC sender must be a top-level BrowserWindow frame'
+)
+assert(
+  /function registerTrustedBrowserMessagePackHandler<TArgs>/.test(handlers),
+  'browser IPC authorization wrapper missing'
+)
+assert(
+  /registerTrustedBrowserMessagePackHandler<[\s\S]*browser:import-cookies/.test(handlers) &&
+    /registerTrustedBrowserMessagePackHandler<undefined>\('browser:clear-cookies'/.test(handlers),
+  'cookie mutation handlers must use the trusted browser IPC wrapper'
+)
+assert(
+  handlers.includes('Unauthorized browser IPC sender'),
+  'unauthorized browser IPC error missing'
+)
+assert(
+  packageJson.includes('npm run verify:browser-cookie-import'),
+  'core verifier registration missing'
+)
 
 console.log('browser-cookie-import verification passed')
