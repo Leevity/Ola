@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
 
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -22,7 +22,7 @@ const includedRoots = [
   'scripts'
 ]
 const sourceExtensions = new Set(['.ts', '.tsx', '.js', '.mjs', '.cjs', '.cs', '.csproj'])
-const ignoredSegments = new Set(['node_modules', 'bin', 'obj', 'out', 'dist', '.git'])
+const ignoredSegments = new Set(['node_modules', 'bin', 'obj', 'out', 'dist', '.git', '.DS_Store'])
 
 const capabilityDomains = [
   {
@@ -121,6 +121,11 @@ function canonicalPath(relativePath) {
   return relativePath
     .replaceAll('Ola.Native.Worker', '{PRODUCT}.Native.Worker')
     .replaceAll('OpenCowork.Native.Worker', '{PRODUCT}.Native.Worker')
+    .replaceAll('Ola.CodeGraph.Worker', '{PRODUCT}.CodeGraph.Worker')
+    .replaceAll('OpenCowork.CodeGraph.Worker', '{PRODUCT}.CodeGraph.Worker')
+    .replaceAll('/CodeGraph/Core/', '/CodeGraph/{CORE}/')
+    .replaceAll('/CodeGraph/Worker/', '/CodeGraph/{WORKER}/')
+    .replaceAll('/CodeGraph/Tests/', '/CodeGraph/{TESTS}/')
 }
 
 function normalizeBrand(content) {

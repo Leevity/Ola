@@ -1,6 +1,8 @@
-node_modules
+﻿node_modules
 dist
 out
+dist-local-release-smoke/
+release-local-smoke/
 .DS_Store
 .eslintcache
 *.log*
@@ -21,3 +23,6 @@ __pycache__/
 *.pyo
 .pytest_cache/
 .mypy_cache/
+# Local release smoke artifacts (built ad hoc, never commit)
+dist-local-release-smoke/
+release-local-smoke/

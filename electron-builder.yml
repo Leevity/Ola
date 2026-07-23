@@ -117,13 +117,14 @@ mac:
   icon: resources/icon-mac.png
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  hardenedRuntime: true
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
     - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
     - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
     - NSLocalNetworkUsageDescription: Ola needs local network access to connect to SSH hosts and local services on your network.
-  notarize: false
+  notarize: true
 dmg:
   artifactName: ${name}-${version}.${ext}
 linux:

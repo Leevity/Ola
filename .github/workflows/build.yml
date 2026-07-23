@@ -4,17 +4,27 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 on:
-  # 在 GitHub 上发布 Release 时自动触发构建
-  release:
-    types: [published]
+  pull_request:
+  push:
+    branches: [main]
 
-  # 手动触发 (用于调试或重新构建)
+  # 从 draft Release 开始构建；仅全部门禁通过后才由本工作流显式发布。
   workflow_dispatch:
     inputs:
       version:
         description: '版本号 (如 1.2.3，不带 v 前缀)'
         required: true
         type: string
+      publish:
+        description: '全部门禁通过后发布 draft Release'
+        required: true
+        default: false
+        type: boolean
+      prerelease:
+        description: '将最终 Release 标记为预发布'
+        required: true
+        default: false
+        type: boolean
 
 # 同一时间只允许一个构建流水线运行
 concurrency:
@@ -26,8 +36,32 @@ permissions:
   actions: read
 
 jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Quality gates
+        run: |
+          npm run typecheck
+          npm run lint:ci
+          npm run format:check
+          npm run verify:ci-core
+          npm run worker:assets:verify
+
   # ── 准备阶段：提取版本号与发布内容 ──
   prepare:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.meta.outputs.version }}
@@ -43,44 +77,31 @@ jobs:
       - name: Extract release metadata
         id: meta
         env:
-          EVENT_NAME: ${{ github.event_name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_BODY: ${{ github.event.release.body }}
-          RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
-          RELEASE_ID: ${{ github.event.release.id }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
+          INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [ "$EVENT_NAME" = "release" ]; then
-            # 从 Release 事件中获取版本号 (去掉 v 前缀)
-            VERSION="${RELEASE_TAG#v}"
-            echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "tag_name=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-            echo "checkout_ref=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=${RELEASE_PRERELEASE}" >> "$GITHUB_OUTPUT"
-            echo "release_id=${RELEASE_ID}" >> "$GITHUB_OUTPUT"
+          TAG="v${INPUT_VERSION}"
+          echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "checkout_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=${INPUT_PRERELEASE}" >> "$GITHUB_OUTPUT"
+          echo "release_body=$(printf '%s' '由发布工作流创建的 draft Release' | base64 -w 0)" >> "$GITHUB_OUTPUT"
 
-            # 获取 Release body 内容 (base64 编码避免多行问题)
-            BODY=$(printf '%s' "$RELEASE_BODY" | base64 -w 0)
-            echo "release_body=${BODY}" >> "$GITHUB_OUTPUT"
-          else
-            # workflow_dispatch 手动触发：通过 tag 查找已有 Release，找不到则创建
-            TAG="v${INPUT_VERSION}"
-            echo "version=${INPUT_VERSION}" >> "$GITHUB_OUTPUT"
-            echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
-            echo "checkout_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
-            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
-            echo "release_body=$(printf '%s' '手动触发构建' | base64 -w 0)" >> "$GITHUB_OUTPUT"
-
-            # 尝试查找已有 Release
-            if gh release view "$TAG" > /dev/null 2>&1; then
-              echo "✅ Found existing Release: ${TAG}"
-            else
-              # 创建 draft Release
-              gh release create "$TAG" --title "Release ${TAG}" --notes "手动触发构建" --draft
-              echo "✅ Created draft Release: ${TAG}"
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            is_draft=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
+            if [ "$is_draft" != "true" ]; then
+              echo "::error::Refusing to modify an already published Release: ${TAG}"
+              exit 1
             fi
+            echo "✅ Found existing draft Release: ${TAG}"
+          else
+            gh release create "$TAG" --title "Release ${TAG}" --notes "由发布工作流创建" --draft
+            echo "✅ Created draft Release: ${TAG}"
           fi
+
+          release_id=$(gh release view "$TAG" --json id --jq '.id')
+          echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
 
       - name: Print build info
         run: |
@@ -90,7 +111,8 @@ jobs:
 
   # ── 多平台构建 ──
   compile:
-    needs: prepare
+    if: github.event_name == 'workflow_dispatch'
+    needs: [prepare, quality]
     runs-on: ubuntu-latest
 
     steps:
@@ -128,8 +150,8 @@ jobs:
       - name: Sync version to package.json
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
-      - name: Build (electron-vite)
-        run: npx electron-vite build
+      - name: Build
+        run: npm run build
 
       - name: Upload compiled app
         uses: actions/upload-artifact@v6
@@ -208,12 +230,24 @@ jobs:
           name: ola-build-output
           path: out
 
+      - name: Require Windows signing credentials for published releases
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
+        run: |
+          if [ "$RELEASE_REQUIRED" = "true" ] && { [ -z "$WIN_CSC_LINK" ] || [ -z "$WIN_CSC_KEY_PASSWORD" ]; }; then
+            echo "::error::Release signing credentials are required: configure WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD"
+            exit 1
+          fi
+
       - name: Package (${{ matrix.platform }}-${{ matrix.artifact_arch }})
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.build_arch }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
-          # Windows 代码签名 (可选)
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
 
@@ -258,6 +292,29 @@ jobs:
             "
           fi
 
+      - name: Smoke install Windows release artifact
+        if: matrix.platform == 'win'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem release-assets -Filter '*.exe' | Select-Object -First 1
+          if ($null -eq $installer) {
+            throw 'Windows installer artifact was not found'
+          }
+
+          $installRoot = Join-Path $env:TEMP "ola-install-smoke-${{ matrix.artifact_arch }}"
+          Remove-Item -Recurse -Force $installRoot -ErrorAction SilentlyContinue
+          Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$installRoot" -Wait -NoNewWindow
+          if (-not (Test-Path (Join-Path $installRoot 'ola.exe'))) {
+            throw "Installed Ola executable was not found under $installRoot"
+          }
+
+      - name: Verify Windows release artifacts
+        if: matrix.platform == 'win'
+        shell: bash
+        env:
+          OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+        run: node scripts/verify-release-artifacts.mjs --platform win --assets release-assets --checksums release-assets/SHA256SUMS-win-${{ matrix.artifact_arch }}.txt --sbom release-assets/Ola-win-${{ matrix.artifact_arch }}.spdx.json
+
       - name: Upload Windows artifacts
         if: matrix.platform == 'win'
         uses: actions/upload-artifact@v6
@@ -266,6 +323,8 @@ jobs:
           path: |
             release-assets/*.exe
             release-assets/*.exe.blockmap
+            release-assets/SHA256SUMS-*.txt
+            release-assets/*.spdx.json
             dist/latest*.yml
           if-no-files-found: error
           retention-days: 30
@@ -334,6 +393,27 @@ jobs:
             " "$yml"
           done
 
+      - name: Smoke extract Linux release artifact
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          deb_file=$(find release-assets -maxdepth 1 -type f -name '*.deb' | head -n 1)
+          if [ -z "$deb_file" ]; then
+            echo "❌ Linux deb artifact was not found"
+            exit 1
+          fi
+
+          smoke_root=$(mktemp -d)
+          dpkg-deb --extract "$deb_file" "$smoke_root"
+          test -x "$smoke_root/opt/Ola/ola" || test -x "$smoke_root/opt/ola/ola"
+
+      - name: Verify Linux release artifacts
+        if: matrix.platform == 'linux'
+        shell: bash
+        env:
+          OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+        run: node scripts/verify-release-artifacts.mjs --platform linux --assets release-assets --checksums release-assets/SHA256SUMS-linux-${{ matrix.artifact_arch }}.txt --sbom release-assets/Ola-linux-${{ matrix.artifact_arch }}.spdx.json
+
       - name: Upload Linux artifacts
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v6
@@ -343,6 +423,8 @@ jobs:
             release-assets/*.AppImage
             release-assets/*.AppImage.zsync
             release-assets/*.deb
+            release-assets/SHA256SUMS-*.txt
+            release-assets/*.spdx.json
             dist/latest*.yml
           if-no-files-found: error
           retention-days: 30
@@ -481,6 +563,25 @@ jobs:
           echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
           echo "::warning::macOS code signing disabled: CSC_LINK is neither a certificate file, URL, nor base64 certificate data"
 
+      - name: Require macOS signing and notarization credentials for published releases
+        shell: bash
+        env:
+          RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+          MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID || '' }}
+        run: |
+          if [ "$RELEASE_REQUIRED" != "true" ]; then
+            exit 0
+          fi
+
+          if [ "$MAC_SIGNING_ENABLED" != "true" ] || [ -z "$CSC_KEY_PASSWORD" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::error::Release signing credentials are required: configure CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID"
+            exit 1
+          fi
+
       - name: Package ${{ matrix.platform }}-${{ matrix.artifact_arch }}
         shell: bash
         run: |
@@ -568,6 +669,28 @@ jobs:
             }
           " "$yml" "${{ matrix.artifact_arch }}"
 
+      - name: Smoke mount macOS release artifact
+        shell: bash
+        run: |
+          dmg_file=$(find release-assets -maxdepth 1 -type f -name '*.dmg' | head -n 1)
+          if [ -z "$dmg_file" ]; then
+            echo "❌ macOS dmg artifact was not found"
+            exit 1
+          fi
+
+          mount_dir=$(mktemp -d)
+          hdiutil attach "$dmg_file" -nobrowse -readonly -mountpoint "$mount_dir"
+          trap 'hdiutil detach "$mount_dir" -quiet || true; rm -rf "$mount_dir"' EXIT
+          app_path=$(find "$mount_dir" -maxdepth 1 -type d -name '*.app' | head -n 1)
+          test -n "$app_path"
+          test -f "$app_path/Contents/Info.plist"
+
+      - name: Verify macOS release artifacts
+        shell: bash
+        env:
+          OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+        run: node scripts/verify-release-artifacts.mjs --platform mac --assets release-assets --checksums release-assets/SHA256SUMS-mac-${{ matrix.artifact_arch }}.txt --smoke-dir dist --sbom release-assets/Ola-mac-${{ matrix.artifact_arch }}.spdx.json
+
       - name: Upload macOS artifacts
         uses: actions/upload-artifact@v6
         with:
@@ -575,6 +698,8 @@ jobs:
           path: |
             release-assets/*.dmg
             release-assets/*.zip
+            release-assets/SHA256SUMS-*.txt
+            release-assets/*.spdx.json
             release-assets/latest-mac-*.yml
           if-no-files-found: error
           retention-days: 30
@@ -659,10 +784,33 @@ jobs:
           File.write('latest-mac.yml', YAML.dump(merged))
           RUBY
 
-      - name: Upload merged macOS update metadata to Release
+      - name: Upload merged macOS update metadata to draft Release
         if: steps.mac_update_metadata.outputs.available == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
           GH_REPO: ${{ github.repository }}
         run: gh release upload "${TAG_NAME}" latest-mac.yml --clobber --repo "${GH_REPO}"
+
+  publish-release:
+    if: inputs.publish == true
+    needs: [prepare, build, build-macos, publish-macos-update-metadata]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish verified draft Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ needs.prepare.outputs.tag_name }}
+          IS_PRERELEASE: ${{ needs.prepare.outputs.is_prerelease }}
+        run: |
+          is_draft=$(gh release view "$TAG_NAME" --json isDraft --jq '.isDraft')
+          if [ "$is_draft" != "true" ]; then
+            echo "::error::Refusing to publish a Release that is not a draft: ${TAG_NAME}"
+            exit 1
+          fi
+
+          publish_args=("$TAG_NAME" --draft=false)
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            publish_args+=(--prerelease)
+          fi
+          gh release edit "${publish_args[@]}"

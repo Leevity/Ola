@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
-// Launch wrapper for `electron-vite dev` that ensures DOTNET_ROOT is set for the
+﻿// Launch wrapper for `electron-vite dev` that ensures DOTNET_ROOT is set for the
 // spawned Electron process tree. Setting the variable in predev.mjs is not
 // enough because npm only forwards env vars that were set before the script
 // ran; predev's process.env mutations never escape that node process.
