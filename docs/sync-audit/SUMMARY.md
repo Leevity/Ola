@@ -9,24 +9,24 @@
 ## File comparison
 
 | Classification | Count |
-| --- | ---: |
-| identical | 434 |
-| brandOnly | 26 |
-| changed | 314 |
-| onlyOla | 88 |
-| onlyReference | 391 |
+| -------------- | ----: |
+| identical      |   434 |
+| brandOnly      |    26 |
+| changed        |   314 |
+| onlyOla        |    88 |
+| onlyReference  |   391 |
 
 ## Reference-only capability candidates
 
-| Domain | Decision | Files | Rationale |
-| --- | --- | ---: | --- |
-| CodeGraph | adapt | 246 | Adopt as an opt-in Ola worker with verified assets and a staged rollout. |
-| Hooks | adapt | 9 | Adopt only after permission policy, with hash-bound trust and local execution defaults. |
-| SSH | adapt | 32 | Reuse modular state and management capabilities inside the Ola remote workbench. |
-| Agent | adapt | 20 | Review runtime, history, permissions, retries, drafts, and execution UX as vertical slices. |
-| Media | defer | 12 | Defer video generation until the Ola product roadmap explicitly requires it. |
-| Distribution | adapt | 3 | Adopt asset integrity and updater improvements while preserving Ola packaging and channels. |
-| Other | defer | 69 | Requires an explicit capability review before adoption. |
+| Domain       | Decision | Files | Rationale                                                                                   |
+| ------------ | -------- | ----: | ------------------------------------------------------------------------------------------- |
+| CodeGraph    | adapt    |   246 | Adopt as an opt-in Ola worker with verified assets and a staged rollout.                    |
+| Hooks        | adapt    |     9 | Adopt only after permission policy, with hash-bound trust and local execution defaults.     |
+| SSH          | adapt    |    32 | Reuse modular state and management capabilities inside the Ola remote workbench.            |
+| Agent        | adapt    |    20 | Review runtime, history, permissions, retries, drafts, and execution UX as vertical slices. |
+| Media        | defer    |    12 | Defer video generation until the Ola product roadmap explicitly requires it.                |
+| Distribution | adapt    |     3 | Adopt asset integrity and updater improvements while preserving Ola packaging and channels. |
+| Other        | defer    |    69 | Requires an explicit capability review before adoption.                                     |
 
 The JSON baseline is the machine-readable gate. Candidate decisions are review metadata, not
 permission to copy reference files.

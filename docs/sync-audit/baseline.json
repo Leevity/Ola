@@ -14,14 +14,7 @@
       "pathHint": "../OpenCowork"
     }
   },
-  "scope": [
-    "src/main",
-    "src/preload",
-    "src/renderer/src",
-    "src/shared",
-    "sidecars",
-    "scripts"
-  ],
+  "scope": ["src/main", "src/preload", "src/renderer/src", "src/shared", "sidecars", "scripts"],
   "summary": {
     "files": {
       "identical": 434,
@@ -7189,9 +7182,7 @@
         "system",
         "websearch"
       ],
-      "onlyOla": [
-        "credentials"
-      ],
+      "onlyOla": ["credentials"],
       "onlyReference": [
         "aiCodingClaudeCode",
         "aiCodingCodex",
@@ -7223,14 +7214,8 @@
         "UserContent",
         "Web"
       ],
-      "onlyOla": [
-        "Ssh"
-      ],
-      "onlyReference": [
-        "Media",
-        "Seedance",
-        "XaiVideo"
-      ]
+      "onlyOla": ["Ssh"],
+      "onlyReference": ["Media", "Seedance", "XaiVideo"]
     }
   }
 }
