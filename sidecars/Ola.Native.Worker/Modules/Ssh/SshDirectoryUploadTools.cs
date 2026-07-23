@@ -66,7 +66,7 @@ internal static class SshDirectoryUploadTools
                 uploadTask.ThrowIfCanceled();
                 var result = await SshOpenSsh.ExecuteFromFileAsync(
                     parameters,
-                    $"cat > {SshOpenSsh.ShellPathExpr(file.RemotePath)}",
+                    SshOpenSsh.BuildAtomicWriteCommand(file.RemotePath),
                     file.LocalPath,
                     timeoutMs,
                     async (current, total) =>

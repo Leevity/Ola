@@ -5,18 +5,22 @@ internal sealed class AgentRuntimeModule : IWorkerModule
     public void Register(WorkerModuleContext context)
     {
         AgentRuntimeDebugPayload.CleanupTempFiles();
-        context.Register("initialize", AgentRuntimeTools.Initialize);
-        context.Register("ping", AgentRuntimeTools.Ping);
-        context.Register("shutdown", AgentRuntimeTools.Shutdown);
-        context.Register("capabilities/check", AgentRuntimeTools.CheckCapability);
-        context.Register("agent/run", AgentRuntimeTools.RunAsync);
-        context.Register("agent/cancel", AgentRuntimeTools.Cancel);
-        context.Register("agent/request-stop", AgentRuntimeTools.RequestStop);
-        context.Register("agent/append-messages", AgentRuntimeTools.AppendMessages);
-        context.Register("agent/compress-context", AgentRuntimeContextCompression.CompressAsync);
-        context.Register("agent/debug-body-read", AgentRuntimeDebugPayload.ReadBody);
-        context.Register("agent/reverse-response", AgentRuntimeTools.ReverseResponse);
-        context.Register("agent/session-visibility", AgentRuntimeTools.SessionVisibility);
+        context.Register(AgentRuntimeContract.InitializeRoute, AgentRuntimeTools.Initialize);
+        context.Register(AgentRuntimeContract.PingRoute, AgentRuntimeTools.Ping);
+        context.Register(AgentRuntimeContract.ShutdownRoute, AgentRuntimeTools.Shutdown);
+        context.Register(AgentRuntimeContract.CapabilitiesCheckRoute, AgentRuntimeTools.CheckCapability);
+        context.Register(AgentRuntimeContract.RunRoute, AgentRuntimeTools.RunAsync);
+        context.Register(AgentRuntimeContract.ActiveRunsRoute, AgentRuntimeTools.ActiveRunList);
+        context.Register(AgentRuntimeContract.RunStatusRoute, AgentRuntimeTools.RunStatus);
+        context.Register(AgentRuntimeContract.RunSnapshotRoute, AgentRuntimeTools.RunSnapshot);
+        context.Register(AgentRuntimeContract.CancelRoute, AgentRuntimeTools.Cancel);
+        context.Register(AgentRuntimeContract.RequestStopRoute, AgentRuntimeTools.RequestStop);
+        context.Register(AgentRuntimeContract.AppendMessagesRoute, AgentRuntimeTools.AppendMessages);
+        context.Register(AgentRuntimeContract.CompressContextRoute, AgentRuntimeContextCompression.CompressAsync);
+        context.Register(AgentRuntimeContract.DebugBodyReadRoute, AgentRuntimeDebugPayload.ReadBody);
+        context.Register(AgentRuntimeContract.ReverseResponseRoute, AgentRuntimeTools.ReverseResponse);
+        context.Register(AgentRuntimeContract.ReverseCancelRoute, AgentRuntimeTools.ReverseCancel);
+        context.Register(AgentRuntimeContract.SessionVisibilityRoute, AgentRuntimeTools.SessionVisibility);
         context.Register("team-runtime/create", AgentRuntimeTeamRuntimeApi.Create);
         context.Register("team-runtime/delete", AgentRuntimeTeamRuntimeApi.Delete);
         context.Register("team-runtime/message-append", AgentRuntimeTeamRuntimeApi.AppendMessage);

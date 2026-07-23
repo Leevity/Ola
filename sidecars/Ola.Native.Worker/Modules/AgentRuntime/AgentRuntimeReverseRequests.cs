@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using System.Text.Json;
 
 internal static class AgentRuntimeReverseRequests
@@ -41,6 +41,22 @@ internal static class AgentRuntimeReverseRequests
         {
             Pending.TryRemove(id, out _);
         }
+    }
+
+    public static WorkerResponse Cancel(JsonElement parameters)
+    {
+        var id = ReadId(parameters);
+        if (string.IsNullOrEmpty(id) || !Pending.TryRemove(id, out var pending))
+        {
+            return WorkerResponse.Json(
+                new AgentRuntimeReverseResponseResult(false),
+                WorkerJsonContext.Default.AgentRuntimeReverseResponseResult);
+        }
+
+        pending.TrySetCanceled();
+        return WorkerResponse.Json(
+            new AgentRuntimeReverseResponseResult(true),
+            WorkerJsonContext.Default.AgentRuntimeReverseResponseResult);
     }
 
     public static WorkerResponse Complete(JsonElement parameters)

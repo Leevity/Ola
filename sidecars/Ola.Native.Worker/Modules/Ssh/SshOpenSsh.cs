@@ -428,10 +428,13 @@ internal static class SshOpenSsh
                 ? $"tail -c +{resumeOffset + 1} -- {ShellPathExpr(sourcePath)}"
                 : $"cat -- {ShellPathExpr(sourcePath)}",
             redirectStdin: false);
+        var targetCommand = resumeOffset > 0
+            ? $"mkdir -p -- {ShellPathExpr(PosixDirname(targetPath))} && " +
+              $"cat >> {ShellPathExpr(targetPath)}"
+            : BuildAtomicWriteCommand(targetPath);
         using var targetProcess = CreateProcess(
             targetLaunch,
-            $"mkdir -p -- {ShellPathExpr(PosixDirname(targetPath))} && " +
-            $"cat {(resumeOffset > 0 ? ">>" : ">")} {ShellPathExpr(targetPath)}",
+            targetCommand,
             redirectStdin: true);
 
         var spawnStartedAt = Stopwatch.GetTimestamp();
@@ -527,6 +530,50 @@ internal static class SshOpenSsh
             ElapsedMs(startedAt),
             spawnMs,
             bytes);
+    }
+
+    public static string BuildAtomicWriteCommand(string remotePath)
+    {
+        var script = """
+            import os, stat, sys, tempfile
+            target = os.path.expanduser(sys.argv[1])
+            directory = os.path.dirname(target) or "."
+            os.makedirs(directory, exist_ok=True)
+            try:
+                mode = stat.S_IMODE(os.stat(target).st_mode)
+            except FileNotFoundError:
+                mode = None
+            descriptor, temporary = tempfile.mkstemp(
+                prefix=f".{os.path.basename(target)}.ola-",
+                suffix=".tmp",
+                dir=directory)
+            try:
+                with os.fdopen(descriptor, "wb") as output:
+                    while True:
+                        chunk = sys.stdin.buffer.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        output.write(chunk)
+                    output.flush()
+                    os.fsync(output.fileno())
+                if mode is not None:
+                    os.chmod(temporary, mode)
+                os.replace(temporary, target)
+                try:
+                    directory_descriptor = os.open(directory, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_descriptor)
+                    finally:
+                        os.close(directory_descriptor)
+                except OSError:
+                    pass
+            finally:
+                try:
+                    os.unlink(temporary)
+                except FileNotFoundError:
+                    pass
+            """;
+        return $"python3 -c {ShellEscape(script)} {ShellPathExpr(remotePath)}";
     }
 
     public static string ShellEscape(string value)
