@@ -87,24 +87,24 @@ flowchart LR
 
 ## 数据边界 / Data boundaries
 
-| 数据 | 权威所有者 | 说明 |
-| --- | --- | --- |
-| SQLite schema and rows | Native Worker | Main 中的 DB 文件是 typed bridge |
-| Agent run lifecycle | Native Worker + Main supervisor | Renderer 只展示派生状态 |
-| UI/session presentation | Renderer | Zustand 与会话路由负责前台/后台切换 |
-| Secrets | Electron Main | Renderer 只接收脱敏 metadata |
-| Cross-process DTOs | `src/shared` | TS/C# 镜像需要契约校验 |
+| 数据                    | 权威所有者                      | 说明                                |
+| ----------------------- | ------------------------------- | ----------------------------------- |
+| SQLite schema and rows  | Native Worker                   | Main 中的 DB 文件是 typed bridge    |
+| Agent run lifecycle     | Native Worker + Main supervisor | Renderer 只展示派生状态             |
+| UI/session presentation | Renderer                        | Zustand 与会话路由负责前台/后台切换 |
+| Secrets                 | Electron Main                   | Renderer 只接收脱敏 metadata        |
+| Cross-process DTOs      | `src/shared`                    | TS/C# 镜像需要契约校验              |
 
 ## 关键实现 / Key implementation
 
-| Component | Responsibility | Source |
-| --- | --- | --- |
-| Native worker supervisor | spawn、heartbeat、restart、MessagePack framing | `src/main/lib/native-worker.ts` |
-| Agent bridge | handshake、active runs、reverse requests | `src/main/ipc/native-agent-runtime.ts` |
-| Sidecar IPC | Renderer routing、permissions、stream forwarding | `src/main/ipc/sidecar-manager.ts` |
-| Agent Runtime | providers、tools、compression、stream | `sidecars/Ola.Native.Worker/Modules/AgentRuntime/` |
-| SQLite module | schema migration and data routes | `sidecars/Ola.Native.Worker/Modules/Db/` |
-| Tool registry | Renderer-owned tool definitions | `src/renderer/src/lib/agent/tool-registry.ts` |
+| Component                | Responsibility                                   | Source                                             |
+| ------------------------ | ------------------------------------------------ | -------------------------------------------------- |
+| Native worker supervisor | spawn、heartbeat、restart、MessagePack framing   | `src/main/lib/native-worker.ts`                    |
+| Agent bridge             | handshake、active runs、reverse requests         | `src/main/ipc/native-agent-runtime.ts`             |
+| Sidecar IPC              | Renderer routing、permissions、stream forwarding | `src/main/ipc/sidecar-manager.ts`                  |
+| Agent Runtime            | providers、tools、compression、stream            | `sidecars/Ola.Native.Worker/Modules/AgentRuntime/` |
+| SQLite module            | schema migration and data routes                 | `sidecars/Ola.Native.Worker/Modules/Db/`           |
+| Tool registry            | Renderer-owned tool definitions                  | `src/renderer/src/lib/agent/tool-registry.ts`      |
 
 ## 设计约束 / Invariants
 
