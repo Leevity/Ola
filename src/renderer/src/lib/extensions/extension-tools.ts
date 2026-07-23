@@ -81,7 +81,8 @@ function createExtensionToolHandler(
 
 export function unregisterExtensionTools(): void {
   for (const name of registeredExtensionToolNames) {
-    toolRegistry.unregister(name)
+    const extensionId = name.split('__')[1]
+    if (extensionId) toolRegistry.unregister(name, `extension:${extensionId}`)
   }
   registeredExtensionToolNames = []
 }
@@ -100,7 +101,11 @@ export async function refreshExtensionTools(): Promise<void> {
       if (!extension.enabled || !activeExtensionIds.has(extension.id)) continue
       for (const tool of extension.manifest.tools) {
         const handler = createExtensionToolHandler(extension, tool)
-        toolRegistry.register(handler)
+        toolRegistry.register(handler, {
+          namespace: 'extension',
+          owner: `extension:${extension.id}`,
+          version: extension.manifest.version
+        })
         names.push(handler.definition.name)
       }
     }

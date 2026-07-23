@@ -478,6 +478,8 @@ function RunHistoryItem({ run }: { run: CronRunEntry }): React.JSX.Element {
           <StopCircle className="size-3 shrink-0 text-amber-400 mt-px" />
         ) : run.status === 'running' ? (
           <Loader2 className="size-3 shrink-0 text-blue-400 animate-spin mt-px" />
+        ) : run.status === 'skipped' ? (
+          <Clock className="size-3 shrink-0 text-muted-foreground mt-px" />
         ) : (
           <CheckCircle2 className="size-3 shrink-0 text-green-500 mt-px" />
         )}
@@ -859,6 +861,11 @@ function HistoryRunCard({
       icon: <Loader2 className="size-3.5 text-blue-400 animate-spin" />,
       label: 'Running',
       color: 'text-blue-400'
+    },
+    skipped: {
+      icon: <Clock className="size-3.5 text-muted-foreground" />,
+      label: 'Skipped',
+      color: 'text-muted-foreground'
     }
   }
   const cfg = statusConfig[run.status] ?? statusConfig.running

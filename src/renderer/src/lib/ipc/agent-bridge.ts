@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ProviderConfig,
   StreamEvent,
   ToolDefinition,
@@ -122,6 +122,27 @@ class AgentBridgeClient {
       toMessagePackChannel('agent:run'),
       params
     )
+  }
+
+  async getAgentRunSnapshot(runId: string): Promise<{
+    active: boolean
+    run: { runId: string; sessionId: string; startedAt: number; queuedMessageCount: number } | null
+    lastSeq: number
+    generation?: number
+    reason?: 'not_owner'
+  }> {
+    return (await ipcClient.invoke('agent:run-snapshot', { runId })) as {
+      active: boolean
+      run: {
+        runId: string
+        sessionId: string
+        startedAt: number
+        queuedMessageCount: number
+      } | null
+      lastSeq: number
+      generation?: number
+      reason?: 'not_owner'
+    }
   }
 
   async cancelAgent(

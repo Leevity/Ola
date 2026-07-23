@@ -13,9 +13,8 @@ import initIronRdp, {
 } from 'ironrdp-wasm'
 import ironRdpWasmUrl from '../../../../../node_modules/ironrdp-wasm/pkg/rdp_client_bg.wasm?url'
 import { useTranslation } from 'react-i18next'
-import { ipcClient } from '@renderer/lib/ipc/ipc-client'
-import { IPC } from '@renderer/lib/ipc/channels'
 import type { RemoteSession, RemoteViewerCredential } from '@renderer/lib/remote/remote-types'
+import { useRemoteStore } from '@renderer/stores/remote-store'
 
 const SCANCODES: Record<string, number> = {
   Escape: 0x01,
@@ -219,6 +218,7 @@ export function IronRdpViewer({
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const sessionRef = useRef<Session | null>(null)
+  const credentialPromiseRef = useRef<Promise<RemoteViewerCredential | null> | null>(null)
   const resolutionModeRef = useRef('adaptive')
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>(
     'connecting'
@@ -256,9 +256,10 @@ export function IronRdpViewer({
     void (async () => {
       currentStage = 'credential'
       setStage('credential')
-      const credential = (await ipcClient.invoke(IPC.REMOTE_SESSION_CREDENTIAL, {
-        sessionId: remoteSession.id
-      })) as RemoteViewerCredential | null
+      credentialPromiseRef.current ??= useRemoteStore
+        .getState()
+        .claimViewerCredential(remoteSession.id)
+      const credential = await credentialPromiseRef.current
       if (!credential?.username || !credential.password) {
         throw new Error('RDP username and password are required')
       }

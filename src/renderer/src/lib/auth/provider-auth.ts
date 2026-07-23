@@ -1,4 +1,4 @@
-import { nanoid } from 'nanoid'
+﻿import { nanoid } from 'nanoid'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import type {
   AccountRateLimit,
@@ -631,7 +631,6 @@ export async function importOauthAccountsFromJson(
   for (let i = 0; i < parsed.length; i += 1) {
     try {
       const { email, token, label } = parseImportRecord(parsed[i])
-      // eslint-disable-next-line no-await-in-loop
       const finalToken = await finalizeOAuthToken(provider, token)
       const account: ProviderOAuthAccount = {
         id: nanoid(),

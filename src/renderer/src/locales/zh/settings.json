@@ -1,4 +1,4 @@
-{
+﻿{
   "hooks": {
     "title": "自动化 Hook",
     "subtitle": "审查、信任并检查本地生命周期脚本",
@@ -841,7 +841,26 @@
       "callers": "调用方",
       "callees": "被调用方",
       "localGraph": "局部关系图",
-      "relationCount": "{{count}} 条关系"
+      "relationCount": "{{count}} 条关系",
+      "sync": "同步变更",
+      "syncing": "正在同步…",
+      "indexedProjects": "已建立索引的项目",
+      "noIndexedProjects": "尚未建立本地索引。",
+      "projectState": "状态：{{state}}",
+      "lastIndexed": "上次索引：{{value}}",
+      "indexSize": "索引大小：{{size}}",
+      "removeIndex": "移除索引",
+      "removeIndexConfirm": "移除 {{project}} 的本地 CodeGraph 索引？此操作不会修改项目文件。",
+      "grammarReady": "Grammar 资产可用（{{available}}/{{expected}}）",
+      "grammarMissing": "缺少 Grammar 资产（{{missing}}/{{expected}}）",
+      "workerGeneration": "Worker 代次 {{generation}}",
+      "syncFailed": "无法同步代码索引",
+      "indexedFiles": "已索引文件",
+      "noIndexedFiles": "没有已索引的源码文件。",
+      "analytics": "图谱健康度",
+      "circularDependencies": "循环依赖：{{count}}",
+      "deadCode": "可能未使用的符号：{{count}}",
+      "fileDetails": "{{language}} · {{symbols}} 个符号 · {{size}}"
     },
     "productDesign": {
       "workflowTitle": "工作流插件",

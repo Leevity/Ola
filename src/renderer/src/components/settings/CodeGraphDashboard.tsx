@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { RefreshCw, Search } from 'lucide-react'
+import { RefreshCw, Search, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { agentBridge } from '@renderer/lib/ipc/agent-bridge'
@@ -25,6 +25,51 @@ type Stats = {
   filesByLanguage: Array<{ key: string; count: number }>
 }
 type SearchResult = { success: boolean; text: string; isError: boolean }
+type FilesTree = {
+  success: boolean
+  files: Array<{ path: string; language: string; nodeCount: number; size: number }>
+}
+type Analytics = {
+  success: boolean
+  circularDependencies: Array<{ files: string[] }>
+  circularTotal: number
+  deadCode: Array<{ id: string; name: string; kind: string; filePath: string; startLine: number }>
+  deadCodeTotal: number
+}
+type ProjectList = {
+  success: boolean
+  projects: Array<{
+    root: string
+    hash: string
+    state: string
+    files: number
+    nodes: number
+    edges: number
+    dbSizeBytes: number
+    lastIndexedAt?: number | null
+  }>
+  error?: string | null
+}
+type WorkerStatus = {
+  running: boolean
+  workerReady: boolean
+  workerPath?: string | null
+  grammarsDir?: string | null
+  grammarStatus?: { expected: number; available: number; missing: string[] }
+  generation?: number
+}
+function formatBytes(value: number): string {
+  if (value < 1024) return `${value} B`
+  const units = ['KB', 'MB', 'GB']
+  let size = value / 1024
+  let unitIndex = 0
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024
+    unitIndex += 1
+  }
+  return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`
+}
+
 type Subgraph = {
   success: boolean
   nodes: Array<{ id: string; name?: string; kind?: string; filePath?: string }>
@@ -39,14 +84,16 @@ export function CodeGraphDashboard(): React.JSX.Element {
   )
   const [status, setStatus] = useState<Status | null>(null)
   const [stats, setStats] = useState<Stats | null>(null)
+  const [files, setFiles] = useState<FilesTree['files']>([])
+  const [analytics, setAnalytics] = useState<Analytics | null>(null)
   const [query, setQuery] = useState('')
   const [searchResult, setSearchResult] = useState('')
   const [subgraph, setSubgraph] = useState<Subgraph | null>(null)
   const [busy, setBusy] = useState(false)
-  const [workerStatus, setWorkerStatus] = useState<{
-    running: boolean
-    workerReady: boolean
-  } | null>(null)
+  const [workerStatus, setWorkerStatus] = useState<WorkerStatus | null>(null)
+  const [projects, setProjects] = useState<ProjectList['projects']>([])
+  const [syncingProject, setSyncingProject] = useState<string | null>(null)
+  const [removingProject, setRemovingProject] = useState<string | null>(null)
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [indexProgress, setIndexProgress] = useState<{
     phase?: string
@@ -58,19 +105,22 @@ export function CodeGraphDashboard(): React.JSX.Element {
     if (!projectPath) return
     const params = { workingFolder: projectPath }
     setRefreshError(null)
-    const nextWorkerStatus = (await ipcClient.invoke(IPC.CODEGRAPH_STATUS)) as {
-      running: boolean
-      workerReady: boolean
-    }
+    const nextWorkerStatus = (await ipcClient.invoke(IPC.CODEGRAPH_STATUS)) as WorkerStatus
     setWorkerStatus(nextWorkerStatus)
     if (!nextWorkerStatus.workerReady) return
     try {
-      const [nextStatus, nextStats] = await Promise.all([
+      const [nextStatus, nextStats, nextProjects, nextFiles, nextAnalytics] = await Promise.all([
         agentBridge.requestCodeGraph<Status>('codegraph/index-status', params, 10_000),
-        agentBridge.requestCodeGraph<Stats>('codegraph/stats', params, 10_000)
+        agentBridge.requestCodeGraph<Stats>('codegraph/stats', params, 10_000),
+        agentBridge.requestCodeGraph<ProjectList>('codegraph/list-projects', {}, 10_000),
+        agentBridge.requestCodeGraph<FilesTree>('codegraph/files-tree', params, 10_000),
+        agentBridge.requestCodeGraph<Analytics>('codegraph/analytics', params, 10_000)
       ])
       setStatus(nextStatus)
       setStats(nextStats)
+      setProjects(nextProjects.success ? nextProjects.projects : [])
+      setFiles(nextFiles.success ? nextFiles.files : [])
+      setAnalytics(nextAnalytics.success ? nextAnalytics : null)
       setWorkerStatus({ ...nextWorkerStatus, running: true })
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : String(error))
@@ -103,6 +153,37 @@ export function CodeGraphDashboard(): React.JSX.Element {
       await refresh()
     } finally {
       setBusy(false)
+    }
+  }
+
+  const syncProject = async (workingFolder: string): Promise<void> => {
+    setSyncingProject(workingFolder)
+    setRefreshError(null)
+    try {
+      await agentBridge.requestCodeGraph('codegraph/sync', { workingFolder }, 5 * 60_000)
+      await refresh()
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : t('plugin.codegraph.syncFailed'))
+    } finally {
+      setSyncingProject(null)
+    }
+  }
+
+  const removeProjectIndex = async (project: ProjectList['projects'][number]): Promise<void> => {
+    const label = project.root || project.hash
+    if (!window.confirm(t('plugin.codegraph.removeIndexConfirm', { project: label }))) return
+
+    setRemovingProject(project.hash)
+    setRefreshError(null)
+    try {
+      await agentBridge.requestCodeGraph('codegraph/remove-project', {
+        ...(project.root ? { workingFolder: project.root } : { hash: project.hash })
+      })
+      await refresh()
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRemovingProject(null)
     }
   }
 
@@ -160,6 +241,26 @@ export function CodeGraphDashboard(): React.JSX.Element {
                   : t('plugin.codegraph.workerReady')
                 : t('plugin.codegraph.workerMissing')}
           </p>
+          {workerStatus?.workerReady ? (
+            <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+              <p>
+                {workerStatus.grammarStatus?.missing.length === 0
+                  ? t('plugin.codegraph.grammarReady', {
+                      available: workerStatus.grammarStatus.available,
+                      expected: workerStatus.grammarStatus.expected
+                    })
+                  : t('plugin.codegraph.grammarMissing', {
+                      missing: workerStatus.grammarStatus?.missing.length ?? 0,
+                      expected: workerStatus.grammarStatus?.expected ?? 0
+                    })}
+              </p>
+              {typeof workerStatus.generation === 'number' ? (
+                <p>
+                  {t('plugin.codegraph.workerGeneration', { generation: workerStatus.generation })}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           {refreshError ? <p className="mt-1 text-xs text-destructive">{refreshError}</p> : null}
           {indexProgress ? (
             <p className="mt-1 text-xs text-muted-foreground">
@@ -172,6 +273,16 @@ export function CodeGraphDashboard(): React.JSX.Element {
           <Button variant="outline" size="sm" onClick={() => void refresh()}>
             <RefreshCw className="size-3.5" />
             {t('plugin.codegraph.refresh')}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!status?.indexed || syncingProject === projectPath}
+            onClick={() => void syncProject(projectPath)}
+          >
+            {syncingProject === projectPath
+              ? t('plugin.codegraph.syncing')
+              : t('plugin.codegraph.sync')}
           </Button>
           <Button size="sm" disabled={busy} onClick={() => void indexProject()}>
             {busy ? t('plugin.codegraph.indexing') : t('plugin.codegraph.index')}
@@ -195,6 +306,118 @@ export function CodeGraphDashboard(): React.JSX.Element {
           </span>
         ))}
       </div>
+
+      <div className="space-y-2 rounded-lg border p-3">
+        <p className="text-xs font-medium">{t('plugin.codegraph.indexedProjects')}</p>
+        {projects.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t('plugin.codegraph.noIndexedProjects')}</p>
+        ) : (
+          <div className="space-y-2">
+            {projects.map((project) => (
+              <div key={project.hash} className="rounded-md bg-muted/30 p-2.5">
+                <p className="truncate text-xs font-medium">{project.root || project.hash}</p>
+                <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                  <p>{t('plugin.codegraph.projectState', { state: project.state })}</p>
+                  <p>
+                    {project.files} · {project.nodes} · {project.edges}
+                  </p>
+                  <p>
+                    {t('plugin.codegraph.indexSize', { size: formatBytes(project.dbSizeBytes) })}
+                  </p>
+                  {project.lastIndexedAt ? (
+                    <p>
+                      {t('plugin.codegraph.lastIndexed', {
+                        value: new Intl.DateTimeFormat(undefined, {
+                          dateStyle: 'medium',
+                          timeStyle: 'short'
+                        }).format(new Date(project.lastIndexedAt))
+                      })}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!project.root || syncingProject === project.root}
+                    onClick={() => void syncProject(project.root)}
+                  >
+                    {syncingProject === project.root
+                      ? t('plugin.codegraph.syncing')
+                      : t('plugin.codegraph.sync')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={removingProject === project.hash}
+                    onClick={() => void removeProjectIndex(project)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    {t('plugin.codegraph.removeIndex')}
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2 rounded-lg border p-3">
+        <p className="text-xs font-medium">{t('plugin.codegraph.indexedFiles')}</p>
+        {files.length === 0 ? (
+          <p className="text-xs text-muted-foreground">{t('plugin.codegraph.noIndexedFiles')}</p>
+        ) : (
+          <div className="max-h-48 space-y-1 overflow-auto">
+            {files.slice(0, 12).map((file) => (
+              <button
+                key={file.path}
+                type="button"
+                className="block w-full rounded px-1.5 py-1 text-left text-xs hover:bg-muted"
+                onClick={() => openSourcePath(file.path)}
+              >
+                <span className="block truncate font-medium">{file.path}</span>
+                <span className="text-[11px] text-muted-foreground">
+                  {t('plugin.codegraph.fileDetails', {
+                    language: file.language,
+                    symbols: file.nodeCount,
+                    size: formatBytes(file.size)
+                  })}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {analytics ? (
+        <div className="space-y-2 rounded-lg border p-3">
+          <p className="text-xs font-medium">{t('plugin.codegraph.analytics')}</p>
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+            <span>
+              {t('plugin.codegraph.circularDependencies', { count: analytics.circularTotal })}
+            </span>
+            <span>{t('plugin.codegraph.deadCode', { count: analytics.deadCodeTotal })}</span>
+          </div>
+          {analytics.circularDependencies.slice(0, 3).map((cycle, index) => (
+            <p
+              key={`${index}-${cycle.files.join('/')}`}
+              className="truncate text-[11px] text-muted-foreground"
+            >
+              {cycle.files.join(' → ')}
+            </p>
+          ))}
+          {analytics.deadCode.slice(0, 6).map((symbol) => (
+            <button
+              key={symbol.id}
+              type="button"
+              className="block text-left text-[11px] text-muted-foreground hover:underline"
+              onClick={() => openSourcePath(symbol.filePath)}
+            >
+              {symbol.name} · {symbol.kind} · {symbol.filePath}:{symbol.startLine}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="flex gap-2">
         <Input

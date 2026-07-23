@@ -496,7 +496,7 @@ export function registerPluginTools(): void {
   if (_registered) return
   _registered = true
   for (const tool of ALL_PLUGIN_TOOLS) {
-    toolRegistry.register(tool)
+    toolRegistry.register(tool, { namespace: 'channel', owner: 'channel:plugin-tools' })
   }
 }
 
@@ -504,7 +504,7 @@ export function unregisterPluginTools(): void {
   if (!_registered) return
   _registered = false
   for (const tool of ALL_PLUGIN_TOOLS) {
-    toolRegistry.unregister(tool.definition.name)
+    toolRegistry.unregister(tool.definition.name, 'channel:plugin-tools')
   }
 }
 

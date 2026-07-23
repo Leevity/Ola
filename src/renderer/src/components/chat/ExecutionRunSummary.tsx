@@ -19,10 +19,10 @@ function durationLabel(durationMs: number | undefined): string | null {
   return `${Math.floor(durationMs / 60_000)}m ${Math.round((durationMs % 60_000) / 1000)}s`
 }
 
-function completedSummary(
+function categorySummaries(
   run: ToolExecutionRun,
   t: (key: string, options?: Record<string, unknown>) => string
-): string {
+): string[] {
   const categories = run.categoryCounts
   const candidates: Array<[number, string]> = [
     [categories['file-change'] ?? 0, 'executionRun.fileChanges'],
@@ -32,11 +32,22 @@ function completedSummary(
     [(categories.browser ?? 0) + (categories.desktop ?? 0), 'executionRun.browserActions'],
     [categories.orchestration ?? 0, 'executionRun.subTasks']
   ]
-  const [count, key] = candidates.reduce(
-    (best, candidate) => (candidate[0] > best[0] ? candidate : best),
-    [0, 'executionRun.completedSteps']
-  )
-  return t(key, { count: count || run.visibleItems.length })
+  const summaries = candidates
+    .filter(([count]) => count > 0)
+    .sort(([leftCount], [rightCount]) => rightCount - leftCount)
+    .slice(0, 3)
+    .map(([count, key]) => t(key, { count }))
+
+  return summaries.length > 0
+    ? summaries
+    : [t('executionRun.completedSteps', { count: run.visibleItems.length })]
+}
+
+function completedSummary(
+  run: ToolExecutionRun,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  return categorySummaries(run, t)[0]
 }
 
 export function ExecutionRunSummary({
@@ -66,6 +77,7 @@ export function ExecutionRunSummary({
           status: statusLabel,
           duration: duration ? ` · ${duration}` : ''
         })
+  const categoryTags = categorySummaries(run, t).slice(1)
 
   return (
     <section className="my-1.5" aria-label={t('executionRun.title')}>
@@ -94,6 +106,30 @@ export function ExecutionRunSummary({
         </span>
         <span className="shrink-0 font-medium text-foreground/85">{t('executionRun.title')}</span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{summary}</span>
+        {run.status === 'failed' || run.status === 'pending-approval' ? (
+          <span
+            className={cn(
+              'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium',
+              run.status === 'failed'
+                ? 'bg-destructive/10 text-destructive'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+            )}
+          >
+            {statusLabel}
+          </span>
+        ) : null}
+        {categoryTags.length > 0 ? (
+          <span className="hidden shrink-0 items-center gap-1 lg:flex" aria-label={summary}>
+            {categoryTags.map((tag) => (
+              <span
+                key={tag}
+                className="max-w-36 truncate rounded-full bg-background/70 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              >
+                {tag}
+              </span>
+            ))}
+          </span>
+        ) : null}
         <span className="sr-only">
           {expanded ? t('executionRun.collapseDetails') : t('executionRun.expandDetails')}
         </span>

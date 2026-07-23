@@ -579,7 +579,7 @@ function App(): React.JSX.Element {
       const d = data as {
         jobId: string
         runId: string
-        status: 'success' | 'error' | 'aborted'
+        status: 'success' | 'error' | 'aborted' | 'skipped'
         toolCallCount: number
         jobName?: string
         sessionId?: string | null
@@ -635,7 +635,9 @@ function App(): React.JSX.Element {
               ? t('app.cron.status.success')
               : event.status === 'error'
                 ? t('app.cron.status.error')
-                : t('app.cron.status.stopped')
+                : event.status === 'skipped'
+                  ? t('app.cron.status.skipped', { defaultValue: 'Skipped' })
+                  : t('app.cron.status.stopped')
           const toolCallLabel = t('app.cron.toolCallCount', { count: event.toolCallCount ?? 0 })
           const content = [
             `<system-reminder>`,

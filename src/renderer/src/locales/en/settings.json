@@ -1,4 +1,4 @@
-{
+﻿{
   "hooks": {
     "title": "Automation hooks",
     "subtitle": "Review, trust, and inspect local lifecycle scripts",
@@ -841,7 +841,26 @@
       "callers": "Callers",
       "callees": "Callees",
       "localGraph": "Local relation graph",
-      "relationCount": "{{count}} relations"
+      "relationCount": "{{count}} relations",
+      "sync": "Sync changes",
+      "syncing": "Syncing…",
+      "indexedProjects": "Indexed projects",
+      "noIndexedProjects": "No local indexes yet.",
+      "projectState": "State: {{state}}",
+      "lastIndexed": "Last indexed: {{value}}",
+      "indexSize": "Index size: {{size}}",
+      "removeIndex": "Remove index",
+      "removeIndexConfirm": "Remove the local CodeGraph index for {{project}}? This does not modify project files.",
+      "grammarReady": "Grammar assets available ({{available}}/{{expected}})",
+      "grammarMissing": "Grammar assets missing ({{missing}}/{{expected}})",
+      "workerGeneration": "Worker generation {{generation}}",
+      "syncFailed": "Unable to sync code index",
+      "indexedFiles": "Indexed files",
+      "noIndexedFiles": "No indexed source files.",
+      "analytics": "Graph health",
+      "circularDependencies": "Circular dependencies: {{count}}",
+      "deadCode": "Potentially unused symbols: {{count}}",
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
     },
     "productDesign": {
       "workflowTitle": "Workflow plugin",

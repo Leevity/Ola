@@ -1,4 +1,4 @@
-﻿// IPC Channel Constants
+// IPC Channel Constants
 
 export const IPC = {
   // App
@@ -368,7 +368,7 @@ export const IPC = {
   REMOTE_CONNECTION_TEST: 'remote:connection:test',
   REMOTE_CONNECTION_DELETE: 'remote:connection:delete',
   REMOTE_SESSION_LIST: 'remote:session:list',
-  REMOTE_SESSION_CREDENTIAL: 'remote:session:credential',
+  REMOTE_SESSION_CLAIM_CREDENTIAL: 'remote:session:claim-credential',
   REMOTE_CONNECT: 'remote:connect',
   REMOTE_DISCONNECT: 'remote:disconnect',
   REMOTE_RDP_DETECT: 'remote:rdp:detect',

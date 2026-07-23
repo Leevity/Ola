@@ -54,7 +54,15 @@ import {
 } from './task-schedule'
 import { RunTranscriptThread } from './RunTranscriptThread'
 
-type StatusFilter = 'all' | 'enabled' | 'disabled' | 'running' | 'success' | 'error' | 'aborted'
+type StatusFilter =
+  | 'all'
+  | 'enabled'
+  | 'disabled'
+  | 'running'
+  | 'success'
+  | 'error'
+  | 'aborted'
+  | 'skipped'
 
 interface TimelineItem {
   jobId: string
@@ -293,6 +301,7 @@ function getStatusLabel(status: string | null, t: TFunction, job?: CronJobEntry 
   if (status === 'success') return t('tasksPage.statusSuccess')
   if (status === 'error') return t('tasksPage.statusFailed')
   if (status === 'aborted') return t('tasksPage.statusAborted')
+  if (status === 'skipped') return t('tasksPage.statusSkipped', { defaultValue: 'Skipped' })
   if (job) return job.enabled ? t('tasksPage.statusEnabled') : t('tasksPage.statusDisabled')
   return t('tasksPage.statusHistory')
 }
@@ -302,6 +311,7 @@ function getStatusClass(status: string | null, job?: CronJobEntry | null): strin
   if (status === 'success') return 'bg-green-500/10 text-green-500'
   if (status === 'error') return 'bg-destructive/10 text-destructive'
   if (status === 'aborted') return 'bg-amber-500/10 text-amber-500'
+  if (status === 'skipped') return 'bg-muted text-muted-foreground'
   if (job?.enabled) return 'bg-emerald-500/10 text-emerald-500'
   return 'bg-muted text-muted-foreground'
 }
@@ -912,6 +922,9 @@ export function TasksPage(): React.JSX.Element {
                 <option value="success">{t('tasksPage.statusSuccess')}</option>
                 <option value="error">{t('tasksPage.statusFailed')}</option>
                 <option value="aborted">{t('tasksPage.statusAborted')}</option>
+                <option value="skipped">
+                  {t('tasksPage.statusSkipped', { defaultValue: 'Skipped' })}
+                </option>
               </select>
               <select
                 className={INPUT_CLASS}

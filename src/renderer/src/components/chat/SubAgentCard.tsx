@@ -369,6 +369,25 @@ function SubAgentCardInner({
         <div className="min-w-0 self-center">
           <div className="flex min-w-0 items-center gap-2">
             <span className="truncate text-[13px] font-medium text-white/82">{displayName}</span>
+            <span
+              className={cn(
+                'shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium',
+                isQueued
+                  ? 'border-amber-400/25 bg-amber-400/10 text-amber-100'
+                  : isRunning
+                    ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'
+                    : isError
+                      ? 'border-destructive/35 bg-destructive/10 text-destructive'
+                      : 'border-white/10 bg-white/[0.05] text-white/60'
+              )}
+            >
+              {statusText}
+            </span>
+            {elapsed != null ? (
+              <span className="shrink-0 text-[10px] tabular-nums text-white/45">
+                {formatElapsed(elapsed)}
+              </span>
+            ) : null}
           </div>
         </div>
 
