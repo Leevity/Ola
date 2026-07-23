@@ -329,10 +329,13 @@ internal static class SshTransferUploadTools
             localPath,
             conflictPolicy);
 
+        var command = resumeOffset > 0
+            ? $"mkdir -p -- {SshOpenSsh.ShellPathExpr(PosixDirname(remotePath))} && " +
+              $"cat >> {SshOpenSsh.ShellPathExpr(remotePath)}"
+            : SshOpenSsh.BuildAtomicWriteCommand(remotePath);
         var result = await SshOpenSsh.ExecuteFromFileAsync(
             parameters,
-            $"mkdir -p -- {SshOpenSsh.ShellPathExpr(PosixDirname(remotePath))} && " +
-            $"cat {(resumeOffset > 0 ? ">>" : ">")} {SshOpenSsh.ShellPathExpr(remotePath)}",
+            command,
             localPath,
             timeoutMs,
             null,

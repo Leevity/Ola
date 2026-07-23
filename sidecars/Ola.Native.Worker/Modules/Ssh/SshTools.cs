@@ -184,8 +184,7 @@ internal static class SshTools
                 $"localPath={localPath} remotePath={remotePath} emitProgress={emitProgress}");
             var result = await SshOpenSsh.ExecuteFromFileAsync(
                 parameters,
-                $"mkdir -p -- {SshOpenSsh.ShellPathExpr(PosixDirname(remotePath))} && " +
-                $"cat > {SshOpenSsh.ShellPathExpr(remotePath)}",
+                SshOpenSsh.BuildAtomicWriteCommand(remotePath),
                 localPath,
                 timeoutMs,
                 emitProgress

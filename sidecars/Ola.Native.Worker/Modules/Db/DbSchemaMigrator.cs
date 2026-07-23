@@ -664,20 +664,16 @@ internal static class DbSchemaMigrator
 
     private static void CreateSyncTables(SqliteConnection connection)
     {
-        // Drop legacy sync tables whose pre-1.0 schema used `record_key` as the primary key.
-        // The current schema uses a composite (provider_id, domain, record_id) key, so
-        // CREATE TABLE IF NOT EXISTS would leave the old table behind and the subsequent
-        // CREATE INDEX on `provider_id` would fail with "no such column".
-        if (HasColumn(connection, "sync_record_state", "record_key"))
-        {
-            Execute(connection, "DROP TABLE IF EXISTS sync_record_state");
-        }
-        if (HasColumn(connection, "sync_tombstones", "record_key"))
-        {
-            Execute(connection, "DROP TABLE IF EXISTS sync_tombstones");
-        }
+        // Pre-1.0 sync tables used `record_key` as the primary key. Their key cannot be
+        // losslessly mapped to the current composite key, so preserve the original rows in
+        // a named backup table instead of dropping them during startup migration.
+        using var transaction = connection.BeginTransaction();
+        PreserveLegacySyncTable(connection, transaction, "sync_record_state");
+        PreserveLegacySyncTable(connection, transaction, "sync_tombstones");
+        Execute(connection, transaction, "DROP INDEX IF EXISTS idx_sync_record_state_provider");
+        Execute(connection, transaction, "DROP INDEX IF EXISTS idx_sync_tombstones_provider");
 
-        Execute(connection, """
+        Execute(connection, transaction, """
             CREATE TABLE IF NOT EXISTS sync_record_state (
               provider_id TEXT NOT NULL,
               domain TEXT NOT NULL,
@@ -702,6 +698,41 @@ internal static class DbSchemaMigrator
             CREATE INDEX IF NOT EXISTS idx_sync_tombstones_provider
               ON sync_tombstones(provider_id, domain, deleted_at);
             """);
+        transaction.Commit();
+    }
+
+    private static void PreserveLegacySyncTable(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string tableName)
+    {
+        if (!HasColumn(connection, tableName, "record_key", transaction))
+        {
+            return;
+        }
+
+        var backupTableName = $"{tableName}_legacy_record_key";
+        if (TableExists(connection, backupTableName, transaction))
+        {
+            throw new InvalidOperationException(
+                $"Cannot preserve legacy sync table {tableName}: backup table {backupTableName} already exists");
+        }
+
+        Execute(
+            connection,
+            transaction,
+            $"ALTER TABLE {QuoteIdent(tableName)} RENAME TO {QuoteIdent(backupTableName)}");
+
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            INSERT INTO app_migrations (key, applied_at)
+            VALUES ($key, $appliedAt)
+            ON CONFLICT(key) DO NOTHING
+            """;
+        command.Parameters.AddWithValue("$key", $"sync-record-key-backup-v1:{tableName}");
+        command.Parameters.AddWithValue("$appliedAt", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        command.ExecuteNonQuery();
     }
 
     private static void ApplyAdditiveMigrations(SqliteConnection connection)
@@ -905,9 +936,14 @@ internal static class DbSchemaMigrator
             """);
     }
 
-    private static bool HasColumn(SqliteConnection connection, string tableName, string columnName)
+    private static bool HasColumn(
+        SqliteConnection connection,
+        string tableName,
+        string columnName,
+        SqliteTransaction? transaction = null)
     {
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = $"PRAGMA table_info({QuoteIdent(tableName)})";
         using var reader = command.ExecuteReader();
         while (reader.Read())
@@ -934,6 +970,23 @@ internal static class DbSchemaMigrator
         Execute(
             connection,
             $"ALTER TABLE {QuoteIdent(tableName)} ADD COLUMN {QuoteIdent(columnName)} {definition}");
+    }
+
+    private static bool TableExists(
+        SqliteConnection connection,
+        string tableName,
+        SqliteTransaction? transaction = null)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT 1 FROM sqlite_master
+             WHERE type = 'table'
+               AND name = $tableName
+             LIMIT 1
+            """;
+        command.Parameters.AddWithValue("$tableName", tableName);
+        return command.ExecuteScalar() is not null;
     }
 
     private static bool TableDefinitionIncludes(
@@ -963,7 +1016,16 @@ internal static class DbSchemaMigrator
 
     private static void Execute(SqliteConnection connection, string sql)
     {
+        Execute(connection, transaction: null, sql);
+    }
+
+    private static void Execute(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string sql)
+    {
         using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = sql;
         try
         {

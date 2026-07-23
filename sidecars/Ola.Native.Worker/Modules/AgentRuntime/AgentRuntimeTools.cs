@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 internal static class AgentRuntimeTools
@@ -41,42 +41,7 @@ internal static class AgentRuntimeTools
     public static WorkerResponse CheckCapability(JsonElement parameters)
     {
         var capability = JsonHelpers.GetString(parameters, "capability") ?? string.Empty;
-        var supported = capability is
-            "agent.run" or
-            "desktop.input" or
-            "provider.openai-chat" or
-            "provider.openai-responses" or
-            "provider.openai-images" or
-            "provider.anthropic" or
-            "provider.gemini" or
-            "provider.vertex-ai" or
-            "agent.stream.msgpack" or
-            "sidecar.reverse.msgpack" or
-            "db.messages.msgpack" or
-            "tool.Task" or
-            "tool.Todo" or
-            "tool.Fs" or
-            "tool.Search" or
-            "tool.Skill" or
-            "tool.Widget" or
-            "tool.Goal" or
-            "tool.Memory" or
-            "tool.CodeCompatible" or
-            "tool.Notify" or
-            "tool.Cron" or
-            "tool.AskUser" or
-            "tool.Plan" or
-            "tool.Translation" or
-            "tool.Plugin" or
-            "tool.Team" or
-            "tool.ChannelPlugin" or
-            "tool.ImageGenerate" or
-            "tool.Desktop" or
-            "tool.Browser" or
-            "tool.Mcp" or
-            "tool.Extension" or
-            "tool.WebSearch" or
-            "tool.WebFetch";
+        var supported = AgentRuntimeContract.Capabilities.Contains(capability);
         return WorkerResponse.Json(
             new AgentRuntimeCapabilityResult(supported),
             WorkerJsonContext.Default.AgentRuntimeCapabilityResult);
@@ -104,6 +69,41 @@ internal static class AgentRuntimeTools
         return Task.FromResult(WorkerResponse.Json(
             new AgentRuntimeRunResult(true, runId),
             WorkerJsonContext.Default.AgentRuntimeRunResult));
+    }
+
+    public static WorkerResponse ActiveRunList(JsonElement parameters)
+    {
+        _ = parameters;
+        var runs = ActiveRuns.Values
+            .Select(ToActiveRun)
+            .OrderBy(run => run.StartedAt)
+            .ToList();
+        return WorkerResponse.Json(runs, WorkerJsonContext.Default.ListAgentRuntimeActiveRun);
+    }
+
+    public static WorkerResponse RunStatus(JsonElement parameters)
+    {
+        var runId = JsonHelpers.GetString(parameters, "runId")?.Trim();
+        var run = !string.IsNullOrEmpty(runId) && ActiveRuns.TryGetValue(runId, out var state)
+            ? ToActiveRun(state)
+            : null;
+        return WorkerResponse.Json(
+            new AgentRuntimeRunStatusResult(run is not null, run),
+            WorkerJsonContext.Default.AgentRuntimeRunStatusResult);
+    }
+
+    public static WorkerResponse RunSnapshot(JsonElement parameters)
+    {
+        var runId = JsonHelpers.GetString(parameters, "runId")?.Trim();
+        var state = !string.IsNullOrEmpty(runId) && ActiveRuns.TryGetValue(runId, out var activeRun)
+            ? activeRun
+            : null;
+        return WorkerResponse.Json(
+            new AgentRuntimeRunSnapshotResult(
+                state is not null,
+                state is null ? null : ToActiveRun(state),
+                state?.LastSeq ?? 0),
+            WorkerJsonContext.Default.AgentRuntimeRunSnapshotResult);
     }
 
     public static WorkerResponse Cancel(JsonElement parameters)
@@ -201,12 +201,26 @@ internal static class AgentRuntimeTools
         return AgentRuntimeReverseRequests.Complete(parameters);
     }
 
+    public static WorkerResponse ReverseCancel(JsonElement parameters)
+    {
+        return AgentRuntimeReverseRequests.Cancel(parameters);
+    }
+
     public static WorkerResponse SessionVisibility(JsonElement parameters)
     {
         _ = parameters;
         return WorkerResponse.Json(
             new AgentRuntimeReverseResponseResult(true),
             WorkerJsonContext.Default.AgentRuntimeReverseResponseResult);
+    }
+
+    private static AgentRuntimeActiveRun ToActiveRun(AgentRuntimeRunState state)
+    {
+        return new AgentRuntimeActiveRun(
+            state.RunId,
+            state.SessionId,
+            state.StartedAt,
+            state.QueuedMessageCount);
     }
 
     private static async Task ExecuteRunAsync(AgentRuntimeRunState state, WorkerRequestContext context)
@@ -345,6 +359,8 @@ internal static class AgentRuntimeTools
         public CancellationToken CancellationToken => cancellation.Token;
 
         public int QueuedMessageCount => Volatile.Read(ref queuedMessageCount);
+
+        public long LastSeq => Volatile.Read(ref seq);
 
         public bool IsCancellationRequested => cancellation.IsCancellationRequested;
 

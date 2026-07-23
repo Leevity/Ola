@@ -50,12 +50,21 @@ internal static partial class ExtensionManifestStore
                 }
 
                 Directory.CreateDirectory(ExtensionsDirectory());
-                CopyDirectory(sourcePath, targetPath);
+                InstallDirectoryAtomically(sourcePath, targetPath);
 
-                var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                var state = ReadStateRoot();
-                state[id] = CreateState(manifest, enabled: false, now);
-                WriteJsonNode(ExtensionsStatePath(), state);
+                try
+                {
+                    var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    var state = ReadStateRoot();
+                    state[id] = CreateState(manifest, enabled: false, now);
+                    WriteJsonNode(ExtensionsStatePath(), state);
+                }
+                catch
+                {
+                    DeleteDirectoryIfExists(targetPath);
+                    throw;
+                }
+
                 WorkerLog.Debug($"extension install id={id}");
             }
 
@@ -412,7 +421,7 @@ internal static partial class ExtensionManifestStore
                 var shouldUpdate = ShouldUpdateExtension(sourceManifest, sourceDir, targetDir);
                 if (shouldUpdate)
                 {
-                    ReplaceDirectory(sourceDir, targetDir);
+                    ReplaceDirectoryAtomically(sourceDir, targetDir);
                 }
 
                 var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -1124,13 +1133,74 @@ internal static partial class ExtensionManifestStore
         }
     }
 
-    private static void ReplaceDirectory(string sourceDir, string targetDir)
+    private static void InstallDirectoryAtomically(string sourceDir, string targetDir)
     {
-        if (Directory.Exists(targetDir))
+        var stagingDir = CreateStagingDirectory(targetDir);
+        try
         {
-            Directory.Delete(targetDir, recursive: true);
+            CopyDirectory(sourceDir, stagingDir);
+            Directory.Move(stagingDir, targetDir);
         }
-        CopyDirectory(sourceDir, targetDir);
+        catch
+        {
+            DeleteDirectoryIfExists(stagingDir);
+            throw;
+        }
+    }
+
+    private static void ReplaceDirectoryAtomically(string sourceDir, string targetDir)
+    {
+        var stagingDir = CreateStagingDirectory(targetDir);
+        var backupDir = $"{targetDir}.ola-backup-{Guid.NewGuid():N}";
+        var movedExisting = false;
+        var installedReplacement = false;
+
+        try
+        {
+            CopyDirectory(sourceDir, stagingDir);
+            if (Directory.Exists(targetDir))
+            {
+                Directory.Move(targetDir, backupDir);
+                movedExisting = true;
+            }
+
+            Directory.Move(stagingDir, targetDir);
+            installedReplacement = true;
+            DeleteDirectoryIfExists(backupDir);
+        }
+        catch
+        {
+            if (installedReplacement)
+            {
+                DeleteDirectoryIfExists(targetDir);
+            }
+            if (movedExisting && Directory.Exists(backupDir) && !Directory.Exists(targetDir))
+            {
+                Directory.Move(backupDir, targetDir);
+            }
+            throw;
+        }
+        finally
+        {
+            DeleteDirectoryIfExists(stagingDir);
+            if (installedReplacement)
+            {
+                DeleteDirectoryIfExists(backupDir);
+            }
+        }
+    }
+
+    private static string CreateStagingDirectory(string targetDir)
+    {
+        return $"{targetDir}.ola-staging-{Guid.NewGuid():N}";
+    }
+
+    private static void DeleteDirectoryIfExists(string path)
+    {
+        if (Directory.Exists(path))
+        {
+            Directory.Delete(path, recursive: true);
+        }
     }
 
     private static string ResolveExtensionAssetPath(string extensionId, string relativePath)

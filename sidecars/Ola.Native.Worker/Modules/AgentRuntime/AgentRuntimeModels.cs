@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 
 internal sealed record AgentRuntimeInitializeResult(bool Ok, string Runtime, string Version);
 
@@ -27,6 +27,13 @@ internal sealed record AgentRuntimeContextCompressionResult(
     bool? SummarizerFailed = null);
 
 internal sealed record AgentRuntimeReverseResponseResult(bool Ok);
+
+internal sealed record AgentRuntimeRunStatusResult(bool Active, AgentRuntimeActiveRun? Run);
+
+internal sealed record AgentRuntimeRunSnapshotResult(
+    bool Active,
+    AgentRuntimeActiveRun? Run,
+    long LastSeq);
 
 internal sealed record AgentRuntimeReverseRequestEnvelope(string Id, string Method, JsonElement Params);
 

@@ -588,7 +588,7 @@ internal static class SshConfigStore
         catch (Exception ex)
         {
             WorkerLog.Warn($"ssh config root read failed error={ex.GetType().Name}: {ex.Message}");
-            return [];
+            throw new InvalidOperationException("SSH config is corrupt; refusing to overwrite it", ex);
         }
     }
 

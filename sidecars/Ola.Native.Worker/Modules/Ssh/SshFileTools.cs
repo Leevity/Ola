@@ -150,9 +150,7 @@ internal static class SshFileTools
             var remotePath = RequirePath(parameters);
             var content = JsonHelpers.GetString(parameters, "content") ?? string.Empty;
             var before = await StatForWriteAsync(parameters, remotePath);
-            var command =
-                $"mkdir -p -- {SshOpenSsh.ShellPathExpr(PosixDirname(remotePath))} && " +
-                $"cat > {SshOpenSsh.ShellPathExpr(remotePath)}";
+            var command = SshOpenSsh.BuildAtomicWriteCommand(remotePath);
             var result = await SshOpenSsh.ExecuteAsync(
                 parameters,
                 command,
@@ -201,9 +199,7 @@ internal static class SshFileTools
             var remotePath = RequirePath(parameters);
             var data = JsonHelpers.GetString(parameters, "data") ?? string.Empty;
             var bytes = Convert.FromBase64String(data);
-            var command =
-                $"mkdir -p -- {SshOpenSsh.ShellPathExpr(PosixDirname(remotePath))} && " +
-                $"cat > {SshOpenSsh.ShellPathExpr(remotePath)}";
+            var command = SshOpenSsh.BuildAtomicWriteCommand(remotePath);
             var result = await SshOpenSsh.ExecuteAsync(parameters, command, DefaultTimeoutMs, bytes);
             return result.ExitCode == 0 ? Mutation(true, null) : Mutation(false, result.Stderr);
         }
