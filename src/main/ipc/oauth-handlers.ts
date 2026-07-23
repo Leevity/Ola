@@ -1,5 +1,6 @@
 import * as http from 'http'
 import { URL } from 'url'
+import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { encodeMessagePackPayload, toMessagePackChannel } from '../../shared/messagepack/binary-ipc'
 import { registerMessagePackHandler } from './messagepack-handler'
 
@@ -29,6 +30,16 @@ const servers = new Map<
   }
 >()
 
+function isTrustedOauthIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
 function buildCallbackHtml(message: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -54,6 +65,10 @@ function buildCallbackHtml(message: string): string {
 
 export function registerOauthHandlers(): void {
   registerMessagePackHandler<OAuthStartArgs>('oauth:start', async (args, event) => {
+    if (!isTrustedOauthIpcSender(event)) {
+      return { error: 'Unauthorized OAuth IPC sender' }
+    }
+
     const requestId = args.requestId
     if (!requestId) {
       return { error: 'requestId is required' }
@@ -61,6 +76,9 @@ export function registerOauthHandlers(): void {
 
     const existing = servers.get(requestId)
     if (existing) {
+      if (existing.sender !== event.sender) {
+        return { error: 'OAuth request is owned by another window' }
+      }
       const redirectUri = `http://localhost:${existing.port}${existing.path}`
       return { port: existing.port, redirectUri }
     }
@@ -146,8 +164,17 @@ export function registerOauthHandlers(): void {
     })
   })
 
-  registerMessagePackHandler<{ requestId: string }>('oauth:stop', async (args) => {
+  registerMessagePackHandler<{ requestId: string }>('oauth:stop', async (args, event) => {
+    if (!isTrustedOauthIpcSender(event)) {
+      return { success: false, error: 'Unauthorized OAuth IPC sender' }
+    }
     if (!args?.requestId) return { success: true }
+
+    const existing = servers.get(args.requestId)
+    if (existing && existing.sender !== event.sender) {
+      return { success: false, error: 'OAuth request is owned by another window' }
+    }
+
     cleanup(args.requestId)
     return { success: true }
   })

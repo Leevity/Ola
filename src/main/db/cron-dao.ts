@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import { getNativeWorker } from '../lib/native-worker'
 
 export type CronScheduleKind = 'at' | 'every' | 'cron'
-export type CronRunStatus = 'running' | 'success' | 'error' | 'aborted'
+export type CronRunStatus = 'running' | 'success' | 'error' | 'aborted' | 'skipped'
 export type CronRunLogType = 'start' | 'text' | 'tool_call' | 'tool_result' | 'error' | 'end'
 
 export interface CronJobRecord {

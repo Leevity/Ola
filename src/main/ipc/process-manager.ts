@@ -1,4 +1,4 @@
-import { app, BrowserWindow, type WebContents } from 'electron'
+import { app, BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { safeSendMessagePackToWindow } from '../window-ipc'
 import { registerMessagePackHandler } from './messagepack-handler'
 import { getNativeWorker } from '../lib/native-worker'
@@ -74,6 +74,20 @@ function detectPort(line: string): number | undefined {
 
 function resolveOwnerWindowId(sender?: WebContents | null): number | null {
   return sender ? (BrowserWindow.fromWebContents(sender)?.id ?? null) : null
+}
+
+function isManagedProcessOwnedBy(managed: ManagedProcess, sender?: WebContents | null): boolean {
+  return typeof managed.windowId === 'number' && managed.windowId === resolveOwnerWindowId(sender)
+}
+
+function isTrustedProcessIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
 }
 
 function getManagedWindow(managed: ManagedProcess): BrowserWindow | null {
@@ -202,6 +216,7 @@ export function registerProcessManagerHandlers(): void {
     shell?: string
     metadata?: ProcessMetadata
   }>('process:spawn', async (args, event) => {
+    if (!isTrustedProcessIpcSender(event)) return { error: 'Unauthorized process IPC sender' }
     const id = `proc-${nextId++}`
     const configuredShell = args.shell?.trim() || undefined
     const cwd = args.cwd || process.cwd()
@@ -274,9 +289,11 @@ export function registerProcessManagerHandlers(): void {
     return { id, terminalId: managed.terminalId }
   })
 
-  registerMessagePackHandler<{ id: string }>('process:kill', async (args) => {
+  registerMessagePackHandler<{ id: string }>('process:kill', async (args, event) => {
     const managed = processes.get(args.id)
-    if (!managed) return { error: 'Process not found' }
+    if (!managed || !isManagedProcessOwnedBy(managed, event.sender)) {
+      return { error: 'Process not found' }
+    }
     try {
       managed.stopping = true
       const result = await killTerminalSession(managed.terminalId)
@@ -293,9 +310,11 @@ export function registerProcessManagerHandlers(): void {
 
   registerMessagePackHandler<{ id: string; input: string; appendNewline?: boolean }>(
     'process:write',
-    async (args) => {
+    async (args, event) => {
       const managed = processes.get(args.id)
-      if (!managed) return { error: 'Process not found' }
+      if (!managed || !isManagedProcessOwnedBy(managed, event.sender)) {
+        return { error: 'Process not found' }
+      }
       if (managed.exited || managed.exitCode !== undefined) {
         return { error: 'Process already exited' }
       }
@@ -310,9 +329,9 @@ export function registerProcessManagerHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<{ id: string }>('process:status', async (args) => {
+  registerMessagePackHandler<{ id: string }>('process:status', async (args, event) => {
     const managed = processes.get(args.id)
-    if (!managed) return { running: false }
+    if (!managed || !isManagedProcessOwnedBy(managed, event.sender)) return { running: false }
     return {
       running: !managed.exited,
       port: managed.port,
@@ -322,7 +341,8 @@ export function registerProcessManagerHandlers(): void {
     }
   })
 
-  registerMessagePackHandler<undefined>('process:list', async () => {
+  registerMessagePackHandler<undefined>('process:list', async (_args, event) => {
+    const ownerWindowId = resolveOwnerWindowId(event.sender)
     const list: {
       id: string
       command: string
@@ -334,6 +354,7 @@ export function registerProcessManagerHandlers(): void {
       exitCode?: number | null
     }[] = []
     processes.forEach((m) => {
+      if (m.windowId !== ownerWindowId) return
       list.push({
         id: m.id,
         command: m.command,

@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, app } from 'electron'
+import { ipcMain, dialog, BrowserWindow, app, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -11,7 +11,6 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
-import { registerMessagePackHandler } from './messagepack-handler'
 
 function readByteLimitFromEnv(
   envName: string,
@@ -588,13 +587,28 @@ type FsReadFileBinaryArgs = { path: string }
 type FsWriteFileBinaryArgs = { path: string; data: string }
 export type FsReadDocumentArgs = { path: string }
 
-function registerFsMessagePackHandler<TArgs>(
+const UNAUTHORIZED_FILESYSTEM_IPC_ERROR = 'Unauthorized filesystem IPC sender'
+
+function isTrustedFilesystemIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
+function registerTrustedFsMessagePackHandler<TArgs>(
   channel: string,
-  handler: (args: TArgs) => Promise<unknown>
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    if (!isTrustedFilesystemIpcSender(event)) {
+      return encodeMessagePackPayload({ error: UNAUTHORIZED_FILESYSTEM_IPC_ERROR })
+    }
     const args = decodeMessagePackPayload<TArgs>(bytes)
-    return encodeMessagePackPayload(await handler(args))
+    return encodeMessagePackPayload(await handler(args, event))
   })
 }
 
@@ -831,17 +845,17 @@ export async function handleFsReadDocument(args: FsReadDocumentArgs): Promise<un
 }
 
 export function registerFsHandlers(): void {
-  registerFsMessagePackHandler<FsReadFileArgs>('fs:read-file', handleFsReadFile)
-  registerFsMessagePackHandler<FsReadTextFileLinesArgs>(
+  registerTrustedFsMessagePackHandler<FsReadFileArgs>('fs:read-file', handleFsReadFile)
+  registerTrustedFsMessagePackHandler<FsReadTextFileLinesArgs>(
     'fs:read-text-file-lines',
     handleFsReadTextFileLines
   )
-  registerFsMessagePackHandler<FsWriteFileArgs>('fs:write-file', handleFsWriteFile)
-  registerFsMessagePackHandler<{ path: string }>('fs:stat-path', handleFsStatPath)
-  registerFsMessagePackHandler<FsListDirArgs>('fs:list-dir', handleFsListDir)
-  registerFsMessagePackHandler<{ path: string }>('fs:mkdir', handleFsMkdir)
+  registerTrustedFsMessagePackHandler<FsWriteFileArgs>('fs:write-file', handleFsWriteFile)
+  registerTrustedFsMessagePackHandler<{ path: string }>('fs:stat-path', handleFsStatPath)
+  registerTrustedFsMessagePackHandler<FsListDirArgs>('fs:list-dir', handleFsListDir)
+  registerTrustedFsMessagePackHandler<{ path: string }>('fs:mkdir', handleFsMkdir)
 
-  registerMessagePackHandler<void>('fs:default-chat-working-folder', async () => {
+  registerTrustedFsMessagePackHandler<void>('fs:default-chat-working-folder', async () => {
     try {
       const folderPath = path.join(app.getPath('documents'), formatLocalDateFolderName(), 'Chat')
       await fs.promises.mkdir(folderPath, { recursive: true })
@@ -851,13 +865,13 @@ export function registerFsHandlers(): void {
     }
   })
 
-  registerFsMessagePackHandler<{ path: string }>('fs:delete', handleFsDelete)
-  registerFsMessagePackHandler<{ from: string; to: string }>('fs:move', handleFsMove)
+  registerTrustedFsMessagePackHandler<{ path: string }>('fs:delete', handleFsDelete)
+  registerTrustedFsMessagePackHandler<{ from: string; to: string }>('fs:move', handleFsMove)
 
-  registerMessagePackHandler<{ defaultPath?: string } | undefined>(
+  registerTrustedFsMessagePackHandler<{ defaultPath?: string } | undefined>(
     'fs:select-folder',
-    async (args) => {
-      const win = BrowserWindow.getFocusedWindow()
+    async (args, event) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
       if (!win) return { canceled: true }
       const defaultPath = args?.defaultPath?.trim()
       const result = await dialog.showOpenDialog(win, {
@@ -869,7 +883,7 @@ export function registerFsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<void>('fs:list-desktop-directories', async () => {
+  registerTrustedFsMessagePackHandler<void>('fs:list-desktop-directories', async () => {
     try {
       const desktopPath = app.getPath('desktop')
       const desktopName = path.basename(desktopPath) || 'Desktop'
@@ -899,14 +913,14 @@ export function registerFsHandlers(): void {
     }
   })
 
-  registerFsMessagePackHandler<FsGlobArgs>('fs:glob', handleFsGlob)
-  registerFsMessagePackHandler<FsSearchFilesArgs>('fs:search-files', handleFsSearchFiles)
-  registerFsMessagePackHandler<FsGrepArgs>('fs:grep', handleFsGrep)
+  registerTrustedFsMessagePackHandler<FsGlobArgs>('fs:glob', handleFsGlob)
+  registerTrustedFsMessagePackHandler<FsSearchFilesArgs>('fs:search-files', handleFsSearchFiles)
+  registerTrustedFsMessagePackHandler<FsGrepArgs>('fs:grep', handleFsGrep)
 
-  registerMessagePackHandler<{ defaultName: string; dataUrl: string }>(
+  registerTrustedFsMessagePackHandler<{ defaultName: string; dataUrl: string }>(
     'fs:save-image',
-    async (args) => {
-      const win = BrowserWindow.getFocusedWindow()
+    async (args, event) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
       if (!win) return { canceled: true }
       const result = await dialog.showSaveDialog(win, {
         defaultPath: args.defaultName,
@@ -929,23 +943,25 @@ export function registerFsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<{ defaultPath?: string; filters?: Electron.FileFilter[] } | undefined>(
-    'fs:select-save-file',
-    async (args) => {
-      const win = BrowserWindow.getFocusedWindow()
-      if (!win) return { canceled: true }
-      const result = await dialog.showSaveDialog(win, {
-        defaultPath: args?.defaultPath,
-        filters: args?.filters
-      })
-      if (result.canceled || !result.filePath) return { canceled: true }
-      return { path: result.filePath }
-    }
-  )
+  registerTrustedFsMessagePackHandler<
+    { defaultPath?: string; filters?: Electron.FileFilter[] } | undefined
+  >('fs:select-save-file', async (args, event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return { canceled: true }
+    const result = await dialog.showSaveDialog(win, {
+      defaultPath: args?.defaultPath,
+      filters: args?.filters
+    })
+    if (result.canceled || !result.filePath) return { canceled: true }
+    return { path: result.filePath }
+  })
 
   // Binary file read/write returns or accepts base64; use MessagePack from renderer for large data.
-  registerFsMessagePackHandler<FsReadFileBinaryArgs>('fs:read-file-binary', handleFsReadFileBinary)
-  registerFsMessagePackHandler<FsWriteFileBinaryArgs>(
+  registerTrustedFsMessagePackHandler<FsReadFileBinaryArgs>(
+    'fs:read-file-binary',
+    handleFsReadFileBinary
+  )
+  registerTrustedFsMessagePackHandler<FsWriteFileBinaryArgs>(
     'fs:write-file-binary',
     handleFsWriteFileBinary
   )
@@ -953,7 +969,7 @@ export function registerFsHandlers(): void {
   // File watching
   const fileWatchers = new Map<string, WatchedFileEntry>()
 
-  registerMessagePackHandler<{ path: string }>('fs:watch-file', async (args, event) => {
+  registerTrustedFsMessagePackHandler<{ path: string }>('fs:watch-file', async (args, event) => {
     const filePath = path.resolve(args.path)
     const existing = fileWatchers.get(filePath)
     if (existing) {
@@ -992,7 +1008,7 @@ export function registerFsHandlers(): void {
     }
   })
 
-  registerMessagePackHandler<{ path: string }>('fs:unwatch-file', async (args, event) => {
+  registerTrustedFsMessagePackHandler<{ path: string }>('fs:unwatch-file', async (args, event) => {
     const filePath = path.resolve(args.path)
     const entry = fileWatchers.get(filePath)
     if (!entry) return { success: true }
@@ -1010,7 +1026,7 @@ export function registerFsHandlers(): void {
   // Directory watching
   const dirWatchers = new Map<string, WatchedDirectoryEntry>()
 
-  registerMessagePackHandler<{ path: string; recursive?: boolean }>(
+  registerTrustedFsMessagePackHandler<{ path: string; recursive?: boolean }>(
     'fs:watch-dir',
     async (args, event) => {
       const dirPath = path.resolve(args.path)
@@ -1063,7 +1079,7 @@ export function registerFsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<{ path: string; recursive?: boolean }>(
+  registerTrustedFsMessagePackHandler<{ path: string; recursive?: boolean }>(
     'fs:unwatch-dir',
     async (args, event) => {
       const dirPath = path.resolve(args.path)
@@ -1088,10 +1104,10 @@ export function registerFsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<
+  registerTrustedFsMessagePackHandler<
     { filters?: Electron.FileFilter[]; multiSelections?: boolean } | undefined
-  >('fs:select-file', async (args) => {
-    const win = BrowserWindow.getFocusedWindow()
+  >('fs:select-file', async (args, event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return { canceled: true }
     const result = await dialog.showOpenDialog(win, {
       properties: args?.multiSelections ? ['openFile', 'multiSelections'] : ['openFile'],
@@ -1125,10 +1141,10 @@ export function registerFsHandlers(): void {
     }
   })
 
-  registerMessagePackHandler<{ previousUrl?: string | null } | undefined>(
+  registerTrustedFsMessagePackHandler<{ previousUrl?: string | null } | undefined>(
     'fs:import-profile-avatar',
-    async (args) => {
-      const win = BrowserWindow.getFocusedWindow()
+    async (args, event) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
       if (!win) return { canceled: true }
 
       const result = await dialog.showOpenDialog(win, {
@@ -1168,5 +1184,5 @@ export function registerFsHandlers(): void {
     }
   )
 
-  registerFsMessagePackHandler<FsReadDocumentArgs>('fs:read-document', handleFsReadDocument)
+  registerTrustedFsMessagePackHandler<FsReadDocumentArgs>('fs:read-document', handleFsReadDocument)
 }

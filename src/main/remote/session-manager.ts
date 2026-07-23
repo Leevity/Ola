@@ -18,6 +18,7 @@ export type RemoteSession = {
 }
 
 type ManagedRemoteSession = RemoteSession & {
+  ownerWebContentsId: number
   process?: ChildProcess | null
   cleanup?: (() => void) | null
   forceKillTimer?: NodeJS.Timeout | null
@@ -40,19 +41,33 @@ export class RemoteSessionManager {
   }
 
   list(): RemoteSession[] {
-    return [...this.sessions.values()]
-      .map(({ process: _process, ...session }) => session)
-      .sort((left, right) => right.updatedAt - left.updatedAt)
+    return this.listMatching(() => true)
+  }
+
+  listByOwner(ownerWebContentsId: number): RemoteSession[] {
+    return this.listMatching((session) => session.ownerWebContentsId === ownerWebContentsId)
+  }
+
+  isOwnedBy(id: string, ownerWebContentsId: number): boolean {
+    return this.sessions.get(id)?.ownerWebContentsId === ownerWebContentsId
+  }
+
+  disconnectByOwner(ownerWebContentsId: number): void {
+    for (const session of this.sessions.values()) {
+      if (session.ownerWebContentsId === ownerWebContentsId) this.disconnect(session.id)
+    }
   }
 
   create(
     session: Omit<RemoteSession, 'createdAt' | 'updatedAt'>,
+    ownerWebContentsId: number,
     process?: ChildProcess | null,
     cleanup?: (() => void) | null
   ): RemoteSession {
     const timestamp = now()
     const managed: ManagedRemoteSession = {
       ...session,
+      ownerWebContentsId,
       process,
       cleanup,
       createdAt: timestamp,
@@ -125,8 +140,16 @@ export class RemoteSessionManager {
     session.forceKillTimer = null
   }
 
+  private listMatching(predicate: (session: ManagedRemoteSession) => boolean): RemoteSession[] {
+    return [...this.sessions.values()]
+      .filter(predicate)
+      .map((session) => this.toPublicSession(session))
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+  }
+
   private toPublicSession(session: ManagedRemoteSession): RemoteSession {
     const {
+      ownerWebContentsId: _ownerWebContentsId,
       process: _process,
       cleanup: _cleanup,
       forceKillTimer: _forceKillTimer,

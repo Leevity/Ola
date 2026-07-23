@@ -5,9 +5,15 @@ import { join } from 'path'
 import { safePostMessageToWindow } from '../window-ipc'
 import {
   AGENT_STREAM_MSGPACK_CHANNEL,
-  decodeAgentStreamEnvelope
+  decodeAgentStreamEnvelope,
+  encodeAgentStreamEnvelope
 } from '../../shared/messagepack/agent-stream-codec'
-import type { AgentStreamEvent, ToolCallStateWire } from '../../shared/agent-stream-protocol'
+import {
+  AGENT_STREAM_PROTOCOL_VERSION,
+  type AgentStreamEnvelope,
+  type AgentStreamEvent,
+  type ToolCallStateWire
+} from '../../shared/agent-stream-protocol'
 import type { InteractiveAgentEvent, ToolCallState } from '../../shared/agent-loop-types'
 import {
   SIDECAR_APPROVAL_REQUEST_MSGPACK_CHANNEL,
@@ -99,6 +105,28 @@ type McpReadResourceInvokeArgs = {
   resourceName?: string
 }
 
+type AgentStreamReplayArgs = {
+  runId?: string
+  afterSeq?: number
+  untilSeq?: number
+}
+
+type AgentStreamReplayResponse = {
+  recoverable: boolean
+  frames: AgentStreamEnvelope[]
+  firstAvailableSeq?: number
+  lastAvailableSeq?: number
+  reason?: 'not_found' | 'expired' | 'not_owner' | 'gap_not_buffered'
+}
+
+type CachedAgentStreamRun = {
+  sessionId: string
+  ownerWindowId: number
+  frames: AgentStreamEnvelope[]
+  expiresAt: number
+  timer: NodeJS.Timeout
+}
+
 type SidecarBridgeManager = {
   setRawEventHandler: (
     handler: (frame: import('../lib/native-worker').NativeWorkerRawEventFrame) => void
@@ -114,8 +142,13 @@ type SidecarBridgeManager = {
   ensureStarted: () => Promise<boolean>
   stop: () => Promise<void>
   request: (method: string, params?: unknown, timeoutMs?: number) => Promise<unknown>
+  getActiveRuns: () => Promise<unknown>
+  runStatus: (runId: string) => Promise<unknown>
+  runSnapshot: (runId: string) => Promise<unknown>
+  cancelReverseRequest: (id: number | string) => Promise<boolean>
   notify: (method: string, params?: unknown) => void
   hasActiveRuns: () => boolean
+  onRunInterrupted: (handler: (run: { runId: string; sessionId?: string }) => void) => () => void
   readonly isRunning: boolean
 }
 
@@ -323,7 +356,7 @@ function mapNativeGoalRuntimeEvent(event: AgentStreamEvent): InteractiveAgentEve
     case 'loop_end':
       return {
         type: 'loop_end',
-        reason: event.reason
+        reason: event.reason === 'interrupted' ? 'error' : event.reason
       }
     default:
       return null
@@ -375,6 +408,20 @@ function isUsableRendererWindow(window: BrowserWindow | null | undefined): windo
     !window.isDestroyed() &&
     !window.webContents.isDestroyed() &&
     !window.webContents.isCrashed()
+  )
+}
+
+function isAgentRunOwnedBy(
+  event: IpcMainInvokeEvent,
+  runId: string | undefined,
+  runWindowIds: Map<string, number>
+): runId is string {
+  const sourceWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    !!runId &&
+    isUsableRendererWindow(sourceWindow) &&
+    sourceWindow.webContents === event.sender &&
+    runWindowIds.get(runId) === sourceWindow.id
   )
 }
 
@@ -454,7 +501,105 @@ export function registerSidecarHandlers(): void {
   const pendingRendererToolRequests = new Map<string, PendingRendererToolRequest>()
   const runWindowIds = new Map<string, number>()
   const sessionWindowIds = new Map<string, number>()
+  const lastStreamSequences = new Map<string, number>()
+  const agentStreamReplayCache = new Map<string, CachedAgentStreamRun>()
   const goalRuntimeObservationChains = new Map<string, Promise<void>>()
+
+  const AGENT_STREAM_REPLAY_MAX_FRAMES = 512
+  const AGENT_STREAM_REPLAY_MAX_RUNS = 64
+  const AGENT_STREAM_REPLAY_ACTIVE_TTL_MS = 10 * 60_000
+  const AGENT_STREAM_REPLAY_TERMINAL_TTL_MS = 60_000
+
+  const clearAgentStreamReplayCache = (runId: string): void => {
+    const cached = agentStreamReplayCache.get(runId)
+    if (!cached) return
+    clearTimeout(cached.timer)
+    agentStreamReplayCache.delete(runId)
+  }
+
+  const scheduleAgentStreamReplayExpiry = (
+    runId: string,
+    cached: CachedAgentStreamRun,
+    terminal: boolean
+  ): void => {
+    clearTimeout(cached.timer)
+    cached.expiresAt =
+      Date.now() +
+      (terminal ? AGENT_STREAM_REPLAY_TERMINAL_TTL_MS : AGENT_STREAM_REPLAY_ACTIVE_TTL_MS)
+    cached.timer = setTimeout(
+      () => {
+        if (agentStreamReplayCache.get(runId) === cached && cached.expiresAt <= Date.now()) {
+          agentStreamReplayCache.delete(runId)
+        }
+      },
+      terminal ? AGENT_STREAM_REPLAY_TERMINAL_TTL_MS : AGENT_STREAM_REPLAY_ACTIVE_TTL_MS
+    )
+  }
+
+  const trimAgentStreamReplayCache = (): void => {
+    while (agentStreamReplayCache.size >= AGENT_STREAM_REPLAY_MAX_RUNS) {
+      const oldest = Array.from(agentStreamReplayCache.entries()).sort(
+        ([, left], [, right]) => left.expiresAt - right.expiresAt
+      )[0]
+      if (!oldest) return
+      clearAgentStreamReplayCache(oldest[0])
+    }
+  }
+
+  const cacheAgentStreamEnvelope = (
+    targetWindow: BrowserWindow,
+    envelope: AgentStreamEnvelope
+  ): void => {
+    if (!isUsableRendererWindow(targetWindow)) return
+
+    let cached = agentStreamReplayCache.get(envelope.runId)
+    if (!cached) {
+      trimAgentStreamReplayCache()
+      cached = {
+        sessionId: envelope.sessionId,
+        ownerWindowId: targetWindow.id,
+        frames: [],
+        expiresAt: 0,
+        timer: setTimeout(() => {}, 0)
+      }
+      agentStreamReplayCache.set(envelope.runId, cached)
+    }
+
+    if (cached.ownerWindowId !== targetWindow.id || cached.sessionId !== envelope.sessionId) {
+      clearAgentStreamReplayCache(envelope.runId)
+      cacheAgentStreamEnvelope(targetWindow, envelope)
+      return
+    }
+
+    const previous = cached.frames.at(-1)
+    if (previous && envelope.seq <= previous.seq) return
+    cached.frames.push(envelope)
+    if (cached.frames.length > AGENT_STREAM_REPLAY_MAX_FRAMES) {
+      cached.frames.splice(0, cached.frames.length - AGENT_STREAM_REPLAY_MAX_FRAMES)
+    }
+
+    scheduleAgentStreamReplayExpiry(
+      envelope.runId,
+      cached,
+      envelope.events.some((event) => event.type === 'loop_end' || event.type === 'error')
+    )
+  }
+
+  const cacheSentAgentStreamFrames = (
+    targetWindow: BrowserWindow,
+    frames: ReadonlyArray<Uint8Array | Buffer>
+  ): void => {
+    for (const frame of frames) {
+      try {
+        cacheAgentStreamEnvelope(targetWindow, decodeAgentStreamEnvelope(frame))
+      } catch (error) {
+        console.warn(
+          '[Sidecar] Skipping invalid agent stream replay frame:',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
+    }
+  }
 
   const cleanupAgentRunIfTerminal = (runId: string, terminal: boolean): void => {
     if (!terminal) return
@@ -562,12 +707,15 @@ export function registerSidecarHandlers(): void {
     if (!targetWindow) return
 
     const bytes = batch.frames.length === 1 ? batch.frames[0] : Buffer.concat(batch.frames)
-    sendAgentStreamBytes(targetWindow, bytes, {
+    const sent = sendAgentStreamBytes(targetWindow, bytes, {
       source: 'native-raw',
       runId: batch.runId,
       sessionId: batch.sessionId,
       frames: batch.frames.length
     })
+    if (sent) {
+      cacheSentAgentStreamFrames(targetWindow, batch.frames)
+    }
   }
 
   const flushAllStreamBatches = (): void => {
@@ -584,12 +732,15 @@ export function registerSidecarHandlers(): void {
         allowFallback: false
       })
       if (targetWindow) {
-        sendAgentStreamBytes(targetWindow, frame.bytes, {
+        const sent = sendAgentStreamBytes(targetWindow, frame.bytes, {
           source: 'native-raw',
           runId: frame.runId,
           sessionId: frame.sessionId,
           seq: frame.seq
         })
+        if (sent) {
+          cacheSentAgentStreamFrames(targetWindow, [frame.bytes])
+        }
       }
       return
     }
@@ -616,7 +767,52 @@ export function registerSidecarHandlers(): void {
       batch.timer = setTimeout(() => flushStreamBatch(runId), STREAM_BATCH_FLUSH_MS)
     }
 
-    if (terminal) cleanupAgentRunIfTerminal(runId, true)
+    if (typeof frame.seq === 'number') lastStreamSequences.set(runId, frame.seq)
+    if (terminal) {
+      cleanupAgentRunIfTerminal(runId, true)
+      lastStreamSequences.delete(runId)
+    }
+  })
+
+  manager.onRunInterrupted(({ runId, sessionId }) => {
+    flushStreamBatch(runId)
+    const resolvedSessionId = sessionId ?? ''
+    if (!resolvedSessionId) {
+      runWindowIds.delete(runId)
+      return
+    }
+
+    const targetWindow = resolveRendererTargetWindow(
+      { runId, sessionId: resolvedSessionId },
+      runWindowIds,
+      sessionWindowIds,
+      { allowFallback: false }
+    )
+    const bytes = encodeAgentStreamEnvelope({
+      v: AGENT_STREAM_PROTOCOL_VERSION,
+      runId,
+      sessionId: resolvedSessionId,
+      seq: (lastStreamSequences.get(runId) ?? -1) + 1,
+      events: [{ type: 'loop_end', reason: 'interrupted' }]
+    })
+    lastStreamSequences.delete(runId)
+    if (targetWindow) {
+      const sent = sendAgentStreamBytes(targetWindow, bytes, {
+        source: 'worker-interrupted',
+        runId,
+        sessionId: resolvedSessionId
+      })
+      if (sent) {
+        cacheSentAgentStreamFrames(targetWindow, [bytes])
+      }
+    }
+    void observeGoalRuntimeFrame(bytes).catch((error) => {
+      console.warn(
+        '[Sidecar] Goal runtime interruption observation failed:',
+        error instanceof Error ? error.message : String(error)
+      )
+    })
+    cleanupAgentRunIfTerminal(runId, true)
   })
 
   manager.setRequestHandler(async (_id, method, params) => {
@@ -882,6 +1078,68 @@ export function registerSidecarHandlers(): void {
     }
   })
 
+  registerMessagePackInvokeHandler<AgentStreamReplayArgs>(
+    'agent:stream-replay',
+    (event, { runId: rawRunId, afterSeq, untilSeq }): AgentStreamReplayResponse => {
+      const runId = readNonEmptyString(rawRunId)
+      if (
+        !runId ||
+        typeof afterSeq !== 'number' ||
+        typeof untilSeq !== 'number' ||
+        !Number.isSafeInteger(afterSeq) ||
+        !Number.isSafeInteger(untilSeq) ||
+        afterSeq < -1 ||
+        untilSeq < afterSeq
+      ) {
+        return { recoverable: false, frames: [], reason: 'not_found' }
+      }
+
+      const cached = agentStreamReplayCache.get(runId)
+      if (!cached) {
+        return { recoverable: false, frames: [], reason: 'not_found' }
+      }
+      if (cached.expiresAt <= Date.now()) {
+        clearAgentStreamReplayCache(runId)
+        return { recoverable: false, frames: [], reason: 'expired' }
+      }
+
+      const sourceWindow = BrowserWindow.fromWebContents(event.sender)
+      if (!isUsableRendererWindow(sourceWindow) || sourceWindow.id !== cached.ownerWindowId) {
+        return { recoverable: false, frames: [], reason: 'not_owner' }
+      }
+
+      const firstAvailableSeq = cached.frames[0]?.seq
+      const lastAvailableSeq = cached.frames.at(-1)?.seq
+      const frames = cached.frames.filter((frame) => frame.seq > afterSeq && frame.seq <= untilSeq)
+      const expectedSeq = afterSeq + 1
+      const isComplete =
+        frames.every((frame, index) => frame.seq === expectedSeq + index) &&
+        (untilSeq === afterSeq || frames.at(-1)?.seq === untilSeq)
+      if (!isComplete) {
+        return {
+          recoverable: false,
+          frames: [],
+          firstAvailableSeq,
+          lastAvailableSeq,
+          reason: 'gap_not_buffered'
+        }
+      }
+
+      return { recoverable: true, frames, firstAvailableSeq, lastAvailableSeq }
+    }
+  )
+
+  registerMessagePackInvokeHandler<{ runId?: string }>(
+    'agent:run-snapshot',
+    async (event, { runId: rawRunId }) => {
+      const runId = readNonEmptyString(rawRunId)
+      if (!isAgentRunOwnedBy(event, runId, runWindowIds)) {
+        return { active: false, run: null, lastSeq: 0, reason: 'not_owner' }
+      }
+      return await manager.runSnapshot(runId)
+    }
+  )
+
   registerMessagePackInvokeHandler<unknown>('agent:run', async (event, params) => {
     console.log('[Sidecar] agent:run requested')
     rememberRendererOrigin(event, params, runWindowIds, sessionWindowIds)
@@ -924,8 +1182,9 @@ export function registerSidecarHandlers(): void {
     }
   })
 
-  registerMessagePackInvokeHandler<unknown>('agent:cancel', async (_event, params) => {
-    if (!manager.isRunning) {
+  registerMessagePackInvokeHandler<unknown>('agent:cancel', async (event, params) => {
+    const runId = readNonEmptyString(normalizeRendererRequestRecord(params).runId)
+    if (!isAgentRunOwnedBy(event, runId, runWindowIds) || !manager.isRunning) {
       return { cancelled: false }
     }
     const result = (await manager.request('agent/cancel', params, 10_000)) as {
@@ -938,15 +1197,17 @@ export function registerSidecarHandlers(): void {
     return result
   })
 
-  registerMessagePackInvokeHandler<unknown>('agent:request-stop', async (_event, params) => {
-    if (!manager.isRunning) {
+  registerMessagePackInvokeHandler<unknown>('agent:request-stop', async (event, params) => {
+    const runId = readNonEmptyString(normalizeRendererRequestRecord(params).runId)
+    if (!isAgentRunOwnedBy(event, runId, runWindowIds) || !manager.isRunning) {
       return { stopped: false }
     }
     return await manager.request('agent/request-stop', params, 10_000)
   })
 
-  registerMessagePackInvokeHandler<unknown>('agent:append-messages', async (_event, params) => {
-    if (!manager.isRunning) {
+  registerMessagePackInvokeHandler<unknown>('agent:append-messages', async (event, params) => {
+    const runId = readNonEmptyString(normalizeRendererRequestRecord(params).runId)
+    if (!isAgentRunOwnedBy(event, runId, runWindowIds) || !manager.isRunning) {
       return { appended: false, count: 0 }
     }
     return await manager.request('agent/append-messages', params, 10_000)

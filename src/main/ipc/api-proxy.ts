@@ -1,4 +1,11 @@
-import { ipcMain, net, session, type WebContents } from 'electron'
+import {
+  BrowserWindow,
+  ipcMain,
+  net,
+  session,
+  type IpcMainInvokeEvent,
+  type WebContents
+} from 'electron'
 import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
@@ -45,6 +52,16 @@ function computeBackoffMs(attempt: number, retryAfterMs: number | undefined): nu
   // +/-25% jitter
   const jitter = (Math.random() * 0.5 - 0.25) * exp
   return Math.max(100, Math.floor(exp + jitter))
+}
+
+function isTrustedApiIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
 }
 
 function sendMessagePackToWebContents(
@@ -372,7 +389,7 @@ async function handleApiRequest(
         path: parsedUrl.pathname + parsedUrl.search,
         method,
         headers: reqHeaders,
-        ...(isHttps && (allowInsecureTls ?? true) ? { rejectUnauthorized: false } : {})
+        ...(isHttps && allowInsecureTls === true ? { rejectUnauthorized: false } : {})
       }
 
       const httpReq = httpModule.request(options, (res) => {
@@ -455,6 +472,9 @@ async function handleApiRequest(
 
 export function registerApiProxyHandlers(): void {
   ipcMain.handle(toMessagePackChannel('api:request'), async (event, bytes: Uint8Array) => {
+    if (!isTrustedApiIpcSender(event)) {
+      return encodeMessagePackPayload({ statusCode: 0, error: 'Unauthorized API IPC sender' })
+    }
     const req = decodeMessagePackPayload<APIProxyRequest>(bytes)
     return encodeMessagePackPayload(await handleApiRequest(event, req))
   })

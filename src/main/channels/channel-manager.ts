@@ -3,9 +3,19 @@ import type {
   ChannelEvent,
   MessagingChannelService,
   ChannelServiceFactory,
-  ChannelWsMessageParser
+  ChannelWsMessageParser,
+  ChannelWsMessageParserLoader
 } from './channel-types'
 import type { BasePluginService } from './base-plugin-service'
+
+const DEFAULT_MESSAGE_DEDUP_TTL_MS = 15 * 60 * 1000
+const DEFAULT_MESSAGE_DEDUP_MAX_PER_PLUGIN = 2_000
+
+export interface ChannelManagerOptions {
+  messageDedupTtlMs?: number
+  messageDedupMaxPerPlugin?: number
+  now?: () => number
+}
 
 /**
  * ChannelManager — manages channel service lifecycle with a factory registry pattern.
@@ -14,8 +24,47 @@ import type { BasePluginService } from './base-plugin-service'
 export class ChannelManager {
   private factories = new Map<string, ChannelServiceFactory>()
   private parsers = new Map<string, ChannelWsMessageParser>()
+  private parserLoaders = new Map<string, ChannelWsMessageParserLoader>()
   private services = new Map<string, MessagingChannelService>()
   private statuses = new Map<string, 'running' | 'stopped' | 'error'>()
+  private readonly seenMessageIds = new Map<string, Map<string, number>>()
+  private readonly messageDedupTtlMs: number
+  private readonly messageDedupMaxPerPlugin: number
+  private readonly now: () => number
+
+  constructor(options: ChannelManagerOptions = {}) {
+    this.messageDedupTtlMs = options.messageDedupTtlMs ?? DEFAULT_MESSAGE_DEDUP_TTL_MS
+    this.messageDedupMaxPerPlugin =
+      options.messageDedupMaxPerPlugin ?? DEFAULT_MESSAGE_DEDUP_MAX_PER_PLUGIN
+    this.now = options.now ?? Date.now
+  }
+
+  private shouldNotify(event: ChannelEvent): boolean {
+    if (event.type !== 'incoming_message') return true
+    const messageId =
+      event.data && typeof event.data === 'object' && 'messageId' in event.data
+        ? String((event.data as { messageId?: unknown }).messageId ?? '').trim()
+        : ''
+    if (!messageId) return true
+
+    const now = this.now()
+    const expiry = now - this.messageDedupTtlMs
+    const seen = this.seenMessageIds.get(event.pluginId) ?? new Map<string, number>()
+    for (const [id, receivedAt] of seen) {
+      if (receivedAt > expiry) break
+      seen.delete(id)
+    }
+    if (seen.has(messageId)) return false
+
+    seen.set(messageId, now)
+    while (seen.size > this.messageDedupMaxPerPlugin) {
+      const oldest = seen.keys().next().value
+      if (oldest === undefined) break
+      seen.delete(oldest)
+    }
+    this.seenMessageIds.set(event.pluginId, seen)
+    return true
+  }
 
   /** Register a service factory for a plugin type */
   registerFactory(type: string, factory: ChannelServiceFactory): void {
@@ -25,6 +74,11 @@ export class ChannelManager {
   /** Register a WS message parser for a plugin type */
   registerParser(type: string, parser: ChannelWsMessageParser): void {
     this.parsers.set(type, parser)
+  }
+
+  /** Register a deferred parser loader so inactive providers do not load their SDK modules. */
+  registerParserLoader(type: string, loader: ChannelWsMessageParserLoader): void {
+    this.parserLoaders.set(type, loader)
   }
 
   /** Start a plugin instance — creates service via factory, calls .start() */
@@ -44,10 +98,14 @@ export class ChannelManager {
       return
     }
 
-    const service = factory(instance, notify)
+    const service = await factory(instance, (event) => {
+      if (this.shouldNotify(event)) notify(event)
+    })
 
     // Wire parser if the service extends BasePluginService
-    const parser = this.parsers.get(instance.type)
+    const parser =
+      this.parsers.get(instance.type) ?? (await this.parserLoaders.get(instance.type)?.())
+    if (parser) this.parsers.set(instance.type, parser)
     if (parser && typeof (service as BasePluginService).setParser === 'function') {
       ;(service as BasePluginService).setParser(parser)
     }

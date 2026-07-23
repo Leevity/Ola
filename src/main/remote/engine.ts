@@ -1,9 +1,15 @@
 import { randomUUID } from 'crypto'
 import { getRemoteConnection, markRemoteConnectionConnected } from './connection-store'
 import { createRdpCleanPathBridge } from './rdp/rdp-cleanpath-bridge'
+import { clearRemoteInputSession, clearRemoteInputSessionIfOwned } from './input-controller'
 import { RemoteSessionManager } from './session-manager'
+import { ViewerCredentialLeaseRegistry } from './viewer-credential-lease'
 import { launchNoVncProxy } from './vnc/novnc-proxy'
-import type { RemoteSession, RemoteViewerCredential } from '../../shared/remote-control'
+import type {
+  RemoteConnectResult,
+  RemoteSession,
+  RemoteViewerCredential
+} from '../../shared/remote-control'
 import {
   getCredentialEntryForInjection,
   getCredentialRef,
@@ -12,13 +18,22 @@ import {
 
 export class RemoteControlEngine {
   readonly sessions = new RemoteSessionManager()
-  private readonly viewerCredentials = new Map<string, RemoteViewerCredential>()
+  private readonly viewerCredentialLeases = new ViewerCredentialLeaseRegistry()
 
-  getViewerCredential(sessionId: string): RemoteViewerCredential | null {
-    return this.viewerCredentials.get(sessionId) ?? null
+  claimViewerCredential(
+    sessionId: string,
+    ownerWebContentsId: number,
+    lease: string
+  ): RemoteViewerCredential | null {
+    if (!this.sessions.isOwnedBy(sessionId, ownerWebContentsId)) return null
+    return this.viewerCredentialLeases.claim(sessionId, ownerWebContentsId, lease)
   }
 
-  async connect(connectionId: string): Promise<RemoteSession> {
+  listSessions(ownerWebContentsId: number): RemoteSession[] {
+    return this.sessions.listByOwner(ownerWebContentsId)
+  }
+
+  async connect(connectionId: string, ownerWebContentsId: number): Promise<RemoteConnectResult> {
     const connection = await getRemoteConnection(connectionId)
     if (!connection) throw new Error('Remote connection not found')
     if (connection.kind !== 'rdp' && connection.kind !== 'vnc') {
@@ -41,18 +56,10 @@ export class RemoteControlEngine {
         ? await createRdpCleanPathBridge(connection.host as string, connection.port ?? 3389)
         : await launchNoVncProxy(connection)
 
-    if (credential) {
-      this.viewerCredentials.set(sessionId, {
-        username: connection.username || credential.username,
-        password: credential.password,
-        domain: connection.rdp?.domain ?? null
-      })
-    }
-
     await markRemoteConnectionConnected(connection.id)
     if (connection.credentialRef) touchCredential(connection.credentialRef)
 
-    return this.sessions.create(
+    const session = this.sessions.create(
       {
         id: sessionId,
         kind: connection.kind,
@@ -64,18 +71,37 @@ export class RemoteControlEngine {
         viewerDestination: `${connection.host}:${connection.port ?? (connection.kind === 'rdp' ? 3389 : 5900)}`,
         credentialAvailable: Boolean(credential)
       },
+      ownerWebContentsId,
       null,
       'close' in launchResult
         ? () => {
             launchResult.close()
-            this.viewerCredentials.delete(sessionId)
+            this.viewerCredentialLeases.revokeSession(sessionId)
           }
-        : () => this.viewerCredentials.delete(sessionId)
+        : () => this.viewerCredentialLeases.revokeSession(sessionId)
     )
+
+    return {
+      session,
+      credentialLease: credential
+        ? this.viewerCredentialLeases.issue(sessionId, ownerWebContentsId, {
+            username: connection.username || credential.username,
+            password: credential.password,
+            domain: connection.rdp?.domain ?? null
+          })
+        : null
+    }
   }
 
-  disconnect(sessionId: string): RemoteSession | null {
+  disconnect(sessionId: string, ownerWebContentsId: number): RemoteSession | null {
+    if (!this.sessions.isOwnedBy(sessionId, ownerWebContentsId)) return null
+    clearRemoteInputSessionIfOwned(sessionId, ownerWebContentsId)
     return this.sessions.disconnect(sessionId)
+  }
+
+  disconnectOwnedBy(ownerWebContentsId: number): void {
+    clearRemoteInputSession(ownerWebContentsId)
+    this.sessions.disconnectByOwner(ownerWebContentsId)
   }
 }
 

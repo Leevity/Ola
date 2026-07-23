@@ -1,4 +1,4 @@
-import { app, ipcMain, BrowserWindow } from 'electron'
+import { app, ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
 import { Client, type ConnectConfig, type ClientChannel } from 'ssh2'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -47,6 +47,7 @@ import {
 interface SshSession {
   id: string
   connectionId: string
+  ownerWindowId: number
   client: Client
   shell: ClientChannel | null
   status: 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error'
@@ -84,6 +85,7 @@ const sshDiagnostics: Array<{
   id: number
   sessionId: string
   connectionId: string
+  ownerWindowId: number
   stage: 'dial' | 'handshake' | 'auth' | 'shell' | 'reconnect'
   level: 'info' | 'error'
   message: string
@@ -264,6 +266,7 @@ type UploadEvent = {
 type UploadTaskState = {
   taskId: string
   connectionId: string
+  ownerWindowId: number
   canceled: boolean
   cancel: (reason?: string) => Promise<void>
 }
@@ -297,6 +300,7 @@ type TransferEvent = {
 type TransferTaskState = {
   taskId: string
   type: TransferTaskType
+  ownerWindowId: number
   sourceConnectionId?: string | null
   targetConnectionId?: string | null
   canceled: boolean
@@ -367,12 +371,24 @@ function isSshDebugEnabled(): boolean {
   return !app.isPackaged
 }
 
-function broadcastUploadEvent(evt: UploadEvent): void {
-  safeSendMessagePackToAllWindows('ssh:fs:upload:events', evt)
+function sendUploadEvent(evt: UploadEvent): void {
+  const ownerWindowId = uploadTasks.get(evt.taskId)?.ownerWindowId
+  const ownerWindow = ownerWindowId ? BrowserWindow.fromId(ownerWindowId) : null
+  if (ownerWindow && !ownerWindow.isDestroyed()) {
+    safeSendMessagePackToWindow(ownerWindow, 'ssh:fs:upload:events', evt)
+  }
 }
 
-function broadcastTransferEvent(evt: TransferEvent): void {
-  safeSendMessagePackToAllWindows('ssh:fs:transfer:events', evt)
+function sendTransferEvent(evt: TransferEvent): void {
+  const ownerWindowId = transferTasks.get(evt.taskId)?.ownerWindowId
+  const ownerWindow = ownerWindowId ? BrowserWindow.fromId(ownerWindowId) : null
+  if (ownerWindow && !ownerWindow.isDestroyed()) {
+    safeSendMessagePackToWindow(ownerWindow, 'ssh:fs:transfer:events', evt)
+  }
+}
+
+function isSshTaskOwnedBy(event: IpcMainInvokeEvent, ownerWindowId: number): boolean {
+  return BrowserWindow.fromWebContents(event.sender)?.id === ownerWindowId
 }
 
 function isNativeSshUploadProgressEvent(value: unknown): value is NativeSshUploadProgressEvent {
@@ -400,7 +416,7 @@ function ensureNativeSshEventBridge(): void {
   nativeSshEventsRegistered = true
   getNativeWorker().onEvent('ssh/upload-progress', (params) => {
     if (!isNativeSshUploadProgressEvent(params)) return
-    broadcastUploadEvent({
+    sendUploadEvent({
       taskId: params.taskId,
       connectionId: params.connectionId,
       stage: params.stage,
@@ -410,7 +426,7 @@ function ensureNativeSshEventBridge(): void {
   })
   getNativeWorker().onEvent('ssh/transfer-progress', (params) => {
     if (!isNativeSshTransferProgressEvent(params)) return
-    broadcastTransferEvent({
+    sendTransferEvent({
       taskId: params.taskId,
       type: params.type,
       stage: params.stage,
@@ -470,11 +486,17 @@ interface SshConnectionRow {
   updated_at: number
 }
 
-function broadcastToRenderer(channel: string, data: unknown): void {
-  const win = BrowserWindow.getAllWindows()[0]
-  if (win) {
-    safeSendMessagePackToWindow(win, channel, data)
+function sendSshSessionMessage(session: SshSession, channel: string, data: unknown): void {
+  const ownerWindow = BrowserWindow.fromId(session.ownerWindowId)
+  if (ownerWindow && !ownerWindow.isDestroyed()) {
+    safeSendMessagePackToWindow(ownerWindow, channel, data)
   }
+}
+
+function isSshSessionOwnedBy(event: IpcMainInvokeEvent | IpcMainEvent, sessionId: string): boolean {
+  const session = sshSessions.get(sessionId)
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return Boolean(session && ownerWindow && session.ownerWindowId === ownerWindow.id)
 }
 
 function ensureSshConfigWatcher(): void {
@@ -931,7 +953,7 @@ function recordOutput(session: SshSession, data: Buffer): void {
     session.outputBufferSize -= removed.data.length
   }
 
-  broadcastToRenderer('ssh:output', {
+  sendSshSessionMessage(session, 'ssh:output', {
     sessionId: session.id,
     data: chunk.toString('base64'),
     seq
@@ -955,6 +977,7 @@ function recordSshDiagnostic(
     id: nextSshDiagnosticId++,
     sessionId: session.id,
     connectionId: session.connectionId,
+    ownerWindowId: session.ownerWindowId,
     stage,
     level,
     message: redactSshDiagnostic(message),
@@ -971,7 +994,7 @@ function scheduleSshReconnect(session: SshSession, connection: SshConfigConnecti
     session.status = 'error'
     session.error = 'Connection lost after 3 reconnect attempts'
     recordSshDiagnostic(session, 'reconnect', 'error', session.error)
-    broadcastToRenderer('ssh:status', {
+    sendSshSessionMessage(session, 'ssh:status', {
       sessionId: session.id,
       connectionId: session.connectionId,
       status: 'error',
@@ -985,7 +1008,7 @@ function scheduleSshReconnect(session: SshSession, connection: SshConfigConnecti
   session.reconnectAttempts += 1
   const attempt = session.reconnectAttempts
   recordSshDiagnostic(session, 'reconnect', 'info', `Reconnect attempt ${attempt}`)
-  broadcastToRenderer('ssh:status', {
+  sendSshSessionMessage(session, 'ssh:status', {
     sessionId: session.id,
     connectionId: session.connectionId,
     status: 'reconnecting'
@@ -1023,7 +1046,7 @@ function scheduleSshReconnect(session: SshSession, connection: SshConfigConnecti
               stream.on('data', (data: Buffer) => recordOutput(session, data))
               stream.stderr?.on('data', (data: Buffer) => recordOutput(session, data))
               stream.on('close', () => scheduleSshReconnect(session, connection))
-              broadcastToRenderer('ssh:status', {
+              sendSshSessionMessage(session, 'ssh:status', {
                 sessionId: session.id,
                 connectionId: session.connectionId,
                 status: 'connected'
@@ -1073,19 +1096,37 @@ type SshGrepArgs = Record<string, unknown> & {
   path?: string
 }
 
+function isTrustedSshIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
 function registerSshMessagePackHandler<TArgs>(
   channel: string,
-  handler: (args: TArgs) => Promise<unknown>
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<unknown>
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    if (!isTrustedSshIpcSender(event)) {
+      return encodeMessagePackPayload({ error: 'Unauthorized SSH IPC sender' })
+    }
     const args = decodeMessagePackPayload<TArgs>(bytes)
-    return encodeMessagePackPayload(await handler(args))
+    return encodeMessagePackPayload(await handler(args, event))
   })
 }
 
-async function handleSshOutputBuffer(args: SshOutputBufferArgs): Promise<unknown> {
+async function handleSshOutputBuffer(
+  args: SshOutputBufferArgs,
+  event: IpcMainInvokeEvent
+): Promise<unknown> {
   const session = sshSessions.get(args.sessionId)
   if (!session) return { error: 'Session not found' }
+  if (!isSshSessionOwnedBy(event, args.sessionId))
+    return { error: 'SSH session is owned by another window' }
 
   const sinceSeq = args.sinceSeq ?? 0
   const chunks = session.outputBuffer
@@ -1474,7 +1515,9 @@ export async function registerSshHandlers(): Promise<void> {
     remoteDir: string
     localPath: string
     kind?: 'file' | 'folder'
-  }>('ssh:fs:upload:start', async (args) => {
+  }>('ssh:fs:upload:start', async (args, event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!ownerWindow) return { error: 'SSH task owner is unavailable' }
     const taskId = `ssh-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     try {
       const localStat = await fs.promises.stat(args.localPath)
@@ -1487,6 +1530,7 @@ export async function registerSshHandlers(): Promise<void> {
       const task: UploadTaskState = {
         taskId,
         connectionId: args.connectionId,
+        ownerWindowId: ownerWindow.id,
         canceled: false,
         cancel: async (): Promise<void> => {
           if (task.canceled) return
@@ -1494,7 +1538,7 @@ export async function registerSshHandlers(): Promise<void> {
           await getNativeWorker()
             .request<NativeSshFileMutationResult>('ssh/fs-upload-abort', { taskId }, 10_000)
             .catch((error) => console.warn('[SSH] Native upload abort failed:', error))
-          broadcastUploadEvent({
+          sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
             stage: 'canceled',
@@ -1507,7 +1551,7 @@ export async function registerSshHandlers(): Promise<void> {
       if (kind === 'file') {
         void (async () => {
           try {
-            broadcastUploadEvent({
+            sendUploadEvent({
               taskId,
               connectionId: args.connectionId,
               stage: 'upload',
@@ -1530,7 +1574,7 @@ export async function registerSshHandlers(): Promise<void> {
             if (!result.success) {
               throw new Error(result.error ?? 'SSH upload failed')
             }
-            broadcastUploadEvent({
+            sendUploadEvent({
               taskId,
               connectionId: args.connectionId,
               stage: 'done',
@@ -1542,7 +1586,7 @@ export async function registerSshHandlers(): Promise<void> {
               message: 'Upload complete'
             })
           } catch (err) {
-            broadcastUploadEvent({
+            sendUploadEvent({
               taskId,
               connectionId: args.connectionId,
               stage: task.canceled ? 'canceled' : 'error',
@@ -1558,7 +1602,7 @@ export async function registerSshHandlers(): Promise<void> {
 
       void (async () => {
         try {
-          broadcastUploadEvent({
+          sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
             stage: 'upload',
@@ -1582,7 +1626,7 @@ export async function registerSshHandlers(): Promise<void> {
           }
 
           const bytes = result.bytes ?? 0
-          broadcastUploadEvent({
+          sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
             stage: 'done',
@@ -1590,7 +1634,7 @@ export async function registerSshHandlers(): Promise<void> {
             message: 'Upload complete'
           })
         } catch (err) {
-          broadcastUploadEvent({
+          sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
             stage: task.canceled ? 'canceled' : 'error',
@@ -1608,9 +1652,12 @@ export async function registerSshHandlers(): Promise<void> {
     }
   })
 
-  registerSshMessagePackHandler<{ taskId: string }>('ssh:fs:upload:cancel', async (args) => {
+  registerSshMessagePackHandler<{ taskId: string }>('ssh:fs:upload:cancel', async (args, event) => {
     const task = uploadTasks.get(args.taskId)
     if (!task) return { error: 'Task not found' }
+    if (!isSshTaskOwnedBy(event, task.ownerWindowId)) {
+      return { error: 'SSH task is owned by another window' }
+    }
     try {
       await task.cancel('Canceled by user')
       return { success: true }
@@ -1645,7 +1692,9 @@ export async function registerSshHandlers(): Promise<void> {
         conflictPolicy?: SshConflictPolicy
         resume?: boolean
       }
-  >('ssh:fs:transfer:start', async (args) => {
+  >('ssh:fs:transfer:start', async (args, event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!ownerWindow) return { error: 'SSH task owner is unavailable' }
     const taskId = `ssh-transfer-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const conflictPolicy = args.conflictPolicy ?? 'skip'
 
@@ -1673,6 +1722,7 @@ export async function registerSshHandlers(): Promise<void> {
       const task: TransferTaskState = {
         taskId,
         type: args.type,
+        ownerWindowId: ownerWindow.id,
         sourceConnectionId:
           args.type === 'remote-copy' ? args.sourceConnectionId : args.connectionId,
         targetConnectionId:
@@ -1684,7 +1734,7 @@ export async function registerSshHandlers(): Promise<void> {
         canceled: false,
         cancel: async () => {
           task.canceled = true
-          broadcastTransferEvent({
+          sendTransferEvent({
             taskId,
             type: args.type,
             stage: 'canceled',
@@ -1715,7 +1765,7 @@ export async function registerSshHandlers(): Promise<void> {
                   10_000
                 )
                 .catch((error) => console.warn('[SSH] Native transfer upload abort failed:', error))
-              broadcastTransferEvent({
+              sendTransferEvent({
                 taskId,
                 type: task.type,
                 stage: 'canceled',
@@ -1763,7 +1813,7 @@ export async function registerSshHandlers(): Promise<void> {
                 .catch((error) =>
                   console.warn('[SSH] Native transfer download abort failed:', error)
                 )
-              broadcastTransferEvent({
+              sendTransferEvent({
                 taskId,
                 type: task.type,
                 stage: 'canceled',
@@ -1809,7 +1859,7 @@ export async function registerSshHandlers(): Promise<void> {
                   10_000
                 )
                 .catch((error) => console.warn('[SSH] Native remote-copy abort failed:', error))
-              broadcastTransferEvent({
+              sendTransferEvent({
                 taskId,
                 type: task.type,
                 stage: 'canceled',
@@ -1842,7 +1892,7 @@ export async function registerSshHandlers(): Promise<void> {
             return
           }
         } catch (err) {
-          broadcastTransferEvent({
+          sendTransferEvent({
             taskId,
             type: task.type,
             stage: task.canceled ? 'canceled' : 'error',
@@ -1863,22 +1913,28 @@ export async function registerSshHandlers(): Promise<void> {
     }
   })
 
-  registerSshMessagePackHandler<{ taskId: string }>('ssh:fs:transfer:cancel', async (args) => {
-    const task = transferTasks.get(args.taskId)
-    if (!task) return { error: 'Task not found' }
-    try {
-      logSshDebug('transfer cancel requested', {
-        taskId: args.taskId,
-        type: task.type,
-        sourceConnectionId: task.sourceConnectionId ?? null,
-        targetConnectionId: task.targetConnectionId ?? null
-      })
-      await task.cancel('Canceled by user')
-      return { success: true }
-    } catch (err) {
-      return { error: String(err) }
+  registerSshMessagePackHandler<{ taskId: string }>(
+    'ssh:fs:transfer:cancel',
+    async (args, event) => {
+      const task = transferTasks.get(args.taskId)
+      if (!task) return { error: 'Task not found' }
+      if (!isSshTaskOwnedBy(event, task.ownerWindowId)) {
+        return { error: 'SSH task is owned by another window' }
+      }
+      try {
+        logSshDebug('transfer cancel requested', {
+          taskId: args.taskId,
+          type: task.type,
+          sourceConnectionId: task.sourceConnectionId ?? null,
+          targetConnectionId: task.targetConnectionId ?? null
+        })
+        await task.cancel('Canceled by user')
+        return { success: true }
+      } catch (err) {
+        return { error: String(err) }
+      }
     }
-  })
+  )
 
   registerSshMessagePackHandler<{ id: string; name?: string; sortOrder?: number }>(
     'ssh:group:update',
@@ -2077,16 +2133,19 @@ export async function registerSshHandlers(): Promise<void> {
 
   // ── Terminal Session: Connect ──
 
-  registerSshMessagePackHandler<{ connectionId: string }>('ssh:connect', async (args) => {
+  registerSshMessagePackHandler<{ connectionId: string }>('ssh:connect', async (args, event) => {
     try {
       const connection = getSshConnection(args.connectionId)
       if (!connection) return { error: 'Connection not found' }
 
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      if (!ownerWindow) return { error: 'SSH session owner is unavailable' }
       const sessionId = `ssh-${nextSessionId++}`
 
       const session: SshSession = {
         id: sessionId,
         connectionId: args.connectionId,
+        ownerWindowId: ownerWindow.id,
         client: new Client(),
         shell: null,
         status: 'connecting',
@@ -2099,7 +2158,7 @@ export async function registerSshHandlers(): Promise<void> {
       sshSessions.set(sessionId, session)
       recordSshDiagnostic(session, 'dial', 'info', 'Connection started')
 
-      broadcastToRenderer('ssh:status', {
+      sendSshSessionMessage(session, 'ssh:status', {
         sessionId,
         connectionId: args.connectionId,
         status: 'connecting'
@@ -2111,7 +2170,7 @@ export async function registerSshHandlers(): Promise<void> {
           session.error = 'Connection timeout (30s)'
           session.client.end()
           sshSessions.delete(sessionId)
-          broadcastToRenderer('ssh:status', {
+          sendSshSessionMessage(session, 'ssh:status', {
             sessionId,
             connectionId: args.connectionId,
             status: 'error',
@@ -2156,7 +2215,7 @@ export async function registerSshHandlers(): Promise<void> {
                 if (err) {
                   session.status = 'error'
                   session.error = `Shell error: ${err.message}`
-                  broadcastToRenderer('ssh:status', {
+                  sendSshSessionMessage(session, 'ssh:status', {
                     sessionId,
                     connectionId: args.connectionId,
                     status: 'error',
@@ -2183,7 +2242,7 @@ export async function registerSshHandlers(): Promise<void> {
                   scheduleSshReconnect(session, connection)
                 })
 
-                broadcastToRenderer('ssh:status', {
+                sendSshSessionMessage(session, 'ssh:status', {
                   sessionId,
                   connectionId: args.connectionId,
                   status: 'connected'
@@ -2210,7 +2269,7 @@ export async function registerSshHandlers(): Promise<void> {
               session.error
             )
             sshSessions.delete(sessionId)
-            broadcastToRenderer('ssh:status', {
+            sendSshSessionMessage(session, 'ssh:status', {
               sessionId,
               connectionId: args.connectionId,
               status: 'error',
@@ -2234,8 +2293,11 @@ export async function registerSshHandlers(): Promise<void> {
     }
   }
 
-  ipcMain.on(toMessagePackChannel('ssh:data'), (_event, bytes: Uint8Array) => {
-    handleSshData(decodeMessagePackPayload<{ sessionId: string; data: string }>(bytes))
+  ipcMain.on(toMessagePackChannel('ssh:data'), (event, bytes: Uint8Array) => {
+    if (!isTrustedSshIpcSender(event)) return
+    const args = decodeMessagePackPayload<{ sessionId: string; data: string }>(bytes)
+    if (!isSshSessionOwnedBy(event, args.sessionId)) return
+    handleSshData(args)
   })
 
   // ── Terminal Session: Resize PTY ──
@@ -2247,17 +2309,21 @@ export async function registerSshHandlers(): Promise<void> {
     }
   }
 
-  ipcMain.on(toMessagePackChannel('ssh:resize'), (_event, bytes: Uint8Array) => {
-    handleSshResize(
-      decodeMessagePackPayload<{ sessionId: string; cols: number; rows: number }>(bytes)
-    )
+  ipcMain.on(toMessagePackChannel('ssh:resize'), (event, bytes: Uint8Array) => {
+    if (!isTrustedSshIpcSender(event)) return
+    const args = decodeMessagePackPayload<{ sessionId: string; cols: number; rows: number }>(bytes)
+    if (!isSshSessionOwnedBy(event, args.sessionId)) return
+    handleSshResize(args)
   })
 
   // ── Terminal Session: Disconnect ──
 
-  registerSshMessagePackHandler<{ sessionId: string }>('ssh:disconnect', async (args) => {
+  registerSshMessagePackHandler<{ sessionId: string }>('ssh:disconnect', async (args, event) => {
     const session = sshSessions.get(args.sessionId)
     if (!session) return { error: 'Session not found' }
+    if (!isSshSessionOwnedBy(event, args.sessionId)) {
+      return { error: 'SSH session is owned by another window' }
+    }
 
     session.userInitiatedDisconnect = true
     session.status = 'disconnected'
@@ -2266,7 +2332,7 @@ export async function registerSshHandlers(): Promise<void> {
     session.client.end()
     sshSessions.delete(args.sessionId)
 
-    broadcastToRenderer('ssh:status', {
+    sendSshSessionMessage(session, 'ssh:status', {
       sessionId: args.sessionId,
       connectionId: session.connectionId,
       status: 'disconnected'
@@ -2277,9 +2343,12 @@ export async function registerSshHandlers(): Promise<void> {
 
   // ── Terminal Session: List active sessions ──
 
-  registerSshMessagePackHandler<void>('ssh:session:list', async () => {
+  registerSshMessagePackHandler<void>('ssh:session:list', async (_args, event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!ownerWindow) return []
     const list: { id: string; connectionId: string; status: string; error?: string }[] = []
     for (const session of sshSessions.values()) {
+      if (session.ownerWindowId !== ownerWindow.id) continue
       list.push({
         id: session.id,
         connectionId: session.connectionId,
@@ -2292,11 +2361,17 @@ export async function registerSshHandlers(): Promise<void> {
 
   registerSshMessagePackHandler<{ connectionId?: string }>(
     'ssh:diagnostics:list',
-    async (args) => ({
-      entries: args?.connectionId
-        ? sshDiagnostics.filter((entry) => entry.connectionId === args.connectionId)
-        : sshDiagnostics.slice()
-    })
+    async (args, event) => {
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      if (!ownerWindow) return { entries: [] }
+      return {
+        entries: sshDiagnostics.filter(
+          (entry) =>
+            entry.ownerWindowId === ownerWindow.id &&
+            (!args?.connectionId || entry.connectionId === args.connectionId)
+        )
+      }
+    }
   )
 
   // ── Terminal Session: Output buffer ──

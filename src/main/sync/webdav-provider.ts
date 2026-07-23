@@ -203,6 +203,16 @@ function hasRemoteChanged(
   return false
 }
 
+function buildConditionalUploadHeaders(options: UploadRemoteBundleOptions): Record<string, string> {
+  if (options.previousExists === false) {
+    return { 'If-None-Match': '*' }
+  }
+  if (options.previousEtag) {
+    return { 'If-Match': `"${options.previousEtag}"` }
+  }
+  return {}
+}
+
 async function listBackupHrefs(config: WebDavSyncConfig): Promise<string[]> {
   const backupsUrl = buildUrl(config.serverUrl, `${config.remoteDir}/backups`)
   const response = await webdavRequest(config, 'PROPFIND', backupsUrl, {
@@ -327,9 +337,13 @@ export class WebDavProvider {
     const { gzipSync } = await import('zlib')
     const body = gzipSync(Buffer.from(JSON.stringify(bundle), 'utf-8'))
     const response = await webdavRequest(config, 'PUT', stateUrl, {
-      headers: { 'Content-Type': 'application/gzip' },
+      headers: {
+        'Content-Type': 'application/gzip',
+        ...buildConditionalUploadHeaders(options)
+      },
       body: bufferToBody(body)
     })
+    if (response.status === 412) throw new RemoteStateChangedError()
     if (!response.ok) throw new Error(`WebDAV upload failed: HTTP ${response.status}`)
 
     await pruneBackups(config)

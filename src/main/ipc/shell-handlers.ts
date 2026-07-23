@@ -1,4 +1,11 @@
-import { ipcMain, shell, BrowserWindow, app } from 'electron'
+import {
+  ipcMain,
+  shell,
+  BrowserWindow,
+  app,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent
+} from 'electron'
 import { spawn } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -94,6 +101,36 @@ interface NativeShellAbortResult {
   success: boolean
   aborted: boolean
   error?: string | null
+}
+
+const UNAUTHORIZED_SHELL_IPC_ERROR = 'Unauthorized shell IPC sender'
+
+function getTrustedShellOwnerWindow(
+  event: IpcMainInvokeEvent | IpcMainEvent
+): BrowserWindow | null {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+    ? ownerWindow
+    : null
+}
+
+function isTrustedShellIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
+  return getTrustedShellOwnerWindow(event) !== null
+}
+
+function registerTrustedShellMessagePackHandler<TArgs>(
+  channel: string,
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<unknown> | unknown
+): void {
+  registerMessagePackHandler<TArgs>(channel, async (args, event) => {
+    if (!isTrustedShellIpcSender(event)) {
+      return { error: UNAUTHORIZED_SHELL_IPC_ERROR }
+    }
+    return await handler(args, event)
+  })
 }
 
 let shellOutputForwardingRegistered = false
@@ -372,7 +409,7 @@ export function registerShellHandlers(): void {
   const nativeWorker = getNativeWorker()
   const runningShellProcesses = new Map<
     string,
-    { terminalId: string; abort: (reason?: 'user' | 'timeout') => void }
+    { ownerWindowId: number; terminalId: string; abort: (reason?: 'user' | 'timeout') => void }
   >()
 
   if (!shellOutputForwardingRegistered) {
@@ -386,21 +423,25 @@ export function registerShellHandlers(): void {
         chunk: params.chunk,
         stream: params.stream === 'stderr' ? 'stderr' : 'stdout'
       }
-      for (const targetWindow of BrowserWindow.getAllWindows()) {
-        if (targetWindow.isDestroyed()) continue
-        safeSendMessagePackToWindow(targetWindow, 'shell:output', payload)
+      const ownerWindowId = runningShellProcesses.get(execId)?.ownerWindowId
+      const ownerWindow = ownerWindowId === undefined ? null : BrowserWindow.fromId(ownerWindowId)
+      if (ownerWindow && !ownerWindow.isDestroyed()) {
+        safeSendMessagePackToWindow(ownerWindow, 'shell:output', payload)
       }
     })
   }
 
-  registerMessagePackHandler<ShellExecArgs>('shell:exec', async (args, event) => {
+  registerTrustedShellMessagePackHandler<ShellExecArgs>('shell:exec', async (args, event) => {
     const DEFAULT_TIMEOUT = 600_000
     const MAX_TIMEOUT = 3_600_000
     const timeout = Math.min(args.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT)
     const execId = args.execId?.trim()
+    if (execId && runningShellProcesses.has(execId)) {
+      return { error: 'Shell execution ID is already active' }
+    }
     const startedAt = Date.now()
-    const ownerWindow =
-      BrowserWindow.fromWebContents(event.sender) ?? BrowserWindow.getAllWindows()[0] ?? null
+    const ownerWindow = getTrustedShellOwnerWindow(event)
+    if (!ownerWindow) return { error: UNAUTHORIZED_SHELL_IPC_ERROR }
 
     const cleanupStarted = nativeWorker.onEvent('shell/started', (params) => {
       if (!execId || !ownerWindow || !isNativeShellStartedEvent(params)) return
@@ -411,6 +452,7 @@ export function registerShellHandlers(): void {
         terminalId: String(params.terminalId ?? params.processId ?? execId)
       }
       runningShellProcesses.set(execId, {
+        ownerWindowId: ownerWindow.id,
         terminalId: payload.terminalId,
         abort: (reason: 'user' | 'timeout' = 'user') => {
           void nativeWorker
@@ -423,6 +465,7 @@ export function registerShellHandlers(): void {
 
     if (execId) {
       runningShellProcesses.set(execId, {
+        ownerWindowId: ownerWindow.id,
         terminalId: `native-shell-${execId}`,
         abort: (reason: 'user' | 'timeout' = 'user') => {
           void nativeWorker
@@ -484,23 +527,25 @@ export function registerShellHandlers(): void {
     }
   })
 
-  const abortShellProcess = (data: { execId?: string }): void => {
-    const execId = data?.execId
-    if (!execId) return
+  const abortShellProcess = (data: { execId?: string }, event: IpcMainEvent): void => {
+    const execId = data?.execId?.trim()
+    const ownerWindow = getTrustedShellOwnerWindow(event)
+    if (!execId || !ownerWindow) return
     const running = runningShellProcesses.get(execId)
-    if (!running) return
+    if (!running || running.ownerWindowId !== ownerWindow.id) return
     running.abort('user')
   }
 
-  ipcMain.on(toMessagePackChannel('shell:abort'), (_event, bytes: Uint8Array) => {
-    abortShellProcess(decodeMessagePackPayload<{ execId?: string }>(bytes))
+  ipcMain.on(toMessagePackChannel('shell:abort'), (event, bytes: Uint8Array) => {
+    if (!isTrustedShellIpcSender(event)) return
+    abortShellProcess(decodeMessagePackPayload<{ execId?: string }>(bytes), event)
   })
 
-  registerMessagePackHandler<string>('shell:openPath', async (folderPath) => {
+  registerTrustedShellMessagePackHandler<string>('shell:openPath', async (folderPath) => {
     return shell.openPath(folderPath)
   })
 
-  registerMessagePackHandler<string>('shell:showItemInFolder', async (targetPath) => {
+  registerTrustedShellMessagePackHandler<string>('shell:showItemInFolder', async (targetPath) => {
     try {
       const resolvedPath = path.resolve(targetPath)
       if (!fs.existsSync(resolvedPath)) {
@@ -514,7 +559,7 @@ export function registerShellHandlers(): void {
     }
   })
 
-  registerMessagePackHandler<string>('shell:trashPath', async (targetPath) => {
+  registerTrustedShellMessagePackHandler<string>('shell:trashPath', async (targetPath) => {
     try {
       const resolvedPath = path.resolve(targetPath)
       if (!fs.existsSync(resolvedPath)) {
@@ -528,7 +573,7 @@ export function registerShellHandlers(): void {
     }
   })
 
-  registerMessagePackHandler<{ path: string; appId: OpenWithAppId }>(
+  registerTrustedShellMessagePackHandler<{ path: string; appId: OpenWithAppId }>(
     'shell:openWithApp',
     async (args) => {
       try {
@@ -545,7 +590,7 @@ export function registerShellHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<string>('shell:openExternal', async (url) => {
+  registerTrustedShellMessagePackHandler<string>('shell:openExternal', async (url) => {
     if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
       return shell.openExternal(url)
     }

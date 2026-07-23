@@ -1,5 +1,6 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { getNativeWorker } from '../lib/native-worker'
+import { McpAutoConnectCoordinator } from '../mcp/autoconnect-coordinator'
 import { McpManager } from '../mcp/mcp-manager'
 import type { McpServerConfig } from '../mcp/mcp-types'
 import {
@@ -11,6 +12,7 @@ import {
 const MCP_CONFIG_TIMEOUT_MS = 60_000
 
 let activeMcpManager: McpManager | null = null
+const mcpAutoConnectCoordinator = new McpAutoConnectCoordinator()
 
 type McpCallToolArgs = {
   serverId: string
@@ -54,28 +56,42 @@ async function removeServer(id: string): Promise<{ success: boolean; error?: str
   return await getNativeWorker().request('mcp/config-remove', id, MCP_CONFIG_TIMEOUT_MS)
 }
 
+function isTrustedMcpIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
 function registerMcpMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    if (!isTrustedMcpIpcSender(event)) {
+      throw new Error('Unauthorized MCP IPC sender')
+    }
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args))
   })
 }
 
 export async function autoConnectMcpServers(mcpManager: McpManager): Promise<void> {
-  const servers = (await readServers()).filter((server) => server.enabled)
-
-  await Promise.allSettled(
-    servers.map(async (server) => {
-      try {
-        await mcpManager.connectServer(server)
-      } catch (err) {
-        console.error(`[MCP] Auto-connect failed for ${server.name} (${server.id}):`, err)
-      }
-    })
+  const outcomes = await mcpAutoConnectCoordinator.connectEnabled(
+    await readServers(),
+    async (server) => await mcpManager.connectServer(server)
   )
+  for (const outcome of outcomes) {
+    if (outcome.status === 'failed') {
+      console.error(
+        `[MCP] Auto-connect failed for ${outcome.serverId} after ${outcome.attempts} attempts; ` +
+          `circuit open until ${new Date(outcome.retryAt).toISOString()}: ${outcome.error}`
+      )
+    }
+  }
 }
 
 // ── Register IPC handlers ──
@@ -104,6 +120,7 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
   // Remove an MCP server config
   registerMcpMessagePackHandler<string>('mcp:remove', async (id) => {
     await mcpManager.disconnectServer(id)
+    mcpAutoConnectCoordinator.reset(id)
     return await removeServer(id)
   })
 
@@ -115,6 +132,7 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
 
     try {
       await mcpManager.connectServer(config)
+      mcpAutoConnectCoordinator.reset(id)
       return { success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
