@@ -1,4 +1,4 @@
-﻿import {
+import {
   app,
   shell,
   BrowserWindow,
@@ -84,6 +84,7 @@ import { registerSidecarHandlers, getSidecarManager } from './ipc/sidecar-manage
 import { registerCodeGraphHandlers } from './ipc/codegraph-handlers'
 import { getNativeWorker, stopNativeWorker } from './lib/native-worker'
 import { getCodeGraphWorker } from './lib/codegraph-worker'
+import { stopCodeGraphSync } from './lib/codegraph-sync'
 import { registerTeamRuntimeHandlers } from './ipc/team-runtime-handlers'
 import { loadPersistedJobs, cancelAllJobs } from './cron/cron-scheduler'
 import { McpManager } from './mcp/mcp-manager'
@@ -108,42 +109,72 @@ import * as sessionsDao from './db/sessions-dao'
 import {
   configureBuiltInBrowserSession,
   flushBuiltInBrowserStorage,
+  getBuiltInBrowserStorageSessions,
   resolveBrowserSessionStorageMode
 } from './browser/browser-emulation'
 
-import { createFeishuService } from './channels/providers/feishu/feishu-service'
-import { FeishuApi } from './channels/providers/feishu/feishu-api'
-import { createDingTalkService } from './channels/providers/dingtalk/dingtalk-service'
-import { createTelegramService } from './channels/providers/telegram/telegram-service'
-import { parseTelegramWsMessage } from './channels/providers/telegram/parse-ws-message'
-import { createDiscordService } from './channels/providers/discord/discord-service'
-import { parseDiscordWsMessage } from './channels/providers/discord/parse-ws-message'
-import { createWhatsAppService } from './channels/providers/whatsapp/whatsapp-service'
-import { parseWhatsAppWsMessage } from './channels/providers/whatsapp/parse-ws-message'
-import { createWeComService } from './channels/providers/wecom/wecom-service'
-import { parseWeComWsMessage } from './channels/providers/wecom/parse-ws-message'
-import { createQQService } from './channels/providers/qq/qq-service'
-import { parseQQWsMessage } from './channels/providers/qq/parse-ws-message'
-import { createWeixinService } from './channels/providers/weixin/weixin-service'
 import { setPluginManager } from './channels/auto-reply'
 
 const channelManager = new ChannelManager()
 setPluginManager(channelManager)
-channelManager.registerFactory('feishu-bot', createFeishuService)
-// Feishu uses official SDK WSClient — no generic parser needed
-channelManager.registerFactory('dingtalk-bot', createDingTalkService)
-// DingTalk uses built-in Stream protocol handling — no generic parser needed
-channelManager.registerFactory('telegram-bot', createTelegramService)
-channelManager.registerParser('telegram-bot', parseTelegramWsMessage)
-channelManager.registerFactory('discord-bot', createDiscordService)
-channelManager.registerParser('discord-bot', parseDiscordWsMessage)
-channelManager.registerFactory('whatsapp-bot', createWhatsAppService)
-channelManager.registerParser('whatsapp-bot', parseWhatsAppWsMessage)
-channelManager.registerFactory('wecom-bot', createWeComService)
-channelManager.registerParser('wecom-bot', parseWeComWsMessage)
-channelManager.registerFactory('qq-bot', createQQService)
-channelManager.registerParser('qq-bot', parseQQWsMessage)
-channelManager.registerFactory('weixin-official', createWeixinService)
+channelManager.registerFactory('feishu-bot', async (instance, notify) =>
+  (await import('./channels/providers/feishu/feishu-service')).createFeishuService(instance, notify)
+)
+channelManager.registerFactory('dingtalk-bot', async (instance, notify) =>
+  (await import('./channels/providers/dingtalk/dingtalk-service')).createDingTalkService(
+    instance,
+    notify
+  )
+)
+channelManager.registerFactory('telegram-bot', async (instance, notify) =>
+  (await import('./channels/providers/telegram/telegram-service')).createTelegramService(
+    instance,
+    notify
+  )
+)
+channelManager.registerParserLoader(
+  'telegram-bot',
+  async () =>
+    (await import('./channels/providers/telegram/parse-ws-message')).parseTelegramWsMessage
+)
+channelManager.registerFactory('discord-bot', async (instance, notify) =>
+  (await import('./channels/providers/discord/discord-service')).createDiscordService(
+    instance,
+    notify
+  )
+)
+channelManager.registerParserLoader(
+  'discord-bot',
+  async () => (await import('./channels/providers/discord/parse-ws-message')).parseDiscordWsMessage
+)
+channelManager.registerFactory('whatsapp-bot', async (instance, notify) =>
+  (await import('./channels/providers/whatsapp/whatsapp-service')).createWhatsAppService(
+    instance,
+    notify
+  )
+)
+channelManager.registerParserLoader(
+  'whatsapp-bot',
+  async () =>
+    (await import('./channels/providers/whatsapp/parse-ws-message')).parseWhatsAppWsMessage
+)
+channelManager.registerFactory('wecom-bot', async (instance, notify) =>
+  (await import('./channels/providers/wecom/wecom-service')).createWeComService(instance, notify)
+)
+channelManager.registerParserLoader(
+  'wecom-bot',
+  async () => (await import('./channels/providers/wecom/parse-ws-message')).parseWeComWsMessage
+)
+channelManager.registerFactory('qq-bot', async (instance, notify) =>
+  (await import('./channels/providers/qq/qq-service')).createQQService(instance, notify)
+)
+channelManager.registerParserLoader(
+  'qq-bot',
+  async () => (await import('./channels/providers/qq/parse-ws-message')).parseQQWsMessage
+)
+channelManager.registerFactory('weixin-official', async (instance, notify) =>
+  (await import('./channels/providers/weixin/weixin-service')).createWeixinService(instance, notify)
+)
 
 const mcpManager = new McpManager()
 
@@ -390,6 +421,11 @@ function handleClipboardWriteImage(args: ClipboardWriteImageArgs): {
   }
 }
 
+async function downloadRemoteImage(url: string): Promise<Buffer> {
+  const { FeishuApi } = await import('./channels/providers/feishu/feishu-api')
+  return await FeishuApi.downloadUrl(url)
+}
+
 async function handleImagePersistGenerated(
   args: ImagePersistGeneratedArgs
 ): Promise<{ filePath?: string; mediaType?: string; data?: string; error?: string }> {
@@ -398,7 +434,7 @@ async function handleImagePersistGenerated(
     if (typeof args.data === 'string' && args.data.trim()) {
       buffer = Buffer.from(args.data, 'base64')
     } else if (typeof args.url === 'string' && args.url.trim()) {
-      buffer = await FeishuApi.downloadUrl(args.url)
+      buffer = await downloadRemoteImage(args.url)
     } else {
       return { error: 'Missing image data or url' }
     }
@@ -417,7 +453,7 @@ async function handleImageFetchBase64(
   args: ImageFetchBase64Args
 ): Promise<{ data?: string; mimeType?: string; error?: string }> {
   try {
-    const buffer = await FeishuApi.downloadUrl(args.url)
+    const buffer = await downloadRemoteImage(args.url)
     const fileExt = extname(args.url.split('?')[0]).toLowerCase()
     const mimeType =
       fileExt === '.jpg' || fileExt === '.jpeg'
@@ -894,6 +930,8 @@ async function openDetachedSessionWindow(
     icon: icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: false,
       webviewTag: true
     }
@@ -1047,10 +1085,43 @@ function registerWindowControlHandlers(): void {
   })
 }
 
+function configureBuiltInBrowserPermissions(): void {
+  for (const browserSession of getBuiltInBrowserStorageSessions()) {
+    browserSession.setPermissionCheckHandler(() => false)
+    browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+      callback(false)
+    })
+  }
+}
+
 function configureAppWindow(
   window: BrowserWindow,
   options?: { hideOnClose?: boolean; onClosed?: () => void }
 ): void {
+  window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    const sourceUrl = params.src ?? ''
+    const isHttpUrl = /^https?:\/\//i.test(sourceUrl)
+    const isAllowedPartition = !params.partition || params.partition === 'persist:ola-browser'
+
+    if (!isHttpUrl || !isAllowedPartition) {
+      event.preventDefault()
+      console.warn('[Main] Blocked unsafe webview attachment', {
+        sourceUrl,
+        partition: params.partition
+      })
+      return
+    }
+
+    delete webPreferences.preload
+    delete webPreferences.additionalArguments
+    webPreferences.nodeIntegration = false
+    webPreferences.nodeIntegrationInSubFrames = false
+    webPreferences.contextIsolation = true
+    webPreferences.sandbox = true
+    webPreferences.webSecurity = true
+    webPreferences.allowRunningInsecureContent = false
+  })
+
   window.on('maximize', () => {
     safeSendMessagePackToWindow(window, 'window:maximized', true)
   })
@@ -1110,6 +1181,8 @@ function createWindow(): void {
 
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: false,
       webviewTag: true
     }
@@ -1183,8 +1256,10 @@ async function createSshWindow(): Promise<void> {
     icon: icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: false,
-      webviewTag: true
+      webviewTag: false
     }
   })
 
@@ -1241,6 +1316,7 @@ app.on('before-quit', (event) => {
     void flushSettingsSync()
     closeAllRemoteSessions()
     void stopNativeWorker()
+    stopCodeGraphSync()
     void getCodeGraphWorker().stop()
     return
   }
@@ -1257,6 +1333,7 @@ app.on('before-quit', (event) => {
     void flushSettingsSync()
     closeAllRemoteSessions()
     void stopNativeWorker()
+    stopCodeGraphSync()
     void getCodeGraphWorker().stop()
     app.quit()
   })()
@@ -1302,6 +1379,12 @@ if (gotSingleInstanceLock) {
     optimizer = utils.optimizer
     is = utils.is
 
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+      attachWindowCrashLogging(window)
+    })
+    runLoggedStartupStep('create_main_window', createWindow)
+
     await runLoggedStartupStepAsync('sync_macos_shell_environment', syncMacOSShellEnvironment)
     try {
       await runLoggedStartupStepAsync('native_worker_settings_startup', async () => {
@@ -1321,6 +1404,10 @@ if (gotSingleInstanceLock) {
     const browserEmulationStatus = runLoggedStartupStep(
       'configure_builtin_browser_session',
       configureBuiltInBrowserSession
+    )
+    runLoggedStartupStep(
+      'configure_builtin_browser_permissions',
+      configureBuiltInBrowserPermissions
     )
 
     recordCrash('app_started', {
@@ -1342,11 +1429,6 @@ if (gotSingleInstanceLock) {
     // and ignore CommandOrControl + R in production.
 
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
-
-    app.on('browser-window-created', (_, window) => {
-      optimizer.watchWindowShortcuts(window)
-      attachWindowCrashLogging(window)
-    })
 
     registerMessagePackHandler<void>('app:homedir', () => homedir())
     registerMessagePackHandler<void>('app:global-memory-home', () => {
@@ -1501,7 +1583,7 @@ if (gotSingleInstanceLock) {
         const win = BrowserWindow.getFocusedWindow()
         if (!win) return { canceled: true }
         try {
-          const buffer = await FeishuApi.downloadUrl(args.url)
+          const buffer = await downloadRemoteImage(args.url)
           const rawName =
             args.defaultName?.trim() ||
             `image-${Date.now()}${extname(args.url.split('?')[0]) || '.png'}`
@@ -1523,7 +1605,6 @@ if (gotSingleInstanceLock) {
     void autoConnectMcpServers(mcpManager)
 
     setMacDockIcon()
-    runLoggedStartupStep('create_main_window', createWindow)
     scheduleUsageEventsStartupCleanup()
 
     createTray()
@@ -1564,6 +1645,7 @@ app.on('window-all-closed', () => {
   closeAllRemoteSessions()
   cancelAllJobs()
   void stopNativeWorker()
+  stopCodeGraphSync()
   void getCodeGraphWorker().stop()
   getSidecarManager()
     .stop()

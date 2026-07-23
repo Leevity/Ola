@@ -1,4 +1,4 @@
-import { app } from 'electron'
+﻿import { app } from 'electron'
 import { spawn, type ChildProcess } from 'child_process'
 import { randomUUID } from 'crypto'
 import { EventEmitter } from 'events'
@@ -14,6 +14,8 @@ const NATIVE_WORKER_CONNECT_TIMEOUT_MS = 10_000
 const NATIVE_WORKER_CONNECT_RETRY_MS = 35
 const FRAME_HEADER_BYTES = 4
 const MAX_FRAME_BYTES = 256 * 1024 * 1024
+const WORKER_RESTART_INITIAL_DELAY_MS = 250
+const WORKER_RESTART_MAX_DELAY_MS = 10_000
 const REQUIRED_NATIVE_WORKER_METHODS = [
   'settings/read',
   'settings/get',
@@ -54,7 +56,14 @@ export type NativeWorkerRawEventFrame = NativeMessagePackRoute & {
   byteLength: number
 }
 
-class NativeWorkerManager {
+export type NativeWorkerLifecycleEvent = {
+  status: 'ready' | 'stopped' | 'restarting'
+  generation: number
+  error?: Error
+  retryDelayMs?: number
+}
+
+export class NativeWorkerManager {
   private child: ChildProcess | null = null
   private socket: net.Socket | null = null
   private endpoint: string | null = null
@@ -66,6 +75,9 @@ class NativeWorkerManager {
   private pendingFrameLength = -1
   private nextId = 1
   private startPromise: Promise<void> | null = null
+  private restartTimer: ReturnType<typeof setTimeout> | null = null
+  private restartAttempts = 0
+  private generationValue = 0
   private stopping = false
 
   get isRunning(): boolean {
@@ -80,6 +92,24 @@ class NativeWorkerManager {
 
   get processId(): number | null {
     return this.child?.pid ?? null
+  }
+
+  get generation(): number {
+    return this.generationValue
+  }
+
+  onLifecycle(listener: (event: NativeWorkerLifecycleEvent) => void): () => void {
+    this.events.on('worker/lifecycle', listener)
+    return () => this.events.off('worker/lifecycle', listener)
+  }
+
+  async healthCheck(): Promise<void> {
+    await this.request('worker/ping', {}, 10_000)
+  }
+
+  async recycle(): Promise<void> {
+    await this.stop()
+    await this.ensureStarted()
   }
 
   async ensureStarted(): Promise<void> {
@@ -166,6 +196,10 @@ class NativeWorkerManager {
 
   async stop(): Promise<void> {
     this.stopping = true
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
     this.closeWorker(new Error('Native worker stopped'))
     this.stopping = false
   }
@@ -220,6 +254,12 @@ class NativeWorkerManager {
 
       await this.request('worker/ping', {}, 10_000)
       await this.verifyRequiredMethods(workerPath)
+      this.generationValue += 1
+      this.restartAttempts = 0
+      this.events.emit('worker/lifecycle', {
+        status: 'ready',
+        generation: this.generationValue
+      } satisfies NativeWorkerLifecycleEvent)
       console.log('[NativeWorker] IPC connected', {
         pid: child.pid ?? null,
         workerPath,
@@ -423,6 +463,7 @@ class NativeWorkerManager {
     const child = this.child
     const socket = this.socket
     const endpoint = this.endpoint
+    const hadWorker = child !== null || socket !== null
 
     this.child = null
     this.socket = null
@@ -454,6 +495,38 @@ class NativeWorkerManager {
       pending.reject(error)
     }
     this.pending.clear()
+
+    if (!hadWorker) return
+    this.events.emit('worker/lifecycle', {
+      status: 'stopped',
+      generation: this.generationValue,
+      error
+    } satisfies NativeWorkerLifecycleEvent)
+    if (!this.stopping) this.scheduleRestart(error)
+  }
+
+  private scheduleRestart(error: Error): void {
+    if (this.restartTimer || this.isRunning) return
+
+    const retryDelayMs = Math.min(
+      WORKER_RESTART_MAX_DELAY_MS,
+      WORKER_RESTART_INITIAL_DELAY_MS * 2 ** this.restartAttempts
+    )
+    this.restartAttempts += 1
+    this.events.emit('worker/lifecycle', {
+      status: 'restarting',
+      generation: this.generationValue,
+      error,
+      retryDelayMs
+    } satisfies NativeWorkerLifecycleEvent)
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null
+      void this.ensureStarted().catch((restartError) => {
+        const normalized = asError(restartError)
+        console.warn('[NativeWorker] restart failed', { error: normalized.message })
+        this.scheduleRestart(normalized)
+      })
+    }, retryDelayMs)
   }
 }
 

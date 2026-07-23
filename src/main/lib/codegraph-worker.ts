@@ -1,4 +1,4 @@
-import { app } from 'electron'
+﻿import { app } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
@@ -10,6 +10,28 @@ import { decode, encode } from '@msgpack/msgpack'
 
 const FRAME_HEADER_BYTES = 4
 const MAX_FRAME_BYTES = 256 * 1024 * 1024
+const WORKER_RESTART_INITIAL_DELAY_MS = 250
+const WORKER_RESTART_MAX_DELAY_MS = 10_000
+const CODEGRAPH_GRAMMAR_LIBRARIES = [
+  'tree-sitter',
+  'tree-sitter-typescript',
+  'tree-sitter-tsx',
+  'tree-sitter-javascript',
+  'tree-sitter-python',
+  'tree-sitter-go',
+  'tree-sitter-java',
+  'tree-sitter-c-sharp',
+  'tree-sitter-rust',
+  'tree-sitter-c',
+  'tree-sitter-cpp',
+  'tree-sitter-php',
+  'tree-sitter-ruby',
+  'tree-sitter-scala',
+  'tree-sitter-bash',
+  'tree-sitter-haskell',
+  'tree-sitter-julia',
+  'tree-sitter-razor'
+] as const
 
 interface PendingRequest {
   resolve: (value: unknown) => void
@@ -23,6 +45,13 @@ interface WorkerFrame {
   error?: string
   event?: string
   params?: unknown
+}
+
+export type CodeGraphWorkerLifecycleEvent = {
+  status: 'ready' | 'stopped' | 'restarting'
+  generation: number
+  error?: Error
+  retryDelayMs?: number
 }
 
 function executableName(): string {
@@ -56,12 +85,38 @@ export function resolveCodeGraphWorkerPath(): string | null {
   )
 }
 
-function resolveGrammarsDir(workerPath: string): string | null {
+export function resolveCodeGraphGrammarsDir(workerPath: string): string | null {
   const override = process.env.OLA_CODEGRAPH_GRAMMARS_DIR?.trim()
   const candidates = [override, path.join(path.dirname(workerPath), 'grammars')].filter(
     (candidate): candidate is string => Boolean(candidate)
   )
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null
+}
+
+function codeGraphGrammarFileName(library: string): string {
+  if (process.platform === 'win32') return `${library}.dll`
+  if (process.platform === 'darwin') return `lib${library}.dylib`
+  return `lib${library}.so`
+}
+
+export function getCodeGraphGrammarStatus(grammarsDir: string | null): {
+  expected: number
+  available: number
+  missing: string[]
+} {
+  const missing = CODEGRAPH_GRAMMAR_LIBRARIES.map(codeGraphGrammarFileName).filter((file) => {
+    if (!grammarsDir) return true
+    try {
+      return !fs.statSync(path.join(grammarsDir, file)).isFile()
+    } catch {
+      return true
+    }
+  })
+  return {
+    expected: CODEGRAPH_GRAMMAR_LIBRARIES.length,
+    available: CODEGRAPH_GRAMMAR_LIBRARIES.length - missing.length,
+    missing
+  }
 }
 
 function endpointPath(): string {
@@ -78,7 +133,7 @@ function createFrame(payload: Uint8Array): Buffer {
   return frame
 }
 
-class CodeGraphWorkerManager {
+export class CodeGraphWorkerManager {
   private child: ChildProcess | null = null
   private socket: net.Socket | null = null
   private endpoint: string | null = null
@@ -86,6 +141,10 @@ class CodeGraphWorkerManager {
   private nextId = 1
   private readBuffer = Buffer.alloc(0)
   private startPromise: Promise<void> | null = null
+  private restartTimer: ReturnType<typeof setTimeout> | null = null
+  private restartAttempts = 0
+  private generationValue = 0
+  private stopping = false
   private events = new EventEmitter()
 
   get isRunning(): boolean {
@@ -98,9 +157,22 @@ class CodeGraphWorkerManager {
     )
   }
 
+  get generation(): number {
+    return this.generationValue
+  }
+
   onEvent(eventName: string, listener: (params: unknown) => void): () => void {
     this.events.on(eventName, listener)
     return () => this.events.off(eventName, listener)
+  }
+
+  onLifecycle(listener: (event: CodeGraphWorkerLifecycleEvent) => void): () => void {
+    this.events.on('worker/lifecycle', listener)
+    return () => this.events.off('worker/lifecycle', listener)
+  }
+
+  async healthCheck(): Promise<void> {
+    await this.request('worker/ping', {}, 10_000)
   }
 
   async ensureStarted(): Promise<void> {
@@ -126,9 +198,7 @@ class CodeGraphWorkerManager {
         // A timed-out request means the IPC stream can no longer be trusted: its late response
         // may arrive after callers have moved on and a blocked worker would make every refresh
         // time out in turn. Recycle it so the next request starts from a clean transport.
-        void this.stop().catch((stopError) => {
-          console.warn('[CodeGraphWorker] failed to stop after request timeout', stopError)
-        })
+        this.closeWorker(error)
       }, timeoutMs)
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject, timer })
       this.socket?.write(createFrame(payload), (error) => {
@@ -146,17 +216,13 @@ class CodeGraphWorkerManager {
   }
 
   async stop(): Promise<void> {
-    this.socket?.destroy()
-    this.socket = null
-    if (this.child && this.child.exitCode === null) this.child.kill()
-    this.child = null
-    for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer)
-      pending.reject(new Error('CodeGraph worker stopped'))
+    this.stopping = true
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
     }
-    this.pending.clear()
-    if (this.endpoint && process.platform !== 'win32') fs.rmSync(this.endpoint, { force: true })
-    this.endpoint = null
+    this.closeWorker(new Error('CodeGraph worker stopped'))
+    this.stopping = false
   }
 
   private async start(): Promise<void> {
@@ -164,7 +230,7 @@ class CodeGraphWorkerManager {
     if (!workerPath) throw new Error('CodeGraph worker assets are missing')
     const endpoint = endpointPath()
     if (process.platform !== 'win32') fs.rmSync(endpoint, { force: true })
-    const grammarsDir = resolveGrammarsDir(workerPath)
+    const grammarsDir = resolveCodeGraphGrammarsDir(workerPath)
     const child = spawn(workerPath, ['--ipc', endpoint], {
       cwd: path.dirname(workerPath),
       env: {
@@ -180,12 +246,30 @@ class CodeGraphWorkerManager {
       const message = chunk.toString('utf8').trim()
       if (message) console.warn(`[CodeGraphWorker] ${message}`)
     })
-    child.on('exit', () => this.closeAfterFailure(new Error('CodeGraph worker exited')))
-    child.on('error', (error) => this.closeAfterFailure(error))
-    this.socket = await this.connect(endpoint, child)
-    this.socket.on('data', (chunk) => this.handleData(chunk))
-    this.socket.on('error', (error) => this.closeAfterFailure(error))
+    child.on('exit', () => {
+      if (this.child === child) this.closeWorker(new Error('CodeGraph worker exited'))
+    })
+    child.on('error', (error) => {
+      if (this.child === child) this.closeWorker(error)
+    })
+    const socket = await this.connect(endpoint, child)
+    this.socket = socket
+    socket.on('data', (chunk) => this.handleData(chunk))
+    socket.on('error', (error) => {
+      if (this.socket === socket) this.closeWorker(error)
+    })
+    socket.on('close', () => {
+      if (this.socket === socket && !this.stopping) {
+        this.closeWorker(new Error('CodeGraph worker IPC closed'))
+      }
+    })
     await this.request('worker/ping', {}, 10_000)
+    this.generationValue += 1
+    this.restartAttempts = 0
+    this.events.emit('worker/lifecycle', {
+      status: 'ready',
+      generation: this.generationValue
+    } satisfies CodeGraphWorkerLifecycleEvent)
     console.log('[CodeGraphWorker] IPC connected', { pid: child.pid ?? null, workerPath })
   }
 
@@ -213,7 +297,7 @@ class CodeGraphWorkerManager {
     while (this.readBuffer.length >= FRAME_HEADER_BYTES) {
       const length = this.readBuffer.readUInt32BE(0)
       if (length <= 0 || length > MAX_FRAME_BYTES) {
-        this.closeAfterFailure(new Error(`Invalid CodeGraph frame length: ${length}`))
+        this.closeWorker(new Error(`Invalid CodeGraph frame length: ${length}`))
         return
       }
       if (this.readBuffer.length < FRAME_HEADER_BYTES + length) return
@@ -234,15 +318,59 @@ class CodeGraphWorkerManager {
     }
   }
 
-  private closeAfterFailure(error: Error): void {
+  private closeWorker(error: Error): void {
+    const child = this.child
+    const socket = this.socket
+    const endpoint = this.endpoint
+    const hadWorker = child !== null || socket !== null
+
+    this.child = null
+    this.socket = null
+    this.endpoint = null
+    this.readBuffer = Buffer.alloc(0)
+    socket?.removeAllListeners()
+    socket?.destroy()
+    if (child && !child.killed && child.exitCode === null) child.kill()
+    if (endpoint && process.platform !== 'win32') fs.rmSync(endpoint, { force: true })
+
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
       pending.reject(error)
     }
     this.pending.clear()
-    this.socket?.destroy()
-    this.socket = null
-    this.child = null
+
+    if (!hadWorker) return
+    this.events.emit('worker/lifecycle', {
+      status: 'stopped',
+      generation: this.generationValue,
+      error
+    } satisfies CodeGraphWorkerLifecycleEvent)
+    if (!this.stopping) this.scheduleRestart(error)
+  }
+
+  private scheduleRestart(error: Error): void {
+    if (this.restartTimer || this.isRunning) return
+
+    const retryDelayMs = Math.min(
+      WORKER_RESTART_MAX_DELAY_MS,
+      WORKER_RESTART_INITIAL_DELAY_MS * 2 ** this.restartAttempts
+    )
+    this.restartAttempts += 1
+    this.events.emit('worker/lifecycle', {
+      status: 'restarting',
+      generation: this.generationValue,
+      error,
+      retryDelayMs
+    } satisfies CodeGraphWorkerLifecycleEvent)
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null
+      void this.ensureStarted().catch((restartError) => {
+        const normalized =
+          restartError instanceof Error ? restartError : new Error(String(restartError))
+        console.warn('[CodeGraphWorker] restart failed', { error: normalized.message })
+        this.scheduleRestart(normalized)
+      })
+    }, retryDelayMs)
   }
 }
 
