@@ -1,6 +1,6 @@
 {
   "name": "ola",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Ola - 新一代 AI 多智能体协作平台。打破传统 GUI 操作模式，将繁琐的跨应用操作、数据处理和日常工作流，简化为最符合人类本能的自然语言对话。意图即界面，语言即生产力。",
   "main": "./out/main/index.js",
   "author": "Leevity team",

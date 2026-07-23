@@ -2,6 +2,70 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.0.4] - 2026-07-23
+
+Feature release that hardens the Ola agent runtime and ships several major product surfaces: CodeGraph analysis, Draw canvas, Hooks, sub-agent history, remote workbench, SSH reliability, AI coding terminal, and a verified multi-platform release pipeline.
+
+### Highlights
+
+**Agent runtime & native worker**
+
+- **Agent runtime contract.** Shared `agent-runtime-contract` between TypeScript and the .NET native worker, with generation + verification scripts so protocol drift is caught in CI.
+- **AgentStream over MessagePack.** Stream protocol, session-scoped cache keys, stable usage accounting, and a clearer main ↔ sidecar bridge for active runs and reverse requests.
+- **Sidecar lifecycle hardening.** Stronger supervisor behavior for spawn / heartbeat / restart, plus IPC routing and permission checks in `sidecar-manager` and `native-agent-runtime`.
+- **Native-enforced permission policy.** Tool and command policy is enforced in the native worker, not only in the renderer dialog.
+- **Provider resilience.** Improved retry / compression controls and a main-process provider configuration mirror so settings stay consistent across restarts.
+- **Sub-agent history.** SQLite schema, worker routes, IPC/DAO, renderer migration off ad-hoc stores, live history upserts, precise single-sub-agent cancel, and complete lifecycle cleanup.
+
+**CodeGraph**
+
+- Isolated analysis worker with verified asset manifests.
+- Opt-in project analysis plugin and a project analysis dashboard.
+- Indexing-path fixes so the dashboard stays responsive, stalled worker requests recover, and stalled dashboard reads retry cleanly.
+- Viewer credential lease so remote/viewer access does not pin long-lived secrets.
+
+**Draw & media**
+
+- Versioned node canvas core with image node operations, project + asset library, and canvas assistant operations.
+- Secure local video runtime for media playback inside Ola without leaking local paths.
+
+**Chat & execution UX**
+
+- Tool execution outline model; final answers are prioritized while execution runs collapse by default.
+- Typed message content blocks and better long-conversation navigation.
+- Scoped chat input drafts with empty-state discard.
+- Localized execution process summaries (i18n).
+
+**Hooks**
+
+- Trusted hook loading and persistence with hash-bound artifact checks.
+- Runtime lifecycle event integration, management + run-history UI, and periodic pruning of expired run history.
+
+**Remote, SSH, terminal, browser**
+
+- Integrated remote workbench.
+- SSH store modularization, reconnect diagnostics, and resume for failed file transfers.
+- AI coding: CLI configuration profiles and launching configured coding sessions from the terminal surface.
+- Browser cookie import into isolated sessions (feeds the local-first credential vault path).
+
+**Release, CI, and updates**
+
+- Expanded CI quality gates and verification suite (`verify:ci-core`, worker asset verify, release-gates).
+- Verified release workflow and update path so multi-platform packages are built, checksummed, and attached under a controlled draft → publish flow.
+- Version bumped to **1.0.4** for this release train.
+
+### Notes
+
+- This release notes set describes **Ola-only** product changes. No external product names are used in the public changelog or GitHub Release body.
+- macOS packages may still require right-click → Open on first launch if notarization is not yet applied for a given artifact channel.
+- Data remains local-first under `~/.ola/`; secrets stay in the main-process vault / OS secure storage paths established in 1.0.3.
+
+### Platform support
+
+- macOS: arm64, x64 (`.dmg` / `.zip`)
+- Windows: x64, arm64 (NSIS installer)
+- Linux: x64, arm64 (`.AppImage` / `.deb`)
+
 ## [1.0.3] - 2026-07-08
 
 Patch release focused on **credentials & browser login agent** — the agent can now sign into 22 first-party sites (GitHub, Google, Notion, Vercel, 1Password, Reddit, X, Discord, Slack, Linear, etc.) under user control, with all secrets handled locally via Electron safeStorage.
