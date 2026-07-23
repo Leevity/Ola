@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, powerMonitor, screen } from 'electron'
+﻿import { app, BrowserWindow, dialog, powerMonitor, screen } from 'electron'
 import { basename, join } from 'path'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
@@ -260,6 +260,8 @@ export async function openPetWindow(): Promise<void> {
     focusable: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: false
     }
   })

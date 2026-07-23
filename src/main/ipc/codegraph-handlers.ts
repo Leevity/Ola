@@ -1,10 +1,16 @@
-import { BrowserWindow, ipcMain } from 'electron'
+﻿import { BrowserWindow, ipcMain } from 'electron'
 import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
-import { getCodeGraphWorker, resolveCodeGraphWorkerPath } from '../lib/codegraph-worker'
+import {
+  getCodeGraphGrammarStatus,
+  getCodeGraphWorker,
+  resolveCodeGraphGrammarsDir,
+  resolveCodeGraphWorkerPath
+} from '../lib/codegraph-worker'
+import { observeCodeGraphOperation, startCodeGraphSync } from '../lib/codegraph-sync'
 
 interface CodeGraphRequestArgs {
   method: string
@@ -62,19 +68,28 @@ function registerProgressForwarding(): void {
 
 export function registerCodeGraphHandlers(): void {
   registerProgressForwarding()
+  void startCodeGraphSync()
   ipcMain.handle(toMessagePackChannel('codegraph:request'), async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<CodeGraphRequestArgs>(bytes)
     if (!args.method?.startsWith('codegraph/')) {
       throw new Error('Only codegraph/* methods may use the CodeGraph worker')
     }
     const result = await requestCodeGraph(args)
+    observeCodeGraphOperation(args.method, args.params, result)
     return encodeMessagePackPayload(result)
   })
   ipcMain.handle(toMessagePackChannel('codegraph:status'), async () => {
     const worker = getCodeGraphWorker()
+    const workerPath = resolveCodeGraphWorkerPath()
+    const grammarsDir = workerPath ? resolveCodeGraphGrammarsDir(workerPath) : null
+    const grammarStatus = getCodeGraphGrammarStatus(grammarsDir)
     return encodeMessagePackPayload({
       running: worker.isRunning,
-      workerReady: resolveCodeGraphWorkerPath() !== null
+      workerReady: workerPath !== null,
+      workerPath,
+      grammarsDir,
+      grammarStatus,
+      generation: worker.generation
     })
   })
   ipcMain.handle(toMessagePackChannel('codegraph:stop'), async () => {

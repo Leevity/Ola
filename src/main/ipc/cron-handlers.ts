@@ -8,7 +8,8 @@ import {
   getScheduledJobIds,
   getActiveRunJobIds,
   markRunning,
-  markFinished
+  markFinished,
+  recordSkippedCronRun
 } from '../cron/cron-scheduler'
 import {
   appendCronRunLog,
@@ -117,7 +118,7 @@ interface CronRunUpdateArgs {
   runId: string
   patch: Partial<{
     finishedAt: number | null
-    status: 'running' | 'success' | 'error' | 'aborted'
+    status: 'running' | 'success' | 'error' | 'aborted' | 'skipped'
     toolCallCount: number
     outputSummary: string | null
     error: string | null
@@ -238,7 +239,7 @@ interface CronRunApi {
   jobId: string
   startedAt: number
   finishedAt: number | null
-  status: 'running' | 'success' | 'error' | 'aborted'
+  status: 'running' | 'success' | 'error' | 'aborted' | 'skipped'
   toolCallCount: number
   outputSummary: string | null
   error: string | null
@@ -588,11 +589,11 @@ export function registerCronHandlers(): void {
       if (!row) return { error: `Job "${args.jobId}" not found` }
       if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
 
-      if (!markRunning(row.id)) {
-        return { error: `Job "${row.id}" is already running or concurrency limit reached` }
-      }
-
       const firedAt = Date.now()
+      if (!markRunning(row.id)) {
+        const reason = await recordSkippedCronRun(row, firedAt)
+        return { error: reason }
+      }
       const win = BrowserWindow.getAllWindows()[0]
       if (win) {
         const firedPayload = {

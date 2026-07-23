@@ -1,7 +1,13 @@
-import { getNativeWorker, type NativeWorkerRawEventFrame } from '../lib/native-worker'
+import {
+  getNativeWorker,
+  type NativeWorkerLifecycleEvent,
+  type NativeWorkerRawEventFrame
+} from '../lib/native-worker'
 
 type RawEventHandler = (frame: NativeWorkerRawEventFrame) => void
 type RequestHandler = (id: number | string, method: string, params: unknown) => Promise<unknown>
+type InterruptedRun = { runId: string; sessionId?: string }
+type RunInterruptedHandler = (run: InterruptedRun) => void
 
 type NativeReverseRequest = {
   id?: number | string
@@ -20,7 +26,9 @@ export class NativeAgentRuntimeManager {
   private requestHandler: RequestHandler | null = null
   private unsubscribeRawAgentStream: (() => void) | null = null
   private unsubscribeReverseRequest: (() => void) | null = null
-  private activeRunIds = new Set<string>()
+  private unsubscribeWorkerLifecycle: (() => void) | null = null
+  private activeRuns = new Map<string, InterruptedRun>()
+  private runInterruptedHandlers = new Set<RunInterruptedHandler>()
 
   get isRunning(): boolean {
     return this.running && getNativeWorker().isRunning
@@ -47,7 +55,12 @@ export class NativeAgentRuntimeManager {
   }
 
   hasActiveRuns(): boolean {
-    return this.activeRunIds.size > 0
+    return this.activeRuns.size > 0
+  }
+
+  onRunInterrupted(handler: RunInterruptedHandler): () => void {
+    this.runInterruptedHandlers.add(handler)
+    return () => this.runInterruptedHandlers.delete(handler)
   }
 
   async start(): Promise<boolean> {
@@ -69,12 +82,37 @@ export class NativeAgentRuntimeManager {
         .request('shutdown', { runtime: 'agent' }, 30_000)
         .catch(() => {})
     }
-    this.activeRunIds.clear()
+    this.activeRuns.clear()
     this.running = false
     this.unsubscribeRawAgentStream?.()
     this.unsubscribeRawAgentStream = null
     this.unsubscribeReverseRequest?.()
     this.unsubscribeReverseRequest = null
+    this.unsubscribeWorkerLifecycle?.()
+    this.unsubscribeWorkerLifecycle = null
+  }
+
+  async getActiveRuns(): Promise<unknown> {
+    await this.ensureStarted()
+    return await getNativeWorker().request('agent/active-runs', {}, 10_000)
+  }
+
+  async runStatus(runId: string): Promise<unknown> {
+    await this.ensureStarted()
+    return await getNativeWorker().request('agent/run-status', { runId }, 10_000)
+  }
+
+  async runSnapshot(runId: string): Promise<unknown> {
+    const worker = getNativeWorker()
+    if (!this.isRunning) {
+      return { active: false, run: null, lastSeq: 0, generation: worker.generation }
+    }
+    const snapshot = await worker.request<Record<string, unknown>>(
+      'agent/run-snapshot',
+      { runId },
+      10_000
+    )
+    return { ...snapshot, generation: worker.generation }
   }
 
   async request(method: string, params?: unknown, timeoutMs = 30_000): Promise<unknown> {
@@ -86,7 +124,11 @@ export class NativeAgentRuntimeManager {
       result.started === true &&
       typeof result.runId === 'string'
     ) {
-      this.activeRunIds.add(result.runId)
+      const runParams = isRecord(params) ? params : {}
+      this.activeRuns.set(result.runId, {
+        runId: result.runId,
+        ...(typeof runParams.sessionId === 'string' ? { sessionId: runParams.sessionId } : {})
+      })
     }
     return result
   }
@@ -108,7 +150,7 @@ export class NativeAgentRuntimeManager {
     if (!this.unsubscribeRawAgentStream) {
       this.unsubscribeRawAgentStream = getNativeWorker().onRawEvent('agent/stream', (frame) => {
         if (frame.hasTerminalEvent && frame.runId) {
-          this.activeRunIds.delete(frame.runId)
+          this.activeRuns.delete(frame.runId)
         }
         this.rawEventHandler?.(frame)
         for (const listener of this.rawEventListeners) {
@@ -124,6 +166,35 @@ export class NativeAgentRuntimeManager {
           void this.handleReverseRequest(params as NativeReverseRequest)
         }
       )
+    }
+
+    if (!this.unsubscribeWorkerLifecycle) {
+      this.unsubscribeWorkerLifecycle = getNativeWorker().onLifecycle((event) => {
+        this.handleWorkerLifecycle(event)
+      })
+    }
+  }
+
+  private handleWorkerLifecycle(event: NativeWorkerLifecycleEvent): void {
+    if (event.status === 'restarting') {
+      const interruptedRuns = [...this.activeRuns.values()]
+      this.activeRuns.clear()
+      for (const run of interruptedRuns) {
+        for (const handler of this.runInterruptedHandlers) handler(run)
+      }
+      return
+    }
+
+    if (event.status === 'ready' && this.running) {
+      void getNativeWorker()
+        .request('initialize', { runtime: 'agent' }, 30_000)
+        .catch((error) => {
+          console.warn(
+            `[NativeAgentRuntime] initialize after worker recovery failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`
+          )
+        })
     }
   }
 
@@ -149,6 +220,15 @@ export class NativeAgentRuntimeManager {
         error instanceof Error ? error.message : String(error)
       )
     }
+  }
+
+  async cancelReverseRequest(id: number | string): Promise<boolean> {
+    const result = await getNativeWorker().request<{ ok?: boolean }>(
+      'agent/reverse-cancel',
+      { id },
+      10_000
+    )
+    return result.ok === true
   }
 
   private async sendReverseResponse(

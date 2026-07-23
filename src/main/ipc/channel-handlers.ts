@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+﻿import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
 import { FeishuApi } from '../channels/providers/feishu/feishu-api'
@@ -118,6 +118,8 @@ async function captureQrPageAsDataUrl(url: string): Promise<string | undefined> 
     height: 960,
     autoHideMenuBar: true,
     webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: false,
       offscreen: false
     }

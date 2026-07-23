@@ -16,6 +16,7 @@ const MAX_TEXT_LENGTH = 4096
 const MAX_EVENTS_PER_SECOND = 300
 
 let enabledDisplayId: string | null = null
+let enabledOwnerWebContentsId: number | null = null
 let rateWindowStartedAt = 0
 let rateWindowCount = 0
 const heldKeys = new Map<string, { key: string; modifiers: string[] }>()
@@ -63,17 +64,48 @@ function consumeRateLimit(): boolean {
 
 export function setRemoteInputSession(
   sessionId: string | null,
-  displayId: string | null = null
+  displayId: string | null = null,
+  ownerWebContentsId?: number
 ): void {
   if (sessionId !== null && (typeof sessionId !== 'string' || sessionId.length > 128)) {
     throw new Error('Invalid remote input session ID')
   }
   const normalizedSessionId = sessionId?.trim() || null
+  if (normalizedSessionId && (!Number.isInteger(ownerWebContentsId) || ownerWebContentsId! <= 0)) {
+    throw new Error('Remote input owner is required')
+  }
   releaseHeldRemoteInputs()
   setAuthorizedInputSession(normalizedSessionId)
   enabledDisplayId = normalizedSessionId ? displayId : null
+  enabledOwnerWebContentsId = normalizedSessionId ? ownerWebContentsId! : null
   rateWindowStartedAt = Date.now()
   rateWindowCount = 0
+}
+
+export function isRemoteInputSessionOwnedBy(
+  sessionId: string,
+  ownerWebContentsId: number
+): boolean {
+  return enabledOwnerWebContentsId === ownerWebContentsId && isInputSessionAuthorized(sessionId)
+}
+
+export function clearRemoteInputSession(ownerWebContentsId: number): boolean {
+  if (enabledOwnerWebContentsId !== null && enabledOwnerWebContentsId !== ownerWebContentsId) {
+    return false
+  }
+  setRemoteInputSession(null)
+  return true
+}
+
+export function clearRemoteInputSessionIfOwned(
+  sessionId: string,
+  ownerWebContentsId: number
+): boolean {
+  if (enabledOwnerWebContentsId !== ownerWebContentsId || !isInputSessionAuthorized(sessionId)) {
+    return false
+  }
+  setRemoteInputSession(null)
+  return true
 }
 
 export function dispatchRemoteInput(

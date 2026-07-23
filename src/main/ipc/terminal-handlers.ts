@@ -1,4 +1,4 @@
-import { BrowserWindow, type WebContents } from 'electron'
+import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { safeSendMessagePackToWindow } from '../window-ipc'
 import { getNativeWorker } from '../lib/native-worker'
 import { buildShellEnvironment } from './shell-environment'
@@ -74,6 +74,21 @@ let nativeTerminalEventsRegistered = false
 
 function resolveOwnerWindowId(sender?: WebContents | null): number | null {
   return sender ? (BrowserWindow.fromWebContents(sender)?.id ?? null) : null
+}
+
+function isTrustedTerminalIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
+function isTerminalOwnedBy(id: string, sender?: WebContents | null): boolean {
+  const ownerWindowId = terminalWindowIds.get(id)
+  return typeof ownerWindowId === 'number' && ownerWindowId === resolveOwnerWindowId(sender)
 }
 
 function createWindowEvent(windowId: number | null, channel: string, payload: unknown): void {
@@ -206,16 +221,22 @@ export function registerTerminalHandlers(): void {
   ensureNativeTerminalEventBridge()
 
   registerMessagePackHandler<CreateTerminalSessionArgs>('terminal:create', async (args, event) => {
+    if (!isTrustedTerminalIpcSender(event)) return { error: 'Unauthorized terminal IPC sender' }
     return await createTerminalSession(args, event.sender)
   })
 
-  registerMessagePackHandler<{ id: string; data: string }>('terminal:input', async (args) => {
-    return await writeTerminalSession(args.id, args.data)
-  })
+  registerMessagePackHandler<{ id: string; data: string }>(
+    'terminal:input',
+    async (args, event) => {
+      if (!isTerminalOwnedBy(args.id, event.sender)) return { error: 'Terminal not found' }
+      return await writeTerminalSession(args.id, args.data)
+    }
+  )
 
   registerMessagePackHandler<{ id: string; cols: number; rows: number }>(
     'terminal:resize',
-    async (args) => {
+    async (args, event) => {
+      if (!isTerminalOwnedBy(args.id, event.sender)) return { error: 'Terminal not found' }
       const result = await getNativeWorker().request<NativeTerminalMutationResult>(
         'terminal/resize',
         {
@@ -231,18 +252,28 @@ export function registerTerminalHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<{ id: string }>('terminal:kill', async (args) => {
+  registerMessagePackHandler<{ id: string }>('terminal:kill', async (args, event) => {
+    if (!isTerminalOwnedBy(args.id, event.sender)) return { error: 'Terminal not found' }
     return await killTerminalSession(args.id)
   })
 
-  registerMessagePackHandler<{ id: string }>('terminal:get', async (args) => {
+  registerMessagePackHandler<{ id: string }>('terminal:get', async (args, event) => {
+    if (!isTerminalOwnedBy(args.id, event.sender)) {
+      return { success: false, error: 'Terminal not found' }
+    }
     const session = await getTerminalSessionSnapshot(args.id)
     return session ? { success: true, session } : { success: false, error: 'Terminal not found' }
   })
 
-  registerMessagePackHandler<undefined>('terminal:list', async () => {
+  registerMessagePackHandler<undefined>('terminal:list', async (_args, event) => {
     ensureNativeTerminalEventBridge()
-    return await getNativeWorker().request<TerminalSessionListEntry[]>('terminal/list', {}, 30_000)
+    const ownerWindowId = resolveOwnerWindowId(event.sender)
+    const sessions = await getNativeWorker().request<TerminalSessionListEntry[]>(
+      'terminal/list',
+      {},
+      30_000
+    )
+    return sessions.filter((session) => terminalWindowIds.get(session.id) === ownerWindowId)
   })
 }
 

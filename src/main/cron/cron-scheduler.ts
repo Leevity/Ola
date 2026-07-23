@@ -1,10 +1,14 @@
 import cron from 'node-cron'
+import { nanoid } from 'nanoid'
 import { BrowserWindow } from 'electron'
-import { safeSendMessagePackToWindow } from '../window-ipc'
+import { safeSendMessagePackToAllWindows, safeSendMessagePackToWindow } from '../window-ipc'
 import {
+  createCronRun,
+  getCronRun,
   loadPersistedCronJobs,
   markCronJobFired,
   softDeleteCronJob,
+  updateCronRun,
   type CronJobRecord,
   type CronRunRecord
 } from '../db/cron-dao'
@@ -47,6 +51,91 @@ export function markRunning(jobId: string): boolean {
   return true
 }
 
+function getSkipReason(jobId: string): string {
+  if (activeRunJobIds.has(jobId)) return 'Skipped: this job is already running'
+  return `Skipped: cron concurrency limit (${maxConcurrentRuns}) reached`
+}
+
+function toRunApi(run: CronRunRecord): Record<string, unknown> {
+  return {
+    id: run.id,
+    jobId: run.job_id,
+    startedAt: run.started_at,
+    finishedAt: run.finished_at,
+    status: run.status,
+    toolCallCount: run.tool_call_count,
+    outputSummary: run.output_summary,
+    error: run.error,
+    scheduledFor: run.scheduled_for,
+    jobNameSnapshot: run.job_name_snapshot,
+    promptSnapshot: run.prompt_snapshot,
+    sourceSessionIdSnapshot: run.source_session_id_snapshot,
+    sourceSessionTitleSnapshot: run.source_session_title_snapshot,
+    sourceProjectIdSnapshot: run.source_project_id_snapshot,
+    sourceProjectNameSnapshot: run.source_project_name_snapshot,
+    sourceProviderIdSnapshot: run.source_provider_id_snapshot,
+    modelSnapshot: run.model_snapshot,
+    workingFolderSnapshot: run.working_folder_snapshot,
+    deliveryModeSnapshot: run.delivery_mode_snapshot,
+    deliveryTargetSnapshot: run.delivery_target_snapshot
+  }
+}
+
+export async function recordSkippedCronRun(
+  job: CronJobRecord,
+  scheduledFor = Date.now()
+): Promise<string> {
+  const reason = getSkipReason(job.id)
+
+  try {
+    const runId = `run-${nanoid(8)}`
+    await createCronRun({
+      runId,
+      jobId: job.id,
+      startedAt: scheduledFor,
+      scheduledFor,
+      jobNameSnapshot: job.name,
+      promptSnapshot: job.prompt,
+      sourceSessionIdSnapshot: job.session_id,
+      sourceSessionTitleSnapshot: job.source_session_title,
+      sourceProjectIdSnapshot: job.source_project_id,
+      sourceProjectNameSnapshot: job.source_project_name,
+      sourceProviderIdSnapshot: job.source_provider_id,
+      modelSnapshot: job.model,
+      workingFolderSnapshot: job.working_folder,
+      deliveryModeSnapshot: job.delivery_mode,
+      deliveryTargetSnapshot: job.delivery_target
+    })
+    await updateCronRun({
+      runId,
+      patch: {
+        finishedAt: Date.now(),
+        status: 'skipped',
+        toolCallCount: 0,
+        outputSummary: null,
+        error: reason
+      }
+    })
+    const run = await getCronRun(runId)
+    safeSendMessagePackToAllWindows('cron:run-finished', {
+      jobId: job.id,
+      runId,
+      status: 'skipped',
+      toolCallCount: 0,
+      jobName: job.name,
+      sessionId: job.session_id,
+      deliveryMode: job.delivery_mode,
+      deliveryTarget: job.delivery_target,
+      error: reason,
+      ...(run ? { run: toRunApi(run) } : {})
+    })
+  } catch (err) {
+    console.error(`[CronScheduler] Failed to persist skipped run for ${job.id}:`, err)
+  }
+
+  return reason
+}
+
 export async function markFinished(jobId: string): Promise<void> {
   activeRunJobIds.delete(jobId)
 
@@ -76,14 +165,16 @@ function sendToRenderer(channel: string, data: unknown): void {
 // ── Job fired handler ────────────────────────────────────────────
 
 async function onJobFired(job: CronJobRecord): Promise<void> {
+  const firedAt = Date.now()
+
   // Concurrency guard — prevent firing if this job is already running or limit reached
   if (!markRunning(job.id)) {
-    console.warn(`[CronScheduler] Job ${job.id} skipped (already running or concurrency limit)`)
+    const reason = await recordSkippedCronRun(job, firedAt)
+    console.warn(`[CronScheduler] Job ${job.id} ${reason}`)
     return
   }
 
   try {
-    const firedAt = Date.now()
     await markCronJobFired(job.id, firedAt)
 
     // Forward to renderer for UI updates only.

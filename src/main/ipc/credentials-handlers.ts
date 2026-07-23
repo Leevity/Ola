@@ -3,8 +3,14 @@
 // flows run end-to-end in the main process; the renderer only sees refs
 // and VerificationResult metadata.
 
-import { app, session as electronSession, webContents } from 'electron'
-import { registerMessagePackHandler } from './messagepack-handler'
+import {
+  app,
+  BrowserWindow,
+  session as electronSession,
+  type IpcMainInvokeEvent,
+  webContents
+} from 'electron'
+import { registerMessagePackHandler as registerRawMessagePackHandler } from './messagepack-handler'
 import {
   CREDENTIALS_IPC,
   type DeleteCredentialRequest,
@@ -25,6 +31,7 @@ import {
 } from '../../shared/credentials'
 import {
   deleteCredential,
+  getCredentialRef,
   getPlaintextPassword,
   getVaultStatus,
   initSecretVault,
@@ -45,25 +52,79 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function isTrustedCredentialsIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
+function registerTrustedCredentialsMessagePackHandler<TArgs, TResult = unknown>(
+  channel: string,
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<TResult> | TResult
+): void {
+  registerRawMessagePackHandler<TArgs, TResult>(channel, async (args, event) => {
+    if (!isTrustedCredentialsIpcSender(event)) {
+      return { error: 'Unauthorized credential IPC sender' } as TResult
+    }
+    return await handler(args, event)
+  })
+}
+
+function isCredentialInjectionTargetAllowed(args: {
+  senderWebContentsId: number
+  targetWebContentsId: number
+  credentialDomain: string
+}): { allowed: true; url: string } | { allowed: false; error: string } {
+  const sender = webContents.fromId(args.senderWebContentsId)
+  const target = webContents.fromId(args.targetWebContentsId)
+  if (!sender || !target || target.isDestroyed() || target.getType() !== 'webview') {
+    return { allowed: false, error: 'webContents is not an active browser guest' }
+  }
+  const ownerWindow = BrowserWindow.fromWebContents(sender)
+  if (!ownerWindow) {
+    return { allowed: false, error: 'requesting window is unavailable' }
+  }
+  if (target.hostWebContents?.id !== ownerWindow.webContents.id) {
+    return { allowed: false, error: 'webContents is not owned by the requesting window' }
+  }
+
+  try {
+    const url = new URL(target.getURL())
+    if (
+      url.protocol !== 'https:' ||
+      url.hostname.toLowerCase() !== args.credentialDomain.toLowerCase()
+    ) {
+      return { allowed: false, error: 'credential domain does not match the active HTTPS page' }
+    }
+    return { allowed: true, url: url.toString() }
+  } catch {
+    return { allowed: false, error: 'browser page URL is invalid' }
+  }
+}
+
 export function registerCredentialsHandlers(): void {
   initSecretVault()
   if (process.env.NODE_ENV !== 'production' || process.env.OLA_CREDENTIALS_SANITY === '1') {
     void runSanityTests()
   }
 
-  registerMessagePackHandler<undefined, { available: boolean; backend: string; reason?: string }>(
-    CREDENTIALS_IPC.VAULT_STATUS,
-    async () => {
-      const status = getVaultStatus()
-      return {
-        available: status.available,
-        backend: status.backend,
-        reason: status.reason
-      }
+  registerTrustedCredentialsMessagePackHandler<
+    undefined,
+    { available: boolean; backend: string; reason?: string }
+  >(CREDENTIALS_IPC.VAULT_STATUS, async () => {
+    const status = getVaultStatus()
+    return {
+      available: status.available,
+      backend: status.backend,
+      reason: status.reason
     }
-  )
+  })
 
-  registerMessagePackHandler<StoreCredentialRequest, StoreCredentialResponse>(
+  registerTrustedCredentialsMessagePackHandler<StoreCredentialRequest, StoreCredentialResponse>(
     CREDENTIALS_IPC.STORE,
     async (args) => {
       try {
@@ -92,7 +153,7 @@ export function registerCredentialsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<ListCredentialsFilter, ListCredentialsResponse>(
+  registerTrustedCredentialsMessagePackHandler<ListCredentialsFilter, ListCredentialsResponse>(
     CREDENTIALS_IPC.LIST,
     async (args) => {
       const refs = listCredentials({
@@ -103,7 +164,7 @@ export function registerCredentialsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<DeleteCredentialRequest, DeleteCredentialResponse>(
+  registerTrustedCredentialsMessagePackHandler<DeleteCredentialRequest, DeleteCredentialResponse>(
     CREDENTIALS_IPC.DELETE,
     async (args) => {
       if (!args?.id) return { success: false, error: 'id is required' }
@@ -112,7 +173,7 @@ export function registerCredentialsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<undefined, ListBuiltinTemplatesResponse>(
+  registerTrustedCredentialsMessagePackHandler<undefined, ListBuiltinTemplatesResponse>(
     CREDENTIALS_IPC.LIST_TEMPLATES,
     async () => {
       const stored = listCredentials()
@@ -129,35 +190,35 @@ export function registerCredentialsHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<EnableBuiltinTemplateRequest, EnableBuiltinTemplateResponse>(
-    CREDENTIALS_IPC.ENABLE_TEMPLATE,
-    async (args) => {
-      try {
-        if (!args?.templateId || !args?.username || !args?.password) {
-          return { success: false, error: 'templateId, username, password are required' }
-        }
-        const template = findSiteProfileById(args.templateId)
-        if (!template || !template.domain) {
-          return { success: false, error: 'template is not configured' }
-        }
-        const ref = storeCredential({
-          domain: template.domain,
-          username: args.username,
-          password: args.password,
-          source: 'builtin_template',
-          builtinTemplateId: template.id
-        })
-        return {
-          success: true,
-          ref
-        }
-      } catch (error) {
-        return { success: false, error: getErrorMessage(error) }
+  registerTrustedCredentialsMessagePackHandler<
+    EnableBuiltinTemplateRequest,
+    EnableBuiltinTemplateResponse
+  >(CREDENTIALS_IPC.ENABLE_TEMPLATE, async (args) => {
+    try {
+      if (!args?.templateId || !args?.username || !args?.password) {
+        return { success: false, error: 'templateId, username, password are required' }
       }
+      const template = findSiteProfileById(args.templateId)
+      if (!template || !template.domain) {
+        return { success: false, error: 'template is not configured' }
+      }
+      const ref = storeCredential({
+        domain: template.domain,
+        username: args.username,
+        password: args.password,
+        source: 'builtin_template',
+        builtinTemplateId: template.id
+      })
+      return {
+        success: true,
+        ref
+      }
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) }
     }
-  )
+  })
 
-  registerMessagePackHandler<
+  registerTrustedCredentialsMessagePackHandler<
     RecordCredentialVerificationRequest,
     RecordCredentialVerificationResponse
   >(CREDENTIALS_IPC.RECORD_VERIFICATION, async (args) => {
@@ -172,7 +233,7 @@ export function registerCredentialsHandlers(): void {
   })
 
   // UPDATE: update username/password/notes of an existing credential.
-  registerMessagePackHandler<UpdateCredentialRequest, UpdateCredentialResponse>(
+  registerTrustedCredentialsMessagePackHandler<UpdateCredentialRequest, UpdateCredentialResponse>(
     CREDENTIALS_IPC.UPDATE,
     async (args) => {
       try {
@@ -196,9 +257,9 @@ export function registerCredentialsHandlers(): void {
   // returns only a status (never the password). This is the ONLY path
   // that combines plaintext + a webview; the renderer cannot trigger it
   // with a plaintext payload.
-  registerMessagePackHandler<FillPasswordRequest, FillPasswordResponse>(
+  registerTrustedCredentialsMessagePackHandler<FillPasswordRequest, FillPasswordResponse>(
     CREDENTIALS_IPC.FILL_PASSWORD,
-    async (args) => {
+    async (args, event) => {
       try {
         if (!args?.credentialId || !args?.webContentsId || !args?.selector) {
           return {
@@ -209,15 +270,24 @@ export function registerCredentialsHandlers(): void {
         if (!app.isReady()) {
           return { status: 'error', error: 'app not ready' }
         }
+
+        const credentialRef = getCredentialRef(args.credentialId)
+        if (!credentialRef) return { status: 'no_credentials' }
+        const target = isCredentialInjectionTargetAllowed({
+          senderWebContentsId: event.sender.id,
+          targetWebContentsId: args.webContentsId,
+          credentialDomain: credentialRef.domain
+        })
+        if (!target.allowed) return { status: 'error', error: target.error }
+
         const wc = webContents.fromId(args.webContentsId)
-        if (!wc) return { status: 'error', error: 'webContents not found' }
         const password = getPlaintextPassword(args.credentialId)
-        if (!password) return { status: 'no_password' }
+        if (!wc || !password) return { status: 'no_password' }
         touchCredential(args.credentialId)
-        // Build a minimal type script. We use the same React-friendly
-        // setter dance as the existing BrowserType tool so frameworks
-        // detect the change.
-        const setterMatch = `(function(sel, val){
+        // Recheck the full URL within the guest so a navigation between the
+        // Main-process authorization check and script execution cannot receive a secret.
+        const setterMatch = `(function(sel, val, expectedUrl){
+          if (location.href !== expectedUrl) return 'navigation_changed';
           var el = document.querySelector(sel);
           if (!el) return 'no_element';
           var tag = el.tagName ? el.tagName.toLowerCase() : '';
@@ -228,10 +298,12 @@ export function registerCredentialsHandlers(): void {
           el.dispatchEvent(new Event('input', { bubbles: true }));
           el.dispatchEvent(new Event('change', { bubbles: true }));
           return 'ok';
-        })(${JSON.stringify(args.selector)}, ${JSON.stringify(password)})`
+        })(${JSON.stringify(args.selector)}, ${JSON.stringify(password)}, ${JSON.stringify(target.url)})`
         const result = (await wc.executeJavaScript(setterMatch)) as string
-        // Best-effort scrub of the local string reference. V8 will GC later.
         if (result === 'no_element') return { status: 'not_found' }
+        if (result === 'navigation_changed') {
+          return { status: 'error', error: 'browser navigated before credential injection' }
+        }
         return { status: 'filled' }
       } catch (error) {
         return { status: 'error', error: getErrorMessage(error) }

@@ -10,22 +10,57 @@ import { detectRdpClient } from '../remote/rdp/rdp-detector'
 import { detectVncClient } from '../remote/vnc/vnc-detector'
 import type {
   RemoteConnectInput,
+  RemoteConnectResult,
+  RemoteCredentialClaimRequest,
   RemoteConnection,
   RemoteConnectionListResult,
   RemoteConnectionUpdateRequest,
   RemoteSession,
   RemoteViewerCredential
 } from '../../shared/remote-control'
-import { registerMessagePackHandler } from './messagepack-handler'
-import { dispatchRemoteInput, setRemoteInputSession } from '../remote/input-controller'
+import { registerMessagePackHandler as registerRawMessagePackHandler } from './messagepack-handler'
+import {
+  clearRemoteInputSession,
+  dispatchRemoteInput,
+  isRemoteInputSessionOwnedBy,
+  setRemoteInputSession
+} from '../remote/input-controller'
 import type { RemoteInputEnvelope } from '../../shared/remote-control'
 import { invokeRemoteAccount, type RemoteAccountRequest } from '../remote/account-client'
 import { deleteCredential, getCredentialRef, storeCredential } from '../credentials/secret-vault'
 import type { RemoteConnectionCreateRequest } from '../../shared/remote-control'
-import { desktopCapturer, screen, systemPreferences } from 'electron'
+import {
+  BrowserWindow,
+  desktopCapturer,
+  screen,
+  systemPreferences,
+  type IpcMainInvokeEvent
+} from 'electron'
 import { testRemoteEndpoint } from '../remote/connection-tester'
 import type { RemoteConnectionTestResult } from '../../shared/remote-control'
 import { setRemoteControlAllowed } from '../remote/authorization-state'
+
+function isTrustedRemoteIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
+
+function registerTrustedRemoteMessagePackHandler<TArgs, TResult = unknown>(
+  channel: string,
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<TResult> | TResult
+): void {
+  registerRawMessagePackHandler<TArgs, TResult>(channel, async (args, event) => {
+    if (!isTrustedRemoteIpcSender(event)) {
+      return { error: 'Unauthorized remote IPC sender' } as TResult
+    }
+    return await handler(args, event)
+  })
+}
 
 function validateRemoteCredentialRef(id: string | null | undefined): void {
   if (id && !getCredentialRef(id))
@@ -43,6 +78,11 @@ function requireExactObject(
   const unknown = Object.keys(value).find((key) => !allowed.has(key))
   if (unknown) throw new Error(`Unknown ${label} field: ${unknown}`)
   return value as Record<string, unknown>
+}
+
+function getRemoteSessionOwner(event: IpcMainInvokeEvent): number {
+  if (event.sender.isDestroyed()) throw new Error('Remote session owner is unavailable')
+  return event.sender.id
 }
 
 async function createConnectionWithCredential(
@@ -107,16 +147,17 @@ export function closeAllRemoteSessions(): void {
 }
 
 export function registerRemoteHandlers(): void {
-  registerMessagePackHandler<undefined, RemoteConnectionListResult>('remote:connection:list', () =>
-    listRemoteConnections()
+  registerTrustedRemoteMessagePackHandler<undefined, RemoteConnectionListResult>(
+    'remote:connection:list',
+    () => listRemoteConnections()
   )
 
-  registerMessagePackHandler<RemoteConnectionCreateRequest, RemoteConnection>(
+  registerTrustedRemoteMessagePackHandler<RemoteConnectionCreateRequest, RemoteConnection>(
     'remote:connection:create',
     (args) => createConnectionWithCredential(args)
   )
 
-  registerMessagePackHandler<RemoteConnectionUpdateRequest, RemoteConnection>(
+  registerTrustedRemoteMessagePackHandler<RemoteConnectionUpdateRequest, RemoteConnection>(
     'remote:connection:update',
     (args) => {
       const value = requireExactObject(
@@ -171,7 +212,7 @@ export function registerRemoteHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<{ id: string }, RemoteConnectionTestResult>(
+  registerTrustedRemoteMessagePackHandler<{ id: string }, RemoteConnectionTestResult>(
     'remote:connection:test',
     async (args) => {
       const value = requireExactObject(args, ['id'], 'remote connection test request')
@@ -190,7 +231,7 @@ export function registerRemoteHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<{ id: string }, { success: true }>(
+  registerTrustedRemoteMessagePackHandler<{ id: string }, { success: true }>(
     'remote:connection:delete',
     async (args) => {
       const value = requireExactObject(args, ['id'], 'remote connection delete request')
@@ -204,61 +245,81 @@ export function registerRemoteHandlers(): void {
     }
   )
 
-  registerMessagePackHandler<undefined, { sessions: RemoteSession[] }>(
+  registerTrustedRemoteMessagePackHandler<undefined, { sessions: RemoteSession[] }>(
     'remote:session:list',
-    () => ({
-      sessions: remoteControlEngine.sessions.list()
+    (_args, event) => ({
+      sessions: remoteControlEngine.listSessions(getRemoteSessionOwner(event))
     })
   )
 
-  registerMessagePackHandler<{ sessionId: string }, RemoteViewerCredential | null>(
-    'remote:session:credential',
-    (args) => {
-      const value = requireExactObject(args, ['sessionId'], 'remote session credential request')
-      if (typeof value.sessionId !== 'string' || !value.sessionId || value.sessionId.length > 128) {
-        throw new Error('Invalid remote session ID')
+  registerTrustedRemoteMessagePackHandler<
+    RemoteCredentialClaimRequest,
+    RemoteViewerCredential | null
+  >('remote:session:claim-credential', (args, event) => {
+    const value = requireExactObject(
+      args,
+      ['sessionId', 'lease'],
+      'remote credential claim request'
+    )
+    if (typeof value.sessionId !== 'string' || !value.sessionId || value.sessionId.length > 128) {
+      throw new Error('Invalid remote session ID')
+    }
+    if (typeof value.lease !== 'string' || !/^[A-Za-z0-9_-]{40,128}$/.test(value.lease)) {
+      throw new Error('Invalid remote credential lease')
+    }
+    return remoteControlEngine.claimViewerCredential(
+      value.sessionId,
+      getRemoteSessionOwner(event),
+      value.lease
+    )
+  })
+
+  registerTrustedRemoteMessagePackHandler<RemoteConnectInput, RemoteConnectResult>(
+    'remote:connect',
+    (args, event) => {
+      const value = requireExactObject(args, ['connectionId'], 'remote connect request')
+      if (
+        typeof value.connectionId !== 'string' ||
+        !value.connectionId ||
+        value.connectionId.length > 128
+      ) {
+        throw new Error('Invalid remote connection ID')
       }
-      return remoteControlEngine.getViewerCredential(value.sessionId)
+      const ownerWebContentsId = getRemoteSessionOwner(event)
+      event.sender.once('destroyed', () =>
+        remoteControlEngine.disconnectOwnedBy(ownerWebContentsId)
+      )
+      return remoteControlEngine.connect(value.connectionId, ownerWebContentsId)
     }
   )
 
-  registerMessagePackHandler<RemoteConnectInput, RemoteSession>('remote:connect', (args) => {
-    const value = requireExactObject(args, ['connectionId'], 'remote connect request')
-    if (
-      typeof value.connectionId !== 'string' ||
-      !value.connectionId ||
-      value.connectionId.length > 128
-    ) {
-      throw new Error('Invalid remote connection ID')
-    }
-    return remoteControlEngine.connect(value.connectionId)
-  })
-
-  registerMessagePackHandler<{ sessionId: string }, { session: RemoteSession | null }>(
+  registerTrustedRemoteMessagePackHandler<{ sessionId: string }, { session: RemoteSession | null }>(
     'remote:disconnect',
-    (args) => {
+    (args, event) => {
       const value = requireExactObject(args, ['sessionId'], 'remote disconnect request')
       if (typeof value.sessionId !== 'string' || !value.sessionId || value.sessionId.length > 128) {
         throw new Error('Invalid remote session ID')
       }
-      return { session: remoteControlEngine.disconnect(value.sessionId) }
+      return {
+        session: remoteControlEngine.disconnect(value.sessionId, getRemoteSessionOwner(event))
+      }
     }
   )
 
-  registerMessagePackHandler<undefined, Awaited<ReturnType<typeof detectRdpClient>>>(
+  registerTrustedRemoteMessagePackHandler<undefined, Awaited<ReturnType<typeof detectRdpClient>>>(
     'remote:rdp:detect',
     () => detectRdpClient()
   )
 
-  registerMessagePackHandler<undefined, Awaited<ReturnType<typeof detectVncClient>>>(
+  registerTrustedRemoteMessagePackHandler<undefined, Awaited<ReturnType<typeof detectVncClient>>>(
     'remote:vnc:detect',
     () => detectVncClient()
   )
 
-  registerMessagePackHandler<
+  registerTrustedRemoteMessagePackHandler<
     { sessionId: string | null; displayId?: string | null },
-    { success: true }
-  >('remote:input:set-session', (args) => {
+    { success: true } | { success: false; error: string }
+  >('remote:input:set-session', (args, event) => {
     const value = requireExactObject(
       args,
       ['sessionId', 'displayId'],
@@ -273,30 +334,47 @@ export function registerRemoteHandlers(): void {
     ) {
       throw new Error('Invalid remote capture display ID')
     }
-    setRemoteInputSession(
-      value.sessionId as string | null,
-      (value.displayId as string | null) ?? null
-    )
+    const ownerWebContentsId = getRemoteSessionOwner(event)
+    const sessionId = value.sessionId as string | null
+    if (sessionId === null) {
+      return clearRemoteInputSession(ownerWebContentsId)
+        ? { success: true }
+        : { success: false, error: 'Remote input is owned by another window' }
+    }
+    if (!remoteControlEngine.sessions.isOwnedBy(sessionId, ownerWebContentsId)) {
+      return { success: false, error: 'Remote session is owned by another window' }
+    }
+    setRemoteInputSession(sessionId, (value.displayId as string | null) ?? null, ownerWebContentsId)
     return { success: true }
   })
 
-  registerMessagePackHandler<
+  registerTrustedRemoteMessagePackHandler<
     RemoteInputEnvelope,
     { success: true } | { success: false; error: string }
-  >('remote:input:dispatch', (args) => dispatchRemoteInput(args))
+  >('remote:input:dispatch', (args, event) => {
+    const ownerWebContentsId = getRemoteSessionOwner(event)
+    if (!isRemoteInputSessionOwnedBy(args?.sessionId, ownerWebContentsId)) {
+      return { success: false, error: 'Remote input is owned by another window' }
+    }
+    return dispatchRemoteInput(args)
+  })
 
-  registerMessagePackHandler<RemoteAccountRequest, unknown>('remote:account:invoke', (args) =>
-    invokeRemoteAccount(args)
+  registerTrustedRemoteMessagePackHandler<RemoteAccountRequest, unknown>(
+    'remote:account:invoke',
+    (args) => invokeRemoteAccount(args)
   )
 
-  registerMessagePackHandler<undefined, { status: string }>('remote:capture:permission', () => ({
-    status:
-      process.platform === 'darwin'
-        ? systemPreferences.getMediaAccessStatus('screen')
-        : 'not-applicable'
-  }))
+  registerTrustedRemoteMessagePackHandler<undefined, { status: string }>(
+    'remote:capture:permission',
+    () => ({
+      status:
+        process.platform === 'darwin'
+          ? systemPreferences.getMediaAccessStatus('screen')
+          : 'not-applicable'
+    })
+  )
 
-  registerMessagePackHandler<
+  registerTrustedRemoteMessagePackHandler<
     undefined,
     { sources: Array<{ id: string; name: string; displayId: string; primary: boolean }> }
   >('remote:capture:sources', async () => {

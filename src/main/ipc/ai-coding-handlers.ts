@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import {
   sanitizeAiCodingConfig,
   sanitizeAiCodingConfigs,
@@ -14,6 +15,16 @@ import { promisify } from 'node:util'
 
 const STORAGE_KEY = 'ola-ai-coding-configs'
 const execFileAsync = promisify(execFile)
+
+function isTrustedAiCodingIpcSender(event: IpcMainInvokeEvent): boolean {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  return (
+    ownerWindow !== null &&
+    !ownerWindow.isDestroyed() &&
+    ownerWindow.webContents === event.sender &&
+    event.senderFrame === event.sender.mainFrame
+  )
+}
 
 function decodeState(value: unknown): Record<string, unknown> {
   let parsed = value
@@ -74,6 +85,9 @@ export function registerAiCodingHandlers(): void {
   registerMessagePackHandler<{ configId: string; cwd: string; projectId?: string | null }>(
     'ai-coding:terminal-launch',
     async (input, event) => {
+      if (!isTrustedAiCodingIpcSender(event)) {
+        return { success: false, error: 'Unauthorized AI coding IPC sender' }
+      }
       const config = (await readAiCodingConfigs()).find(
         (candidate) => candidate.id === input.configId && candidate.enabled
       )
