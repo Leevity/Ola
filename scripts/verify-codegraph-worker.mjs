@@ -1,7 +1,9 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
+import { existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { loadGrammarManifest, resolveGrammarFiles } from './codegraph-grammar-manifest.mjs'
 import { assert, startWorker } from './verify-message-windowing.mjs'
 
 const repoRoot = path.resolve(import.meta.dirname, '..')
@@ -12,10 +14,48 @@ const project = path.join(
   'Ola.CodeGraph.Worker.csproj'
 )
 
+function currentRid() {
+  if (process.platform === 'darwin') return process.arch === 'arm64' ? 'osx-arm64' : 'osx-x64'
+  if (process.platform === 'win32') return process.arch === 'arm64' ? 'win-arm64' : 'win-x64'
+  if (process.platform === 'linux') return process.arch === 'arm64' ? 'linux-arm64' : 'linux-x64'
+  throw new Error(`unsupported platform: ${process.platform}/${process.arch}`)
+}
+
+function resolveGrammarsDir() {
+  const manifest = loadGrammarManifest()
+  const rid = process.env.OLA_NATIVE_WORKER_RID?.trim() || currentRid()
+  const candidates = [
+    process.env.OLA_CODEGRAPH_GRAMMARS_DIR?.trim(),
+    path.join(repoRoot, 'resources', 'native-worker', 'codegraph-worker', 'grammars'),
+    path.join(
+      os.homedir(),
+      `.nuget/packages/${manifest.source.package.toLowerCase()}/${manifest.source.version}/runtimes`,
+      rid,
+      'native'
+    )
+  ].filter(Boolean)
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue
+    try {
+      resolveGrammarFiles(candidate, rid, manifest)
+      return candidate
+    } catch {
+      // Try the next candidate when the directory exists but is incomplete.
+    }
+  }
+
+  throw new Error(
+    `CodeGraph grammars not found for ${rid}. Tried: ${candidates.join(', ')}. ` +
+      'Run `dotnet restore sidecars/Ola.CodeGraph.Core/Ola.CodeGraph.Core.csproj` or `npm run native:publish` first.'
+  )
+}
+
 async function main() {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), 'ola-codegraph-verify-'))
   const requestedRoot = process.env.OLA_CODEGRAPH_VERIFY_ROOT?.trim()
   const sourceRoot = requestedRoot ? path.resolve(requestedRoot) : path.join(tempDir, 'project')
+  const grammarsDir = resolveGrammarsDir()
   let client
   let child
   try {
@@ -33,13 +73,7 @@ async function main() {
       }
     }
     ;({ client, child } = await startWorker(tempDir, project, {
-      OLA_CODEGRAPH_GRAMMARS_DIR: path.join(
-        repoRoot,
-        'resources',
-        'native-worker',
-        'codegraph-worker',
-        'grammars'
-      ),
+      OLA_CODEGRAPH_GRAMMARS_DIR: grammarsDir,
       CODEGRAPH_HOME: path.join(tempDir, 'data')
     }))
     const routes = await client.request('worker/routes')
