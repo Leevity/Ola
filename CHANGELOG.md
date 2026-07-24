@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [1.0.4] - 2026-07-23
+## [1.0.4] - 2026-07-24
 
 Feature release that hardens the Ola agent runtime and ships several major product surfaces: CodeGraph analysis, Draw canvas, Hooks, sub-agent history, remote workbench, SSH reliability, AI coding terminal, and a verified multi-platform release pipeline.
 
@@ -32,9 +32,16 @@ Feature release that hardens the Ola agent runtime and ships several major produ
 **Chat & execution UX**
 
 - Tool execution outline model; final answers are prioritized while execution runs collapse by default.
-- Typed message content blocks and better long-conversation navigation.
+- Typed message content blocks and a database-backed assistant reply rail for reliable navigation across long and partially loaded conversations.
+- Result cards summarize run state, elapsed time, token usage, changed files, and actions for reviewing, exporting, copying, bookmarking, or forking a result.
+- Manual context compression now has a preview-and-confirm flow, with compression boundaries exposed in the Cowork context timeline.
 - Scoped chat input drafts with empty-state discard.
 - Localized execution process summaries (i18n).
+
+**Models & providers**
+
+- Refreshed built-in model catalogs across OpenAI-compatible, Anthropic, Google, Azure OpenAI, OpenRouter, Copilot OAuth, Codex OAuth, Baidu, Qwen, Moonshot, SiliconFlow, Gitee AI, and xAI providers.
+- Redesigned the model switcher to expose provider and model details more clearly while preserving custom provider configuration.
 
 **Hooks**
 
@@ -52,7 +59,7 @@ Feature release that hardens the Ola agent runtime and ships several major produ
 
 - Expanded CI quality gates and verification suite (`verify:ci-core`, worker asset verify, release-gates).
 - Verified release workflow and update path so multi-platform packages are built, checksummed, and attached under a controlled draft → publish flow.
-- Version bumped to **1.0.4** for this release train.
+- Application version, release tag, artifact names, and the four-part Windows file version are aligned to **1.0.4** (`1.0.4.0` for Windows resources).
 
 ### Notes
 
