@@ -1,4 +1,4 @@
-import {
+﻿import {
   ArrowUpRight,
   Bot,
   CheckCircle2,
@@ -26,6 +26,7 @@ import { cn } from '@renderer/lib/utils'
 import type { TeamTask } from '@renderer/lib/agent/teams/types'
 import { useAggregatedChangeSummaries } from '@renderer/components/chat/change-summary-utils'
 import { aggregateDisplayableRunFileChanges } from '@renderer/components/chat/file-change-utils'
+import { navigateToConversationTarget } from '@renderer/lib/conversation-navigation-events'
 
 const EMPTY_TEAM_TASKS: TeamTask[] = []
 const EMPTY_TASKS: TaskItem[] = []
@@ -349,10 +350,9 @@ function InlineStepsPanelCard({
     }
 
     if (!changeSummary?.assistantMessageId) return
-    const target = document.querySelector<HTMLElement>(
-      `[data-message-id="${changeSummary.assistantMessageId}"]`
-    )
-    target?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    navigateToConversationTarget({
+      messageId: changeSummary.assistantMessageId
+    })
   }
 
   return (

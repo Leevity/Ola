@@ -420,6 +420,66 @@ export const giteeAiPreset: BuiltinProviderPreset = {
     { id: 'LegalOne-8B', name: 'LegalOne 8B', enabled: true },
     { id: 'Sinong1.0-32B', name: 'Sinong 1.0 32B', enabled: true },
     { id: 'HealthGPT-L14', name: 'HealthGPT L14', enabled: true },
-    { id: 'moark-m1', name: 'Moark M1', enabled: true }
+    { id: 'moark-m1', name: 'Moark M1', enabled: true },
+    // Official completion-capable models collected from Gitee AI /v1/models
+    // Pricing: per-million-token USD rates from public provider metadata (OpenRouter) where available
+    // ── Qwen ──
+    {
+      id: 'Qwen3.6-35B-A3B',
+      name: 'Qwen3.6 35B A3B',
+      icon: 'qwen',
+      enabled: true,
+      inputPrice: 0.2,
+      outputPrice: 1.6
+    },
+    // ── DeepSeek ──
+    {
+      id: 'DeepSeek-V4-Pro',
+      name: 'DeepSeek V4 Pro',
+      icon: 'deepseek',
+      enabled: true,
+      inputPrice: 1.6,
+      outputPrice: 3.135
+    },
+    {
+      id: 'DeepSeek-V4-Flash',
+      name: 'DeepSeek V4 Flash',
+      icon: 'deepseek',
+      enabled: true,
+      inputPrice: 0.13,
+      outputPrice: 0.28
+    },
+    // ── GLM (智谱) ──
+    {
+      id: 'GLM-5.2',
+      name: 'GLM 5.2',
+      icon: 'chatglm',
+      enabled: true,
+      inputPrice: 1.302,
+      outputPrice: 4.092
+    },
+    // ── Kimi / MiniMax ──
+    {
+      id: 'Kimi-K2.7-Code',
+      name: 'Kimi K2.7 Code',
+      icon: 'kimi',
+      enabled: true,
+      inputPrice: 0.95,
+      outputPrice: 4,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'enabled' } },
+        disabledBodyParams: { thinking: { type: 'disabled' } },
+        forceTemperature: 1
+      }
+    },
+    {
+      id: 'MiniMax-M3',
+      name: 'MiniMax M3',
+      icon: 'minimax',
+      enabled: true,
+      inputPrice: 0.3,
+      outputPrice: 1.2
+    }
   ]
 }

@@ -1,26 +1,28 @@
-import assert from 'node:assert/strict'
+﻿import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
 const source = await readFile('src/renderer/src/components/chat/MessageList.tsx', 'utf8')
 
-assert.match(source, /const USER_LOCATOR_PREVIEW_LIMIT = 88/)
+assert.match(source, /const ASSISTANT_RAIL_PREVIEW_LIMIT = 120/)
 assert.match(
   source,
-  /function getMessageLocatorText\(content: UnifiedMessage\['content'\]\): string/
+  /function getAssistantVisibleText\(content: UnifiedMessage\['content'\]\): string/
 )
-assert.match(source, /isSystemPromptText\(content\) \? '' : content/)
-assert.match(source, /block\.type === 'tool_use'/)
-assert.match(source, /toolNames\.slice\(0, 3\)/)
-assert.match(source, /Tool: \$\{toolNames/)
-assert.match(source, /block\.type === 'tool_result'/)
-assert.match(source, /failedToolResultCount/)
-assert.match(source, /Tool result:/)
-assert.match(source, /truncateLocatorPreview\(/)
-assert.match(source, /DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL/)
+assert.match(source, /function AssistantReplyRail\(/)
+assert.match(source, /ASSISTANT_RAIL_DENSE_THRESHOLD = 80/)
+assert.match(source, /DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL/)
 assert.match(
   source,
-  /loadMessageWindowAround\(activeSessionId, \{ messageId, sortOrder: item\.sortOrder \}, 30\)/
+  /loadMessageWindowAround\(activeSessionId, \{ messageId, sortOrder: target\.sortOrder \}, 30\)/
 )
-assert.match(source, /<UserMessageLocator/)
+assert.match(source, /messageIds: string\[\]/)
+assert.match(source, /summary: string/)
+assert.match(source, /function appendAssistantRailSummary\(current: string, next: string\): string/)
+assert.match(source, /title: previewItem\.preview, detail: previewItem\.summary \|\| null/)
+assert.match(source, /let activeTurn: AssistantReplyRailItem \| null = null/)
+assert.match(source, /activeTurn\.summary = appendAssistantRailSummary\(/)
+assert.match(source, /itemIdByMessageId\.set\(source\.id, activeTurn\.id\)/)
+assert.match(source, /measuredMessageHeightsRef/)
+assert.match(source, /getBoundingClientRect\(\)/)
 
-console.log('message locator verification passed')
+console.log('assistant reply rail verification passed')

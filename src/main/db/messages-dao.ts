@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+﻿import { getNativeWorker } from '../lib/native-worker'
 
 export interface MessageRow {
   id: string
@@ -8,6 +8,16 @@ export interface MessageRow {
   meta: string | null
   created_at: number
   usage: string | null
+  sort_order: number
+}
+
+export interface MessageLocatorRow {
+  id: string
+  session_id: string
+  role: string
+  content: string
+  meta: string | null
+  created_at: number
   sort_order: number
 }
 
@@ -89,6 +99,14 @@ export function getUserMessages(sessionId: string): Promise<MessageRow[]> {
 
 export function getMessageMarkers(sessionId: string): Promise<MessageRow[]> {
   return getNativeWorker().request<MessageRow[]>('db/messages-list-markers', { sessionId }, 120_000)
+}
+
+export function getMessageLocatorRows(sessionId: string): Promise<MessageLocatorRow[]> {
+  return getNativeWorker().request<MessageLocatorRow[]>(
+    'db/messages-list-locator',
+    { sessionId },
+    120_000
+  )
 }
 
 export function getMessagesPage(

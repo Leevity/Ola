@@ -391,10 +391,12 @@ export function mergeCompressedMessagesKeepHistory(
     return null
   }
 
-  const currentMessagesWithoutCompactArtifacts = currentMessages.filter(
-    (message) => !isCompactArtifactMessage(message)
+  const currentMessagesWithoutIncomingCompactArtifacts = currentMessages.filter(
+    (message) => message.id !== boundaryMessage.id && message.id !== summaryMessage.id
   )
-  const currentIds = new Set(currentMessagesWithoutCompactArtifacts.map((message) => message.id))
+  const currentIds = new Set(
+    currentMessagesWithoutIncomingCompactArtifacts.map((message) => message.id)
+  )
 
   // Skip the merge entirely if the boundary is already wired into the transcript
   // (e.g. resume of a previously-compressed conversation). Return a shallow copy
@@ -403,12 +405,7 @@ export function mergeCompressedMessagesKeepHistory(
     currentMessages.some((message) => message.id === boundaryMessage.id) &&
     currentMessages.some((message) => message.id === summaryMessage.id)
   ) {
-    return currentMessages.filter(
-      (message) =>
-        !isCompactArtifactMessage(message) ||
-        message.id === boundaryMessage.id ||
-        message.id === summaryMessage.id
-    )
+    return [...currentMessages]
   }
 
   const preservedHeadId = boundaryMessage.meta?.compactBoundary?.preservedSegment?.headId ?? null
@@ -418,12 +415,12 @@ export function mergeCompressedMessagesKeepHistory(
   // summary stays after the compact boundary in both UI and request order.
   let insertIndex = -1
   if (options.insertAtEnd) {
-    insertIndex = currentMessagesWithoutCompactArtifacts.length
+    insertIndex = currentMessagesWithoutIncomingCompactArtifacts.length
   }
   if (insertIndex < 0) {
     for (const insertBeforeId of options.insertBeforeIds ?? []) {
       if (!insertBeforeId) continue
-      insertIndex = currentMessagesWithoutCompactArtifacts.findIndex(
+      insertIndex = currentMessagesWithoutIncomingCompactArtifacts.findIndex(
         (message) => message.id === insertBeforeId
       )
       if (insertIndex >= 0) break
@@ -437,7 +434,7 @@ export function mergeCompressedMessagesKeepHistory(
   // end so the boundary still renders, rather than dropping the merge.
   if (insertIndex < 0) {
     if (preservedHeadId && currentIds.has(preservedHeadId)) {
-      insertIndex = currentMessagesWithoutCompactArtifacts.findIndex(
+      insertIndex = currentMessagesWithoutIncomingCompactArtifacts.findIndex(
         (message) => message.id === preservedHeadId
       )
     }
@@ -446,7 +443,7 @@ export function mergeCompressedMessagesKeepHistory(
       for (let index = summaryIndex + 1; index < compressedMessages.length; index += 1) {
         const candidateId = compressedMessages[index]?.id
         if (candidateId && currentIds.has(candidateId)) {
-          insertIndex = currentMessagesWithoutCompactArtifacts.findIndex(
+          insertIndex = currentMessagesWithoutIncomingCompactArtifacts.findIndex(
             (message) => message.id === candidateId
           )
           if (insertIndex >= 0) break
@@ -457,21 +454,21 @@ export function mergeCompressedMessagesKeepHistory(
   if (insertIndex < 0) {
     for (const fallbackId of options.fallbackInsertBeforeIds ?? []) {
       if (!fallbackId) continue
-      insertIndex = currentMessagesWithoutCompactArtifacts.findIndex(
+      insertIndex = currentMessagesWithoutIncomingCompactArtifacts.findIndex(
         (message) => message.id === fallbackId
       )
       if (insertIndex >= 0) break
     }
   }
   if (insertIndex < 0) {
-    insertIndex = currentMessagesWithoutCompactArtifacts.length
+    insertIndex = currentMessagesWithoutIncomingCompactArtifacts.length
   }
 
   return [
-    ...currentMessagesWithoutCompactArtifacts.slice(0, insertIndex),
+    ...currentMessagesWithoutIncomingCompactArtifacts.slice(0, insertIndex),
     boundaryMessage,
     summaryMessage,
-    ...currentMessagesWithoutCompactArtifacts.slice(insertIndex)
+    ...currentMessagesWithoutIncomingCompactArtifacts.slice(insertIndex)
   ]
 }
 

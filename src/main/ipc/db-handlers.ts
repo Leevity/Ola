@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+﻿import { ipcMain } from 'electron'
 import { initializeDatabase } from '../db/database'
 import * as sessionsDao from '../db/sessions-dao'
 import * as projectsDao from '../db/projects-dao'
@@ -32,6 +32,7 @@ import {
   DB_MESSAGES_INSERT_ARTIFACTS_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL,
+  DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL,
   DB_MESSAGES_REQUEST_CONTEXT_MSGPACK_CHANNEL,
@@ -415,6 +416,11 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const sessionId = decodeMessagePackPayload<string>(bytes)
     return encodeMessagePackPayload(await messagesDao.getMessageMarkers(sessionId))
+  })
+
+  ipcMain.handle(DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const sessionId = decodeMessagePackPayload<string>(bytes)
+    return encodeMessagePackPayload(await messagesDao.getMessageLocatorRows(sessionId))
   })
 
   ipcMain.handle(DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {

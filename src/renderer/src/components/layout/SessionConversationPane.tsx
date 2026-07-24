@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   Check,
@@ -6,6 +6,7 @@ import {
   Eraser,
   ExternalLink,
   ImageDown,
+  FileOutput,
   Loader2,
   Maximize2,
   MoreHorizontal,
@@ -33,6 +34,7 @@ import {
 import { Input } from '@renderer/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { MessageList } from '@renderer/components/chat/MessageList'
+import { ContextCompressionPreviewDialog } from '@renderer/components/chat/ContextCompressionPreviewDialog'
 import { ImageEditDialog } from '@renderer/components/chat/ImageEditDialog'
 import { InputArea } from '@renderer/components/chat/InputArea'
 import { ProjectTerminalDock } from '@renderer/components/terminal/ProjectTerminalDock'
@@ -41,12 +43,16 @@ import { RuntimeStatusPanel } from './RuntimeStatusPanel'
 import {
   abortSession,
   clearPendingSessionMessages,
+  type ContextCompressionPreview,
   useChatActions
 } from '@renderer/hooks/use-chat-actions'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { openDetachedSessionWindow } from '@renderer/lib/session-window'
-import { exportSessionMarkdownFromDb } from '@renderer/lib/utils/export-chat'
+import {
+  exportSessionMarkdownFromDb,
+  exportSessionResultReportFromDb
+} from '@renderer/lib/utils/export-chat'
 import { copySessionAsImageToClipboard } from '@renderer/lib/utils/export-session-image'
 import { cn } from '@renderer/lib/utils'
 import { useChatStore } from '@renderer/stores/chat-store'
@@ -119,7 +125,9 @@ export function SessionConversationPane({
     retryLastMessage,
     editAndResend,
     deleteMessage,
-    manualCompressContext
+    manualCompressContext,
+    previewContextCompressionAt,
+    applyContextCompressionPreview
   } = useChatActions()
   const updateSessionTitle = useChatStore((state) => state.updateSessionTitle)
   const clearSessionMessages = useChatStore((state) => state.clearSessionMessages)
@@ -128,8 +136,55 @@ export function SessionConversationPane({
   const [copiedAll, setCopiedAll] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [compressionPreviewOpen, setCompressionPreviewOpen] = useState(false)
+  const [compressionPreviewLoading, setCompressionPreviewLoading] = useState(false)
+  const [compressionPreviewApplying, setCompressionPreviewApplying] = useState(false)
+  const [compressionPreview, setCompressionPreview] = useState<ContextCompressionPreview | null>(
+    null
+  )
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
+
+  const handleRequestContextCompression = useCallback(
+    async (messageId: string) => {
+      setCompressionPreviewOpen(true)
+      setCompressionPreviewLoading(true)
+      setCompressionPreview(null)
+      try {
+        const preview = await previewContextCompressionAt(messageId)
+        if (!preview) {
+          toast.error('无法生成上下文摘要')
+          setCompressionPreviewOpen(false)
+          return
+        }
+        setCompressionPreview(preview)
+      } catch (error) {
+        console.error('[SessionConversationPane] Context compression preview failed', error)
+        toast.error('无法生成上下文摘要')
+        setCompressionPreviewOpen(false)
+      } finally {
+        setCompressionPreviewLoading(false)
+      }
+    },
+    [previewContextCompressionAt]
+  )
+
+  const handleApplyContextCompressionPreview = useCallback(async () => {
+    if (!compressionPreview) return
+    setCompressionPreviewApplying(true)
+    try {
+      const result = await applyContextCompressionPreview(compressionPreview)
+      if (result === 'compressed') {
+        setCompressionPreviewOpen(false)
+        setCompressionPreview(null)
+        toast.success('已整理上下文')
+      } else {
+        toast.error('无法应用上下文摘要')
+      }
+    } finally {
+      setCompressionPreviewApplying(false)
+    }
+  }, [applyContextCompressionPreview, compressionPreview])
 
   const compactSessionHeader = sessionView.messageCount === 0
   const hasProjectFolderAction = Boolean(sessionView.projectId && sessionView.workingFolder)
@@ -164,6 +219,14 @@ export function SessionConversationPane({
     setCopiedAll(true)
     window.setTimeout(() => setCopiedAll(false), 2000)
   }, [resolvedSessionId])
+
+  const handleCopyResultReport = useCallback(async (): Promise<void> => {
+    if (!resolvedSessionId) return
+    const session = useChatStore.getState().sessions.find((item) => item.id === resolvedSessionId)
+    if (!session) return
+    await navigator.clipboard.writeText(await exportSessionResultReportFromDb(session))
+    toast.success(t('layout.resultReportCopied', { defaultValue: 'Result report copied' }))
+  }, [resolvedSessionId, t])
 
   const handleExportImage = useCallback(async (): Promise<void> => {
     if (!resolvedSessionId) return
@@ -453,6 +516,13 @@ export function SessionConversationPane({
                     {t('layout.copyAll', { defaultValue: 'Copy conversation' })}
                   </DropdownMenuItem>
                   <DropdownMenuItem
+                    onClick={() => void handleCopyResultReport()}
+                    disabled={isStreaming || !hasTranscriptActions}
+                  >
+                    <FileOutput className="size-4" />
+                    {t('layout.copyResultReport', { defaultValue: 'Copy result report' })}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     onClick={() => void handleExportImage()}
                     disabled={exporting || isStreaming || !hasTranscriptActions}
                   >
@@ -492,7 +562,21 @@ export function SessionConversationPane({
           onContinue={continueLastToolExecution}
           onEditUserMessage={editAndResend}
           onDeleteMessage={deleteMessage}
+          onRequestContextCompression={handleRequestContextCompression}
           onCancelRequestRetry={stopStreaming}
+        />
+        <ContextCompressionPreviewDialog
+          open={compressionPreviewOpen}
+          preview={compressionPreview}
+          loading={compressionPreviewLoading}
+          applying={compressionPreviewApplying}
+          onOpenChange={(open) => {
+            if (!open && !compressionPreviewApplying) {
+              setCompressionPreviewOpen(false)
+              setCompressionPreview(null)
+            }
+          }}
+          onConfirm={() => void handleApplyContextCompressionPreview()}
         />
         <InputArea
           sessionId={resolvedSessionId}

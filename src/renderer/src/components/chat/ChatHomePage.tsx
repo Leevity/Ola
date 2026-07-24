@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { InputArea } from '@renderer/components/chat/InputArea'
@@ -222,7 +222,11 @@ export function ChatHomePage(): React.JSX.Element {
 
   const quickPrompts =
     mode === 'chat'
-      ? [t('messageList.explainAsync'), t('messageList.compareRest'), t('messageList.writeRegex')]
+      ? [
+          t('messageList.analyzeSituation'),
+          t('messageList.summarizeMeeting'),
+          t('messageList.createPptOutline')
+        ]
       : homeWorkingFolder
         ? [
             t('messageList.summarizeProject'),

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useState, useCallback, useMemo, useEffect, useId, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -27,7 +27,8 @@ import {
   Volume2,
   Share2,
   GitFork,
-  CircleHelp
+  CircleHelp,
+  Archive
 } from 'lucide-react'
 import { FadeIn, ScaleIn } from '@renderer/components/animate-ui'
 import { ImageGeneratingLoader } from './ImageGeneratingLoader'
@@ -39,6 +40,7 @@ import { DesktopActionToolCard } from './DesktopActionToolCard'
 import { BrowserToolCard } from './BrowserToolCard'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
+import { useTaskStore, type TaskItem } from '@renderer/stores/task-store'
 import type { AgentRunChangeSet, AgentRunFileChange } from '@renderer/stores/agent-store'
 import { useShallow } from 'zustand/react/shallow'
 import type {
@@ -50,9 +52,17 @@ import type {
   MessageMeta
 } from '@renderer/lib/api/types'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import {
+  isConversationBookmarked,
+  toggleConversationBookmark
+} from '@renderer/lib/conversation-bookmarks'
+import { exportSessionResultReportFromDb } from '@renderer/lib/utils/export-chat'
 import { ToolCallCard, WidgetOutputBlock } from './ToolCallCard'
 import { ToolCallGroup } from './ToolCallGroup'
 import { ExecutionRunSummary } from './ExecutionRunSummary'
+import { RunResultCard } from './RunResultCard'
+import { buildChatRunPresentation } from './chat-run-view-model'
+import { SessionChangeSummaryCard } from './SessionChangeSummaryCard'
 import {
   buildExecutionOutline,
   type ToolExecutionItem,
@@ -141,6 +151,7 @@ interface AssistantMessageProps {
   onRetry?: (messageId: string) => void
   onContinue?: () => void
   onDelete?: (messageId: string) => void
+  onRequestContextCompression?: (messageId: string) => void
   renderMode?: AssistantRenderMode
   orchestrationRun?: OrchestrationRun | null
   hiddenToolUseIds?: Set<string>
@@ -188,6 +199,7 @@ const SPECIAL_TOOLS = new Set([
   DESKTOP_TYPE_TOOL_NAME
 ])
 const EMPTY_LIVE_TOOL_CALLS: ToolCallState[] = []
+const EMPTY_SESSION_TASKS: TaskItem[] = []
 
 function formatRetryDelay(delayMs: number): string {
   if (delayMs < 1000) return `${delayMs}ms`
@@ -1578,6 +1590,7 @@ export function AssistantMessage({
   onRetry,
   onContinue,
   onDelete,
+  onRequestContextCompression,
   renderMode = 'default',
   orchestrationRun,
   hiddenToolUseIds,
@@ -1601,11 +1614,15 @@ export function AssistantMessage({
     : undefined
   const openTranslatePage = useUIStore((s) => s.openTranslatePage)
   const navigateToSession = useUIStore((s) => s.navigateToSession)
+  const openDetailPanel = useUIStore((s) => s.openDetailPanel)
   const setTranslateSourceText = useTranslateStore((s) => s.setSourceText)
   const openImageEditor = useImageEditStore((s) => s.openEditor)
   const forkSessionFromMessage = useChatStore((s) => s.forkSessionFromMessage)
   const [collapsed, setCollapsed] = useState(false)
   const [forking, setForking] = useState(false)
+  const [bookmarked, setBookmarked] = useState(() =>
+    isConversationBookmarked(sessionId, msgId ?? '')
+  )
   const sessionModelBinding = useChatStore(
     useShallow((state) => {
       const sessionIndex = sessionId ? state.sessionsById[sessionId] : undefined
@@ -1774,6 +1791,14 @@ export function AssistantMessage({
   const collapseExecutionRunsByDefault = useSettingsStore(
     (state) => state.collapseExecutionRunsByDefault
   )
+  const toolExecutionDensity = useSettingsStore((state) => state.toolExecutionDensity)
+  const sessionTasks = useTaskStore((state) => {
+    if (!sessionId) return EMPTY_SESSION_TASKS
+    return (
+      state.tasksBySession[sessionId] ??
+      (state.currentSessionId === sessionId ? state.tasks : EMPTY_SESSION_TASKS)
+    )
+  })
   const executionRuns = useMemo(
     () =>
       buildExecutionOutline(normalizedContent, {
@@ -1796,6 +1821,26 @@ export function AssistantMessage({
   }>({ msgId, expandedByRunId: {} })
   const expandedRunOverrides =
     executionRunState.msgId === msgId ? executionRunState.expandedByRunId : {}
+  const runPresentation = useMemo(
+    () =>
+      buildChatRunPresentation({
+        runs: executionRuns,
+        changeSet: runChangeSet,
+        tasks: sessionTasks,
+        usage
+      }),
+    [executionRuns, runChangeSet, sessionTasks, usage]
+  )
+  const expandExecutionRuns = useCallback(() => {
+    if (executionRuns.length === 0) return
+    setExecutionRunState((current) => ({
+      msgId,
+      expandedByRunId: {
+        ...(current.msgId === msgId ? current.expandedByRunId : {}),
+        ...Object.fromEntries(executionRuns.map((run) => [run.id, true]))
+      }
+    }))
+  }, [executionRuns, msgId])
   const hasStructuredThinkingBlocks = useMemo(
     () => normalizedContent?.some((block) => block.type === 'thinking') ?? false,
     [normalizedContent]
@@ -2082,7 +2127,8 @@ export function AssistantMessage({
     const renderToolBlock = (
       block: Extract<ContentBlock, { type: 'tool_use' }>,
       key: string,
-      blockIndex: number
+      blockIndex: number,
+      displayMode: 'full' | 'summary' | 'hidden-detail' = 'full'
     ): React.JSX.Element | null => {
       if (!shouldShowToolInMessageList(block.name)) return null
       if (hiddenToolUseIds?.has(block.id)) {
@@ -2298,6 +2344,7 @@ export function AssistantMessage({
             error={toolCallState.error}
             startedAt={toolCallState.startedAt}
             completedAt={toolCallState.completedAt}
+            displayMode={displayMode}
           />
         </ScaleIn>
       )
@@ -2488,7 +2535,18 @@ export function AssistantMessage({
               runItems.map((runItem) => {
                 const block = normalizedContent[runItem.blockIndex]
                 return block?.type === 'tool_use'
-                  ? renderToolBlock(block, block.id, runItem.blockIndex)
+                  ? renderToolBlock(
+                      block,
+                      block.id,
+                      runItem.blockIndex,
+                      runItem.visibility !== 'ordinary' || run.status === 'running'
+                        ? 'full'
+                        : toolExecutionDensity === 'verbose'
+                          ? 'full'
+                          : toolExecutionDensity === 'compact'
+                            ? 'hidden-detail'
+                            : 'summary'
+                    )
                   : null
               })
             return (
@@ -2628,6 +2686,33 @@ export function AssistantMessage({
       toast.error(t('messageActions.shareFailed'))
     }
   }, [plainText, t])
+
+  useEffect(() => {
+    setBookmarked(isConversationBookmarked(sessionId, msgId ?? ''))
+  }, [msgId, sessionId])
+
+  const handleToggleBookmark = useCallback((): void => {
+    if (!msgId) return
+    setBookmarked(toggleConversationBookmark(sessionId, msgId))
+  }, [msgId, sessionId])
+
+  const handleExportResult = useCallback(async (): Promise<void> => {
+    if (!sessionId) return
+    const session = useChatStore.getState().sessions.find((item) => item.id === sessionId)
+    if (!session) return
+    await navigator.clipboard.writeText(await exportSessionResultReportFromDb(session))
+    toast.success(t('runResult.exported'))
+  }, [sessionId, t])
+
+  const handleOpenRunChanges = useCallback((): void => {
+    const firstChange = runChangeSet?.changes[0]
+    if (!runChangeSet || !firstChange) return
+    openDetailPanel({
+      type: 'change-review',
+      runId: runChangeSet.runId,
+      initialChangeId: firstChange.id
+    })
+  }, [openDetailPanel, runChangeSet])
 
   const handleFork = useCallback(async (): Promise<void> => {
     if (!sessionId || !msgId || forking) return
@@ -2915,6 +3000,24 @@ export function AssistantMessage({
             {!isStreaming && completionSummary && (
               <CompletionSummaryBar summary={completionSummary} />
             )}
+            {!isStreaming && isLiveMode ? (
+              <RunResultCard
+                presentation={runPresentation}
+                onViewProcess={expandExecutionRuns}
+                onCopyResult={plainText.trim() ? handleCopy : undefined}
+                onReviewChanges={runChangeSet ? handleOpenRunChanges : undefined}
+                onExportResult={sessionId ? () => void handleExportResult() : undefined}
+                onFork={sessionId && msgId ? () => void handleFork() : undefined}
+              >
+                {runPresentation?.changeSummary.fileCount ? (
+                  <SessionChangeSummaryCard
+                    sessionId={sessionId}
+                    messageId={msgId}
+                    toolUseIds={messageToolUseIds}
+                  />
+                ) : null}
+              </RunResultCard>
+            ) : null}
           </>
         )}
         {!isStreaming &&
@@ -3010,6 +3113,10 @@ export function AssistantMessage({
                     <Share2 className="size-4" />
                     {t('messageActions.share')}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={handleToggleBookmark} disabled={!sessionId || !msgId}>
+                    <Archive className="size-4" />
+                    {bookmarked ? t('messageActions.unbookmark') : t('messageActions.bookmark')}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onSelect={() => setCollapsed((value) => !value)}>
                     {collapsed ? (
                       <ChevronsDownUp className="size-4" />
@@ -3038,6 +3145,12 @@ export function AssistantMessage({
                     <DropdownMenuItem onSelect={handleDeleteAndRegenerate}>
                       <RotateCcw className="size-4" />
                       {t('messageActions.deleteAndRegenerate')}
+                    </DropdownMenuItem>
+                  )}
+                  {msgId && onRequestContextCompression && (
+                    <DropdownMenuItem onSelect={() => onRequestContextCompression(msgId)}>
+                      <Archive className="size-4" />
+                      {t('messageActions.compressContext')}
                     </DropdownMenuItem>
                   )}
                   {msgId && onDelete && (

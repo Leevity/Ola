@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "Typ een bericht...",
     "placeholderClarify": "Beschrijf je idee en ik blijf onderzoeken tot de eisen duidelijk zijn...",
@@ -726,6 +726,16 @@
       "jumpLabel": "Naar gebruikersbericht springen {{index}}: {{preview}}",
       "imageMessage": "{{count}} afbeeldingen",
       "emptyMessage": "Leeg bericht"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Afbeelding gekopieerd naar klembord",
     "imageCopiedDesc": "U kunt het plakken in chat of documenten",

@@ -44,12 +44,6 @@ import type {
   ThinkingConfig
 } from '@renderer/lib/api/types'
 import { isResponsesImageGenerationEnabled } from '@renderer/lib/api/responses-image-generation'
-import {
-  clampCompressionThreshold,
-  DEFAULT_CONTEXT_COMPRESSION_THRESHOLD,
-  MAX_CONTEXT_COMPRESSION_THRESHOLD,
-  MIN_CONTEXT_COMPRESSION_THRESHOLD
-} from '@renderer/lib/agent/context-compression'
 import { resolveSessionModelSelection } from '@renderer/lib/session-model-resolution'
 import { ReasoningEffortSlider } from './ReasoningEffortSlider'
 
@@ -174,11 +168,13 @@ function PillToggle({
 function ModelCapabilityTags({
   model,
   providerType,
-  t
+  t,
+  showContext = true
 }: {
   model: AIModelConfig
   providerType?: AIProvider['type']
   t: (key: string) => string
+  showContext?: boolean
 }): React.JSX.Element {
   const ctx = formatContextLength(model.contextLength)
   return (
@@ -201,10 +197,71 @@ function ModelCapabilityTags({
           {t('topbar.thinking')}
         </span>
       )}
-      {ctx && (
+      {showContext && ctx && (
         <span className="inline-flex items-center rounded-sm bg-muted/60 px-1 py-px text-[9px] font-medium text-muted-foreground">
           {ctx}
         </span>
+      )}
+    </div>
+  )
+}
+
+function ModelHoverDetails({
+  model,
+  tSettings
+}: {
+  model: AIModelConfig
+  tSettings: (key: string, opts?: Record<string, unknown>) => string
+}): React.JSX.Element | null {
+  const contextRows = [
+    { label: tSettings('provider.contextLength'), value: formatTokenCount(model.contextLength) },
+    { label: tSettings('provider.maxOutputTokens'), value: formatTokenCount(model.maxOutputTokens) }
+  ].filter((row) => row.value !== '-')
+  const priceRows = [
+    { label: tSettings('provider.inputPrice'), value: formatPrice(model.inputPrice) },
+    { label: tSettings('provider.outputPrice'), value: formatPrice(model.outputPrice) },
+    {
+      label: tSettings('provider.cacheCreationPrice'),
+      value: formatPrice(model.cacheCreationPrice)
+    },
+    { label: tSettings('provider.cacheHitPrice'), value: formatPrice(model.cacheHitPrice) }
+  ].filter((row) => row.value !== '-')
+
+  if (contextRows.length === 0 && priceRows.length === 0) return null
+
+  return (
+    <div className="mt-3 space-y-2 border-t border-border/60 pt-2">
+      {contextRows.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {contextRows.map((row) => (
+            <div key={row.label} className="min-w-0 rounded-md bg-muted/35 px-2 py-1.5">
+              <div className="truncate text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                {row.label}
+              </div>
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-foreground/90">
+                {row.value}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {priceRows.length > 0 && (
+        <div className="space-y-1.5 rounded-md bg-muted/25 px-2 py-1.5">
+          <div className="flex items-center justify-between gap-2 text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70">
+            <span>{tSettings('provider.pricing')}</span>
+            <span className="normal-case tracking-normal">{tSettings('provider.pricingUnit')}</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {priceRows.map((row) => (
+              <div key={row.label} className="flex min-w-0 items-center justify-between gap-2">
+                <span className="truncate text-[10px] text-muted-foreground">{row.label}</span>
+                <span className="shrink-0 text-[10px] font-semibold text-foreground/85">
+                  {row.value.replace('/M tokens', '')}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   )
@@ -324,7 +381,6 @@ function ModelSettingsPopover({
   const supportsFastMode = supportsPriorityServiceTier(model)
   const supportsResponsesWebsocket = !!model && requestType === 'openai-responses'
   const supportsResponsesImageGeneration = !!model && requestType === 'openai-responses'
-  const supportsContextCompression = !!model
   const levels = model?.thinkingConfig?.reasoningEffortLevels
   const thinkingEnabled = useSettingsStore((s) => s.thinkingEnabled)
   const fastModeEnabled = useSettingsStore((s) => s.fastModeEnabled)
@@ -370,7 +426,6 @@ function ModelSettingsPopover({
     supportsFastMode ||
     supportsResponsesWebsocket ||
     supportsResponsesImageGeneration ||
-    supportsContextCompression ||
     supportsAnthropicCacheTtl
 
   const supportsAnthropicThinkingBudget =
@@ -382,26 +437,6 @@ function ModelSettingsPopover({
   const thinkingBudget = clampThinkingBudget(
     readAnthropicThinkingBudget(model) ?? DEFAULT_ANTHROPIC_THINKING_BUDGET,
     model?.maxOutputTokens
-  )
-
-  const contextCompressionPercent = Math.round(
-    clampCompressionThreshold(
-      model?.contextCompressionThreshold ?? DEFAULT_CONTEXT_COMPRESSION_THRESHOLD
-    ) * 100
-  )
-
-  const updateContextCompressionThreshold = useCallback(
-    (value: number) => {
-      if (!model?.id) return
-      const normalized = clampCompressionThreshold(value / 100)
-      const providerStore = useProviderStore.getState()
-      const targetProviderId = providerId ?? providerStore.activeProviderId
-      if (!targetProviderId) return
-      providerStore.updateModel(targetProviderId, model.id, {
-        contextCompressionThreshold: normalized
-      })
-    },
-    [model, providerId]
   )
 
   const updateAnthropicThinkingBudget = useCallback(
@@ -460,39 +495,6 @@ function ModelSettingsPopover({
     })
   }, [model, providerId, responsesImageGenerationEnabled])
 
-  const priceRows = [
-    { label: tSettings('provider.inputPrice'), value: formatPrice(model?.inputPrice) },
-    { label: tSettings('provider.outputPrice'), value: formatPrice(model?.outputPrice) },
-    { label: tSettings('provider.cacheHitPrice'), value: formatPrice(model?.cacheHitPrice) }
-  ]
-
-  const capabilityItems = [
-    {
-      enabled: !!model && modelSupportsVision(model, providerType),
-      label: t('topbar.vision'),
-      icon: <Eye className="size-3" />,
-      className: 'bg-lime-500/15 text-lime-500'
-    },
-    {
-      enabled: !!model?.supportsFunctionCall,
-      label: t('topbar.tools'),
-      icon: <Wrench className="size-3" />,
-      className: 'bg-cyan-500/15 text-cyan-500'
-    },
-    {
-      enabled: supportsThinking,
-      label: t('topbar.thinking'),
-      icon: <Brain className="size-3" />,
-      className: 'bg-fuchsia-500/15 text-fuchsia-500'
-    },
-    {
-      enabled: requestType === 'openai-responses',
-      label: tSettings('provider.responsesConfig'),
-      icon: <Settings2 className="size-3" />,
-      className: 'bg-emerald-500/15 text-emerald-500'
-    }
-  ].filter((item) => item.enabled)
-
   return (
     <Popover>
       <PopoverTrigger asChild>
@@ -505,7 +507,7 @@ function ModelSettingsPopover({
         </button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[388px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur"
+        className="w-[340px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-xl border-border/70 bg-popover/95 p-0 shadow-2xl backdrop-blur"
         align="start"
         side={side}
         sideOffset={8}
@@ -523,53 +525,6 @@ function ModelSettingsPopover({
 
           {model && (
             <>
-              <SettingSection accent="bg-blue-500" title={tSettings('provider.contextLength')}>
-                <div className="flex items-baseline justify-between px-2">
-                  <span className="text-xs text-muted-foreground">{model.name}</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {formatTokenCount(model.contextLength)}
-                  </span>
-                </div>
-              </SettingSection>
-
-              <SettingSection accent="bg-violet-500" title={t('topbar.capabilities')}>
-                <div className="flex items-center justify-between px-2">
-                  <span className="text-xs text-muted-foreground">
-                    {capabilityItems.length > 0 ? requestType : '-'}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    {capabilityItems.map((item) => (
-                      <Tooltip key={item.label}>
-                        <TooltipTrigger asChild>
-                          <span
-                            className={cn(
-                              'inline-flex size-6 items-center justify-center rounded-md',
-                              item.className
-                            )}
-                          >
-                            {item.icon}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-[11px]">
-                          {item.label}
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                </div>
-              </SettingSection>
-
-              <SettingSection accent="bg-amber-500" title={tSettings('provider.pricing')}>
-                <div className="space-y-2 px-2 text-xs">
-                  {priceRows.map((row) => (
-                    <div key={row.label} className="flex items-center justify-between gap-3">
-                      <span className="text-muted-foreground">{row.label}</span>
-                      <span className="text-right font-medium text-foreground/85">{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </SettingSection>
-
               <SettingSection accent="bg-emerald-500" title={tSettings('provider.modelConfig')}>
                 {!hasConfigControls && (
                   <div className="px-2 py-2 text-xs text-muted-foreground">
@@ -706,28 +661,6 @@ function ModelSettingsPopover({
                     label={tSettings('provider.responsesImageGeneration')}
                     activeClassName="bg-emerald-500 border-emerald-500"
                   />
-                )}
-
-                {supportsContextCompression && (
-                  <div className="px-2 py-1.5">
-                    <div className="mb-2 flex items-center justify-between gap-3">
-                      <span className="text-xs font-semibold text-foreground">
-                        {tChat('input.contextCompressionThreshold')}
-                      </span>
-                      <span className="text-xs font-semibold text-foreground">
-                        {contextCompressionPercent}%
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={Math.round(MIN_CONTEXT_COMPRESSION_THRESHOLD * 100)}
-                      max={Math.round(MAX_CONTEXT_COMPRESSION_THRESHOLD * 100)}
-                      step={1}
-                      value={contextCompressionPercent}
-                      onChange={(e) => updateContextCompressionThreshold(Number(e.target.value))}
-                      className="w-full accent-sky-500"
-                    />
-                  </div>
                 )}
               </SettingSection>
             </>
@@ -1072,7 +1005,7 @@ export function ModelSwitcher({
               </button>
             </PopoverTrigger>
           </HoverCardTrigger>
-          <HoverCardContent side="top" align="start" className="w-72 p-3">
+          <HoverCardContent side="top" align="start" className="w-80 p-3">
             <div className="flex items-start gap-3">
               <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-muted/45">
                 {isAutoModeActive ? (
@@ -1110,9 +1043,11 @@ export function ModelSwitcher({
                   model={triggerModel}
                   providerType={triggerProviderType}
                   t={t}
+                  showContext={false}
                 />
               </div>
             )}
+            {triggerModel && <ModelHoverDetails model={triggerModel} tSettings={tSettings} />}
           </HoverCardContent>
         </HoverCard>
         <PopoverContent

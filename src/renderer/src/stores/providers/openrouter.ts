@@ -813,6 +813,175 @@ export const openrouterPreset: BuiltinProviderPreset = {
       supportsFunctionCall: true,
       inputPrice: 0,
       outputPrice: 0
+    },
+    {
+      id: 'anthropic/claude-opus-4.7',
+      name: 'Claude Opus 4.7',
+      icon: 'claude',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 32768,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 5,
+      outputPrice: 25,
+      cacheCreationPrice: 6.25,
+      cacheHitPrice: 0.5
+    },
+    {
+      id: 'anthropic/claude-sonnet-5',
+      name: 'Claude Sonnet 5',
+      icon: 'claude',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 16384,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 2,
+      outputPrice: 10,
+      cacheCreationPrice: 2.5,
+      cacheHitPrice: 0.2
+    },
+    // ── Google Gemini ──
+    {
+      id: 'google/gemini-3.1-pro-preview',
+      name: 'Gemini 3.1 Pro Preview',
+      icon: 'gemini',
+      enabled: true,
+      contextLength: 1048576,
+      maxOutputTokens: 65536,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 2,
+      outputPrice: 12,
+      cacheHitPrice: 0.2,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { reasoning_effort: 'medium' } }
+    },
+    {
+      id: 'google/gemini-3.5-flash',
+      name: 'Gemini 3.5 Flash',
+      icon: 'gemini',
+      enabled: true,
+      contextLength: 1048576,
+      maxOutputTokens: 65536,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 1.5,
+      outputPrice: 9,
+      cacheHitPrice: 0.15,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { reasoning_effort: 'medium' } }
+    },
+    // ── DeepSeek ──
+    {
+      id: 'deepseek/deepseek-v4-pro',
+      name: 'DeepSeek V4 Pro',
+      icon: 'deepseek',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 8192,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 0.435,
+      outputPrice: 0.87,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } }
+    },
+    // ── Moonshot / Kimi ──
+    {
+      id: 'moonshotai/kimi-k2.6',
+      name: 'Kimi K2.6',
+      icon: 'kimi',
+      enabled: true,
+      contextLength: 262144,
+      maxOutputTokens: 8192,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 0.66,
+      outputPrice: 3.41,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'enabled' } },
+        disabledBodyParams: { thinking: { type: 'disabled' } },
+        forceTemperature: 1
+      }
+    },
+    // ── MiniMax ──
+    {
+      id: 'minimax/minimax-m3',
+      name: 'MiniMax M3',
+      icon: 'minimax',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 16384,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 0.3,
+      outputPrice: 1.2
+    },
+    // ── xAI Grok ──
+    {
+      id: 'x-ai/grok-4.3',
+      name: 'Grok 4.3',
+      icon: 'grok',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 32768,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 1.25,
+      outputPrice: 2.5
+    },
+    {
+      id: 'x-ai/grok-4.20',
+      name: 'Grok 4.20',
+      icon: 'grok',
+      enabled: true,
+      contextLength: 2000000,
+      maxOutputTokens: 32768,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 1.25,
+      outputPrice: 2.5
+    },
+    {
+      id: 'x-ai/grok-build-0.1',
+      name: 'Grok Build 0.1',
+      icon: 'grok',
+      enabled: true,
+      contextLength: 256000,
+      maxOutputTokens: 32768,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 1,
+      outputPrice: 2
+    },
+    // ── Z.AI / GLM (智谱) ──
+    {
+      id: 'z-ai/glm-5.2',
+      name: 'GLM-5.2',
+      icon: 'chatglm',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 8192,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 0.9,
+      outputPrice: 2.86
+    },
+    // ── Qwen ──
+    {
+      id: 'qwen/qwen3.7-max',
+      name: 'Qwen3.7 Max',
+      icon: 'qwen',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 32768,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 1.25,
+      outputPrice: 3.75
     }
   ]
 }

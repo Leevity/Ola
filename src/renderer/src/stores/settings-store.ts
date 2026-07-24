@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { ProviderType, ReasoningEffortLevel, ThinkingConfig } from '../lib/api/types'
 import { ipcStorage } from '../lib/ipc/ipc-storage'
@@ -319,6 +319,7 @@ interface SettingsStore {
   liveOutputAnimationStyle: LiveOutputAnimationStyle
   toolbarCollapsedByDefault: boolean
   collapseExecutionRunsByDefault: boolean
+  toolExecutionDensity: 'compact' | 'balanced' | 'verbose'
   leftSidebarWidth: number
 
   // Web Search Settings
@@ -439,6 +440,7 @@ export const useSettingsStore = create<SettingsStore>()(
       liveOutputAnimationStyle: 'agile',
       toolbarCollapsedByDefault: false,
       collapseExecutionRunsByDefault: true,
+      toolExecutionDensity: 'balanced',
       leftSidebarWidth: LEFT_SIDEBAR_DEFAULT_WIDTH,
 
       // Web Search Settings
@@ -512,7 +514,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'ola-settings',
-      version: 27,
+      version: 28,
       storage: createJSONStorage(() => ipcStorage),
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>
@@ -657,6 +659,13 @@ export const useSettingsStore = create<SettingsStore>()(
         }
         if (state.collapseExecutionRunsByDefault === undefined) {
           state.collapseExecutionRunsByDefault = true
+        }
+        if (
+          state.toolExecutionDensity !== 'compact' &&
+          state.toolExecutionDensity !== 'balanced' &&
+          state.toolExecutionDensity !== 'verbose'
+        ) {
+          state.toolExecutionDensity = 'balanced'
         }
         if (state.leftSidebarWidth === undefined || typeof state.leftSidebarWidth !== 'number') {
           state.leftSidebarWidth = LEFT_SIDEBAR_DEFAULT_WIDTH

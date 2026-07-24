@@ -77,6 +77,36 @@ export const xaiPreset: BuiltinProviderPreset = {
       inputPrice: 1,
       outputPrice: 2,
       cacheHitPrice: 0.2
+    },
+    {
+      id: 'grok-4.5',
+      name: 'Grok 4.5',
+      icon: 'grok',
+      enabled: true,
+      contextLength: 500000,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 2,
+      outputPrice: 6,
+      cacheHitPrice: 0.2,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['low', 'medium', 'high'],
+        defaultReasoningEffort: 'high'
+      }
+    },
+    {
+      id: 'grok-4.20-non-reasoning',
+      name: 'Grok 4.20 Non-Reasoning',
+      icon: 'grok',
+      enabled: true,
+      contextLength: 1000000,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 1.25,
+      outputPrice: 2.5,
+      cacheHitPrice: 0.2
     }
   ]
 }

@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "พิมพ์จดหมาย...",
     "placeholderClarify": "จงอธิบายความคิดของคุณ และผมจะค้นหาต่อไป จนกว่าความต้องการจะชัดเจน...",
@@ -726,6 +726,16 @@
       "jumpLabel": "กระโดดไปยังจดหมายของผู้ใช้ {{index}}. {{preview}}",
       "imageMessage": "{{count}} รูปภาพ",
       "emptyMessage": "ล้างข้อความ"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "คัดลอกรูปภาพไปยังคลิปบอร์ด",
     "imageCopiedDesc": "คุณสามารถวางลงในการสนทนาหรือเอกสาร",

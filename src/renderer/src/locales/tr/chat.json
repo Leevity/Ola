@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "Bir mesaj yazın...",
     "placeholderClarify": "Fikrinizi açıklayın ve gerekliliklerin açık olana kadar hayal edeceğim...",
@@ -726,6 +726,16 @@
       "jumpLabel": "Kullanıcı mesajına Git {{index}}: {{preview}}",
       "imageMessage": "{{count}} görüntüler görüntüler",
       "emptyMessage": "Boş mesaj"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Image, klipler için kopyalandı",
     "imageCopiedDesc": "Bunu sohbete veya belgelere sokabilirsiniz",

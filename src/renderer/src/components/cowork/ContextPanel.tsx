@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import { useTranslation } from 'react-i18next'
 import {
@@ -40,6 +40,7 @@ import {
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { useChatActions } from '@renderer/hooks/use-chat-actions'
 import { GoalPanelCard } from '@renderer/components/goal/GoalSessionControls'
+import { ContextTimeline } from './ContextTimeline'
 import {
   getCompressionTriggerTokens,
   getEffectiveContextWindow,
@@ -399,6 +400,7 @@ export function ContextPanel(): React.JSX.Element {
         <>
           <Separator />
           <GoalPanelCard sessionId={activeSessionId} />
+          <ContextTimeline sessionId={activeSessionId} messages={activeSession.messages} />
           <Separator />
           <div className="space-y-2">
             <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">

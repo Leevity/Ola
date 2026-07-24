@@ -1,4 +1,4 @@
-{
+﻿{
   "context": {
     "workingFolder": "工作目录",
     "clickToCopy": "点击复制路径",
@@ -31,7 +31,16 @@
     },
     "autoApproved": "自动批准：{{count}}",
     "noContext": "未加载上下文",
-    "noContextDesc": "选择工作目录以允许助手访问你的项目"
+    "noContextDesc": "选择工作目录以允许助手访问你的项目",
+    "compressionTimeline": {
+      "title": "上下文时间线",
+      "compressed": "已压缩上下文",
+      "auto": "自动压缩",
+      "manual": "手动压缩",
+      "messages": "已摘要 {{count}} 条消息",
+      "preTokens": "压缩前 {{count}} tokens",
+      "toggle": "展开或收起压缩摘要"
+    }
   },
   "steps": {
     "noTasks": "暂无任务",

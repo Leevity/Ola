@@ -1,6 +1,7 @@
-{
+﻿{
   "input": {
     "sendFailedDraftRetained": "发送失败，草稿已保留。",
+    "draftRestored": "已恢复未发送的草稿。",
     "placeholder": "输入消息...",
     "placeholderClarify": "描述你的想法，我会先不断追问把需求问透...",
     "placeholderCowork": "让助手帮你处理项目...",
@@ -432,7 +433,8 @@
       "fullAccess": "完全访问",
       "fullAccessConfirmTitle": "启用完全访问？",
       "fullAccessConfirmDescription": "工具调用将不再逐次确认；Worker 仍会执行命令拒绝规则。",
-      "fullAccessConfirmAction": "启用完全访问"
+      "fullAccessConfirmAction": "启用完全访问",
+      "manageWhitelist": "管理白名单规则"
     },
     "toolLabels": {
       "Read": "读取文件",
@@ -714,7 +716,7 @@
   },
   "messageList": {
     "startConversation": "开始对话",
-    "startConversationDesc": "随意提问，也可以使用搜索与已选择的 MCP 工具。",
+    "startConversationDesc": "分析问题、整理信息、撰写文档和推进日常工作，直接告诉 Ola 你的目标即可。",
     "startClarify": "开始澄清需求",
     "startClarifyDesc": "先把目标、约束、风险和遗漏问清楚，再进入规划。默认偏向追问和澄清，但权限与编程模式一致。",
     "startCowork": "开始协作会话",
@@ -745,9 +747,9 @@
     "homeDescCodeThinking": "更适合复杂实现、重构、调试和多步骤代码任务。",
     "homeAutoMeta": "发送后自动匹配更合适的模型",
     "tipDropFiles": "提示：将文件拖入输入框以引用其路径",
-    "explainAsync": "解释 async/await 的工作原理",
-    "compareRest": "比较 REST 和 GraphQL",
-    "writeRegex": "写一个邮箱验证正则表达式",
+    "analyzeSituation": "分析这件事的关键问题和下一步",
+    "summarizeMeeting": "根据会议记录整理行动项",
+    "createPptOutline": "帮我写一份 PPT 大纲",
     "clarifyIdea": "通过连续提问帮我把这个产品想法问透",
     "challengeAssumptions": "挑战这个方案里的隐含假设和模糊表述",
     "exploreRisks": "找出这个方向的边界条件、失败模式和二阶影响",
@@ -786,14 +788,24 @@
       "emptyMessage": "空消息"
     },
     "messageRail": {
-      "title": "消息轨道",
+      "title": "对话总览",
       "jumpLabel": "跳转到第 {{index}} 条消息：{{preview}}"
+    },
+    "assistantRail": {
+      "currentLabel": "当前第 {{index}} 条消息：{{preview}}",
+      "userLabel": "跳转到第 {{index}} 条用户消息：{{preview}}",
+      "streamingLabel": "跳转到正在输出的第 {{index}} 条助手回复：{{preview}}",
+      "summaryLabel": "跳转到第 {{index}} 条压缩历史摘要：{{preview}}",
+      "jumpLabel": "跳转到第 {{index}} 条消息：{{preview}}",
+      "toolOnlyPreview": "{{count}} 次工具调用",
+      "summaryPreview": "压缩历史摘要",
+      "emptyPreview": "助手回复"
     },
     "imageCopied": "图片已复制到剪贴板",
     "imageCopiedDesc": "可直接粘贴到聊天或文档中",
     "exportImageFailed": "导出图片失败",
     "homeWorkspaceCaption": "工作区",
-    "homeTitleChatQuestion": "想聊些什么？",
+    "homeTitleChatQuestion": "Ola 能帮你做什么？",
     "homeTitleBuildQuestion": "想在 {{name}} 里构建什么？",
     "thisWorkspace": "当前工作区"
   },
@@ -1033,9 +1045,12 @@
     "collapse": "收起消息",
     "expand": "展开消息",
     "deleteAndRegenerate": "删除并重新生成",
+    "compressContext": "压缩到此处",
     "sentToTranslator": "已填入翻译页",
     "copiedForShare": "已复制到剪贴板，可直接分享",
     "shareFailed": "分享失败",
+    "bookmark": "标记结果",
+    "unbookmark": "取消标记",
     "speechNotSupported": "当前环境不支持语音朗读",
     "collapsedMessage": "已收起消息",
     "imagesCollapsed": "{{count}} 张图片"
@@ -1056,6 +1071,25 @@
     "summary": "{{status}} · {{count}} 个步骤{{duration}}",
     "expandDetails": "展开详情",
     "collapseDetails": "收起详情"
+  },
+  "runResult": {
+    "title": "本次运行结果",
+    "completed": "本次运行完成",
+    "running": "正在执行",
+    "failed": "执行失败",
+    "needsAttention": "需要处理",
+    "canceled": "已取消",
+    "steps": "{{count}} 个步骤",
+    "filesChanged": "修改 {{count}} 个文件",
+    "attention": "{{count}} 项待处理",
+    "viewProcess": "查看过程",
+    "reviewChanges": "审查改动",
+    "exportResult": "复制结果报告",
+    "exported": "结果报告已复制",
+    "fork": "从结果分叉",
+    "copyResult": "复制结果",
+    "showDetails": "显示详情",
+    "hideDetails": "收起详情"
   },
   "toolGroup": {
     "readFiles": "读取了 {{count}} 个文件",

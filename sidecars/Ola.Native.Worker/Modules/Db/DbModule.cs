@@ -1,4 +1,4 @@
-internal sealed class DbModule : IWorkerModule
+﻿internal sealed class DbModule : IWorkerModule
 {
     public string Name => "db";
 
@@ -116,6 +116,7 @@ internal sealed class DbModule : IWorkerModule
         context.Register("db/messages-list", DbMessageTools.List);
         context.Register("db/messages-list-user", DbMessageTools.ListUser);
         context.Register("db/messages-list-markers", DbMessageTools.ListMarkers);
+        context.Register("db/messages-list-locator", DbMessageTools.ListLocator);
         context.Register("db/messages-list-page", DbMessageTools.ListPage);
         context.Register("db/messages-request-context", DbMessageTools.RequestContext);
         context.Register("db/messages-window-around", DbMessageTools.WindowAround);

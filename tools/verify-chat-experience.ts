@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+﻿import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import {
   preserveViewportOffsetAfterPrepend,
@@ -67,15 +67,19 @@ const subAgentCard = await readFile(
 )
 assert(messageList.includes('defaultRangeExtractor'), 'initial tail range optimization is missing')
 assert(
-  messageList.includes('DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL'),
-  'message rail index is missing'
+  messageList.includes('DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL'),
+  'assistant reply rail index is missing'
 )
-assert(messageList.includes("kind: 'streaming'"), 'streaming rail marker is missing')
 assert(
-  messageList.includes('Tool: ${toolNames.slice(0, 3).join'),
+  messageList.includes("kind === 'streaming'") &&
+    messageList.includes("activeTurn.kind = 'streaming'"),
+  'streaming rail marker is missing'
+)
+assert(
+  messageList.includes('countToolUseBlocks') &&
+    messageList.includes("t('messageList.assistantRail.toolOnlyPreview'"),
   'tool-use locator summary is missing'
 )
-assert(messageList.includes('Tool result:'), 'tool-result locator placeholder is missing')
 assert(collapsiblePanel.includes('useReducedMotion'), 'reduced-motion handling is missing')
 assert(
   planReviewCard.includes('navigator.clipboard.writeText'),
@@ -99,7 +103,10 @@ assert(
   inputArea.includes("openSettingsPage('permission')"),
   'permission whitelist settings shortcut is missing'
 )
-assert(inputArea.includes('value="full-access"'), 'full-access permission mode option is missing')
+assert(
+  inputArea.includes("['default', 'whitelist', 'full-access'] as const"),
+  'full-access permission mode option is missing'
+)
 assert(
   inputArea.includes("t('permission.mode.fullAccessConfirmDescription')"),
   'full-access worker deny-rule explanation is missing'

@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "メッセージを入力してください...",
     "placeholderClarify": "アイデアを書いてください。要件が明確になるまで、こちらから確認を続けます...",
@@ -726,6 +726,16 @@
       "jumpLabel": "ユーザーメッセージ {{index}}: {{preview}}",
       "imageMessage": "{{count}}画像",
       "emptyMessage": "空のメッセージ"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "クリップボードにコピーした画像",
     "imageCopiedDesc": "チャットや文書に貼り付ける",

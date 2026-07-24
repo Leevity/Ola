@@ -283,6 +283,97 @@ export const siliconflowPreset: BuiltinProviderPreset = {
       supportsFunctionCall: true,
       inputPrice: 0.14,
       outputPrice: 0.57
+    },
+    // ── DeepSeek ──
+    {
+      id: 'deepseek-ai/DeepSeek-V4-Pro',
+      name: 'DeepSeek V4 Pro',
+      icon: 'deepseek',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 8192,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 1.6,
+      outputPrice: 3.135,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } }
+    },
+    {
+      id: 'deepseek-ai/DeepSeek-V4-Flash',
+      name: 'DeepSeek V4 Flash',
+      icon: 'deepseek',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 8192,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 0.13,
+      outputPrice: 0.28,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } }
+    },
+    // ── Qwen ──
+    {
+      id: 'Qwen/Qwen3.6-35B-A3B',
+      name: 'Qwen3.6 35B-A3B',
+      icon: 'qwen',
+      enabled: true,
+      contextLength: 262144,
+      maxOutputTokens: 32768,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 0.2,
+      outputPrice: 1.6,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } }
+    },
+    // ── GLM (智谱) ──
+    {
+      id: 'zai-org/GLM-5.2',
+      name: 'GLM-5.2',
+      icon: 'chatglm',
+      enabled: true,
+      contextLength: 1048576,
+      maxOutputTokens: 8192,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 1.302,
+      outputPrice: 4.092
+    },
+    // ── Moonshot / Kimi ──
+    {
+      id: 'moonshotai/Kimi-K2.7-Code',
+      name: 'Kimi K2.7 Code',
+      icon: 'kimi',
+      enabled: true,
+      contextLength: 262144,
+      maxOutputTokens: 8192,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'enabled' } },
+        disabledBodyParams: { thinking: { type: 'disabled' } },
+        forceTemperature: 1
+      },
+      inputPrice: 0.94,
+      outputPrice: 4.0
+    },
+    // ── MiniMax ──
+    {
+      id: 'MiniMaxAI/MiniMax-M3',
+      name: 'MiniMax M3',
+      icon: 'minimax',
+      enabled: true,
+      contextLength: 1048576,
+      maxOutputTokens: 16384,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } },
+      inputPrice: 0.3,
+      outputPrice: 1.2
     }
   ]
 }

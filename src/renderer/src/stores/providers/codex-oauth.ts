@@ -272,6 +272,105 @@ export const codexOAuthPreset: BuiltinProviderPreset = {
       enablePromptCache: true,
       enableSystemPromptCache: true,
       type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.5',
+      name: 'GPT 5.5',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 1050000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 5,
+      outputPrice: 30,
+      cacheHitPrice: 0.5,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['low', 'medium', 'high', 'xhigh'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.6-luna',
+      name: 'GPT 5.6 Luna',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 400000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 1,
+      outputPrice: 6,
+      cacheCreationPrice: 1.25,
+      cacheHitPrice: 0.1,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.6-terra',
+      name: 'GPT 5.6 Terra',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 1050000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 2.5,
+      outputPrice: 15,
+      cacheCreationPrice: 3.125,
+      cacheHitPrice: 0.25,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.6-sol',
+      name: 'GPT 5.6 Sol',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 1050000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 5,
+      outputPrice: 30,
+      cacheCreationPrice: 6.25,
+      cacheHitPrice: 0.5,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
     }
   ]
 }
