@@ -27,6 +27,8 @@ import {
   ImageIcon,
   RefreshCcw,
   ShieldAlert,
+  ShieldCheck,
+  Check,
   Shapes,
   Users,
   Wrench,
@@ -37,15 +39,9 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@renderer/components/ui/dropdown-menu'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@renderer/components/ui/select'
 import { Textarea } from '@renderer/components/ui/textarea'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
@@ -205,6 +201,7 @@ function ContextRing({
     return idx !== undefined ? (s.sessions[idx] ?? null) : null
   })
   const mainModelSelectionMode = useSettingsStore((s) => s.mainModelSelectionMode)
+  const contextCompressionThreshold = useSettingsStore((s) => s.contextCompressionThreshold)
   const channels = useChannelStore((s) => s.channels)
   const autoSelection = useUIStore((s) =>
     activeSession ? (s.autoModelSelectionsBySession[activeSession.id] ?? null) : null
@@ -239,7 +236,7 @@ function ContextRing({
     ? {
         enabled: true,
         contextLength: resolveCompressionContextLength(activeModelCfg),
-        threshold: resolveCompressionThreshold(activeModelCfg),
+        threshold: resolveCompressionThreshold(contextCompressionThreshold),
         preCompressThreshold: 0.65,
         reservedOutputBudget: resolveCompressionReservedOutputBudget(activeModelCfg)
       }
@@ -352,6 +349,12 @@ function ContextRing({
           <p className="text-muted-foreground">
             {formatTokens(remaining)} {t('input.remaining')}
           </p>
+          {compressionConfig && (
+            <p className="text-muted-foreground">
+              {t('input.contextCompressionThreshold')}:{' '}
+              {Math.round(compressionConfig.threshold * 100)}%
+            </p>
+          )}
           {onCompressContext && (
             <p className="text-muted-foreground">
               {isCompressing
@@ -1911,7 +1914,8 @@ export function InputArea({
     : permissionPolicy.enabled
       ? 'whitelist'
       : 'default'
-  const showPermissionModeControl = projectScoped && (mode === 'cowork' || mode === 'code')
+  const showPermissionModeControl =
+    mode === 'chat' || (projectScoped && (mode === 'cowork' || mode === 'code'))
   const handlePermissionModeChange = React.useCallback(
     (nextMode: 'default' | 'whitelist' | 'full-access'): void => {
       if (nextMode === 'full-access') {
@@ -1960,6 +1964,7 @@ export function InputArea({
   const hydratePersistedDraft = useInputDraftStore((s) => s.hydrateDraft)
   const draftReadyKeyRef = React.useRef<string | null>(null)
   const draftAppliedKeyRef = React.useRef<string | null>(null)
+  const restoredDraftNoticeKeysRef = React.useRef(new Set<string>())
   const queuedMessagesSnapshotRef = React.useRef<PendingSessionMessageItem[]>(EMPTY_QUEUED_MESSAGES)
   const getQueuedMessagesSnapshot = React.useCallback(() => {
     if (suppressPendingQueue) return EMPTY_QUEUED_MESSAGES
@@ -2770,6 +2775,16 @@ export function InputArea({
     setAttachedImages(persistedDraft?.images ? cloneImageAttachments(persistedDraft.images) : [])
     setPreviewImage(null)
     setSelectedSkill(persistedDraft?.skill ?? null)
+    if (
+      activeDraftKey &&
+      persistedDraft &&
+      hasInputDraftContent(persistedDraft) &&
+      !shouldResetHomeReferenceDraft &&
+      !restoredDraftNoticeKeysRef.current.has(activeDraftKey)
+    ) {
+      restoredDraftNoticeKeysRef.current.add(activeDraftKey)
+      toast.info(t('input.draftRestored'))
+    }
     setHighlightedFileId(null)
     setEditorSelection({ start: 0, end: 0 })
 
@@ -2786,6 +2801,7 @@ export function InputArea({
     inputDraftHydrated,
     isHomeComposer,
     persistedDraft,
+    t,
     workingFolder
   ])
 
@@ -4588,10 +4604,10 @@ export function InputArea({
           {/* Bottom toolbar */}
           <div
             ref={bottomToolbarRef}
-            className="composer-toolbar relative z-20 mt-1 shrink-0 flex items-center justify-between gap-2 px-2 pb-2"
+            className="composer-toolbar relative z-20 mt-1 shrink-0 flex items-center justify-between gap-1.5 px-2 pb-2"
           >
             <div className="flex w-full items-center justify-between gap-2">
-              <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pr-1 [scrollbar-width:none]">
+              <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto pr-1 [scrollbar-width:none]">
                 <div className="shrink-0">
                   {readOnlyModel !== undefined ? (
                     <ReadOnlyModelBadge model={readOnlyModel} />
@@ -4600,25 +4616,68 @@ export function InputArea({
                   )}
                 </div>
                 {showPermissionModeControl && (
-                  <Select
-                    value={permissionMode}
-                    onValueChange={(value) =>
-                      handlePermissionModeChange(value as 'default' | 'whitelist' | 'full-access')
-                    }
-                  >
-                    <SelectTrigger
-                      className="composer-control h-8 w-[7.5rem] shrink-0 rounded-lg px-2 text-xs"
-                      aria-label={t('permission.mode.label')}
-                    >
-                      <ShieldAlert className="mr-1 size-3.5 shrink-0" />
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="default">{t('permission.mode.default')}</SelectItem>
-                      <SelectItem value="whitelist">{t('permission.mode.whitelist')}</SelectItem>
-                      <SelectItem value="full-access">{t('permission.mode.fullAccess')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <DropdownMenu>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className={cn(
+                              'composer-control h-8 shrink-0 gap-1.5 rounded-lg px-2 text-xs font-medium',
+                              permissionMode === 'full-access' &&
+                                'text-amber-600 dark:text-amber-400',
+                              permissionMode === 'whitelist' &&
+                                'text-emerald-600 dark:text-emerald-400'
+                            )}
+                            aria-label={t('permission.mode.label')}
+                          >
+                            {permissionMode === 'full-access' ? (
+                              <ShieldAlert className="size-3.5" />
+                            ) : (
+                              <ShieldCheck className="size-3.5" />
+                            )}
+                            <span className="max-w-24 truncate">
+                              {permissionMode === 'full-access'
+                                ? t('permission.mode.fullAccess')
+                                : permissionMode === 'whitelist'
+                                  ? t('permission.mode.whitelist')
+                                  : t('permission.mode.default')}
+                            </span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent>{t('permission.mode.label')}</TooltipContent>
+                    </Tooltip>
+                    <DropdownMenuContent align="start" className="min-w-48">
+                      {(['default', 'whitelist', 'full-access'] as const).map((modeOption) => (
+                        <DropdownMenuItem
+                          key={modeOption}
+                          onSelect={() => handlePermissionModeChange(modeOption)}
+                          className="flex items-center gap-2"
+                        >
+                          {modeOption === 'full-access' ? (
+                            <ShieldAlert className="size-3.5 text-amber-600 dark:text-amber-400" />
+                          ) : (
+                            <ShieldCheck className="size-3.5" />
+                          )}
+                          <span className="flex-1">
+                            {modeOption === 'full-access'
+                              ? t('permission.mode.fullAccess')
+                              : modeOption === 'whitelist'
+                                ? t('permission.mode.whitelist')
+                                : t('permission.mode.default')}
+                          </span>
+                          {permissionMode === modeOption && <Check className="size-3.5" />}
+                        </DropdownMenuItem>
+                      ))}
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => openSettingsPage('permission')}>
+                        {t('permission.mode.manageWhitelist')}
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 )}
                 {webSearchToggleControl}
                 {skillsMenuControl}

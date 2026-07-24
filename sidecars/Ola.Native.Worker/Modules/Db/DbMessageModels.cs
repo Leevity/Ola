@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 internal sealed class MessageRow
 {
@@ -22,6 +22,30 @@ internal sealed class MessageRow
 
     [JsonPropertyName("usage")]
     public string? Usage { get; set; }
+
+    [JsonPropertyName("sort_order")]
+    public int SortOrder { get; set; }
+}
+
+internal sealed class MessageLocatorRow
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("session_id")]
+    public string SessionId { get; set; } = string.Empty;
+
+    [JsonPropertyName("role")]
+    public string Role { get; set; } = string.Empty;
+
+    [JsonPropertyName("content")]
+    public string Content { get; set; } = string.Empty;
+
+    [JsonPropertyName("meta")]
+    public string? Meta { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public long CreatedAt { get; set; }
 
     [JsonPropertyName("sort_order")]
     public int SortOrder { get; set; }

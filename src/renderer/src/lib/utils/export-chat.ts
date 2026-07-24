@@ -1,4 +1,4 @@
-import type { ContentBlock, UnifiedMessage } from '../api/types'
+﻿import type { ContentBlock, UnifiedMessage } from '../api/types'
 import type { Session } from '../../stores/chat-store'
 import { invokeMessagePackBinary } from '../ipc/messagepack-ipc-client'
 import {
@@ -237,6 +237,29 @@ export async function exportSessionMarkdownFromDb(session: Session): Promise<str
 
   appendTokenTotals(lines, totals)
   return lines.join('\n')
+}
+
+export function sessionToResultReport(session: Session): string {
+  const visible = session.messages.filter((message) => message.role !== 'system')
+  const lastUser = [...visible].reverse().find((message) => message.role === 'user')
+  const lastAssistant = [...visible].reverse().find((message) => message.role === 'assistant')
+  const lines = [`# ${session.title} — Result Report`, '', `- **Mode**: ${session.mode}`]
+
+  if (lastUser) {
+    lines.push('', '## Request', '', contentToMarkdown(lastUser.content, true))
+  }
+  if (lastAssistant) {
+    lines.push('', '## Final Result', '', contentToMarkdown(lastAssistant.content))
+  }
+  if (!lastUser && !lastAssistant) {
+    lines.push('', '_No user or assistant result is available yet._')
+  }
+
+  return lines.join('\n')
+}
+
+export async function exportSessionResultReportFromDb(session: Session): Promise<string> {
+  return sessionToResultReport(await exportSessionSnapshotFromDb(session))
 }
 
 export async function exportSessionSnapshotFromDb(session: Session): Promise<Session> {

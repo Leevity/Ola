@@ -1175,6 +1175,35 @@ function GeneralPanel(): React.JSX.Element {
             }
           />
         </div>
+        <div className="flex items-center justify-between max-w-lg">
+          <div>
+            <label className="text-sm font-medium">{t('general.toolExecutionDensity')}</label>
+            <p className="text-xs text-muted-foreground">{t('general.toolExecutionDensityDesc')}</p>
+          </div>
+          <Select
+            value={settings.toolExecutionDensity}
+            onValueChange={(value) =>
+              settings.updateSettings({
+                toolExecutionDensity: value as typeof settings.toolExecutionDensity
+              })
+            }
+          >
+            <SelectTrigger className="w-32 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="compact" className="text-xs">
+                {t('general.toolExecutionDensityCompact')}
+              </SelectItem>
+              <SelectItem value="balanced" className="text-xs">
+                {t('general.toolExecutionDensityBalanced')}
+              </SelectItem>
+              <SelectItem value="verbose" className="text-xs">
+                {t('general.toolExecutionDensityVerbose')}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </section>
 
       <Separator />
@@ -1678,6 +1707,7 @@ function GeneralPanel(): React.JSX.Element {
               liveOutputAnimationStyle: 'agile',
               toolbarCollapsedByDefault: false,
               collapseExecutionRunsByDefault: true,
+              toolExecutionDensity: 'balanced',
               maxParallelToolCalls: DEFAULT_MAX_PARALLEL_TOOL_CALLS,
               maxConcurrentSubAgents: DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
               autoUpdateEnabled: true,

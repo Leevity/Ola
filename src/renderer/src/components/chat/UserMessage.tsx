@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
@@ -30,7 +30,8 @@ import {
   Loader2,
   FileText,
   AlertCircle,
-  CornerDownRight
+  CornerDownRight,
+  Archive
 } from 'lucide-react'
 import { formatTokens } from '@renderer/lib/format-tokens'
 import { useMemoizedTokens } from '@renderer/hooks/use-estimated-tokens'
@@ -60,16 +61,22 @@ import { useUIStore } from '@renderer/stores/ui-store'
 import { useSkillsStore } from '@renderer/stores/skills-store'
 import { cn } from '@renderer/lib/utils'
 import { SystemCommandCard } from './SystemCommandCard'
+import {
+  isConversationBookmarked,
+  toggleConversationBookmark
+} from '@renderer/lib/conversation-bookmarks'
 import { SelectFileInlineText } from './SelectFileInlineText'
 
 interface UserMessageProps {
   messageId: string
+  sessionId?: string | null
   content: string | ContentBlock[]
   meta?: MessageMeta
   source?: UnifiedMessage['source']
   isLast?: boolean
   onEdit?: (messageId: string, draft: EditableUserMessageDraft) => void
   onDelete?: (messageId: string) => void
+  onRequestContextCompression?: (messageId: string) => void
 }
 
 function ActionIconButton({
@@ -438,11 +445,13 @@ function UserImageAttachmentView({
 
 export function UserMessage({
   messageId,
+  sessionId,
   content,
   meta,
   source,
   onEdit,
-  onDelete
+  onDelete,
+  onRequestContextCompression
 }: UserMessageProps): React.JSX.Element {
   const { t } = useTranslation('chat')
   const currentDraft = useMemo(() => extractEditableUserMessageDraft(content), [content])
@@ -488,6 +497,7 @@ export function UserMessage({
   const [copied, setCopied] = useState(false)
   const [previewCopied, setPreviewCopied] = useState(false)
   const [previewImageSrc, setPreviewImageSrc] = useState<string | null>(null)
+  const [bookmarked, setBookmarked] = useState(() => isConversationBookmarked(sessionId, messageId))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -533,6 +543,14 @@ export function UserMessage({
     setEditImages(cloneImageAttachments(allImages))
     setEditing(false)
   }
+
+  useEffect(() => {
+    setBookmarked(isConversationBookmarked(sessionId, messageId))
+  }, [messageId, sessionId])
+
+  const handleToggleBookmark = useCallback((): void => {
+    setBookmarked(toggleConversationBookmark(sessionId, messageId))
+  }, [messageId, sessionId])
 
   const handleCopy = useCallback((): void => {
     navigator.clipboard.writeText(copyText)
@@ -848,6 +866,10 @@ export function UserMessage({
                   <Share2 className="size-4" />
                   {t('messageActions.share')}
                 </DropdownMenuItem>
+                <DropdownMenuItem onSelect={handleToggleBookmark} disabled={!sessionId}>
+                  <Sparkles className="size-4" />
+                  {bookmarked ? t('messageActions.unbookmark') : t('messageActions.bookmark')}
+                </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setCollapsed((value) => !value)}>
                   {collapsed ? (
                     <ChevronsDownUp className="size-4" />
@@ -856,6 +878,12 @@ export function UserMessage({
                   )}
                   {collapsed ? t('messageActions.expand') : t('messageActions.collapse')}
                 </DropdownMenuItem>
+                {onRequestContextCompression && (
+                  <DropdownMenuItem onSelect={() => onRequestContextCompression(messageId)}>
+                    <Archive className="size-4" />
+                    {t('messageActions.compressContext')}
+                  </DropdownMenuItem>
+                )}
                 {onDelete && (
                   <>
                     <DropdownMenuSeparator />

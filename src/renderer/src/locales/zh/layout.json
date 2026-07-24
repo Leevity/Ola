@@ -1,4 +1,4 @@
-{
+﻿{
   "sidebar": {
     "openCowork": "Ola",
     "conversations": "会话列表",
@@ -113,6 +113,10 @@
     "smartRename": "智能重命名",
     "smartRenaming": "智能命名中",
     "extensionsLabel": "扩展功能"
+  },
+  "layout": {
+    "copyResultReport": "复制结果报告",
+    "resultReportCopied": "结果报告已复制"
   },
   "sidebar_toast": {
     "sessionDeleted": "会话已删除",

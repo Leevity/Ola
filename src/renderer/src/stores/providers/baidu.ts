@@ -197,6 +197,33 @@ export const baiduPreset: BuiltinProviderPreset = {
       icon: 'minimax',
       enabled: true,
       supportsFunctionCall: true
+    },
+    // ERNIE (native models)
+    {
+      id: 'ernie-5.1',
+      name: 'ERNIE 5.1',
+      icon: 'ernie',
+      enabled: true,
+      supportsFunctionCall: true
+    },
+    {
+      id: 'ernie-4.5-turbo-128k',
+      name: 'ERNIE 4.5 Turbo 128K',
+      icon: 'ernie',
+      enabled: true,
+      supportsFunctionCall: true
+    },
+    {
+      id: 'ernie-x1.1',
+      name: 'ERNIE X1.1',
+      icon: 'ernie',
+      enabled: true,
+      supportsFunctionCall: true,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { enable_thinking: true },
+        disabledBodyParams: { enable_thinking: false }
+      }
     }
   ]
 }

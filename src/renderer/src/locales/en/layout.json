@@ -1,4 +1,4 @@
-{
+﻿{
   "sidebar": {
     "openCowork": "Ola",
     "conversations": "Conversations",
@@ -113,6 +113,10 @@
     "smartRename": "Smart Rename",
     "smartRenaming": "Smart renaming",
     "extensionsLabel": "Extensions"
+  },
+  "layout": {
+    "copyResultReport": "Copy result report",
+    "resultReportCopied": "Result report copied"
   },
   "sidebar_toast": {
     "sessionDeleted": "Session deleted",

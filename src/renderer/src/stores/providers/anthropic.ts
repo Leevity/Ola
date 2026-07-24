@@ -246,6 +246,28 @@ export const anthropicPreset: BuiltinProviderPreset = {
         reasoningEffortLevels: ['low', 'medium', 'high'],
         defaultReasoningEffort: 'medium'
       }
+    },
+    // Claude Fable 5 (flagship-tier, above Opus 4.8 — always-on adaptive thinking, 1M context)
+    {
+      id: 'claude-fable-5',
+      name: 'Claude Fable 5',
+      icon: 'claude',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 10,
+      outputPrice: 50,
+      cacheCreationPrice: 12.5,
+      cacheHitPrice: 1,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'adaptive' } },
+        forceTemperature: 1,
+        reasoningEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'high'
+      }
     }
   ]
 }

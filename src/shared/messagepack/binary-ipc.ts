@@ -1,4 +1,4 @@
-import { decode, encode } from '@msgpack/msgpack'
+﻿import { decode, encode } from '@msgpack/msgpack'
 
 export const SIDECAR_APPROVAL_REQUEST_MSGPACK_CHANNEL = 'sidecar:approval-request:msgpack'
 export const SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL = 'sidecar:approval-response:msgpack'
@@ -13,6 +13,7 @@ export const DB_MESSAGES_ADD_BATCH_MSGPACK_CHANNEL = 'db:messages:add-batch:msgp
 export const DB_MESSAGES_LIST_MSGPACK_CHANNEL = 'db:messages:list:msgpack'
 export const DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL = 'db:messages:list-user:msgpack'
 export const DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL = 'db:messages:list-markers:msgpack'
+export const DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL = 'db:messages:list-locator:msgpack'
 export const DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL = 'db:messages:list-page:msgpack'
 export const DB_MESSAGES_REQUEST_CONTEXT_MSGPACK_CHANNEL = 'db:messages:request-context:msgpack'
 export const DB_MESSAGES_WINDOW_AROUND_MSGPACK_CHANNEL = 'db:messages:window-around:msgpack'

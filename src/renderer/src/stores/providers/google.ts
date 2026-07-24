@@ -134,6 +134,21 @@ export const googlePreset: BuiltinProviderPreset = {
       type: 'gemini',
       supportsVision: true,
       supportsFunctionCall: false
+    },
+    // Gemini 3.1 Flash-Lite (stable — most cost-efficient current tier)
+    {
+      id: 'gemini-3.1-flash-lite',
+      name: 'Gemini 3.1 Flash-Lite',
+      icon: 'gemini',
+      enabled: true,
+      contextLength: 1048576,
+      maxOutputTokens: 65536,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 0.25,
+      outputPrice: 1.5,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { reasoning_effort: 'medium' } }
     }
   ]
 }

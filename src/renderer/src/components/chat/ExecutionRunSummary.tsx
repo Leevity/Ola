@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { Check, ChevronDown, ChevronRight, CircleAlert, Loader2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
@@ -80,7 +80,7 @@ export function ExecutionRunSummary({
   const categoryTags = categorySummaries(run, t).slice(1)
 
   return (
-    <section className="my-1.5" aria-label={t('executionRun.title')}>
+    <section className="my-1.5" data-run-id={run.id} aria-label={t('executionRun.title')}>
       <button
         type="button"
         aria-expanded={expanded}

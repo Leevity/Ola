@@ -1,4 +1,4 @@
-import type { BuiltinProviderPreset } from './types'
+﻿import type { BuiltinProviderPreset } from './types'
 
 export const openaiPreset: BuiltinProviderPreset = {
   builtinId: 'openai',
@@ -605,6 +605,171 @@ export const openaiPreset: BuiltinProviderPreset = {
       supportsFunctionCall: false,
       inputPrice: 0.04,
       outputPrice: 0.08
+    },
+    {
+      id: 'gpt-5.4-mini',
+      name: 'GPT 5.4 Mini',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 400000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 0.75,
+      outputPrice: 4.5,
+      cacheHitPrice: 0.075,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.4-nano',
+      name: 'GPT 5.4 Nano',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 400000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 0.2,
+      outputPrice: 1.25,
+      cacheHitPrice: 0.02,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.5',
+      name: 'GPT 5.5',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      contextLength: 1050000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 5,
+      outputPrice: 30,
+      cacheHitPrice: 0.5,
+      supportsThinking: true,
+      supportsComputerUse: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['low', 'medium', 'high', 'xhigh'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.6-luna',
+      name: 'GPT 5.6 Luna',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      // Synced with Codex's model catalog: 400K total window − 128K reserved output.
+      contextLength: 372000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 1,
+      outputPrice: 6,
+      cacheCreationPrice: 1.25,
+      cacheHitPrice: 0.1,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.6-terra',
+      name: 'GPT 5.6 Terra',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      // Synced with Codex's model catalog: 400K total window − 128K reserved output.
+      contextLength: 372000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 2.5,
+      outputPrice: 15,
+      cacheCreationPrice: 3.125,
+      cacheHitPrice: 0.25,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    {
+      id: 'gpt-5.6-sol',
+      name: 'GPT 5.6 Sol',
+      icon: 'openai',
+      enabled: true,
+      serviceTier: 'priority',
+      // Synced with Codex's model catalog: 400K total window − 128K reserved output.
+      contextLength: 372000,
+      maxOutputTokens: 128000,
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 5,
+      outputPrice: 30,
+      cacheCreationPrice: 6.25,
+      cacheHitPrice: 0.5,
+      supportsThinking: true,
+      supportsComputerUse: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['none', 'low', 'medium', 'high', 'xhigh', 'max'],
+        defaultReasoningEffort: 'medium'
+      },
+      responseSummary: 'detailed',
+      enablePromptCache: true,
+      enableSystemPromptCache: true,
+      type: 'openai-responses'
+    },
+    // Image generation models
+    {
+      id: 'gpt-image-2',
+      name: 'GPT-Image 2',
+      icon: 'openai',
+      enabled: true,
+      category: 'image',
+      type: 'openai-images',
+      supportsVision: true,
+      supportsFunctionCall: false,
+      inputPrice: 0.05,
+      outputPrice: 0.21
     }
   ]
 }

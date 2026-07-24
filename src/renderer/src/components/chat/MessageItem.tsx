@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import Markdown from 'react-markdown'
 import { Users, ChevronDown } from 'lucide-react'
 import { SlideIn } from '@renderer/components/animate-ui'
@@ -33,6 +33,7 @@ interface MessageItemProps {
   onContinueAssistantMessage?: () => void
   onEditUserMessage?: (messageId: string, draft: EditableUserMessageDraft) => void
   onDeleteMessage?: (messageId: string) => void
+  onRequestContextCompression?: (messageId: string) => void
   toolResults?: Map<string, { content: ToolResultContent; isError?: boolean }>
   liveToolCallMap?: Map<string, ToolCallState> | null
   inlineCompactSummaries?: readonly UnifiedMessage[]
@@ -113,6 +114,7 @@ function MessageItemInner({
   onContinueAssistantMessage,
   onEditUserMessage,
   onDeleteMessage,
+  onRequestContextCompression,
   toolResults,
   liveToolCallMap,
   inlineCompactSummaries,
@@ -144,12 +146,14 @@ function MessageItemInner({
         return (
           <UserMessage
             messageId={message.id}
+            sessionId={sessionId}
             content={message.content}
             meta={message.meta}
             source={message.source}
             isLast={isLastUserMessage}
             onEdit={onEditUserMessage}
             onDelete={onDeleteMessage}
+            onRequestContextCompression={onRequestContextCompression}
           />
         )
       }
@@ -171,6 +175,7 @@ function MessageItemInner({
             onRetry={onRetryAssistantMessage}
             onContinue={onContinueAssistantMessage}
             onDelete={onDeleteMessage}
+            onRequestContextCompression={onRequestContextCompression}
             liveToolCallMap={liveToolCallMap}
             renderMode={renderMode}
             orchestrationRun={orchestrationRun}
@@ -288,6 +293,7 @@ function areEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
       prev.onContinueAssistantMessage === next.onContinueAssistantMessage &&
       prev.onEditUserMessage === next.onEditUserMessage &&
       prev.onDeleteMessage === next.onDeleteMessage &&
+      prev.onRequestContextCompression === next.onRequestContextCompression &&
       areToolResultsEqual(prev.toolResults, next.toolResults) &&
       prev.liveToolCallMap === next.liveToolCallMap &&
       prev.inlineCompactSummaries === next.inlineCompactSummaries &&
@@ -331,6 +337,7 @@ function areEqual(prev: MessageItemProps, next: MessageItemProps): boolean {
     prev.onContinueAssistantMessage === next.onContinueAssistantMessage &&
     prev.onEditUserMessage === next.onEditUserMessage &&
     prev.onDeleteMessage === next.onDeleteMessage &&
+    prev.onRequestContextCompression === next.onRequestContextCompression &&
     prev.message.role === next.message.role &&
     prev.message.createdAt === next.message.createdAt &&
     prev.message.source === next.message.source &&

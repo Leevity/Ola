@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "Saisissez un message...",
     "placeholderClarify": "Décrivez votre idée et je continuerai à étudier jusqu'à ce que les exigences soient claires...",
@@ -726,6 +726,16 @@
       "jumpLabel": "Aller au message utilisateur {{index}}: {{preview}}",
       "imageMessage": "{{count}} images",
       "emptyMessage": "Message vide"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Image copiée dans le presse-papiers",
     "imageCopiedDesc": "Vous pouvez le coller dans chat ou documents",

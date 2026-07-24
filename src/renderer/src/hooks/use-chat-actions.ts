@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+﻿import { useCallback, useEffect } from 'react'
 import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
 import i18n from '@renderer/locales'
@@ -105,6 +105,7 @@ import { parseSelectFileText } from '@renderer/lib/select-file-tags'
 import { type AgentEvent, type ToolCallState } from '@renderer/lib/agent/types'
 import { recordUsageEvent } from '@renderer/lib/usage-analytics'
 import {
+  getCompactSummaryDisplayText,
   isCompactBoundaryMessage,
   isCompactSummaryLikeMessage,
   isCompactSummaryMessage,
@@ -3511,6 +3512,13 @@ function createSubAgentEventBuffer(sessionId: string): {
 
 export type ManualCompressionResult = 'compressed' | 'skipped' | 'blocked' | 'failed'
 
+export interface ContextCompressionPreview {
+  targetMessageId: string
+  compressedMessages: UnifiedMessage[]
+  messagesSummarized: number
+  summary: string
+}
+
 export function useChatActions(): {
   sendMessage: (
     text: string,
@@ -3527,6 +3535,10 @@ export function useChatActions(): {
   editAndResend: (messageId: string, draft: EditableUserMessageDraft) => Promise<void>
   deleteMessage: (messageId: string) => Promise<void>
   manualCompressContext: (focusPrompt?: string) => Promise<ManualCompressionResult>
+  previewContextCompressionAt: (messageId: string) => Promise<ContextCompressionPreview | null>
+  applyContextCompressionPreview: (
+    preview: ContextCompressionPreview
+  ) => Promise<ManualCompressionResult>
 } {
   const activeSessionId = useChatStore((state) => state.activeSessionId)
 
@@ -6125,6 +6137,95 @@ export function useChatActions(): {
     [stopStreaming]
   )
 
+  const previewContextCompressionAt = useCallback(
+    async (messageId: string): Promise<ContextCompressionPreview | null> => {
+      const chatStore = useChatStore.getState()
+      const agentStore = useAgentStore.getState()
+      const sessionId = chatStore.activeSessionId
+      if (!sessionId || agentStore.runningSessions[sessionId]) return null
+
+      const fullMessages = await chatStore.getFullSessionMessagesForMutation(sessionId)
+      const targetIndex = fullMessages.findIndex((message) => message.id === messageId)
+      if (targetIndex < 0) return null
+
+      // “Compress to here” includes the selected message. The summary is then
+      // displayed immediately after it, so choosing the final message places the
+      // card at the bottom of the transcript.
+      const messages = fullMessages.slice(0, targetIndex + 1)
+      const settings = useSettingsStore.getState()
+      const providerStore = useProviderStore.getState()
+      const activeProvider = providerStore.getActiveProvider()
+      if (activeProvider && !(await ensureProviderAuthReady(activeProvider.id))) return null
+
+      const providerConfig = providerStore.getActiveProviderConfig()
+      if (!providerConfig) return null
+
+      const config: ProviderConfig = {
+        ...providerConfig,
+        maxTokens: providerStore.getEffectiveMaxTokens(settings.maxTokens),
+        temperature: settings.temperature,
+        systemPrompt: settings.systemPrompt || undefined
+      }
+      const session = chatStore.sessions.find((item) => item.id === sessionId)
+      if (session?.providerId && session?.modelId) {
+        if (!(await ensureProviderAuthReady(session.providerId))) return null
+        const sessionProviderConfig = providerStore.getProviderConfigById(
+          session.providerId,
+          session.modelId
+        )
+        if (sessionProviderConfig?.apiKey) {
+          config.type = sessionProviderConfig.type
+          config.apiKey = sessionProviderConfig.apiKey
+          config.baseUrl = sessionProviderConfig.baseUrl
+          config.model = sessionProviderConfig.model
+        }
+      }
+
+      const preTokens = estimateManualCompressionInputTokens(messages, config)
+      const { messages: compressed, result } = await runSidecarContextCompression({
+        messages,
+        provider: config,
+        preTokens
+      })
+      const summaryMessage = compressed.find(isCompactSummaryMessage)
+      const summary = summaryMessage ? getCompactSummaryDisplayText(summaryMessage).trim() : ''
+      if (!result.compressed || !summary) return null
+
+      return {
+        targetMessageId: messageId,
+        compressedMessages: compressed,
+        messagesSummarized: result.messagesSummarized ?? 0,
+        summary
+      }
+    },
+    []
+  )
+
+  const applyContextCompressionPreview = useCallback(
+    async (preview: ContextCompressionPreview): Promise<ManualCompressionResult> => {
+      const chatStore = useChatStore.getState()
+      const agentStore = useAgentStore.getState()
+      const sessionId = chatStore.activeSessionId
+      if (!sessionId || agentStore.runningSessions[sessionId]) return 'blocked'
+
+      const currentMessages = await chatStore.getFullSessionMessagesForMutation(sessionId)
+      const targetIndex = currentMessages.findIndex(
+        (message) => message.id === preview.targetMessageId
+      )
+      if (targetIndex < 0) return 'failed'
+
+      const nextMessageId = currentMessages[targetIndex + 1]?.id
+      const merged = await mergeCompressedMessagesIntoSession({
+        sessionId,
+        compressedMessages: preview.compressedMessages,
+        currentMessages,
+        ...(nextMessageId ? { insertBeforeIds: [nextMessageId] } : { insertAtEnd: true })
+      })
+      return merged ? 'compressed' : 'failed'
+    },
+    []
+  )
+
   const manualCompressContext = useCallback(async (focusPrompt?: string) => {
     const chatStore = useChatStore.getState()
     const agentStore = useAgentStore.getState()
@@ -6235,8 +6336,7 @@ export function useChatActions(): {
       }
       const merged = await mergeCompressedMessagesIntoSession({
         sessionId,
-        compressedMessages: compressed,
-        insertAtEnd: true
+        compressedMessages: compressed
       })
       if (!merged) {
         toast.error('Compression failed', { description: 'Could not merge compressed context' })
@@ -6258,7 +6358,9 @@ export function useChatActions(): {
     retryLastMessage,
     editAndResend,
     deleteMessage,
-    manualCompressContext
+    manualCompressContext,
+    previewContextCompressionAt,
+    applyContextCompressionPreview
   }
 }
 

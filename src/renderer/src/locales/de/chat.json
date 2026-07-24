@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "Geben Sie eine Nachricht ein...",
     "placeholderClarify": "Beschreiben Sie Ihre Idee und ich werde weiterforschen, bis die Anforderungen klar sind...",
@@ -726,6 +726,16 @@
       "jumpLabel": "Springen Sie zur Benutzernachricht {{index}}: {{preview}}",
       "imageMessage": "{{count}} Bilder",
       "emptyMessage": "Leermeldung"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Bild kopiert ins Clipboard",
     "imageCopiedDesc": "Sie können es in chat oder dokumente einfügen.",

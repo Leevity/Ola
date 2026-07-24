@@ -1,6 +1,7 @@
-{
+﻿{
   "input": {
     "sendFailedDraftRetained": "Send failed. Your draft was kept.",
+    "draftRestored": "Your unsent draft was restored.",
     "placeholder": "Type a message...",
     "placeholderClarify": "Describe your idea and I will keep probing until the requirements are clear...",
     "placeholderCowork": "Ask the assistant to help with your project...",
@@ -432,7 +433,8 @@
       "fullAccess": "Full access",
       "fullAccessConfirmTitle": "Enable full access?",
       "fullAccessConfirmDescription": "Tool calls will be approved without a prompt. Command deny rules remain enforced by the Worker.",
-      "fullAccessConfirmAction": "Enable full access"
+      "fullAccessConfirmAction": "Enable full access",
+      "manageWhitelist": "Manage whitelist rules"
     },
     "toolLabels": {
       "Read": "Read File",
@@ -714,7 +716,7 @@
   },
   "messageList": {
     "startConversation": "Start a conversation",
-    "startConversationDesc": "Ask anything, or use web search and selected MCP tools.",
+    "startConversationDesc": "Analyze situations, organize information, draft documents, and move everyday work forward. Tell Ola what you want to achieve.",
     "startClarify": "Start clarifying",
     "startClarifyDesc": "Interrogate the goal, constraints, risks, and gaps before planning. It defaults to clarification-first behavior, but permissions match Code mode.",
     "startCowork": "Start a Cowork session",
@@ -745,9 +747,9 @@
     "homeDescCodeThinking": "Better for complex implementation, refactoring, debugging, and multi-step coding tasks.",
     "homeAutoMeta": "Routes automatically after you send",
     "tipDropFiles": "Tip: Drop files into the input to reference their paths",
-    "explainAsync": "Explain how async/await works",
-    "compareRest": "Compare REST vs GraphQL",
-    "writeRegex": "Write a regex for email validation",
+    "analyzeSituation": "Analyze the key issues and next steps",
+    "summarizeMeeting": "Turn meeting notes into action items",
+    "createPptOutline": "Create an outline for a presentation",
     "clarifyIdea": "Interrogate this product idea with relentless follow-up questions",
     "challengeAssumptions": "Challenge the hidden assumptions and vague language in this proposal",
     "exploreRisks": "Surface edge cases, failure modes, and second-order consequences",
@@ -786,14 +788,24 @@
       "emptyMessage": "Empty message"
     },
     "messageRail": {
-      "title": "Message rail",
+      "title": "Conversation overview",
       "jumpLabel": "Jump to message {{index}}: {{preview}}"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Image copied to clipboard",
     "imageCopiedDesc": "You can paste it into chat or documents",
     "exportImageFailed": "Export image failed",
     "homeWorkspaceCaption": "Workspace",
-    "homeTitleChatQuestion": "What should we talk through?",
+    "homeTitleChatQuestion": "What can Ola help you with?",
     "homeTitleBuildQuestion": "What should we build in {{name}}?",
     "thisWorkspace": "this workspace"
   },
@@ -1033,9 +1045,12 @@
     "collapse": "Collapse message",
     "expand": "Expand message",
     "deleteAndRegenerate": "Delete and regenerate",
+    "compressContext": "Compress to here",
     "sentToTranslator": "Sent to translator",
     "copiedForShare": "Copied to clipboard for sharing",
     "shareFailed": "Share failed",
+    "bookmark": "Bookmark result",
+    "unbookmark": "Remove bookmark",
     "speechNotSupported": "Speech synthesis is not supported in this environment",
     "collapsedMessage": "Message collapsed",
     "imagesCollapsed": "{{count}} images"
@@ -1056,6 +1071,25 @@
     "summary": "{{status}} · {{count}} steps{{duration}}",
     "expandDetails": "Expand details",
     "collapseDetails": "Collapse details"
+  },
+  "runResult": {
+    "title": "Run result",
+    "completed": "Run completed",
+    "running": "Running",
+    "failed": "Execution failed",
+    "needsAttention": "Needs attention",
+    "canceled": "Canceled",
+    "steps": "{{count}} steps",
+    "filesChanged": "Changed {{count}} files",
+    "attention": "{{count}} items need attention",
+    "viewProcess": "View process",
+    "reviewChanges": "Review changes",
+    "exportResult": "Copy result report",
+    "exported": "Result report copied",
+    "fork": "Fork from result",
+    "copyResult": "Copy result",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details"
   },
   "toolGroup": {
     "readFiles": "Read {{count}} files",

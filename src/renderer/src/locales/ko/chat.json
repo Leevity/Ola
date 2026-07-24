@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "메시지를 입력하세요...",
     "placeholderClarify": "아이디어를 적어 주세요. 요구 사항이 명확해질 때까지 계속 확인하겠습니다...",
@@ -726,6 +726,16 @@
       "jumpLabel": "사용자 메시지 {{index}}로 이동: {{preview}}",
       "imageMessage": "{{count}} 이미지",
       "emptyMessage": "빈 메시지"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "클립보드에 복사 된 이미지",
     "imageCopiedDesc": "채팅 또는 문서로 붙여 넣을 수 있습니다.",

@@ -1,4 +1,4 @@
-import * as React from 'react'
+﻿import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   ChevronDown,
@@ -71,6 +71,7 @@ interface ToolCallCardProps {
   error?: string
   startedAt?: number
   completedAt?: number
+  displayMode?: 'full' | 'summary' | 'hidden-detail'
 }
 
 function getBashInputTerminalId(input: Record<string, unknown>): string | null {
@@ -132,6 +133,7 @@ function areToolCallCardPropsEqual(prev: ToolCallCardProps, next: ToolCallCardPr
     prev.error === next.error &&
     prev.startedAt === next.startedAt &&
     prev.completedAt === next.completedAt &&
+    prev.displayMode === next.displayMode &&
     shallowEqualRecord(prev.input, next.input) &&
     toolResultContentEqual(prev.output, next.output)
   )
@@ -3127,7 +3129,8 @@ function ToolCallCardInner({
   status,
   error,
   startedAt,
-  completedAt
+  completedAt,
+  displayMode = 'full'
 }: ToolCallCardProps): React.JSX.Element {
   const { t } = useTranslation('chat')
   const isProcessing = status === 'streaming' || status === 'running'
@@ -3142,7 +3145,9 @@ function ToolCallCardInner({
         : null
   const hasVisualOutput = hasImageBlocks(output)
   const isReadTextTool = name === 'Read' && !hasVisualOutput
-  const [open, setOpen] = React.useState((isActive && !isReadTextTool) || hasVisualOutput)
+  const shouldForceOpen =
+    displayMode === 'full' || isActive || hasVisualOutput || status === 'error' || Boolean(error)
+  const [open, setOpen] = React.useState(shouldForceOpen && !isReadTextTool)
   // Text Read output can be large; only mount it after the user opens the Read card.
   const [readTextOutputRevealed, setReadTextOutputRevealed] = React.useState(false)
   const prevIsActiveRef = React.useRef(isActive)
@@ -3156,7 +3161,7 @@ function ToolCallCardInner({
   }, [isLiveCommandTool, name, open])
 
   React.useEffect(() => {
-    if (hasVisualOutput) {
+    if (shouldForceOpen && !isReadTextTool) {
       setOpen(true)
       prevIsActiveRef.current = isActive
       wasLiveCommandToolRef.current = isLiveCommandTool
@@ -3187,7 +3192,7 @@ function ToolCallCardInner({
     }
     prevIsActiveRef.current = isActive
     wasLiveCommandToolRef.current = isLiveCommandTool
-  }, [hasVisualOutput, isActive, isLiveCommandTool, isReadTextTool, readTextOutputRevealed])
+  }, [isActive, isLiveCommandTool, isReadTextTool, readTextOutputRevealed, shouldForceOpen])
   const outputText = React.useMemo(() => outputAsString(output), [output])
   const extensionToolResult = React.useMemo(
     () => (open ? parseExtensionToolResult(output) : null),

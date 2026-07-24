@@ -56,6 +56,55 @@ export const moonshotCodingPreset: BuiltinProviderPreset = {
         bodyParams: { thinking: { type: 'enabled' } },
         forceTemperature: 1
       }
+    },
+    // Kimi K3（Kimi Code 套餐，2026-07-16）。请求参数对齐官方 kimi-code CLI
+    // （github.com/MoonshotAI/kimi-code, kosong/providers/kimi.ts）对 coding 端点的线上格式：
+    //  - thinking 常开，effort 走 thinking.effort（当前仅 max 档），因此省略顶层 reasoning_effort；
+    //  - temperature 服务端固定，官方客户端默认不发；
+    //  - 输出上限官方客户端默认不发（服务端默认 131072）。max_tokens 是遗留别名，推理模型下
+    //    与思考内容共享预算，小值会导致 200 空内容，因此连同 max_completion_tokens 一起省略。
+    // 上下文按档位：Moderato 256K，Allegretto 及以上 1M —— 预设取保守的 256K，
+    // 高档位用户可在模型编辑里调大。价格按 Moonshot 官方 API 的 K3 价目展示。
+    {
+      id: 'k3',
+      name: 'Kimi K3',
+      icon: 'kimi',
+      enabled: true,
+      contextLength: 262144,
+      maxOutputTokens: 131072,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 3,
+      outputPrice: 15,
+      cacheHitPrice: 0.3,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'enabled', effort: 'max' } },
+        reasoningEffortLevels: ['max'],
+        defaultReasoningEffort: 'max'
+      },
+      requestOverrides: {
+        omitBodyKeys: ['temperature', 'max_tokens', 'max_completion_tokens', 'reasoning_effort']
+      }
+    },
+    // Allegretto 及以上档位可用；输出加速，输入/缓存价与 kimi-for-coding 相同。
+    {
+      id: 'kimi-for-coding-highspeed',
+      name: 'Kimi For Coding HighSpeed (K2.7 Code)',
+      icon: 'kimi',
+      enabled: true,
+      contextLength: 262144,
+      maxOutputTokens: 32768,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 0.95,
+      outputPrice: 8,
+      cacheHitPrice: 0.19,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'enabled' } },
+        forceTemperature: 1
+      }
     }
   ]
 }
@@ -244,6 +293,31 @@ export const moonshotPreset: BuiltinProviderPreset = {
       inputPrice: 1.4,
       outputPrice: 4.2,
       cacheHitPrice: 0.35
+    },
+    // Kimi K3（2026-07-16）：thinking 常开，官方 API 文档走顶层 reasoning_effort（当前仅 max 档）；
+    // temperature/top_p 等采样参数服务端固定，请求中必须省略。输出上限也省略（服务端默认
+    // 131072）：max_tokens 是遗留别名，推理模型下与思考内容共享预算，小值会导致 200 空内容。
+    {
+      id: 'kimi-k3',
+      name: 'Kimi K3',
+      icon: 'kimi',
+      enabled: true,
+      contextLength: 1048576,
+      maxOutputTokens: 131072,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 3,
+      outputPrice: 15,
+      cacheHitPrice: 0.3,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: {},
+        reasoningEffortLevels: ['max'],
+        defaultReasoningEffort: 'max'
+      },
+      requestOverrides: {
+        omitBodyKeys: ['temperature', 'max_tokens', 'max_completion_tokens']
+      }
     }
   ]
 }

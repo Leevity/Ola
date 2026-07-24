@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Data.Sqlite;
@@ -22,6 +22,39 @@ internal static class DbMessageTools
     public static WorkerResponse ListUser(JsonElement parameters)
     {
         return ReadRows(parameters, role: "user", paged: false);
+    }
+
+    public static WorkerResponse ListLocator(JsonElement parameters)
+    {
+        try
+        {
+            var sessionId = RequireString(parameters, "sessionId");
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            NormalizeSessionMessageSortOrders(connection, sessionId);
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT id, session_id, role, content, meta, created_at, sort_order
+                  FROM messages
+                 WHERE session_id = $sessionId
+                 ORDER BY sort_order ASC, created_at ASC
+                """;
+            command.Parameters.AddWithValue("$sessionId", sessionId);
+
+            var rows = new List<MessageLocatorRow>();
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add(ReadMessageLocatorRow(reader));
+            }
+
+            return WorkerResponse.Json(rows, WorkerJsonContext.Default.ListMessageLocatorRow);
+        }
+        catch
+        {
+            return WorkerResponse.Json(
+                new List<MessageLocatorRow>(),
+                WorkerJsonContext.Default.ListMessageLocatorRow);
+        }
     }
 
     public static WorkerResponse ListMarkers(JsonElement parameters)
@@ -1270,6 +1303,20 @@ internal static class DbMessageTools
             JsonHelpers.GetLong(element, "createdAt", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
             JsonHelpers.GetString(element, "usage"),
             JsonHelpers.GetInt(element, "sortOrder", 0));
+    }
+
+    private static MessageLocatorRow ReadMessageLocatorRow(SqliteDataReader reader)
+    {
+        return new MessageLocatorRow
+        {
+            Id = reader.GetString(0),
+            SessionId = reader.GetString(1),
+            Role = reader.GetString(2),
+            Content = reader.GetString(3),
+            Meta = reader.IsDBNull(4) ? null : reader.GetString(4),
+            CreatedAt = reader.GetInt64(5),
+            SortOrder = reader.GetInt32(6)
+        };
     }
 
     private static MessageRow ReadMessageRow(SqliteDataReader reader)

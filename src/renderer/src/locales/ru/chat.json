@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "Введите сообщение...",
     "placeholderClarify": "Опишите вашу идею, и я буду продолжать исследовать, пока требования не будут ясны.",
@@ -726,6 +726,16 @@
       "jumpLabel": "Перейти к пользовательскому сообщению {{index}}: {{preview}}",
       "imageMessage": "{{count}} изображения",
       "emptyMessage": "Пустое сообщение"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Изображение скопировано в буфер обмена",
     "imageCopiedDesc": "Вы можете вставить его в чат или документы",

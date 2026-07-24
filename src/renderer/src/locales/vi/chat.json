@@ -1,4 +1,4 @@
-{
+﻿{
   "input": {
     "placeholder": "Gõ tin nhắn...",
     "placeholderClarify": "Mô tả ý tưởng của anh và tôi sẽ tiếp tục điều tra cho đến khi các yêu cầu rõ ràng...",
@@ -726,6 +726,16 @@
       "jumpLabel": "Nhảy tới thông điệp người dùng {{index}}: {{preview}}",
       "imageMessage": "{{count}} Ảnh",
       "emptyMessage": "Thông điệp rỗng"
+    },
+    "assistantRail": {
+      "currentLabel": "Current message {{index}}: {{preview}}",
+      "userLabel": "Jump to user message {{index}}: {{preview}}",
+      "streamingLabel": "Jump to streaming assistant reply {{index}}: {{preview}}",
+      "summaryLabel": "Jump to compressed history summary {{index}}: {{preview}}",
+      "jumpLabel": "Jump to message {{index}}: {{preview}}",
+      "toolOnlyPreview": "{{count}} tool calls",
+      "summaryPreview": "Compressed history summary",
+      "emptyPreview": "Assistant reply"
     },
     "imageCopied": "Ảnh được sao chép vào bảng nháp",
     "imageCopiedDesc": "Bạn có thể dán nó vào chat hoặc tài liệu",

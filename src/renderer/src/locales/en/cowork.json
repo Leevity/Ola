@@ -1,4 +1,4 @@
-{
+﻿{
   "context": {
     "workingFolder": "Working Folder",
     "clickToCopy": "Click to copy path",
@@ -31,7 +31,16 @@
     },
     "autoApproved": "Auto-approved: {{count}}",
     "noContext": "No context loaded",
-    "noContextDesc": "Select a working folder to give the assistant access to your project"
+    "noContextDesc": "Select a working folder to give the assistant access to your project",
+    "compressionTimeline": {
+      "title": "Context timeline",
+      "compressed": "Context compressed",
+      "auto": "Auto compression",
+      "manual": "Manual compression",
+      "messages": "{{count}} messages summarized",
+      "preTokens": "{{count}} tokens before compression",
+      "toggle": "Toggle compression summary"
+    }
   },
   "steps": {
     "noTasks": "No tasks yet",

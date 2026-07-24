@@ -239,6 +239,35 @@ export const qwenPreset: BuiltinProviderPreset = {
       outputPrice: 0,
       supportsThinking: true,
       thinkingConfig: { bodyParams: { enable_thinking: true } }
+    },
+    // Qwen3.7 series (2026-05 flagship refresh)
+    {
+      id: 'qwen3.7-max',
+      name: 'Qwen3.7 Max',
+      icon: 'qwen',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 32768,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      inputPrice: 1.25,
+      outputPrice: 3.75,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } }
+    },
+    {
+      id: 'qwen3.7-plus',
+      name: 'Qwen3.7 Plus',
+      icon: 'qwen',
+      enabled: true,
+      contextLength: 1000000,
+      maxOutputTokens: 65536,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      inputPrice: 0.32,
+      outputPrice: 1.28,
+      supportsThinking: true,
+      thinkingConfig: { bodyParams: { enable_thinking: true } }
     }
   ]
 }
