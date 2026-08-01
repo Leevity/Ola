@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   Loader2,
   Settings2,
-  ExternalLink,
   KeyRound
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -36,9 +35,6 @@ import { Popover, PopoverContent, PopoverTrigger } from '@renderer/components/ui
 import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { SkillInstallDialog } from './SkillInstallDialog'
-
-const SKILLS_MARKET_DOCS_URL = 'https://shop.lbxai.cn/docs'
-const SKILLS_MARKET_DASHBOARD_URL = 'https://shop.lbxai.cn/dashboard'
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
@@ -219,24 +215,6 @@ function MarketProviderConfig(): React.JSX.Element {
               <KeyRound className="size-3" />
               {t('skillsmarket.apiKey')}
             </label>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-[10px] text-primary"
-                onClick={() => window.open(SKILLS_MARKET_DASHBOARD_URL, '_blank', 'noopener')}
-              >
-                {t('skillsmarket.getApiKey')} <ExternalLink className="ml-0.5 size-2.5" />
-              </Button>
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-[10px] text-primary"
-                onClick={() => window.open(SKILLS_MARKET_DOCS_URL, '_blank', 'noopener')}
-              >
-                {t('skillsmarket.openDocs')} <ExternalLink className="ml-0.5 size-2.5" />
-              </Button>
-            </div>
           </div>
           <Input
             type="password"
