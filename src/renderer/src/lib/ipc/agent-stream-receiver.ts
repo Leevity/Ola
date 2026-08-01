@@ -80,6 +80,14 @@ export class AgentStreamReceiver {
     }
   }
 
+  getLastSeq(runId: string): number | undefined {
+    return this.lastSeqByRun.get(runId)
+  }
+
+  ingest(envelopes: ReadonlyArray<AgentStreamEnvelope>): void {
+    for (const envelope of envelopes) this.queueEnvelope(envelope)
+  }
+
   notifySessionVisibility(sessionId: string, visible: boolean): void {
     ipcClient.send('agent:session-visibility', { sessionId, visible })
   }
