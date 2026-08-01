@@ -18,13 +18,6 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from '@renderer/components/ui/dialog'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { cn } from '@renderer/lib/utils'
 import {
@@ -45,9 +38,10 @@ import {
   type DrawGraphProject
 } from '../../../../shared/draw-graph'
 import type { VideoProviderCapability, VideoTask } from '../../../../shared/media-runtime'
+import { AssetLibraryDialog, type AssetLibraryItem } from './graph/AssetLibraryDialog'
+import { MaskEditorDialog } from './graph/MaskEditorDialog'
 
 type Snapshot = Pick<DrawGraphProject, 'nodes' | 'edges'>
-type AssetLibraryItem = DrawGraphAssetRef & { url: string }
 
 function toAssetRef(asset: AssetLibraryItem): DrawGraphAssetRef {
   return {
@@ -940,143 +934,24 @@ export function DrawGraphCanvas(): React.JSX.Element {
           {assetLibrary.length} {t('drawPage.graph.assets')}
         </div>
       </button>
-      <Dialog open={assetLibraryOpen} onOpenChange={setAssetLibraryOpen}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{t('drawPage.graph.assetLibrary')}</DialogTitle>
-          </DialogHeader>
-          {assetLibrary.length > 0 ? (
-            <div className="grid max-h-[60vh] grid-cols-3 gap-3 overflow-auto sm:grid-cols-4">
-              {assetLibrary.map((asset) => (
-                <button
-                  key={asset.id}
-                  type="button"
-                  className="rounded-lg border p-2 text-left hover:border-primary"
-                  onClick={() => selectLibraryAsset(asset)}
-                >
-                  <img
-                    className="aspect-square w-full rounded object-contain bg-black/5"
-                    src={asset.url}
-                    alt=""
-                  />
-                  <div className="mt-1 truncate text-[10px] text-muted-foreground">
-                    {asset.width} × {asset.height}
-                  </div>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {t('drawPage.graph.noAssets', { defaultValue: 'No saved assets yet.' })}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-      <Dialog
+      <AssetLibraryDialog
+        open={assetLibraryOpen}
+        assets={assetLibrary}
+        onOpenChange={setAssetLibraryOpen}
+        onSelect={selectLibraryAsset}
+      />
+      <MaskEditorDialog
         open={maskNodeId !== null}
+        asset={maskNodeId ? (nodeMap.get(maskNodeId)?.asset ?? null) : null}
+        strokes={maskStrokes}
+        brushSize={maskBrushSize}
         onOpenChange={(open) => {
           if (!open) setMaskNodeId(null)
         }}
-      >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{t('drawPage.graph.mask', { defaultValue: 'Mask editor' })}</DialogTitle>
-          </DialogHeader>
-          {maskNodeId && nodeMap.get(maskNodeId)?.asset ? (
-            <div className="space-y-3">
-              <div className="text-xs text-muted-foreground">
-                {t('drawPage.graph.maskHint', {
-                  defaultValue: 'Paint the area that the next image edit should regenerate.'
-                })}
-              </div>
-              <input
-                type="range"
-                min="4"
-                max={Math.max(
-                  8,
-                  Math.round(
-                    Math.min(
-                      nodeMap.get(maskNodeId)!.asset!.width,
-                      nodeMap.get(maskNodeId)!.asset!.height
-                    ) * 0.25
-                  )
-                )}
-                value={maskBrushSize}
-                onChange={(event) => setMaskBrushSize(Number(event.target.value))}
-              />
-              <canvas
-                className="max-h-[60vh] w-full cursor-crosshair rounded border bg-contain bg-center bg-no-repeat"
-                width={nodeMap.get(maskNodeId)!.asset!.width}
-                height={nodeMap.get(maskNodeId)!.asset!.height}
-                style={{
-                  aspectRatio: `${nodeMap.get(maskNodeId)!.asset!.width}/${nodeMap.get(maskNodeId)!.asset!.height}`,
-                  backgroundImage: `url(ola-draw-asset://${nodeMap.get(maskNodeId)!.asset!.id})`
-                }}
-                onPointerDown={(event) => {
-                  const canvas = event.currentTarget
-                  canvas.setPointerCapture(event.pointerId)
-                  const bounds = canvas.getBoundingClientRect()
-                  const point = {
-                    x: ((event.clientX - bounds.left) / bounds.width) * canvas.width,
-                    y: ((event.clientY - bounds.top) / bounds.height) * canvas.height
-                  }
-                  setMaskStrokes((items) => [...items, { size: maskBrushSize, points: [point] }])
-                }}
-                onPointerMove={(event) => {
-                  if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
-                  const canvas = event.currentTarget
-                  const bounds = canvas.getBoundingClientRect()
-                  const point = {
-                    x: ((event.clientX - bounds.left) / bounds.width) * canvas.width,
-                    y: ((event.clientY - bounds.top) / bounds.height) * canvas.height
-                  }
-                  setMaskStrokes((items) =>
-                    items.map((stroke, index) =>
-                      index === items.length - 1
-                        ? { ...stroke, points: [...stroke.points, point] }
-                        : stroke
-                    )
-                  )
-                }}
-                ref={(canvas) => {
-                  if (!canvas) return
-                  const context = canvas.getContext('2d')
-                  if (!context) return
-                  context.clearRect(0, 0, canvas.width, canvas.height)
-                  context.strokeStyle = 'rgba(239, 68, 68, 0.75)'
-                  context.fillStyle = 'rgba(239, 68, 68, 0.75)'
-                  context.lineCap = 'round'
-                  context.lineJoin = 'round'
-                  for (const stroke of maskStrokes) {
-                    context.lineWidth = stroke.size
-                    context.beginPath()
-                    context.moveTo(stroke.points[0].x, stroke.points[0].y)
-                    for (const point of stroke.points.slice(1)) context.lineTo(point.x, point.y)
-                    if (stroke.points.length === 1) {
-                      context.arc(
-                        stroke.points[0].x,
-                        stroke.points[0].y,
-                        stroke.size / 2,
-                        0,
-                        Math.PI * 2
-                      )
-                      context.fill()
-                    } else context.stroke()
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setMaskStrokes([])}>
-              {t('drawPage.graph.clear', { defaultValue: 'Clear' })}
-            </Button>
-            <Button disabled={maskStrokes.length === 0} onClick={() => void saveMaskEdit()}>
-              {t('drawPage.graph.saveMask', { defaultValue: 'Save mask' })}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onStrokesChange={setMaskStrokes}
+        onBrushSizeChange={setMaskBrushSize}
+        onSave={() => void saveMaskEdit()}
+      />
     </div>
   )
 }

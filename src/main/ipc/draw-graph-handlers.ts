@@ -42,10 +42,10 @@ function safeProjectId(value: unknown): string {
   return id
 }
 
-function projectPaths(id: string): { target: string; backup: string; temporary: string } {
+function projectPaths(id: string): { target: string; backup: string } {
   const directory = path.join(app.getPath('userData'), 'draw-projects')
   const target = path.join(directory, `${id}.json`)
-  return { target, backup: `${target}.bak`, temporary: `${target}.${process.pid}.tmp` }
+  return { target, backup: `${target}.bak` }
 }
 
 function assetsDirectory(): string {
