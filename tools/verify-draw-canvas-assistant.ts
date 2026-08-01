@@ -12,5 +12,12 @@ assert.doesNotMatch(tool, /draw-graph:save/)
 assert.match(tool, /useDrawGraphStore/)
 assert.match(store, /changes:/)
 assert.match(store, /source: 'assistant'/)
-assert.match(store, /await ipcClient\.invoke\('draw-graph:save', next\)/)
+assert.match(store, /await ipcClient\.invoke\('draw-graph:save', project\)/)
+for (const action of ['update_node', 'delete_nodes', 'disconnect']) {
+  assert.match(tool, new RegExp(`'${action}'`))
+  assert.match(store, new RegExp(`action === '${action}'`))
+}
+assert.match(store, /wouldCreateDrawGraphCycle/)
+assert.match(store, /acquireAssistantMutation/)
+assert.match(store, /await persist\(next\)\s+set\(\{ project: next \}\)/)
 console.log('Draw canvas assistant verification passed')

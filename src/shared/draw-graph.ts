@@ -62,7 +62,7 @@ export interface DrawGraphEdge {
 export interface DrawGraphChangeRecord {
   id: string
   source: 'assistant'
-  action: 'add_node' | 'connect'
+  action: 'add_node' | 'update_node' | 'delete_nodes' | 'connect' | 'disconnect'
   summary: string
   createdAt: number
 }
@@ -86,6 +86,30 @@ export function createEmptyDrawGraphProject(id = 'default'): DrawGraphProject {
     nodes: [],
     edges: []
   }
+}
+
+export function wouldCreateDrawGraphCycle(
+  edges: DrawGraphEdge[],
+  source: string,
+  target: string
+): boolean {
+  if (source === target) return true
+  const outgoing = new Map<string, string[]>()
+  for (const edge of edges) {
+    const targets = outgoing.get(edge.source) ?? []
+    targets.push(edge.target)
+    outgoing.set(edge.source, targets)
+  }
+  const pending = [target]
+  const visited = new Set<string>()
+  while (pending.length > 0) {
+    const nodeId = pending.pop()!
+    if (nodeId === source) return true
+    if (visited.has(nodeId)) continue
+    visited.add(nodeId)
+    pending.push(...(outgoing.get(nodeId) ?? []))
+  }
+  return false
 }
 
 function isBoundedString(value: unknown, maxLength: number): value is string {
@@ -131,7 +155,9 @@ export function isValidDrawGraphProject(value: unknown): value is DrawGraphProje
         !change ||
         !isBoundedString(change.id, 128) ||
         change.source !== 'assistant' ||
-        !['add_node', 'connect'].includes(change.action) ||
+        !['add_node', 'update_node', 'delete_nodes', 'connect', 'disconnect'].includes(
+          change.action
+        ) ||
         !isBoundedString(change.summary, 2_000) ||
         !Number.isFinite(change.createdAt)
     )
