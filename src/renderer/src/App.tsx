@@ -31,7 +31,11 @@ import { useSshStore } from './stores/ssh-store'
 import { useTaskStore } from './stores/task-store'
 import { useTeamStore } from './stores/team-store'
 import { useUIStore } from './stores/ui-store'
-import { registerAllTools, updateWebSearchToolRegistration } from './lib/tools'
+import {
+  registerAllTools,
+  updateCanvasToolRegistration,
+  updateWebSearchToolRegistration
+} from './lib/tools'
 import { updateAppPluginToolRegistration } from './lib/app-plugin'
 import { refreshExtensionTools } from './lib/extensions/extension-tools'
 import { registerAllViewers } from './lib/preview/register-viewers'
@@ -844,6 +848,11 @@ function App(): React.JSX.Element {
   useEffect(() => {
     updateWebSearchToolRegistration(webSearchEnabled)
   }, [webSearchEnabled])
+
+  const advancedDrawEnabled = useSettingsStore((s) => s.advancedDrawEnabled)
+  useEffect(() => {
+    updateCanvasToolRegistration(advancedDrawEnabled)
+  }, [advancedDrawEnabled])
 
   useEffect(() => {
     updateAppPluginToolRegistration()

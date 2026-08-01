@@ -68,3 +68,11 @@ const canvasHandler: ToolHandler = {
 export function registerCanvasTool(): void {
   toolRegistry.register(canvasHandler)
 }
+
+export function unregisterCanvasTool(): void {
+  toolRegistry.unregister(canvasHandler.definition.name)
+}
+
+export function isCanvasToolRegistered(): boolean {
+  return toolRegistry.has(canvasHandler.definition.name)
+}
