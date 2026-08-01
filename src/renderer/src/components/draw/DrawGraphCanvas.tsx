@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { cn } from '@renderer/lib/utils'
+import { useSettingsStore } from '@renderer/stores/settings-store'
 import {
   createEmptyDrawGraphProject,
   type DrawGraphNode,
@@ -35,6 +36,8 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [history, setHistory] = useState<Snapshot[]>([])
   const [future, setFuture] = useState<Snapshot[]>([])
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
+  const advancedDrawEnabled = useSettingsStore((state) => state.advancedDrawEnabled)
+  const videoGenerationEnabled = useSettingsStore((state) => state.videoGenerationEnabled)
   const loaded = useRef(false)
 
   useEffect(() => {
@@ -138,7 +141,12 @@ export function DrawGraphCanvas(): React.JSX.Element {
               ...node,
               imageOperations: [
                 ...(node.imageOperations ?? []),
-                { id: nanoid(), type, value: type === 'upscale' ? 2 : 1 }
+                {
+                  id: nanoid(),
+                  type,
+                  value: type === 'upscale' ? 2 : 1,
+                  state: 'idle'
+                }
               ]
             }
           : node
@@ -170,10 +178,12 @@ export function DrawGraphCanvas(): React.JSX.Element {
           <Image className="size-4" />
           {t('drawPage.graph.image')}
         </Button>
-        <Button size="sm" variant="outline" onClick={() => addNode('video')}>
-          <Video className="size-4" />
-          {t('drawPage.graph.video')}
-        </Button>
+        {videoGenerationEnabled ? (
+          <Button size="sm" variant="outline" onClick={() => addNode('video')}>
+            <Video className="size-4" />
+            {t('drawPage.graph.video')}
+          </Button>
+        ) : null}
         <Button size="sm" variant="outline" onClick={() => addNode('text')}>
           <Type className="size-4" />
           {t('drawPage.graph.text')}
@@ -182,14 +192,16 @@ export function DrawGraphCanvas(): React.JSX.Element {
           <Settings2 className="size-4" />
           {t('drawPage.graph.config')}
         </Button>
-        <Button size="sm" variant="ghost" onClick={() => addNode('text')}>
-          {t('drawPage.graph.promptLibrary')}
-        </Button>
+        {advancedDrawEnabled ? (
+          <Button size="sm" variant="ghost" onClick={() => addNode('text')}>
+            {t('drawPage.graph.promptLibrary')}
+          </Button>
+        ) : null}
         <Button size="sm" variant="outline" disabled={selected.length !== 2} onClick={connect}>
           <Link2 className="size-4" />
           {t('drawPage.graph.connect')}
         </Button>
-        {nodeMap.get(selected[0])?.kind === 'image' ? (
+        {advancedDrawEnabled && nodeMap.get(selected[0])?.kind === 'image' ? (
           <>
             <Button size="sm" variant="ghost" onClick={() => applyImageOperation('crop')}>
               <Crop className="size-4" />
@@ -309,6 +321,10 @@ export function DrawGraphCanvas(): React.JSX.Element {
               <textarea
                 className="h-16 w-full resize-none rounded-md bg-muted/40 p-2 text-xs outline-none"
                 value={node.content}
+                disabled={
+                  (node.kind === 'video' && !videoGenerationEnabled) ||
+                  (node.kind === 'image' && !advancedDrawEnabled && !!node.imageOperations?.length)
+                }
                 placeholder={t(`drawPage.graph.placeholder.${node.kind}`)}
                 onChange={(event) =>
                   setProject((current) => ({
@@ -321,12 +337,20 @@ export function DrawGraphCanvas(): React.JSX.Element {
               />
               {node.kind === 'image' && node.imageOperations?.length ? (
                 <div className="mt-2 text-[10px] text-muted-foreground">
-                  {node.imageOperations.map((operation) => operation.type).join(' → ')}
+                  {advancedDrawEnabled
+                    ? node.imageOperations
+                        .map((operation) => `${operation.type}:${operation.state ?? 'idle'}`)
+                        .join(' → ')
+                    : t('drawPage.graph.optionalCapabilityDisabled')}
                 </div>
               ) : null}
               {node.kind === 'video' ? (
                 <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
-                  <div>{t('drawPage.graph.videoProviderDisabled')}</div>
+                  <div>
+                    {videoGenerationEnabled
+                      ? t('drawPage.graph.videoProviderDisabled')
+                      : t('drawPage.graph.optionalCapabilityDisabled')}
+                  </div>
                   <div>
                     {t('drawPage.graph.estimatedCost')}: — · {t('drawPage.graph.outputSize')}: —
                   </div>
