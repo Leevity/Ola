@@ -50,6 +50,7 @@ import { ipcClient } from './lib/ipc/ipc-client'
 import { IPC } from './lib/ipc/channels'
 import { attachRendererToolBridge } from './lib/ipc/renderer-tool-bridge'
 import { agentStream } from './lib/ipc/agent-stream-receiver'
+import { reattachActiveAgentRuns } from './lib/agent/runtime-reattach'
 import { nanoid } from 'nanoid'
 import type { UnifiedMessage } from './lib/api/types'
 import { NotifyToastContainer } from './components/notify/NotifyWindow'
@@ -206,6 +207,15 @@ function App(): React.JSX.Element {
   const [settingsHydrated, setSettingsHydrated] = useState(() =>
     useSettingsStore.persist.hasHydrated()
   )
+
+  useEffect(() => {
+    void reattachActiveAgentRuns().catch((error) => {
+      console.warn(
+        '[App] Failed to recover active agent runs',
+        error instanceof Error ? error.message : String(error)
+      )
+    })
+  }, [])
 
   // Initialize plugin auto-reply agent loop listener only in the main app window.
   usePluginAutoReply(!sessionWindowView && !sshWindowView)

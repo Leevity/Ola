@@ -209,12 +209,12 @@ import {
   normalizeSidecarApprovalRequest
 } from '@renderer/lib/ipc/sidecar-protocol'
 import { agentStream } from '@renderer/lib/ipc/agent-stream-receiver'
+import { sessionSidecarRunIds } from '@renderer/lib/agent/session-run-registry'
 import { toAgentEvent, toSubAgentEvent } from '@renderer/lib/agent/stream-event-adapter'
 import type { AgentStreamEvent } from '../../../shared/agent-stream-protocol'
 
 /** Per-session abort controllers — module-level so concurrent sessions don't overwrite each other */
 const sessionAbortControllers = new Map<string, AbortController>()
-const sessionSidecarRunIds = new Map<string, string>()
 const hookStartedSessions = new Set<string>()
 const stopAfterCurrentRequestSessions = new Set<string>()
 const continuingToolExecutionSessions = new Set<string>()
