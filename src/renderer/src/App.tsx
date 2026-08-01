@@ -34,6 +34,7 @@ import { useUIStore } from './stores/ui-store'
 import {
   registerAllTools,
   updateCanvasToolRegistration,
+  updateVideoGenerationToolRegistration,
   updateWebSearchToolRegistration
 } from './lib/tools'
 import { updateAppPluginToolRegistration } from './lib/app-plugin'
@@ -853,6 +854,10 @@ function App(): React.JSX.Element {
   useEffect(() => {
     updateCanvasToolRegistration(advancedDrawEnabled)
   }, [advancedDrawEnabled])
+
+  useEffect(() => {
+    updateVideoGenerationToolRegistration(videoGenerationEnabled)
+  }, [videoGenerationEnabled])
 
   useEffect(() => {
     updateAppPluginToolRegistration()
