@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using System.Net.Http.Headers;
+using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -11,6 +12,8 @@ internal static partial class SkillCatalog
     private const string SkillsMarketApiBaseUrl = SkillsMarketBaseUrl + "/api/v1";
     private const string SkillFileName = "SKILL.md";
     private const string TempRootName = "ola-skills";
+    private const string BuiltinMarkerFileName = ".ola-builtin.json";
+    private const int MaxSkillInstructionLines = 500;
     private static readonly object Sync = new();
     private static readonly HttpClient Http = WorkerHttpClientFactory.Create(TimeSpan.FromSeconds(60));
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -72,15 +75,7 @@ internal static partial class SkillCatalog
 
                 Directory.CreateDirectory(SkillsDirectory());
                 var targetDir = ResolveInstalledSkillPath(name);
-                var targetManifest = Path.Combine(targetDir, SkillFileName);
-                if (!File.Exists(targetManifest))
-                {
-                    if (Directory.Exists(targetDir))
-                    {
-                        Directory.Delete(targetDir, recursive: true);
-                    }
-                    CopyDirectory(sourceDir, targetDir);
-                }
+                SynchronizeBuiltin(sourceDir, targetDir, name);
 
                 return ToResponse(new JsonObject
                 {
@@ -282,6 +277,11 @@ internal static partial class SkillCatalog
                 {
                     return ToResponse(Mutation(false, "Invalid skill folder name"));
                 }
+                var manifestError = ValidateSkillManifest(File.ReadAllText(sourceManifest), skillName);
+                if (manifestError is not null)
+                {
+                    return ToResponse(Mutation(false, manifestError));
+                }
 
                 var targetDir = ResolveInstalledSkillPath(skillName);
                 if (Directory.Exists(targetDir))
@@ -318,8 +318,15 @@ internal static partial class SkillCatalog
                 {
                     return ToResponse(Mutation(false, $"Skill \"{name}\" not found"));
                 }
-
-                File.WriteAllText(Path.Combine(skillDir, SkillFileName), content);
+                var manifestError = ValidateSkillManifest(content, name);
+                if (manifestError is not null)
+                {
+                    return ToResponse(Mutation(false, manifestError));
+                }
+                var manifestPath = Path.Combine(skillDir, SkillFileName);
+                var tempPath = manifestPath + ".tmp";
+                File.WriteAllText(tempPath, content);
+                File.Move(tempPath, manifestPath, overwrite: true);
                 WorkerLog.Debug($"skills save name={name}");
                 return ToResponse(Mutation(true, null));
             }
@@ -466,6 +473,13 @@ internal static partial class SkillCatalog
             {
                 throw new InvalidOperationException($"Downloaded skill {slug} is missing SKILL.md");
             }
+            var downloadedManifest = File.ReadAllText(Path.Combine(tempDir, SkillFileName));
+            var downloadedName = Path.GetFileName(tempDir);
+            var manifestError = ValidateSkillManifest(downloadedManifest, downloadedName, requireMatchingName: false);
+            if (manifestError is not null)
+            {
+                throw new InvalidOperationException(manifestError);
+            }
 
             return ToResponse(new JsonObject
             {
@@ -533,11 +547,15 @@ internal static partial class SkillCatalog
             }
 
             var targetDir = ResolveInstalledSkillPath(name);
-            if (Directory.Exists(targetDir))
+            var manifestError = ValidateSkillManifest(
+                File.ReadAllText(Path.Combine(sourceDir, SkillFileName)),
+                name);
+            if (manifestError is not null)
             {
+                WorkerLog.Warn($"skills skipped invalid builtin name={name} error={manifestError}");
                 continue;
             }
-            CopyDirectory(sourceDir, targetDir);
+            SynchronizeBuiltin(sourceDir, targetDir, name);
         }
     }
 
@@ -583,6 +601,11 @@ internal static partial class SkillCatalog
 
         var skillName = Path.GetFileName(sourceDir);
         var skillContent = File.ReadAllText(sourceManifest);
+        var manifestError = ValidateSkillManifest(skillContent, skillName);
+        if (manifestError is not null)
+        {
+            return new JsonObject { ["error"] = manifestError };
+        }
         var scriptContents = new JsonArray();
         var files = new JsonArray();
         WalkFiles(sourceDir, (fullPath, relativePath) =>
@@ -864,6 +887,174 @@ internal static partial class SkillCatalog
                 onFile(fullPath, NormalizeRelativePath(Path.GetRelativePath(root, fullPath)));
             });
         }
+    }
+
+    private static string? ValidateSkillManifest(
+        string content,
+        string expectedName,
+        bool requireMatchingName = true)
+    {
+        var frontmatter = FrontmatterRegex().Match(content);
+        if (!frontmatter.Success)
+        {
+            return "SKILL.md must start with YAML frontmatter";
+        }
+
+        var values = new Dictionary<string, string>(StringComparer.Ordinal);
+        string? multilineKey = null;
+        foreach (var rawLine in frontmatter.Groups[1].Value.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r');
+            if (multilineKey is not null && line.Length > 0 && char.IsWhiteSpace(line[0]))
+            {
+                values[multilineKey] = string.Join(
+                    ' ',
+                    new[] { values[multilineKey], line.Trim() }.Where(value => value.Length > 0));
+                continue;
+            }
+            multilineKey = null;
+            line = line.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            var separator = line.IndexOf(':');
+            if (separator <= 0)
+            {
+                return $"Invalid SKILL.md frontmatter line: {line}";
+            }
+            var key = line[..separator].Trim();
+            if (key is not ("name" or "description"))
+            {
+                return $"Unsupported SKILL.md frontmatter field: {key}";
+            }
+            var value = line[(separator + 1)..].Trim().Trim('"', '\'');
+            values[key] = value is ">" or "|" ? string.Empty : value;
+            multilineKey = value is ">" or "|" ? key : null;
+        }
+
+        if (!values.TryGetValue("name", out var name) || !BuiltinSkillNameRegex().IsMatch(name))
+        {
+            return "SKILL.md name must use lowercase letters, digits, and hyphens";
+        }
+        if (requireMatchingName && !string.Equals(name, expectedName, StringComparison.Ordinal))
+        {
+            return $"SKILL.md name \"{name}\" must match folder \"{expectedName}\"";
+        }
+        if (!values.TryGetValue("description", out var description) || string.IsNullOrWhiteSpace(description))
+        {
+            return "SKILL.md description is required";
+        }
+        if (description.Length > 1024)
+        {
+            return "SKILL.md description must not exceed 1024 characters";
+        }
+
+        var instructionLines = StripFrontmatter(content)
+            .Replace("\r\n", "\n")
+            .Replace('\r', '\n')
+            .Split('\n')
+            .Length;
+        return instructionLines > MaxSkillInstructionLines
+            ? $"SKILL.md instructions must not exceed {MaxSkillInstructionLines} lines"
+            : null;
+    }
+
+    private static void SynchronizeBuiltin(string sourceDir, string targetDir, string name)
+    {
+        var sourceHash = ComputeSkillDirectoryHash(sourceDir);
+        if (!Directory.Exists(targetDir))
+        {
+            CopyDirectory(sourceDir, targetDir);
+            WriteBuiltinMarker(targetDir, name, sourceHash);
+            return;
+        }
+
+        var markerPath = Path.Combine(targetDir, BuiltinMarkerFileName);
+        if (!File.Exists(markerPath))
+        {
+            var installedHash = ComputeSkillDirectoryHash(targetDir);
+            if (string.Equals(installedHash, sourceHash, StringComparison.Ordinal))
+            {
+                WriteBuiltinMarker(targetDir, name, sourceHash);
+                return;
+            }
+
+            var backupDir = BackupLegacyBuiltin(targetDir, name);
+            ReplaceSkillDirectory(sourceDir, targetDir, name, sourceHash);
+            WorkerLog.Info($"skills upgraded legacy builtin name={name} backup={backupDir}");
+            return;
+        }
+
+        string? installedSourceHash = null;
+        try
+        {
+            using var marker = JsonDocument.Parse(File.ReadAllText(markerPath));
+            installedSourceHash = JsonHelpers.GetString(marker.RootElement, "sourceHash");
+        }
+        catch
+        {
+            return;
+        }
+        if (string.Equals(installedSourceHash, sourceHash, StringComparison.Ordinal)) return;
+        if (!string.Equals(ComputeSkillDirectoryHash(targetDir), installedSourceHash, StringComparison.Ordinal))
+        {
+            WorkerLog.Debug($"skills preserved locally modified builtin name={name}");
+            return;
+        }
+
+        ReplaceSkillDirectory(sourceDir, targetDir, name, sourceHash);
+        WorkerLog.Debug($"skills updated builtin name={name}");
+    }
+
+    private static string BackupLegacyBuiltin(string targetDir, string name)
+    {
+        var backupRoot = Path.Combine(SkillsDirectory(), ".builtin-backups");
+        Directory.CreateDirectory(backupRoot);
+        var backupDir = Path.Combine(
+            backupRoot,
+            $"{name}-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}");
+        CopyDirectory(targetDir, backupDir);
+        return backupDir;
+    }
+
+    private static void ReplaceSkillDirectory(
+        string sourceDir,
+        string targetDir,
+        string name,
+        string sourceHash)
+    {
+        var stagingDir = targetDir + $".update-{Guid.NewGuid():N}";
+        CopyDirectory(sourceDir, stagingDir);
+        WriteBuiltinMarker(stagingDir, name, sourceHash);
+        Directory.Delete(targetDir, recursive: true);
+        Directory.Move(stagingDir, targetDir);
+    }
+
+    private static string ComputeSkillDirectoryHash(string root)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+            .Where(path => !string.Equals(
+                Path.GetFileName(path),
+                BuiltinMarkerFileName,
+                StringComparison.Ordinal))
+            .OrderBy(path => NormalizeRelativePath(Path.GetRelativePath(root, path)), StringComparer.Ordinal);
+        foreach (var file in files)
+        {
+            var relative = NormalizeRelativePath(Path.GetRelativePath(root, file));
+            hash.AppendData(System.Text.Encoding.UTF8.GetBytes(relative + "\n"));
+            hash.AppendData(File.ReadAllBytes(file));
+        }
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    private static void WriteBuiltinMarker(string targetDir, string name, string sourceHash)
+    {
+        File.WriteAllText(
+            Path.Combine(targetDir, BuiltinMarkerFileName),
+            new JsonObject
+            {
+                ["name"] = name,
+                ["sourceHash"] = sourceHash
+            }.ToJsonString(JsonOptions));
     }
 
     private static void CopyDirectory(string sourceDir, string targetDir)
