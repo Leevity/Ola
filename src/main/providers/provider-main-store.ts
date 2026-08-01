@@ -74,3 +74,37 @@ export function getProviderMainMirrorSnapshot(): ProviderMirrorSnapshot {
     activeModelId: mirroredState.activeModelId
   }
 }
+
+export function resolveMainProviderModel(
+  providerId: string,
+  modelId: string
+): {
+  provider: SharedProviderRecord
+  model: SharedProviderRecord['models'][number]
+} | null {
+  const provider = mirroredState.providers.find(
+    (candidate) => candidate.id === providerId && candidate.enabled
+  )
+  if (!provider) return null
+  const model = provider.models.find(
+    (candidate) => candidate.id === modelId && candidate.enabled !== false
+  )
+  return model ? { provider, model } : null
+}
+
+export function listMainProviderModels(requestType: string): Array<{
+  providerId: string
+  providerName: string
+  modelId: string
+}> {
+  return mirroredState.providers.flatMap((provider) => {
+    if (!provider.enabled || !provider.apiKey?.trim()) return []
+    return provider.models
+      .filter((model) => model.enabled !== false && (model.type ?? provider.type) === requestType)
+      .map((model) => ({
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId: model.id
+      }))
+  })
+}

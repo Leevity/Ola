@@ -304,6 +304,7 @@ export type ProviderType =
   | 'openai-chat'
   | 'openai-responses'
   | 'openai-images'
+  | 'seedance-video'
   | 'gemini'
   | 'vertex-ai'
 export type ResponseSummary = 'auto' | 'concise' | 'detailed'
@@ -440,7 +441,7 @@ export interface ChannelAuth {
   userInfo?: Record<string, unknown>
 }
 
-export type ModelCategory = 'chat' | 'speech' | 'embedding' | 'image'
+export type ModelCategory = 'chat' | 'speech' | 'embedding' | 'image' | 'video'
 
 export interface AIModelConfig {
   id: string
