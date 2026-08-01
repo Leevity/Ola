@@ -21,7 +21,7 @@ internal static class OpenAIChatRuntime
         "</turn-context>";
     private const string PlanRevisionInstruction =
         "Please revise the current plan file accordingly with Write/Edit, then call ExitPlanMode.";
-    private static readonly HttpClient Http = WorkerHttpClientFactory.Create();
+    private static readonly HttpClient Http = WorkerHttpClientFactory.Create(Timeout.InfiniteTimeSpan);
     private static readonly JsonWriterOptions WriterOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -547,9 +547,11 @@ internal static class OpenAIChatRuntime
         var toolBuffers = new Dictionary<int, ToolCallBuffer>();
         var toolCalls = new List<AgentRuntimeNativeToolCall>();
 
-        using var response = await Http.SendAsync(
+        using var response = await AgentRuntimeRequestTimeout.SendAsync(
+            Http,
             request,
-            HttpCompletionOption.ResponseHeadersRead,
+            provider,
+            "OpenAI-compatible chat",
             state.CancellationToken);
         if (!response.IsSuccessStatusCode)
         {

@@ -119,6 +119,7 @@ function scoreManagedModelRichness(model: AIModelConfig | ManagedModelConfig): n
     'contextLength',
     'enableExtendedContextCompression',
     'contextCompressionThreshold',
+    'requestTimeoutSeconds',
     'maxOutputTokens',
     'inputPrice',
     'outputPrice',

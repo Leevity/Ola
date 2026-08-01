@@ -584,6 +584,9 @@ function ModelFormDialog({
   const [category, setCategory] = useState<ModelCategory>(initial?.category ?? 'chat')
   const [contextLength, setContextLength] = useState(initial?.contextLength?.toString() ?? '')
   const [maxOutputTokens, setMaxOutputTokens] = useState(initial?.maxOutputTokens?.toString() ?? '')
+  const [requestTimeoutSeconds, setRequestTimeoutSeconds] = useState(
+    initial?.requestTimeoutSeconds?.toString() ?? '100'
+  )
   const [contextCompressionThreshold, setContextCompressionThreshold] = useState(
     Math.round(
       clampCompressionThreshold(
@@ -658,6 +661,7 @@ function ModelFormDialog({
     setCategory(model.category ?? 'chat')
     setContextLength(model.contextLength?.toString() ?? '')
     setMaxOutputTokens(model.maxOutputTokens?.toString() ?? '')
+    setRequestTimeoutSeconds(model.requestTimeoutSeconds?.toString() ?? '100')
     setContextCompressionThreshold(
       Math.round(
         clampCompressionThreshold(
@@ -746,6 +750,12 @@ function ModelFormDialog({
       if (!isNaN(v)) model.maxOutputTokens = v
     } else {
       delete model.maxOutputTokens
+    }
+    if (requestTimeoutSeconds.trim()) {
+      const v = parseInt(requestTimeoutSeconds)
+      if (!isNaN(v) && v >= 0) model.requestTimeoutSeconds = v
+    } else {
+      delete model.requestTimeoutSeconds
     }
     if (contextCompressionThreshold.trim()) {
       const v = parseFloat(contextCompressionThreshold)
@@ -999,6 +1009,21 @@ function ModelFormDialog({
               placeholder="80"
               value={contextCompressionThreshold}
               onChange={(e) => setContextCompressionThreshold(e.target.value)}
+              className="text-xs"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium">{t('provider.requestTimeoutSeconds')}</label>
+            <p className="text-[11px] text-muted-foreground">
+              {t('provider.requestTimeoutSecondsDesc')}
+            </p>
+            <Input
+              type="number"
+              min={0}
+              placeholder="100"
+              value={requestTimeoutSeconds}
+              onChange={(e) => setRequestTimeoutSeconds(e.target.value)}
               className="text-xs"
             />
           </div>

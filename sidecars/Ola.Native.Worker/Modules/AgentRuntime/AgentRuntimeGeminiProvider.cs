@@ -6,7 +6,7 @@ using System.Text.Json;
 
 internal static class AgentRuntimeGeminiProvider
 {
-    private static readonly HttpClient Http = WorkerHttpClientFactory.Create();
+    private static readonly HttpClient Http = WorkerHttpClientFactory.Create(Timeout.InfiniteTimeSpan);
     private static readonly JsonWriterOptions WriterOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
@@ -50,9 +50,11 @@ internal static class AgentRuntimeGeminiProvider
         var parseState = new GeminiParseState();
         WorkerLog.Debug($"gemini request start provider={providerType} model={model} url={url}");
 
-        using var response = await Http.SendAsync(
+        using var response = await AgentRuntimeRequestTimeout.SendAsync(
+            Http,
             request,
-            HttpCompletionOption.ResponseHeadersRead,
+            provider,
+            "Gemini",
             state.CancellationToken);
         if (!response.IsSuccessStatusCode)
         {

@@ -12,7 +12,7 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
     private const string ResponsesWebSocketBetaValue = "responses_websockets=2026-02-06";
     private const string ResponsesWebSocketAgentMainScope = "agent-main";
     private const string ResponsesWebSocketSubAgentScopePrefix = "sub-agent";
-    private static readonly HttpClient Http = WorkerHttpClientFactory.Create();
+    private static readonly HttpClient Http = WorkerHttpClientFactory.Create(Timeout.InfiniteTimeSpan);
     private static readonly JsonWriterOptions WriterOptions = new()
     {
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping

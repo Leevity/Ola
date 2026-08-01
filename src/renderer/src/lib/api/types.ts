@@ -457,6 +457,8 @@ export interface AIModelConfig {
   enableExtendedContextCompression?: boolean
   /** Full context compression trigger ratio, clamped to 0.3 ~ 0.9 */
   contextCompressionThreshold?: number
+  /** Seconds to wait for response headers; 0 waits indefinitely */
+  requestTimeoutSeconds?: number
   maxOutputTokens?: number
   /** Price per million input tokens (USD) */
   inputPrice?: number
