@@ -7,6 +7,7 @@ import type {
 } from '../../channel-types'
 import { BasePluginService } from '../../base-plugin-service'
 import { DiscordApi } from './discord-api'
+import { decodeMessageReplyReference } from '../../message-reply-reference'
 
 export class DiscordService extends BasePluginService {
   readonly pluginType = 'discord-bot'
@@ -30,9 +31,12 @@ export class DiscordService extends BasePluginService {
     return this.api.sendMessage(chatId, content)
   }
 
-  async replyMessage(_messageId: string, content: string): Promise<{ messageId: string }> {
-    // Discord reply requires channelId — stub for now
-    return this.api.sendMessage('', content)
+  async replyMessage(messageId: string, content: string): Promise<{ messageId: string }> {
+    const reference = decodeMessageReplyReference(messageId)
+    if (!reference) {
+      throw new Error('Discord reply target is unavailable; send the message to a channel instead')
+    }
+    return this.api.replyMessage(reference.chatId, reference.messageId, content)
   }
 
   async getGroupMessages(_chatId: string, _count?: number): Promise<ChannelMessage[]> {

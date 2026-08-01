@@ -7,6 +7,7 @@ import type {
 } from '../../channel-types'
 import { BasePluginService } from '../../base-plugin-service'
 import { TelegramApi } from './telegram-api'
+import { decodeMessageReplyReference } from '../../message-reply-reference'
 
 export class TelegramService extends BasePluginService {
   readonly pluginType = 'telegram-bot'
@@ -25,10 +26,12 @@ export class TelegramService extends BasePluginService {
     return this.api.sendMessage(chatId, content)
   }
 
-  async replyMessage(_messageId: string, content: string): Promise<{ messageId: string }> {
-    // Telegram reply requires chatId — for now send without reply context
-    // In practice, the auto-reply pipeline provides chatId
-    return this.api.sendMessage('', content)
+  async replyMessage(messageId: string, content: string): Promise<{ messageId: string }> {
+    const reference = decodeMessageReplyReference(messageId)
+    if (!reference) {
+      throw new Error('Telegram reply target is unavailable; send the message to a chat instead')
+    }
+    return this.api.replyMessage(reference.messageId, reference.chatId, content)
   }
 
   async getGroupMessages(_chatId: string, _count?: number): Promise<ChannelMessage[]> {
