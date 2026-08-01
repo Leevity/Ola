@@ -1,16 +1,38 @@
-import { app } from 'electron'
+import { app, BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
-  DRAW_GRAPH_SCHEMA_VERSION,
   createEmptyDrawGraphProject,
+  isValidDrawGraphProject,
   type DrawGraphProject
 } from '../../shared/draw-graph'
-import { registerMessagePackHandler } from './messagepack-handler'
+import { registerMessagePackHandler as registerRawMessagePackHandler } from './messagepack-handler'
+
+const MAX_PROJECT_BYTES = 10 * 1024 * 1024
+const saveQueues = new Map<string, Promise<void>>()
+
+function registerMessagePackHandler<TArgs, TResult = unknown>(
+  channel: string,
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<TResult> | TResult
+): void {
+  registerRawMessagePackHandler<TArgs, TResult>(channel, async (args, event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    if (
+      !ownerWindow ||
+      ownerWindow.isDestroyed() ||
+      ownerWindow.webContents !== event.sender ||
+      event.senderFrame !== event.sender.mainFrame
+    ) {
+      throw new Error('Unauthorized draw graph IPC sender')
+    }
+    return await handler(args, event)
+  })
+}
 
 function safeProjectId(value: unknown): string {
-  const id = typeof value === 'string' ? value.trim() : 'default'
-  return /^[a-zA-Z0-9_-]{1,64}$/.test(id) ? id : 'default'
+  const id = typeof value === 'string' ? value.trim() : ''
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(id)) throw new Error('Invalid draw project ID')
+  return id
 }
 
 function projectPaths(id: string): { target: string; backup: string; temporary: string } {
@@ -20,17 +42,13 @@ function projectPaths(id: string): { target: string; backup: string; temporary: 
 }
 
 function isProject(value: unknown): value is DrawGraphProject {
-  if (!value || typeof value !== 'object') return false
-  const project = value as Partial<DrawGraphProject>
-  return (
-    project.version === DRAW_GRAPH_SCHEMA_VERSION &&
-    Array.isArray(project.nodes) &&
-    Array.isArray(project.edges)
-  )
+  return isValidDrawGraphProject(value)
 }
 
 async function readProjectFile(filePath: string): Promise<DrawGraphProject | null> {
   try {
+    const stat = await fs.stat(filePath)
+    if (!stat.isFile() || stat.size > MAX_PROJECT_BYTES) return null
     const value: unknown = JSON.parse(await fs.readFile(filePath, 'utf8'))
     return isProject(value) ? value : null
   } catch {
@@ -54,18 +72,31 @@ async function saveProject(project: DrawGraphProject): Promise<{ success: true }
   if (!isProject(project)) throw new Error('Invalid draw graph project')
   const id = safeProjectId(project.id)
   const files = projectPaths(id)
-  await fs.mkdir(path.dirname(files.target), { recursive: true })
-  await fs.writeFile(
-    files.temporary,
-    JSON.stringify({ ...project, id, updatedAt: Date.now() }),
-    'utf8'
-  )
-  try {
-    await fs.copyFile(files.target, files.backup)
-  } catch {
-    // The first save has no previous version to back up.
+  const serialized = JSON.stringify({ ...project, id, updatedAt: Date.now() })
+  if (Buffer.byteLength(serialized, 'utf8') > MAX_PROJECT_BYTES) {
+    throw new Error('Draw graph project exceeds the size limit')
   }
-  await fs.rename(files.temporary, files.target)
+  const previous = saveQueues.get(id) ?? Promise.resolve()
+  const save = previous
+    .catch(() => undefined)
+    .then(async () => {
+      await fs.mkdir(path.dirname(files.target), { recursive: true })
+      const temporary = `${files.target}.${process.pid}.${crypto.randomUUID()}.tmp`
+      await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600 })
+      try {
+        try {
+          await fs.copyFile(files.target, files.backup)
+        } catch {
+          // The first save has no previous version to back up.
+        }
+        await fs.rename(temporary, files.target)
+      } finally {
+        await fs.rm(temporary, { force: true })
+      }
+    })
+  saveQueues.set(id, save)
+  await save
+  if (saveQueues.get(id) === save) saveQueues.delete(id)
   return { success: true }
 }
 
@@ -87,7 +118,7 @@ export function registerDrawGraphHandlers(): void {
     }
   })
   registerMessagePackHandler<{ id?: string }>('draw-graph:load', async ({ id }) =>
-    loadProject(safeProjectId(id))
+    loadProject(safeProjectId(id ?? 'default'))
   )
   registerMessagePackHandler<DrawGraphProject>('draw-graph:save', saveProject)
 }

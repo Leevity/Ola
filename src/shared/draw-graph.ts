@@ -1,4 +1,6 @@
 export const DRAW_GRAPH_SCHEMA_VERSION = 1
+export const DRAW_GRAPH_MAX_NODES = 5_000
+export const DRAW_GRAPH_MAX_EDGES = 10_000
 
 export type DrawGraphNodeKind = 'image' | 'video' | 'text' | 'config'
 export type DrawGraphOperationState =
@@ -67,4 +69,91 @@ export function createEmptyDrawGraphProject(id = 'default'): DrawGraphProject {
     nodes: [],
     edges: []
   }
+}
+
+function isBoundedString(value: unknown, maxLength: number): value is string {
+  return typeof value === 'string' && value.length <= maxLength
+}
+
+function hasSafeParameters(value: unknown): boolean {
+  if (value === undefined) return true
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const entries = Object.entries(value)
+  return (
+    entries.length <= 100 &&
+    entries.every(
+      ([key, item]) =>
+        key.length <= 128 &&
+        (typeof item === 'boolean' ||
+          (typeof item === 'number' && Number.isFinite(item)) ||
+          isBoundedString(item, 20_000))
+    )
+  )
+}
+
+export function isValidDrawGraphProject(value: unknown): value is DrawGraphProject {
+  if (!value || typeof value !== 'object') return false
+  const project = value as Partial<DrawGraphProject>
+  if (
+    project.version !== DRAW_GRAPH_SCHEMA_VERSION ||
+    !/^[a-zA-Z0-9_-]{1,64}$/.test(project.id ?? '') ||
+    !isBoundedString(project.name, 500) ||
+    !Number.isFinite(project.updatedAt) ||
+    !Array.isArray(project.nodes) ||
+    !Array.isArray(project.edges) ||
+    project.nodes.length > DRAW_GRAPH_MAX_NODES ||
+    project.edges.length > DRAW_GRAPH_MAX_EDGES
+  )
+    return false
+
+  const nodeIds = new Set<string>()
+  for (const node of project.nodes) {
+    if (
+      !node ||
+      !isBoundedString(node.id, 128) ||
+      !node.id ||
+      nodeIds.has(node.id) ||
+      !['image', 'video', 'text', 'config'].includes(node.kind) ||
+      ![node.x, node.y, node.width, node.height].every(Number.isFinite) ||
+      node.width <= 0 ||
+      node.height <= 0 ||
+      !isBoundedString(node.title, 500) ||
+      !isBoundedString(node.content, 2_000_000) ||
+      (node.error !== undefined && !isBoundedString(node.error, 20_000)) ||
+      (node.imageOperations !== undefined &&
+        (!Array.isArray(node.imageOperations) ||
+          node.imageOperations.length > 100 ||
+          node.imageOperations.some(
+            (operation) =>
+              !operation ||
+              !isBoundedString(operation.id, 128) ||
+              !['crop', 'mask', 'expand', 'upscale'].includes(operation.type) ||
+              !Number.isFinite(operation.value) ||
+              !hasSafeParameters(operation.parameters) ||
+              (operation.error !== undefined && !isBoundedString(operation.error, 20_000))
+          ))) ||
+      (node.video !== undefined &&
+        (!node.video ||
+          Object.values(node.video).some(
+            (item) => typeof item === 'string' && item.length > 2_000_000
+          )))
+    )
+      return false
+    nodeIds.add(node.id)
+  }
+
+  const edgeIds = new Set<string>()
+  return project.edges.every((edge) => {
+    if (
+      !edge ||
+      !isBoundedString(edge.id, 128) ||
+      !edge.id ||
+      edgeIds.has(edge.id) ||
+      !nodeIds.has(edge.source) ||
+      !nodeIds.has(edge.target)
+    )
+      return false
+    edgeIds.add(edge.id)
+    return true
+  })
 }
