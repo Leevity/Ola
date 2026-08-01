@@ -99,6 +99,7 @@ const toolCard = fs.readFileSync('src/renderer/src/components/chat/ToolCallCard.
 assert.match(tool, /name: 'GenerateVideo'/)
 assert.match(tool, /type: 'video_generation_task'/)
 assert.match(tool, /requiresApproval: \(\) => true/)
+assert.match(tool, /status\.settings\.videoGenerationEnabled/)
 assert.match(toolRegistry, /updateVideoGenerationToolRegistration/)
 assert.match(toolRegistry, /videoGenerationEnabled/)
 assert.match(toolRegistry, /unregisterVideoGenerationTool/)

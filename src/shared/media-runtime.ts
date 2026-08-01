@@ -45,3 +45,10 @@ export interface VideoTask {
 export interface MediaPluginSettings {
   videoGenerationEnabled: boolean
 }
+export interface MediaRuntimeStatus {
+  settings: MediaPluginSettings
+  capabilities: VideoProviderCapability[]
+  totalBytes: number
+  removedFiles: number
+  maxBytes: number
+}

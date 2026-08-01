@@ -43,7 +43,11 @@ import {
   type DrawGraphImageOperation,
   type DrawGraphProject
 } from '../../../../shared/draw-graph'
-import type { VideoProviderCapability, VideoTask } from '../../../../shared/media-runtime'
+import type {
+  MediaRuntimeStatus,
+  VideoProviderCapability,
+  VideoTask
+} from '../../../../shared/media-runtime'
 import { AssetLibraryDialog, type AssetLibraryItem } from './graph/AssetLibraryDialog'
 import { MaskEditorDialog } from './graph/MaskEditorDialog'
 import { PromptLibraryDialog } from './graph/PromptLibraryDialog'
@@ -113,8 +117,8 @@ export function DrawGraphCanvas(): React.JSX.Element {
       return
     }
     void ipcClient.invoke('media:status').then((value) => {
-      const status = value as { capabilities?: VideoProviderCapability[] }
-      setVideoCapabilities(status.capabilities ?? [])
+      const status = value as MediaRuntimeStatus
+      setVideoCapabilities(status.capabilities)
     })
     void refreshVideoTasks()
     const timer = window.setInterval(() => void refreshVideoTasks(), 3000)
