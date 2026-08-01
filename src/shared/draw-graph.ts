@@ -1,6 +1,23 @@
 export const DRAW_GRAPH_SCHEMA_VERSION = 1
 
 export type DrawGraphNodeKind = 'image' | 'video' | 'text' | 'config'
+export type DrawGraphOperationState =
+  | 'idle'
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export interface DrawGraphImageOperation {
+  id: string
+  type: 'crop' | 'mask' | 'expand' | 'upscale'
+  value: number
+  state?: DrawGraphOperationState
+  parameters?: Record<string, string | number | boolean>
+  outputAssetId?: string
+  error?: string
+}
 
 export interface DrawGraphNode {
   id: string
@@ -11,11 +28,10 @@ export interface DrawGraphNode {
   height: number
   title: string
   content: string
-  imageOperations?: Array<{
-    id: string
-    type: 'crop' | 'mask' | 'expand' | 'upscale'
-    value: number
-  }>
+  imageOperations?: DrawGraphImageOperation[]
+  status?: DrawGraphOperationState
+  outputAssetId?: string
+  error?: string
 }
 
 export interface DrawGraphEdge {
