@@ -1,0 +1,4 @@
+interface:
+  display_name: "Code Review"
+  short_description: "Review changes for concrete defects and regressions"
+  default_prompt: "Use $code-review to inspect the current changes and report evidence-backed findings."
