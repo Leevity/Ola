@@ -558,7 +558,7 @@ internal static partial class AgentRuntimeAnthropicMessagesProvider
             writer.WritePropertyName("input_schema");
             if (tool.TryGetProperty("inputSchema", out var schema))
             {
-                schema.WriteTo(writer);
+                WriteAnthropicInputSchema(writer, schema);
             }
             else
             {
@@ -580,6 +580,132 @@ internal static partial class AgentRuntimeAnthropicMessagesProvider
         writer.WriteStartObject();
         writer.WriteString("type", "auto");
         writer.WriteEndObject();
+    }
+
+    private static void WriteAnthropicInputSchema(Utf8JsonWriter writer, JsonElement schema)
+    {
+        if (schema.ValueKind != JsonValueKind.Object || !HasTopLevelSchemaCombinator(schema))
+        {
+            schema.WriteTo(writer);
+            return;
+        }
+
+        var properties = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+        CollectSchemaProperties(schema, properties);
+        foreach (var branch in SchemaBranches(schema, "allOf"))
+        {
+            CollectSchemaProperties(branch, properties);
+        }
+        foreach (var branch in SchemaBranches(schema, "oneOf"))
+        {
+            CollectSchemaProperties(branch, properties);
+        }
+        foreach (var branch in SchemaBranches(schema, "anyOf"))
+        {
+            CollectSchemaProperties(branch, properties);
+        }
+
+        var required = ReadRequired(schema);
+        foreach (var branch in SchemaBranches(schema, "allOf"))
+        {
+            required.UnionWith(ReadRequired(branch));
+        }
+        foreach (var combinator in new[] { "oneOf", "anyOf" })
+        {
+            var alternatives = SchemaBranches(schema, combinator).ToList();
+            if (alternatives.Count > 0)
+            {
+                var common = ReadRequired(alternatives[0]);
+                foreach (var branch in alternatives.Skip(1))
+                {
+                    common.IntersectWith(ReadRequired(branch));
+                }
+                required.UnionWith(common);
+            }
+        }
+
+        writer.WriteStartObject();
+        foreach (var property in schema.EnumerateObject())
+        {
+            if (property.Name is "properties" or "required" or "oneOf" or "anyOf" or "allOf")
+            {
+                continue;
+            }
+            property.WriteTo(writer);
+        }
+        if (!schema.TryGetProperty("type", out _))
+        {
+            writer.WriteString("type", "object");
+        }
+        writer.WriteStartObject("properties");
+        foreach (var property in properties)
+        {
+            writer.WritePropertyName(property.Key);
+            property.Value.WriteTo(writer);
+        }
+        writer.WriteEndObject();
+        if (required.Count > 0)
+        {
+            writer.WriteStartArray("required");
+            foreach (var name in required)
+            {
+                writer.WriteStringValue(name);
+            }
+            writer.WriteEndArray();
+        }
+        writer.WriteEndObject();
+    }
+
+    private static bool HasTopLevelSchemaCombinator(JsonElement schema)
+        => schema.TryGetProperty("oneOf", out _)
+            || schema.TryGetProperty("anyOf", out _)
+            || schema.TryGetProperty("allOf", out _);
+
+    private static IEnumerable<JsonElement> SchemaBranches(JsonElement schema, string name)
+    {
+        if (!schema.TryGetProperty(name, out var branches) || branches.ValueKind != JsonValueKind.Array)
+        {
+            yield break;
+        }
+        foreach (var branch in branches.EnumerateArray())
+        {
+            if (branch.ValueKind == JsonValueKind.Object)
+            {
+                yield return branch;
+            }
+        }
+    }
+
+    private static void CollectSchemaProperties(
+        JsonElement schema,
+        Dictionary<string, JsonElement> properties)
+    {
+        if (!schema.TryGetProperty("properties", out var source) ||
+            source.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+        foreach (var property in source.EnumerateObject())
+        {
+            properties.TryAdd(property.Name, property.Value);
+        }
+    }
+
+    private static SortedSet<string> ReadRequired(JsonElement schema)
+    {
+        var required = new SortedSet<string>(StringComparer.Ordinal);
+        if (!schema.TryGetProperty("required", out var values) || values.ValueKind != JsonValueKind.Array)
+        {
+            return required;
+        }
+        foreach (var value in values.EnumerateArray())
+        {
+            if (value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } name)
+            {
+                required.Add(name);
+            }
+        }
+        return required;
     }
 
     private static HashSet<string> CollectAnthropicMessageCacheTargets(
