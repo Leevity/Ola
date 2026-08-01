@@ -783,6 +783,8 @@
       "upscale": "Upscale",
       "project": "Canvas",
       "promptLibrary": "Prompt Library",
+      "assistantTitle": "Canvas Assistant",
+      "assistantDraft": "Help me improve canvas project {{projectId}}. Inspect it first, explain the proposed changes, and use only CanvasOperation for canvas mutations.",
       "assetLibrary": "Asset Library",
       "assets": "assets",
       "videoProviderDisabled": "Configure and enable a video provider to start this node",
