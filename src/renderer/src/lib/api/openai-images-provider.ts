@@ -17,10 +17,26 @@ interface Base64ImageInput {
   mediaType?: string
 }
 
-interface GeneratedImage {
+export interface GeneratedImage {
   sourceType: 'base64' | 'url'
   data: string
   mediaType: string
+}
+
+export async function generateNativeOpenAIImages(args: {
+  config: ProviderConfig
+  prompt: string
+  images?: Base64ImageInput[]
+  signal?: AbortSignal
+}): Promise<GeneratedImage[]> {
+  if (args.signal?.aborted) throw new Error('Image request was cancelled')
+  const result = await requestNativeImages({
+    config: args.config,
+    prompt: args.prompt,
+    images: args.images ?? []
+  })
+  if (args.signal?.aborted) throw new Error('Image request was cancelled')
+  return result
 }
 
 interface NativeOpenAIImagesResult {

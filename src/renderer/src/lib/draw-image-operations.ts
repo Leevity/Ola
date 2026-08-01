@@ -69,6 +69,13 @@ export async function normalizeImageFile(file: File): Promise<RasterAsset> {
   }
 }
 
+export async function rasterSourceToDataUrl(source: string): Promise<RasterAsset> {
+  const image = await loadRasterImage(source)
+  const { canvas, context } = createCanvas(image.naturalWidth, image.naturalHeight)
+  context.drawImage(image, 0, 0)
+  return output(canvas)
+}
+
 export async function cropRaster(source: string, parameters: CropParameters): Promise<RasterAsset> {
   const image = await loadRasterImage(source)
   const x = boundedInteger(parameters.x, 0, image.naturalWidth - 1)

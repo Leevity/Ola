@@ -20,7 +20,7 @@ export type DrawGraphOperationState =
 
 export interface DrawGraphImageOperation {
   id: string
-  type: 'crop' | 'mask' | 'expand' | 'outpaint' | 'upscale'
+  type: 'crop' | 'mask' | 'expand' | 'outpaint' | 'upscale' | 'angle'
   value: number
   state?: DrawGraphOperationState
   parameters?: Record<string, string | number | boolean>
@@ -147,7 +147,9 @@ export function isValidDrawGraphProject(value: unknown): value is DrawGraphProje
             (operation) =>
               !operation ||
               !isBoundedString(operation.id, 128) ||
-              !['crop', 'mask', 'expand', 'outpaint', 'upscale'].includes(operation.type) ||
+              !['crop', 'mask', 'expand', 'outpaint', 'upscale', 'angle'].includes(
+                operation.type
+              ) ||
               !Number.isFinite(operation.value) ||
               !hasSafeParameters(operation.parameters) ||
               (operation.error !== undefined && !isBoundedString(operation.error, 20_000))
