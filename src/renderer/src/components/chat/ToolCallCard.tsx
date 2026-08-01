@@ -61,6 +61,7 @@ import { parseExtensionToolResult } from '@renderer/lib/extensions/extension-res
 import { BashArtifactsCard } from './BashArtifactsCard'
 import { CodeGraphToolCard } from './CodeGraphToolCard'
 import { WebSearchBlock } from './WebSearchBlock'
+import { VideoGenerationTaskCard } from './VideoGenerationTaskCard'
 
 interface ToolCallCardProps {
   toolUseId?: string
@@ -3500,6 +3501,9 @@ function ToolCallCardInner({
                 {shouldRenderOutputPanels && name === 'codegraph_explore' && outputText ? (
                   <CodeGraphToolCard output={outputText} />
                 ) : null}
+                {shouldRenderOutputPanels && name === 'GenerateVideo' && output ? (
+                  <VideoGenerationTaskCard output={output} />
+                ) : null}
                 {shouldRenderOutputPanels && output && name === 'Grep' && outputText && (
                   <GrepOutputBlock output={outputText} pattern={String(input.pattern ?? '')} />
                 )}
@@ -3561,7 +3565,8 @@ function ToolCallCardInner({
                     'Skill',
                     'visualize_show_widget',
                     'WebSearch',
-                    'codegraph_explore'
+                    'codegraph_explore',
+                    'GenerateVideo'
                   ].includes(name) &&
                   (hasImageBlocks(output) ? (
                     <ImageOutputBlock output={output} />
