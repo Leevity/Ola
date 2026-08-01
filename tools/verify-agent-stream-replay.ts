@@ -6,6 +6,8 @@ const receiver = await readFile('src/renderer/src/lib/ipc/agent-stream-receiver.
 const routing = await readFile('src/renderer/src/lib/ipc/messagepack-channel-routing.ts', 'utf8')
 const runtime = await readFile('src/main/ipc/native-agent-runtime.ts', 'utf8')
 const bridge = await readFile('src/renderer/src/lib/ipc/agent-bridge.ts', 'utf8')
+const reattach = await readFile('src/renderer/src/lib/agent/runtime-reattach.ts', 'utf8')
+const app = await readFile('src/renderer/src/App.tsx', 'utf8')
 const workerModule = await readFile(
   'sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs',
   'utf8'
@@ -39,6 +41,13 @@ assert.match(manager, /frames\.at\(-1\)\?\.seq === untilSeq/)
 
 assert.match(routing, /'agent:stream-replay'/)
 assert.match(routing, /'agent:run-snapshot'/)
+assert.match(routing, /'agent:runtime-state'/)
+assert.match(routing, /'agent:attach-run'/)
+assert.match(manager, /'agent:runtime-state'/)
+assert.match(manager, /'agent:attach-run'/)
+assert.match(manager, /cached\.ownerWindowId === sourceWindow\.id/)
+assert.match(manager, /!cached\.terminal/)
+assert.match(manager, /cached\.frames\.filter\(\(frame\) => frame\.seq > sinceSeq\)/)
 assert.match(manager, /'agent:run-snapshot'/)
 assert.match(manager, /isAgentRunOwnedBy\(event, runId, runWindowIds\)/)
 assert.match(manager, /reason: 'not_owner'/)
@@ -46,6 +55,8 @@ assert.match(runtime, /async runSnapshot\(runId: string\)/)
 assert.match(runtime, /'agent\/run-snapshot'/)
 assert.match(runtime, /generation: worker\.generation/)
 assert.match(bridge, /async getAgentRunSnapshot\(runId: string\)/)
+assert.match(bridge, /async getAgentRuntimeState\(\)/)
+assert.match(bridge, /async attachAgentRun\(/)
 assert.match(
   workerModule,
   /context\.Register\(AgentRuntimeContract\.RunSnapshotRoute, AgentRuntimeTools\.RunSnapshot\)/
@@ -67,6 +78,14 @@ assert.match(receiver, /this\.lastSeqByRun\.delete\(envelope\.runId\)/)
 assert.match(receiver, /private unrecoverableRunIds = new Set<string>\(\)/)
 assert.match(receiver, /if \(this\.unrecoverableRunIds\.has\(envelope\.runId\)\) return/)
 assert.match(receiver, /while \(this\.unrecoverableRunIds\.size > 256\)/)
+assert.match(receiver, /getLastSeq\(runId: string\)/)
+assert.match(receiver, /ingest\(envelopes: ReadonlyArray<AgentStreamEnvelope>\)/)
+assert.match(reattach, /agentStream\.subscribe\(run\.runId/)
+assert.match(reattach, /agentBridge\.attachAgentRun\(/)
+assert.match(reattach, /agentStream\.ingest\(response\.frames\)/)
+assert.match(reattach, /loadRecentSessionMessages\(run\.sessionId, true\)/)
+assert.match(reattach, /setStreamingMessageId\(run\.sessionId, run\.assistantMessageId\)/)
+assert.match(app, /reattachActiveAgentRuns\(\)/)
 assert.match(packageJson, /"verify:agent-stream-replay"/)
 assert.match(packageJson, /npm run verify:agent-stream-replay/)
 
