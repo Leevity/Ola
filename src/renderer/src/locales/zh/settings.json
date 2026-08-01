@@ -1098,6 +1098,8 @@
     "contextLength": "上下文长度",
     "contextCompressionThreshold": "上下文压缩阈值 (%)",
     "contextCompressionThresholdDesc": "达到模型上下文窗口使用率后触发正式压缩，范围 {{min}}% - {{max}}%",
+    "requestTimeoutSeconds": "API 请求超时（秒）",
+    "requestTimeoutSecondsDesc": "等待响应头的最长时间，设为 0 表示无限等待。",
     "enabledModels": "已启用模型",
     "noModels": "未配置模型",
     "noModelsHint": "从 API 获取或手动添加",

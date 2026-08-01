@@ -33,9 +33,11 @@ internal static partial class AgentRuntimeOpenAIResponsesProvider
         request.Content = new StringContent(body, Encoding.UTF8, "application/json");
         ApplyOpenAIHeaders(request, provider, websocket: false);
 
-        using var response = await Http.SendAsync(
+        using var response = await AgentRuntimeRequestTimeout.SendAsync(
+            Http,
             request,
-            HttpCompletionOption.ResponseHeadersRead,
+            provider,
+            "OpenAI Responses",
             state.CancellationToken);
         if (!response.IsSuccessStatusCode)
         {

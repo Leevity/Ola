@@ -1098,6 +1098,8 @@
     "contextLength": "Context Length",
     "contextCompressionThreshold": "Context compression threshold (%)",
     "contextCompressionThresholdDesc": "Trigger full compression at this context usage ratio. Range: {{min}}% - {{max}}%",
+    "requestTimeoutSeconds": "API request timeout (seconds)",
+    "requestTimeoutSecondsDesc": "Time to wait for response headers. Set to 0 to wait indefinitely.",
     "enabledModels": "Enabled Models",
     "noModels": "No models configured",
     "noModelsHint": "Fetch from API or add manually",
