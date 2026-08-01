@@ -374,9 +374,11 @@ export function DrawGraphCanvas(): React.JSX.Element {
       )
     }))
     setOperationState(nodeId, operationId, 'running')
+    const controller = type === 'outpaint' ? new AbortController() : null
+    if (controller) imageOperationControllers.current.set(operationId, controller)
     try {
       const source = `ola-draw-asset://${sourceNode.asset.id}`
-      const result: RasterAsset & { maskDataUrl?: string } =
+      let result: RasterAsset & { maskDataUrl?: string } =
         type === 'crop'
           ? await cropRaster(source, {
               x: parameters.x,
@@ -392,6 +394,45 @@ export function DrawGraphCanvas(): React.JSX.Element {
                 bottom: parameters.bottom
               })
             : await upscaleRaster(source, 2)
+      if (type === 'outpaint') {
+        const providerConfig = useProviderStore.getState().getImageProviderConfig()
+        if (!providerConfig?.providerId) {
+          throw new Error(
+            t('drawPage.graph.imageProviderRequired', {
+              defaultValue: 'Configure an enabled image generation model first.'
+            })
+          )
+        }
+        if (!(await ensureProviderAuthReady(providerConfig.providerId))) {
+          throw new Error(
+            t('drawPage.graph.imageProviderAuthRequired', {
+              defaultValue: 'Image provider authentication is required.'
+            })
+          )
+        }
+        const outputs = await generateNativeOpenAIImages({
+          config: providerConfig,
+          prompt: [
+            'Extend this image naturally into the transparent border.',
+            'Preserve the original subject, composition, lighting, colors, and visual style.',
+            sourceNode.content.trim()
+          ]
+            .filter(Boolean)
+            .join(' '),
+          images: [{ dataUrl: result.dataUrl, mediaType: 'image/png' }],
+          signal: controller?.signal
+        })
+        const generated = outputs[0]
+        if (!generated) throw new Error('Image provider returned no output')
+        result =
+          generated.sourceType === 'base64'
+            ? {
+                dataUrl: `data:${generated.mediaType};base64,${generated.data}`,
+                width: result.width,
+                height: result.height
+              }
+            : await rasterSourceToDataUrl(generated.data)
+      }
       const outputAsset = await saveAsset(result.dataUrl)
       let maskAssetId: string | undefined
       if (result.maskDataUrl) maskAssetId = (await saveAsset(result.maskDataUrl)).id
@@ -415,9 +456,15 @@ export function DrawGraphCanvas(): React.JSX.Element {
       setOperationState(nodeId, operationId, 'completed', { outputAssetId: outputAsset.id })
       setSelected([outputNodeId])
     } catch (error) {
-      setOperationState(nodeId, operationId, 'failed', {
-        error: error instanceof Error ? error.message : String(error)
-      })
+      if (controller?.signal.aborted) {
+        setOperationState(nodeId, operationId, 'cancelled')
+      } else {
+        setOperationState(nodeId, operationId, 'failed', {
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    } finally {
+      imageOperationControllers.current.delete(operationId)
     }
   }
 
@@ -992,7 +1039,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
                             {t('drawPage.graph.retry', { defaultValue: 'Retry' })}
                           </Button>
                         ) : null}
-                        {operation.type === 'angle' &&
+                        {['angle', 'outpaint'].includes(operation.type) &&
                         ['queued', 'running'].includes(operation.state ?? '') ? (
                           <Button
                             size="sm"
