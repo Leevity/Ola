@@ -289,7 +289,10 @@
       "session": "会话状态",
       "transfers": "传输总览",
       "uploadPanel": "当前上传",
-      "retryTask": "续传"
+      "retryTask": "续传",
+      "pauseTask": "暂停",
+      "remaining": "剩余 {{duration}}",
+      "retryCount": "已重试 {{count}} 次"
     },
     "uploads": {
       "title": "上传",
