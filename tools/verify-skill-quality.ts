@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict'
 import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { spawnSync } from 'node:child_process'
+
+async function collectFiles(directory: string): Promise<string[]> {
+  const files: string[] = []
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const target = path.join(directory, entry.name)
+    if (entry.isDirectory()) files.push(...(await collectFiles(target)))
+    else if (entry.isFile()) files.push(target)
+  }
+  return files
+}
 
 const root = path.resolve('resources/skills')
 const entries = await readdir(root, { withFileTypes: true })
@@ -48,4 +59,30 @@ for (const folderName of skillNames) {
   }
 }
 
-console.log(`Verified ${skillNames.length} bundled skill manifests.`)
+const scriptFiles = await collectFiles(root)
+const pythonFiles = scriptFiles.filter((file) => file.endsWith('.py'))
+if (pythonFiles.length > 0) {
+  const syntaxCheck = spawnSync(
+    'python3',
+    [
+      '-c',
+      'import ast,pathlib,sys; [ast.parse(pathlib.Path(p).read_text(encoding="utf-8"), filename=p) for p in sys.argv[1:]]',
+      ...pythonFiles
+    ],
+    { encoding: 'utf8' }
+  )
+  assert.equal(
+    syntaxCheck.status,
+    0,
+    `bundled Python skill scripts must parse on the supported runtime:\n${syntaxCheck.stderr}`
+  )
+}
+
+for (const script of scriptFiles.filter((file) => /\.(?:js|mjs)$/.test(file))) {
+  const syntaxCheck = spawnSync(process.execPath, ['--check', script], { encoding: 'utf8' })
+  assert.equal(syntaxCheck.status, 0, `${script}: invalid JavaScript\n${syntaxCheck.stderr}`)
+}
+
+console.log(
+  `Verified ${skillNames.length} bundled skill manifests and ${pythonFiles.length} Python scripts.`
+)
