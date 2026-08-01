@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import {
   Activity,
@@ -564,6 +565,7 @@ function HostsWorkspace({
   const [importOpen, setImportOpen] = useState(false)
   const [inspectorDialogOpen, setInspectorDialogOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const hostListRef = useRef<HTMLDivElement>(null)
 
   const quickConnectTarget = useMemo(() => parseQuickConnect(searchQuery), [searchQuery])
 
@@ -586,6 +588,13 @@ function HostsWorkspace({
       )
     })
   }, [connections, quickConnectTarget, searchQuery, selectedGroupId])
+  const hostVirtualizer = useVirtualizer({
+    count: visibleConnections.length,
+    getScrollElement: () => hostListRef.current,
+    estimateSize: () => 76,
+    overscan: 8,
+    getItemKey: (index) => visibleConnections[index]?.id ?? index
+  })
 
   const selectedConnection =
     inspectorMode === 'edit' && detailConnectionId
@@ -942,7 +951,7 @@ function HostsWorkspace({
                 </div>
               </div>
             ) : (
-              <div className="min-h-0 flex-1 overflow-auto">
+              <div ref={hostListRef} className="min-h-0 flex-1 overflow-auto">
                 <div className="min-w-[1020px] border-b border-[#2d2d2d] bg-[#1b1b1b] px-2 py-3 text-[12px] text-[#9ca3af]">
                   <div className="grid grid-cols-[44px_44px_76px_96px_minmax(170px,1fr)_220px_minmax(230px,280px)_176px] items-center">
                     <div />
@@ -956,30 +965,46 @@ function HostsWorkspace({
                   </div>
                 </div>
 
-                {visibleConnections.map((connection) => {
-                  const testInfo = testStatus[connection.id]
-                  const fresh =
-                    typeof testInfo?.at === 'number' &&
-                    Date.now() - testInfo.at < TEST_STATUS_TTL_MS
-                  const testOk = fresh ? testInfo?.ok : undefined
-                  const session = getSessionForConnection(sessions, connection.id)
+                <div
+                  className="relative min-w-[1020px]"
+                  style={{ height: hostVirtualizer.getTotalSize() }}
+                >
+                  {hostVirtualizer.getVirtualItems().map((virtualRow) => {
+                    const connection = visibleConnections[virtualRow.index]
+                    if (!connection) return null
+                    const testInfo = testStatus[connection.id]
+                    const fresh =
+                      typeof testInfo?.at === 'number' &&
+                      Date.now() - testInfo.at < TEST_STATUS_TTL_MS
+                    const testOk = fresh ? testInfo?.ok : undefined
+                    const session = getSessionForConnection(sessions, connection.id)
 
-                  return (
-                    <HostRow
-                      key={connection.id}
-                      connection={connection}
-                      group={groups.find((group) => group.id === connection.groupId)}
-                      session={session}
-                      isSelected={inspectorMode === 'edit' && detailConnectionId === connection.id}
-                      isTesting={testingId === connection.id}
-                      testOk={testOk}
-                      onSelect={() => handleSelectConnection(connection.id)}
-                      onEdit={() => handleEditConnection(connection.id)}
-                      onConnect={() => onConnect(connection.id)}
-                      onTest={() => void handleTest(connection.id)}
-                    />
-                  )
-                })}
+                    return (
+                      <div
+                        key={connection.id}
+                        ref={hostVirtualizer.measureElement}
+                        data-index={virtualRow.index}
+                        className="absolute left-0 top-0 w-full"
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      >
+                        <HostRow
+                          connection={connection}
+                          group={groups.find((group) => group.id === connection.groupId)}
+                          session={session}
+                          isSelected={
+                            inspectorMode === 'edit' && detailConnectionId === connection.id
+                          }
+                          isTesting={testingId === connection.id}
+                          testOk={testOk}
+                          onSelect={() => handleSelectConnection(connection.id)}
+                          onEdit={() => handleEditConnection(connection.id)}
+                          onConnect={() => onConnect(connection.id)}
+                          onTest={() => void handleTest(connection.id)}
+                        />
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
           </main>

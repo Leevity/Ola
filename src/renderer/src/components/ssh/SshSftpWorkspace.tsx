@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeftRight, PanelRightOpen, Server } from 'lucide-react'
 import { toast } from 'sonner'
@@ -182,6 +183,16 @@ function TransferTaskList({
   onClear: (taskId: string) => void
 }): React.JSX.Element {
   const { t } = useTranslation('ssh')
+  const taskListRef = useRef<HTMLDivElement>(null)
+  // TanStack Virtual intentionally returns mutable measurement callbacks.
+  // eslint-disable-next-line react-hooks/incompatible-library
+  const taskVirtualizer = useVirtualizer({
+    count: tasks.length,
+    getScrollElement: () => taskListRef.current,
+    estimateSize: () => 180,
+    overscan: 5,
+    getItemKey: (index) => tasks[index]?.taskId ?? index
+  })
 
   if (tasks.length === 0) {
     return (
@@ -192,75 +203,84 @@ function TransferTaskList({
   }
 
   return (
-    <div className="space-y-3 px-4 py-4">
-      {tasks.map((task) => {
-        const percent = task.progress?.percent ?? 0
-        const active = !['done', 'error', 'canceled'].includes(task.stage)
+    <div ref={taskListRef} className="h-full overflow-auto px-4 py-4">
+      <div className="relative" style={{ height: taskVirtualizer.getTotalSize() }}>
+        {taskVirtualizer.getVirtualItems().map((virtualRow) => {
+          const task = tasks[virtualRow.index]
+          if (!task) return null
+          const percent = task.progress?.percent ?? 0
+          const active = !['done', 'error', 'canceled'].includes(task.stage)
 
-        return (
-          <div
-            key={task.taskId}
-            className="rounded-[22px] border border-border bg-card px-4 py-4 shadow-[0_14px_30px_-22px_color-mix(in_srgb,var(--foreground)_18%,transparent)]"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate text-[0.9rem] font-semibold text-foreground">
-                  {formatTaskTitle(task)}
-                </div>
-                <div className="mt-1 truncate text-[0.76rem] text-muted-foreground">
-                  {task.message || task.currentItem || task.taskId}
-                </div>
-                <div className="mt-1 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                  {task.stage}
-                </div>
-              </div>
+          return (
+            <div
+              key={task.taskId}
+              ref={taskVirtualizer.measureElement}
+              data-index={virtualRow.index}
+              className="absolute left-0 top-0 w-full pb-3"
+              style={{ transform: `translateY(${virtualRow.start}px)` }}
+            >
+              <div className="rounded-[22px] border border-border bg-card px-4 py-4 shadow-[0_14px_30px_-22px_color-mix(in_srgb,var(--foreground)_18%,transparent)]">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-[0.9rem] font-semibold text-foreground">
+                      {formatTaskTitle(task)}
+                    </div>
+                    <div className="mt-1 truncate text-[0.76rem] text-muted-foreground">
+                      {task.message || task.currentItem || task.taskId}
+                    </div>
+                    <div className="mt-1 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                      {task.stage}
+                    </div>
+                  </div>
 
-              <div className="flex gap-2">
-                {task.stage === 'error' && task.request ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
-                    onClick={() => onRetry(task.taskId)}
-                  >
-                    {t('sftp.retryTask', { defaultValue: 'Resume' })}
-                  </Button>
-                ) : null}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
-                  onClick={() => (active ? onCancel(task.taskId) : onClear(task.taskId))}
-                >
-                  {active
-                    ? t('workspace.sftp.cancelTask', { defaultValue: 'Cancel' })
-                    : t('workspace.sftp.clearTask', { defaultValue: 'Clear' })}
-                </Button>
+                  <div className="flex gap-2">
+                    {task.stage === 'error' && task.request ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
+                        onClick={() => onRetry(task.taskId)}
+                      >
+                        {t('sftp.retryTask', { defaultValue: 'Resume' })}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
+                      onClick={() => (active ? onCancel(task.taskId) : onClear(task.taskId))}
+                    >
+                      {active
+                        ? t('workspace.sftp.cancelTask', { defaultValue: 'Cancel' })
+                        : t('workspace.sftp.clearTask', { defaultValue: 'Clear' })}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <div className="h-2 rounded-full bg-muted">
+                    <div
+                      className="h-2 rounded-full bg-primary transition-all"
+                      style={{ width: `${Math.max(4, percent)}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[0.72rem] text-muted-foreground">
+                    <span>{percent}%</span>
+                    <span>
+                      {task.progress?.processedItems ?? 0}/{task.progress?.totalItems ?? 0}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-[0.72rem] text-muted-foreground">
+                    {(task.progress?.currentBytes ?? 0) > 0 || (task.progress?.totalBytes ?? 0) > 0
+                      ? `${formatBytes(task.progress?.currentBytes)} / ${formatBytes(task.progress?.totalBytes)}`
+                      : '--'}
+                  </div>
+                </div>
               </div>
             </div>
-
-            <div className="mt-4">
-              <div className="h-2 rounded-full bg-muted">
-                <div
-                  className="h-2 rounded-full bg-primary transition-all"
-                  style={{ width: `${Math.max(4, percent)}%` }}
-                />
-              </div>
-              <div className="mt-2 flex items-center justify-between text-[0.72rem] text-muted-foreground">
-                <span>{percent}%</span>
-                <span>
-                  {task.progress?.processedItems ?? 0}/{task.progress?.totalItems ?? 0}
-                </span>
-              </div>
-              <div className="mt-1 text-[0.72rem] text-muted-foreground">
-                {(task.progress?.currentBytes ?? 0) > 0 || (task.progress?.totalBytes ?? 0) > 0
-                  ? `${formatBytes(task.progress?.currentBytes)} / ${formatBytes(task.progress?.totalBytes)}`
-                  : '--'}
-              </div>
-            </div>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
