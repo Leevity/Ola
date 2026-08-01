@@ -31,7 +31,7 @@ function waitForRun(client, runId, timeoutMs = 20_000) {
   })
 }
 
-async function runAgent(client, baseUrl, scenario, providerType, maxAttempts) {
+async function runAgent(client, baseUrl, scenario, providerType, maxAttempts, options = {}) {
   const runId = `${scenario}-${providerType}`
   const complete = waitForRun(client, runId)
   await client.request('agent/run', {
@@ -42,9 +42,10 @@ async function runAgent(client, baseUrl, scenario, providerType, maxAttempts) {
       type: providerType,
       apiKey: 'test-key',
       baseUrl: `${baseUrl}/${scenario}`,
-      model: 'retry-verification-model'
+      model: 'retry-verification-model',
+      ...options.provider
     },
-    tools: [],
+    tools: options.tools ?? [],
     maxIterations: 1,
     providerRetryMaxAttempts: maxAttempts,
     forceApproval: false
@@ -58,10 +59,31 @@ function retryEvents(events) {
 
 async function main() {
   const counts = new Map()
+  const requestBodies = new Map()
   const server = createServer((request, response) => {
     const scenario = request.url?.split('/').filter(Boolean)[0] ?? 'unknown'
     const count = (counts.get(scenario) ?? 0) + 1
     counts.set(scenario, count)
+
+    if (scenario === 'schema') {
+      const chunks = []
+      request.on('data', (chunk) => chunks.push(chunk))
+      request.on('end', () => {
+        requestBodies.set(scenario, JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        response.writeHead(400, { 'content-type': 'application/json' })
+        response.end('{"error":"schema captured"}')
+      })
+      return
+    }
+    if (scenario === 'timeout') {
+      setTimeout(() => {
+        if (!response.headersSent) {
+          response.writeHead(200, { 'content-type': 'text/event-stream' })
+          response.end()
+        }
+      }, 2_000)
+      return
+    }
 
     if (scenario === 'bad-request') {
       response.writeHead(400, { 'content-type': 'application/json' })
@@ -96,6 +118,68 @@ async function main() {
     const badRequestEvents = await badRequest.complete
     assert(retryEvents(badRequestEvents).length === 0, 'HTTP 400 must not retry')
     assert(counts.get('bad-request') === 1, 'HTTP 400 issued more than one request')
+
+    const schema = await runAgent(client, baseUrl, 'schema', 'anthropic', 1, {
+      tools: [
+        {
+          name: 'combined_schema',
+          description: 'schema verification',
+          inputSchema: {
+            type: 'object',
+            properties: { shared: { type: 'string' } },
+            required: ['shared'],
+            allOf: [
+              {
+                properties: { always: { type: 'boolean' } },
+                required: ['always']
+              }
+            ],
+            oneOf: [
+              {
+                properties: { left: { type: 'string' }, common: { type: 'number' } },
+                required: ['left', 'common']
+              },
+              {
+                properties: { right: { type: 'string' }, common: { type: 'number' } },
+                required: ['right', 'common']
+              }
+            ]
+          }
+        }
+      ]
+    })
+    await schema.complete
+    const capturedSchema = requestBodies.get('schema')?.tools?.[0]?.input_schema
+    assert(capturedSchema, 'Anthropic request schema was not captured')
+    assert(
+      !capturedSchema.oneOf && !capturedSchema.anyOf && !capturedSchema.allOf,
+      'top-level schema combinator was preserved'
+    )
+    assert(
+      ['shared', 'always', 'common'].every((name) => capturedSchema.required.includes(name)),
+      'required fields were not normalized'
+    )
+    assert(
+      !capturedSchema.required.includes('left') && !capturedSchema.required.includes('right'),
+      'alternative-only field became required'
+    )
+    assert(
+      ['shared', 'always', 'left', 'right', 'common'].every(
+        (name) => capturedSchema.properties[name]
+      ),
+      'schema properties were not merged'
+    )
+
+    const timeoutStartedAt = Date.now()
+    const timedOut = await runAgent(client, baseUrl, 'timeout', 'openai-chat', 1, {
+      provider: { requestTimeoutSeconds: 1 }
+    })
+    const timeoutEvents = await timedOut.complete
+    assert(Date.now() - timeoutStartedAt < 1_800, 'response deadline was not enforced')
+    assert(
+      timeoutEvents.some((event) => event.type === 'error' && event.message?.includes('within 1s')),
+      'response deadline did not surface a distinct timeout error'
+    )
 
     const exhausted = await runAgent(client, baseUrl, 'exhausted', 'openai-responses', 3)
     const exhaustedEvents = await exhausted.complete
