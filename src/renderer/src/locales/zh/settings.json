@@ -1602,6 +1602,7 @@
     "builtinDesc": "本地内置技能列表（无需 API 密钥）",
     "builtinInfo": "使用随应用打包的内置技能。安装市场技能时会下载官方技能包并在本地执行安全检查。",
     "skillsmpInfo": "从 skills.ola.shop 获取最新技能目录。搜索无需 API 密钥；如需额外能力，可在 Dashboard 生成密钥并参考 Docs 配置。",
+    "catalogInfo": "浏览当前技能目录，并在安装前于本地审查每个技能包。API 密钥为可选配置。",
     "apiKey": "API 密钥",
     "apiKeyDesc": "可选：您的 Ola Skills API 密钥（如有）",
     "apiKeyPlaceholder": "sk_live_...",

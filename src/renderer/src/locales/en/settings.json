@@ -1602,6 +1602,7 @@
     "builtinDesc": "Local bundled skills list (no API key required)",
     "builtinInfo": "Uses the bundled skills shipped with the app. Marketplace installs download the official skill package and run local safety checks before installation.",
     "skillsmpInfo": "Fetches the latest skills catalog from skills.ola.shop. Browsing no longer requires an API key; if you need extra capabilities, create one in Dashboard and use Docs for setup.",
+    "catalogInfo": "Browse the current skill catalog and review each package locally before installation. An API key is optional.",
     "apiKey": "API Key",
     "apiKeyDesc": "Optional: your Ola Skills API key, if you have one",
     "apiKeyPlaceholder": "sk_live_...",
