@@ -91,11 +91,20 @@ assert.doesNotMatch(runtime, /apiKey\s*:/)
 
 const tool = fs.readFileSync('src/renderer/src/lib/tools/video-generation-tool.ts', 'utf8')
 const toolRegistry = fs.readFileSync('src/renderer/src/lib/tools/index.ts', 'utf8')
+const taskCard = fs.readFileSync(
+  'src/renderer/src/components/chat/VideoGenerationTaskCard.tsx',
+  'utf8'
+)
+const toolCard = fs.readFileSync('src/renderer/src/components/chat/ToolCallCard.tsx', 'utf8')
 assert.match(tool, /name: 'GenerateVideo'/)
 assert.match(tool, /type: 'video_generation_task'/)
 assert.match(tool, /requiresApproval: \(\) => true/)
 assert.match(toolRegistry, /updateVideoGenerationToolRegistration/)
 assert.match(toolRegistry, /videoGenerationEnabled/)
 assert.match(toolRegistry, /unregisterVideoGenerationTool/)
+assert.match(taskCard, /media:tasks-list/)
+assert.match(taskCard, /media:task-cancel/)
+assert.match(taskCard, /ola-media:\/\//)
+assert.match(toolCard, /VideoGenerationTaskCard/)
 
 console.log('Media runtime verification passed')
