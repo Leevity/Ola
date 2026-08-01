@@ -18,17 +18,46 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { cn } from '@renderer/lib/utils'
+import {
+  buildMask,
+  cropRaster,
+  expandRaster,
+  normalizeImageFile,
+  upscaleRaster,
+  type MaskStroke,
+  type RasterAsset
+} from '@renderer/lib/draw-image-operations'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import {
   createEmptyDrawGraphProject,
   type DrawGraphNode,
+  type DrawGraphAssetRef,
+  type DrawGraphImageOperation,
   type DrawGraphProject
 } from '../../../../shared/draw-graph'
 import type { VideoProviderCapability, VideoTask } from '../../../../shared/media-runtime'
 
 type Snapshot = Pick<DrawGraphProject, 'nodes' | 'edges'>
+type AssetLibraryItem = DrawGraphAssetRef & { url: string }
+
+function toAssetRef(asset: AssetLibraryItem): DrawGraphAssetRef {
+  return {
+    id: asset.id,
+    mediaType: asset.mediaType,
+    width: asset.width,
+    height: asset.height,
+    ...(asset.maskAssetId ? { maskAssetId: asset.maskAssetId } : {})
+  }
+}
 
 export function DrawGraphCanvas(): React.JSX.Element {
   const { t } = useTranslation('layout')
@@ -40,6 +69,11 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
   const [videoCapabilities, setVideoCapabilities] = useState<VideoProviderCapability[]>([])
   const [videoTasks, setVideoTasks] = useState<Map<string, VideoTask>>(new Map())
+  const [maskNodeId, setMaskNodeId] = useState<string | null>(null)
+  const [maskStrokes, setMaskStrokes] = useState<MaskStroke[]>([])
+  const [maskBrushSize, setMaskBrushSize] = useState(48)
+  const [assetLibraryOpen, setAssetLibraryOpen] = useState(false)
+  const [assetLibrary, setAssetLibrary] = useState<AssetLibraryItem[]>([])
   const advancedDrawEnabled = useSettingsStore((state) => state.advancedDrawEnabled)
   const videoGenerationEnabled = useSettingsStore((state) => state.videoGenerationEnabled)
   const loaded = useRef(false)
@@ -144,6 +178,11 @@ export function DrawGraphCanvas(): React.JSX.Element {
     () => new Map(project.nodes.map((node) => [node.id, node])),
     [project.nodes]
   )
+  const selectedImageBusy = Boolean(
+    nodeMap
+      .get(selected[0])
+      ?.imageOperations?.some((operation) => ['queued', 'running'].includes(operation.state ?? ''))
+  )
   const connect = (): void => {
     if (selected.length !== 2) return
     const [source, target] = selected
@@ -153,9 +192,123 @@ export function DrawGraphCanvas(): React.JSX.Element {
       edges: [...current.edges, { id: nanoid(), source, target }]
     }))
   }
-  const applyImageOperation = (type: 'crop' | 'mask' | 'expand' | 'upscale'): void => {
+  const saveAsset = async (dataUrl: string): Promise<DrawGraphAssetRef & { url: string }> =>
+    (await ipcClient.invoke('draw-graph:asset-save', { dataUrl })) as AssetLibraryItem
+
+  const refreshAssetLibrary = useCallback(async (): Promise<void> => {
+    setAssetLibrary((await ipcClient.invoke('draw-graph:assets-list')) as AssetLibraryItem[])
+  }, [])
+
+  const attachImage = async (nodeId: string, file: File): Promise<void> => {
+    try {
+      const normalized = await normalizeImageFile(file)
+      const asset = await saveAsset(normalized.dataUrl)
+      void refreshAssetLibrary()
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.id === nodeId
+            ? { ...node, asset: toAssetRef(asset), status: 'completed', error: undefined }
+            : node
+        )
+      }))
+    } catch (error) {
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.id === nodeId
+            ? {
+                ...node,
+                status: 'failed',
+                error: error instanceof Error ? error.message : String(error)
+              }
+            : node
+        )
+      }))
+    }
+  }
+
+  const selectLibraryAsset = (asset: AssetLibraryItem): void => {
+    const selectedNode = nodeMap.get(selected[0])
+    if (selectedNode?.kind === 'image') {
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.id === selectedNode.id
+            ? { ...node, asset: toAssetRef(asset), status: 'completed' }
+            : node
+        )
+      }))
+    } else {
+      const node: DrawGraphNode = {
+        id: nanoid(),
+        kind: 'image',
+        x: 80 + project.nodes.length * 24,
+        y: 80 + project.nodes.length * 20,
+        width: 220,
+        height: 180,
+        title: t('drawPage.graph.node.image'),
+        content: '',
+        asset: toAssetRef(asset),
+        status: 'completed'
+      }
+      commit((current) => ({ ...current, nodes: [...current.nodes, node] }))
+      setSelected([node.id])
+    }
+    setAssetLibraryOpen(false)
+  }
+
+  const setOperationState = (
+    nodeId: string,
+    operationId: string,
+    state: 'queued' | 'running' | 'completed' | 'failed',
+    patch?: { outputAssetId?: string; error?: string }
+  ): void => {
+    setProject((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) =>
+        node.id === nodeId
+          ? {
+              ...node,
+              imageOperations: node.imageOperations?.map((operation) =>
+                operation.id === operationId ? { ...operation, state, ...patch } : operation
+              )
+            }
+          : node
+      )
+    }))
+  }
+
+  const applyImageOperation = async (
+    type: 'crop' | 'outpaint' | 'upscale',
+    retryOperation?: DrawGraphImageOperation
+  ): Promise<void> => {
     const nodeId = selected[0]
-    if (!nodeId || nodeMap.get(nodeId)?.kind !== 'image') return
+    const sourceNode = nodeMap.get(nodeId)
+    if (!nodeId || sourceNode?.kind !== 'image' || !sourceNode.asset) return
+    const operationId = retryOperation?.id ?? nanoid()
+    const retryParameters = retryOperation?.parameters
+    const parameters: Record<string, number> = retryParameters
+      ? Object.fromEntries(
+          Object.entries(retryParameters).filter(
+            (entry): entry is [string, number] => typeof entry[1] === 'number'
+          )
+        )
+      : type === 'crop'
+        ? {
+            x: Math.round(sourceNode.asset.width * 0.1),
+            y: Math.round(sourceNode.asset.height * 0.1),
+            width: Math.round(sourceNode.asset.width * 0.8),
+            height: Math.round(sourceNode.asset.height * 0.8)
+          }
+        : type === 'outpaint'
+          ? {
+              left: Math.round(sourceNode.asset.width * 0.2),
+              right: Math.round(sourceNode.asset.width * 0.2),
+              top: Math.round(sourceNode.asset.height * 0.2),
+              bottom: Math.round(sourceNode.asset.height * 0.2)
+            }
+          : { scale: 2 }
     commit((current) => ({
       ...current,
       nodes: current.nodes.map((node) =>
@@ -163,18 +316,138 @@ export function DrawGraphCanvas(): React.JSX.Element {
           ? {
               ...node,
               imageOperations: [
+                ...(retryOperation
+                  ? (node.imageOperations ?? []).map((operation) =>
+                      operation.id === operationId
+                        ? { ...operation, state: 'queued' as const, error: undefined }
+                        : operation
+                    )
+                  : [
+                      ...(node.imageOperations ?? []),
+                      {
+                        id: operationId,
+                        type,
+                        value: type === 'upscale' ? 2 : 1,
+                        parameters,
+                        state: 'queued' as const
+                      }
+                    ])
+              ]
+            }
+          : node
+      )
+    }))
+    setOperationState(nodeId, operationId, 'running')
+    try {
+      const source = `ola-draw-asset://${sourceNode.asset.id}`
+      const result: RasterAsset & { maskDataUrl?: string } =
+        type === 'crop'
+          ? await cropRaster(source, {
+              x: parameters.x,
+              y: parameters.y,
+              width: parameters.width,
+              height: parameters.height
+            })
+          : type === 'outpaint'
+            ? await expandRaster(source, {
+                left: parameters.left,
+                right: parameters.right,
+                top: parameters.top,
+                bottom: parameters.bottom
+              })
+            : await upscaleRaster(source, 2)
+      const outputAsset = await saveAsset(result.dataUrl)
+      let maskAssetId: string | undefined
+      if (result.maskDataUrl) maskAssetId = (await saveAsset(result.maskDataUrl)).id
+      void refreshAssetLibrary()
+      const outputNodeId = nanoid()
+      const outputNode: DrawGraphNode = {
+        ...sourceNode,
+        id: outputNodeId,
+        x: sourceNode.x + sourceNode.width + 80,
+        title: `${sourceNode.title} · ${type}`,
+        asset: { ...toAssetRef(outputAsset), ...(maskAssetId ? { maskAssetId } : {}) },
+        imageOperations: [],
+        status: 'completed',
+        error: undefined
+      }
+      commit((current) => ({
+        ...current,
+        nodes: [...current.nodes, outputNode],
+        edges: [...current.edges, { id: nanoid(), source: sourceNode.id, target: outputNodeId }]
+      }))
+      setOperationState(nodeId, operationId, 'completed', { outputAssetId: outputAsset.id })
+      setSelected([outputNodeId])
+    } catch (error) {
+      setOperationState(nodeId, operationId, 'failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
+  }
+
+  const beginMaskEdit = (): void => {
+    const node = nodeMap.get(selected[0])
+    if (node?.kind !== 'image' || !node.asset) return
+    setMaskNodeId(node.id)
+    setMaskStrokes([])
+    setMaskBrushSize(Math.max(8, Math.round(Math.min(node.asset.width, node.asset.height) * 0.05)))
+  }
+
+  const saveMaskEdit = async (): Promise<void> => {
+    const sourceNode = nodeMap.get(maskNodeId ?? '')
+    if (!sourceNode?.asset || maskStrokes.length === 0) return
+    const operationId = nanoid()
+    commit((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) =>
+        node.id === sourceNode.id
+          ? {
+              ...node,
+              imageOperations: [
                 ...(node.imageOperations ?? []),
                 {
-                  id: nanoid(),
-                  type,
-                  value: type === 'upscale' ? 2 : 1,
-                  state: 'idle'
+                  id: operationId,
+                  type: 'mask',
+                  value: maskBrushSize,
+                  parameters: { strokeCount: maskStrokes.length, brushSize: maskBrushSize },
+                  state: 'running'
                 }
               ]
             }
           : node
       )
     }))
+    try {
+      const mask = buildMask(sourceNode.asset.width, sourceNode.asset.height, maskStrokes)
+      const maskAsset = await saveAsset(mask.dataUrl)
+      void refreshAssetLibrary()
+      const outputNodeId = nanoid()
+      const outputNode: DrawGraphNode = {
+        ...sourceNode,
+        id: outputNodeId,
+        x: sourceNode.x + sourceNode.width + 80,
+        title: `${sourceNode.title} · mask`,
+        asset: { ...sourceNode.asset, maskAssetId: maskAsset.id },
+        imageOperations: [],
+        status: 'completed',
+        error: undefined
+      }
+      commit((current) => ({
+        ...current,
+        nodes: [...current.nodes, outputNode],
+        edges: [...current.edges, { id: nanoid(), source: sourceNode.id, target: outputNodeId }]
+      }))
+      setOperationState(sourceNode.id, operationId, 'completed', {
+        outputAssetId: sourceNode.asset.id
+      })
+      setSelected([outputNodeId])
+      setMaskNodeId(null)
+      setMaskStrokes([])
+    } catch (error) {
+      setOperationState(sourceNode.id, operationId, 'failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+    }
   }
 
   const generateVideo = async (node: DrawGraphNode): Promise<void> => {
@@ -337,18 +610,38 @@ export function DrawGraphCanvas(): React.JSX.Element {
         </Button>
         {advancedDrawEnabled && nodeMap.get(selected[0])?.kind === 'image' ? (
           <>
-            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('crop')}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selectedImageBusy || !nodeMap.get(selected[0])?.asset}
+              onClick={() => void applyImageOperation('crop')}
+            >
               <Crop className="size-4" />
               {t('drawPage.graph.crop')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('mask')}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selectedImageBusy || !nodeMap.get(selected[0])?.asset}
+              onClick={beginMaskEdit}
+            >
               {t('drawPage.graph.mask')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('expand')}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selectedImageBusy || !nodeMap.get(selected[0])?.asset}
+              onClick={() => void applyImageOperation('outpaint')}
+            >
               <Expand className="size-4" />
               {t('drawPage.graph.expand')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => applyImageOperation('upscale')}>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selectedImageBusy || !nodeMap.get(selected[0])?.asset}
+              onClick={() => void applyImageOperation('upscale')}
+            >
               {t('drawPage.graph.upscale')}
             </Button>
           </>
@@ -425,7 +718,12 @@ export function DrawGraphCanvas(): React.JSX.Element {
                 )
               }
               onPointerDown={(event) => {
-                if ((event.target as HTMLElement).closest('textarea,input')) return
+                if (
+                  (event.target as HTMLElement).closest(
+                    'textarea,input,button,select,video,canvas,label'
+                  )
+                )
+                  return
                 const startX = event.clientX
                 const startY = event.clientY
                 const originX = node.x
@@ -452,6 +750,36 @@ export function DrawGraphCanvas(): React.JSX.Element {
               }}
             >
               <div className="mb-2 text-xs font-semibold">{node.title}</div>
+              {node.kind === 'image' ? (
+                <div className="mb-2 space-y-2">
+                  {node.asset ? (
+                    <img
+                      className="max-h-40 w-full rounded-md object-contain bg-black/5"
+                      src={`ola-draw-asset://${node.asset.id}`}
+                      alt={node.title}
+                    />
+                  ) : (
+                    <label className="flex h-24 cursor-pointer items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground">
+                      {t('drawPage.graph.selectAsset', { defaultValue: 'Select image asset' })}
+                      <input
+                        className="hidden"
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        onChange={(event) => {
+                          const file = event.target.files?.[0]
+                          if (file) void attachImage(node.id, file)
+                          event.target.value = ''
+                        }}
+                      />
+                    </label>
+                  )}
+                  {node.asset?.maskAssetId ? (
+                    <div className="text-[10px] text-muted-foreground">
+                      {t('drawPage.graph.maskAttached', { defaultValue: 'Editable mask attached' })}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <textarea
                 className="h-16 w-full resize-none rounded-md bg-muted/40 p-2 text-xs outline-none"
                 value={node.content}
@@ -470,13 +798,39 @@ export function DrawGraphCanvas(): React.JSX.Element {
                 }
               />
               {node.kind === 'image' && node.imageOperations?.length ? (
-                <div className="mt-2 text-[10px] text-muted-foreground">
-                  {advancedDrawEnabled
-                    ? node.imageOperations
-                        .map((operation) => `${operation.type}:${operation.state ?? 'idle'}`)
-                        .join(' → ')
-                    : t('drawPage.graph.optionalCapabilityDisabled')}
-                </div>
+                advancedDrawEnabled ? (
+                  <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+                    {node.imageOperations.map((operation) => (
+                      <div key={operation.id} className="flex items-center justify-between gap-2">
+                        <span>
+                          {operation.type}:{operation.state ?? 'idle'}
+                        </span>
+                        {operation.state === 'failed' &&
+                        ['crop', 'outpaint', 'upscale'].includes(operation.type) ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              void applyImageOperation(
+                                operation.type as 'crop' | 'outpaint' | 'upscale',
+                                operation
+                              )
+                            }
+                          >
+                            {t('drawPage.graph.retry', { defaultValue: 'Retry' })}
+                          </Button>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-2 text-[10px] text-muted-foreground">
+                    {t('drawPage.graph.optionalCapabilityDisabled')}
+                  </div>
+                )
+              ) : null}
+              {node.kind === 'image' && node.error ? (
+                <div className="mt-2 text-[10px] text-destructive">{node.error}</div>
               ) : null}
               {node.kind === 'video' ? (
                 <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
@@ -573,13 +927,156 @@ export function DrawGraphCanvas(): React.JSX.Element {
           </div>
         </div>
       </div>
-      <div className="absolute bottom-3 left-3 rounded-lg border bg-background/90 p-2 shadow">
+      <button
+        type="button"
+        className="absolute bottom-3 left-3 rounded-lg border bg-background/90 p-2 text-left shadow"
+        onClick={() => {
+          void refreshAssetLibrary()
+          setAssetLibraryOpen(true)
+        }}
+      >
         <div className="text-[10px] font-medium">{t('drawPage.graph.assetLibrary')}</div>
         <div className="mt-1 text-[10px] text-muted-foreground">
-          {project.nodes.filter((node) => node.kind === 'image').length}{' '}
-          {t('drawPage.graph.assets')}
+          {assetLibrary.length} {t('drawPage.graph.assets')}
         </div>
-      </div>
+      </button>
+      <Dialog open={assetLibraryOpen} onOpenChange={setAssetLibraryOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{t('drawPage.graph.assetLibrary')}</DialogTitle>
+          </DialogHeader>
+          {assetLibrary.length > 0 ? (
+            <div className="grid max-h-[60vh] grid-cols-3 gap-3 overflow-auto sm:grid-cols-4">
+              {assetLibrary.map((asset) => (
+                <button
+                  key={asset.id}
+                  type="button"
+                  className="rounded-lg border p-2 text-left hover:border-primary"
+                  onClick={() => selectLibraryAsset(asset)}
+                >
+                  <img
+                    className="aspect-square w-full rounded object-contain bg-black/5"
+                    src={asset.url}
+                    alt=""
+                  />
+                  <div className="mt-1 truncate text-[10px] text-muted-foreground">
+                    {asset.width} × {asset.height}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              {t('drawPage.graph.noAssets', { defaultValue: 'No saved assets yet.' })}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={maskNodeId !== null}
+        onOpenChange={(open) => {
+          if (!open) setMaskNodeId(null)
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{t('drawPage.graph.mask', { defaultValue: 'Mask editor' })}</DialogTitle>
+          </DialogHeader>
+          {maskNodeId && nodeMap.get(maskNodeId)?.asset ? (
+            <div className="space-y-3">
+              <div className="text-xs text-muted-foreground">
+                {t('drawPage.graph.maskHint', {
+                  defaultValue: 'Paint the area that the next image edit should regenerate.'
+                })}
+              </div>
+              <input
+                type="range"
+                min="4"
+                max={Math.max(
+                  8,
+                  Math.round(
+                    Math.min(
+                      nodeMap.get(maskNodeId)!.asset!.width,
+                      nodeMap.get(maskNodeId)!.asset!.height
+                    ) * 0.25
+                  )
+                )}
+                value={maskBrushSize}
+                onChange={(event) => setMaskBrushSize(Number(event.target.value))}
+              />
+              <canvas
+                className="max-h-[60vh] w-full cursor-crosshair rounded border bg-contain bg-center bg-no-repeat"
+                width={nodeMap.get(maskNodeId)!.asset!.width}
+                height={nodeMap.get(maskNodeId)!.asset!.height}
+                style={{
+                  aspectRatio: `${nodeMap.get(maskNodeId)!.asset!.width}/${nodeMap.get(maskNodeId)!.asset!.height}`,
+                  backgroundImage: `url(ola-draw-asset://${nodeMap.get(maskNodeId)!.asset!.id})`
+                }}
+                onPointerDown={(event) => {
+                  const canvas = event.currentTarget
+                  canvas.setPointerCapture(event.pointerId)
+                  const bounds = canvas.getBoundingClientRect()
+                  const point = {
+                    x: ((event.clientX - bounds.left) / bounds.width) * canvas.width,
+                    y: ((event.clientY - bounds.top) / bounds.height) * canvas.height
+                  }
+                  setMaskStrokes((items) => [...items, { size: maskBrushSize, points: [point] }])
+                }}
+                onPointerMove={(event) => {
+                  if (!event.currentTarget.hasPointerCapture(event.pointerId)) return
+                  const canvas = event.currentTarget
+                  const bounds = canvas.getBoundingClientRect()
+                  const point = {
+                    x: ((event.clientX - bounds.left) / bounds.width) * canvas.width,
+                    y: ((event.clientY - bounds.top) / bounds.height) * canvas.height
+                  }
+                  setMaskStrokes((items) =>
+                    items.map((stroke, index) =>
+                      index === items.length - 1
+                        ? { ...stroke, points: [...stroke.points, point] }
+                        : stroke
+                    )
+                  )
+                }}
+                ref={(canvas) => {
+                  if (!canvas) return
+                  const context = canvas.getContext('2d')
+                  if (!context) return
+                  context.clearRect(0, 0, canvas.width, canvas.height)
+                  context.strokeStyle = 'rgba(239, 68, 68, 0.75)'
+                  context.fillStyle = 'rgba(239, 68, 68, 0.75)'
+                  context.lineCap = 'round'
+                  context.lineJoin = 'round'
+                  for (const stroke of maskStrokes) {
+                    context.lineWidth = stroke.size
+                    context.beginPath()
+                    context.moveTo(stroke.points[0].x, stroke.points[0].y)
+                    for (const point of stroke.points.slice(1)) context.lineTo(point.x, point.y)
+                    if (stroke.points.length === 1) {
+                      context.arc(
+                        stroke.points[0].x,
+                        stroke.points[0].y,
+                        stroke.size / 2,
+                        0,
+                        Math.PI * 2
+                      )
+                      context.fill()
+                    } else context.stroke()
+                  }
+                }}
+              />
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setMaskStrokes([])}>
+              {t('drawPage.graph.clear', { defaultValue: 'Clear' })}
+            </Button>
+            <Button disabled={maskStrokes.length === 0} onClick={() => void saveMaskEdit()}>
+              {t('drawPage.graph.saveMask', { defaultValue: 'Save mask' })}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, protocol, type IpcMainInvokeEvent } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import {
@@ -6,10 +6,17 @@ import {
   isValidDrawGraphProject,
   type DrawGraphProject
 } from '../../shared/draw-graph'
+import {
+  decodeDrawAssetDataUrl,
+  MAX_DRAW_ASSET_BYTES,
+  parseJpegSize,
+  parsePngSize
+} from '../draw/draw-asset-codec'
 import { registerMessagePackHandler as registerRawMessagePackHandler } from './messagepack-handler'
 
 const MAX_PROJECT_BYTES = 10 * 1024 * 1024
 const saveQueues = new Map<string, Promise<void>>()
+let assetProtocolRegistered = false
 
 function registerMessagePackHandler<TArgs, TResult = unknown>(
   channel: string,
@@ -39,6 +46,61 @@ function projectPaths(id: string): { target: string; backup: string; temporary: 
   const directory = path.join(app.getPath('userData'), 'draw-projects')
   const target = path.join(directory, `${id}.json`)
   return { target, backup: `${target}.bak`, temporary: `${target}.${process.pid}.tmp` }
+}
+
+function assetsDirectory(): string {
+  return path.join(app.getPath('userData'), 'draw-assets')
+}
+
+async function saveAsset(dataUrl: string): Promise<{
+  id: string
+  mediaType: 'image/png' | 'image/jpeg'
+  width: number
+  height: number
+  url: string
+}> {
+  const decoded = decodeDrawAssetDataUrl(dataUrl)
+  const id = `${crypto.randomUUID()}${decoded.extension}`
+  const directory = assetsDirectory()
+  await fs.mkdir(directory, { recursive: true })
+  const target = path.join(directory, id)
+  const temporary = `${target}.tmp`
+  await fs.writeFile(temporary, decoded.bytes, { mode: 0o600, flag: 'wx' })
+  await fs.rename(temporary, target)
+  return {
+    id,
+    mediaType: decoded.mediaType,
+    width: decoded.width,
+    height: decoded.height,
+    url: `ola-draw-asset://${id}`
+  }
+}
+
+function registerAssetProtocol(): void {
+  if (assetProtocolRegistered) return
+  assetProtocolRegistered = true
+  protocol.handle('ola-draw-asset', async (request) => {
+    const id = new URL(request.url).hostname.toLowerCase()
+    if (!/^[a-f0-9-]{36}\.(png|jpg)$/.test(id)) return new Response('Not found', { status: 404 })
+    const root = path.resolve(assetsDirectory())
+    const filePath = path.resolve(root, id)
+    if (!filePath.startsWith(`${root}${path.sep}`))
+      return new Response('Forbidden', { status: 403 })
+    try {
+      const stat = await fs.stat(filePath)
+      if (!stat.isFile() || stat.size > MAX_DRAW_ASSET_BYTES)
+        return new Response('Not found', { status: 404 })
+      return new Response(await fs.readFile(filePath), {
+        headers: {
+          'content-type': id.endsWith('.png') ? 'image/png' : 'image/jpeg',
+          'cache-control': 'private, max-age=31536000, immutable',
+          'access-control-allow-origin': '*'
+        }
+      })
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+  })
 }
 
 function isProject(value: unknown): value is DrawGraphProject {
@@ -101,6 +163,7 @@ async function saveProject(project: DrawGraphProject): Promise<{ success: true }
 }
 
 export function registerDrawGraphHandlers(): void {
+  registerAssetProtocol()
   registerMessagePackHandler('draw-graph:list', async () => {
     const directory = path.join(app.getPath('userData'), 'draw-projects')
     try {
@@ -121,4 +184,45 @@ export function registerDrawGraphHandlers(): void {
     loadProject(safeProjectId(id ?? 'default'))
   )
   registerMessagePackHandler<DrawGraphProject>('draw-graph:save', saveProject)
+  registerMessagePackHandler<{ dataUrl: string }>('draw-graph:asset-save', async ({ dataUrl }) => {
+    if (typeof dataUrl !== 'string') throw new Error('Draw asset data is required')
+    return saveAsset(dataUrl)
+  })
+  registerMessagePackHandler('draw-graph:assets-list', async () => {
+    try {
+      const files = await fs.readdir(assetsDirectory(), { withFileTypes: true })
+      const assets: Array<{
+        id: string
+        mediaType: string
+        width: number
+        height: number
+        url: string
+      }> = []
+      for (const entry of files
+        .filter((item) => item.isFile() && /^[a-f0-9-]{36}\.(png|jpg)$/.test(item.name))
+        .slice(0, 2_000)) {
+        const file = await fs.open(path.join(assetsDirectory(), entry.name), 'r')
+        try {
+          const stat = await file.stat()
+          if (stat.size <= 0 || stat.size > MAX_DRAW_ASSET_BYTES) continue
+          const bytes = Buffer.alloc(Math.min(stat.size, 2 * 1024 * 1024))
+          await file.read(bytes, 0, bytes.length, 0)
+          const mediaType = entry.name.endsWith('.png') ? 'image/png' : 'image/jpeg'
+          const size = mediaType === 'image/png' ? parsePngSize(bytes) : parseJpegSize(bytes)
+          if (!size) continue
+          assets.push({
+            id: entry.name,
+            mediaType,
+            ...size,
+            url: `ola-draw-asset://${entry.name}`
+          })
+        } finally {
+          await file.close()
+        }
+      }
+      return assets
+    } catch {
+      return []
+    }
+  })
 }
