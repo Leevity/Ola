@@ -82,6 +82,7 @@ server.close()
 
 const runtime = fs.readFileSync('src/main/ipc/media-runtime-handlers.ts', 'utf8')
 assert.match(runtime, /resolveMainProviderModel/)
+assert.match(runtime, /Unauthorized media IPC sender/)
 assert.match(runtime, /remoteTaskId/)
 assert.match(runtime, /schedulePoll/)
 assert.match(runtime, /downloadVideoResult/)

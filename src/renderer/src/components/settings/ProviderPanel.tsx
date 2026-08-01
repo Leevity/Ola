@@ -2169,7 +2169,12 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
       const requestType = modelConfig?.type ?? activeProvider.type
       const isAnthropic = requestType === 'anthropic'
       const isResponses = requestType === 'openai-responses'
-      const defaultBaseUrl = isAnthropic ? 'https://api.anthropic.com' : 'https://api.openai.com/v1'
+      const isSeedanceVideo = requestType === 'seedance-video'
+      const defaultBaseUrl = isAnthropic
+        ? 'https://api.anthropic.com'
+        : isSeedanceVideo
+          ? 'https://ark.cn-beijing.volces.com/api/v3'
+          : 'https://api.openai.com/v1'
       const baseUrl = normalizeProviderBaseUrl(
         activeProvider.baseUrl?.trim() || defaultBaseUrl,
         requestType
@@ -2196,7 +2201,11 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
       let url: string
       let method = 'POST'
       let body: string | undefined
-      if (isAnthropic) {
+      if (isSeedanceVideo) {
+        url = `${baseUrl.replace(/\/(chat\/completions|responses)$/i, '')}/contents/generations/tasks?page_size=1`
+        method = 'GET'
+        if (authToken) headers['Authorization'] = `Bearer ${authToken}`
+      } else if (isAnthropic) {
         url = `${baseUrl}/v1/models`
         method = 'GET'
         if (useAnthropicCompatAuth) {
