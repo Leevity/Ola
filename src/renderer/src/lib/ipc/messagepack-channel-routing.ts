@@ -66,6 +66,8 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'draw-graph:load',
   'draw-graph:list',
   'draw-graph:save',
+  'draw-graph:asset-save',
+  'draw-graph:assets-list',
   'media:status',
   'media:settings-update',
   'media:tasks-list',

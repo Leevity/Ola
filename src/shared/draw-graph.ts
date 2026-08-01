@@ -3,6 +3,13 @@ export const DRAW_GRAPH_MAX_NODES = 5_000
 export const DRAW_GRAPH_MAX_EDGES = 10_000
 
 export type DrawGraphNodeKind = 'image' | 'video' | 'text' | 'config'
+export interface DrawGraphAssetRef {
+  id: string
+  mediaType: 'image/png' | 'image/jpeg'
+  width: number
+  height: number
+  maskAssetId?: string
+}
 export type DrawGraphOperationState =
   | 'idle'
   | 'queued'
@@ -13,7 +20,7 @@ export type DrawGraphOperationState =
 
 export interface DrawGraphImageOperation {
   id: string
-  type: 'crop' | 'mask' | 'expand' | 'upscale'
+  type: 'crop' | 'mask' | 'expand' | 'outpaint' | 'upscale'
   value: number
   state?: DrawGraphOperationState
   parameters?: Record<string, string | number | boolean>
@@ -34,6 +41,7 @@ export interface DrawGraphNode {
   status?: DrawGraphOperationState
   outputAssetId?: string
   error?: string
+  asset?: DrawGraphAssetRef
   video?: {
     providerId?: string
     model?: string
@@ -120,6 +128,18 @@ export function isValidDrawGraphProject(value: unknown): value is DrawGraphProje
       !isBoundedString(node.title, 500) ||
       !isBoundedString(node.content, 2_000_000) ||
       (node.error !== undefined && !isBoundedString(node.error, 20_000)) ||
+      (node.asset !== undefined &&
+        (!node.asset ||
+          !/^[a-f0-9-]{36}\.(png|jpg)$/.test(node.asset.id) ||
+          !['image/png', 'image/jpeg'].includes(node.asset.mediaType) ||
+          !Number.isInteger(node.asset.width) ||
+          !Number.isInteger(node.asset.height) ||
+          node.asset.width <= 0 ||
+          node.asset.height <= 0 ||
+          node.asset.width > 16_384 ||
+          node.asset.height > 16_384 ||
+          (node.asset.maskAssetId !== undefined &&
+            !/^[a-f0-9-]{36}\.png$/.test(node.asset.maskAssetId)))) ||
       (node.imageOperations !== undefined &&
         (!Array.isArray(node.imageOperations) ||
           node.imageOperations.length > 100 ||
@@ -127,7 +147,7 @@ export function isValidDrawGraphProject(value: unknown): value is DrawGraphProje
             (operation) =>
               !operation ||
               !isBoundedString(operation.id, 128) ||
-              !['crop', 'mask', 'expand', 'upscale'].includes(operation.type) ||
+              !['crop', 'mask', 'expand', 'outpaint', 'upscale'].includes(operation.type) ||
               !Number.isFinite(operation.value) ||
               !hasSafeParameters(operation.parameters) ||
               (operation.error !== undefined && !isBoundedString(operation.error, 20_000))
