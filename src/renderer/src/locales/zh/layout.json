@@ -790,6 +790,10 @@
       "estimatedCost": "预计费用",
       "outputSize": "输出大小",
       "deleteOutput": "删除输出",
+      "triggerOff": "触发器：关闭",
+      "triggerOutpaint": "触发器：自动扩图",
+      "triggerUpscale": "触发器：自动放大",
+      "triggerVideo": "触发器：自动生成视频",
       "minimap": "小地图",
       "node": {
         "image": "图片节点",

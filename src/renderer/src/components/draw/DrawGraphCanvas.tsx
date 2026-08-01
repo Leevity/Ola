@@ -44,6 +44,7 @@ import {
   type DrawGraphImageOperation,
   type DrawGraphProject
 } from '../../../../shared/draw-graph'
+import { resolveReadyDrawGraphTriggers } from '../../../../shared/draw-graph-triggers'
 import type {
   MediaRuntimeStatus,
   VideoProviderCapability,
@@ -86,6 +87,14 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [promptLibraryOpen, setPromptLibraryOpen] = useState(false)
   const [angleNodeId, setAngleNodeId] = useState<string | null>(null)
   const imageOperationControllers = useRef(new Map<string, AbortController>())
+  const activeTriggerRuns = useRef(new Set<string>())
+  const triggerRunner = useRef<
+    | ((
+        action: NonNullable<DrawGraphNode['trigger']>['action'],
+        node: DrawGraphNode
+      ) => Promise<void>)
+    | null
+  >(null)
   const advancedDrawEnabled = useSettingsStore((state) => state.advancedDrawEnabled)
   const videoGenerationEnabled = useSettingsStore((state) => state.videoGenerationEnabled)
   const loaded = useRef(false)
@@ -323,9 +332,10 @@ export function DrawGraphCanvas(): React.JSX.Element {
 
   const applyImageOperation = async (
     type: 'crop' | 'outpaint' | 'upscale',
-    retryOperation?: DrawGraphImageOperation
+    retryOperation?: DrawGraphImageOperation,
+    requestedNodeId?: string
   ): Promise<void> => {
-    const nodeId = selected[0]
+    const nodeId = requestedNodeId ?? selected[0]
     const sourceNode = nodeMap.get(nodeId)
     if (!nodeId || sourceNode?.kind !== 'image' || !sourceNode.asset) return
     const operationId = retryOperation?.id ?? nanoid()
@@ -777,6 +787,38 @@ export function DrawGraphCanvas(): React.JSX.Element {
     })
   }, [setProject, videoTasks])
 
+  triggerRunner.current = (action, node) =>
+    action === 'generate_video'
+      ? generateVideo(node)
+      : applyImageOperation(action, undefined, node.id)
+
+  useEffect(() => {
+    if (!advancedDrawEnabled) return
+    const ready = resolveReadyDrawGraphTriggers(project)
+    for (const run of ready) {
+      const executionKey = `${project.id}:${run.nodeId}:${run.runKey}`
+      if (activeTriggerRuns.current.has(executionKey)) continue
+      if (run.action === 'generate_video' && !videoGenerationEnabled) continue
+      const node = project.nodes.find((item) => item.id === run.nodeId)
+      if (!node) continue
+      activeTriggerRuns.current.add(executionKey)
+      setProject((current) => ({
+        ...current,
+        nodes: current.nodes.map((item) =>
+          item.id === run.nodeId && item.trigger
+            ? {
+                ...item,
+                trigger: { ...item.trigger, lastRunKey: run.runKey, lastTriggeredAt: Date.now() }
+              }
+            : item
+        )
+      }))
+      const operation = triggerRunner.current?.(run.action, node)
+      if (!operation) continue
+      void operation.finally(() => activeTriggerRuns.current.delete(executionKey))
+    }
+  }, [advancedDrawEnabled, project, setProject, videoGenerationEnabled])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
       <div className="flex flex-wrap items-center gap-2 border-b p-2">
@@ -1022,6 +1064,44 @@ export function DrawGraphCanvas(): React.JSX.Element {
                   }))
                 }
               />
+              {advancedDrawEnabled && ['image', 'video'].includes(node.kind) ? (
+                <select
+                  className="mt-2 h-7 w-full rounded border bg-background px-1 text-[10px]"
+                  value={node.trigger?.enabled ? node.trigger.action : 'off'}
+                  onChange={(event) => {
+                    const action = event.target.value
+                    setProject((current) => ({
+                      ...current,
+                      nodes: current.nodes.map((item) =>
+                        item.id === node.id
+                          ? {
+                              ...item,
+                              trigger:
+                                action === 'off'
+                                  ? undefined
+                                  : {
+                                      enabled: true,
+                                      action: action as NonNullable<
+                                        DrawGraphNode['trigger']
+                                      >['action']
+                                    }
+                            }
+                          : item
+                      )
+                    }))
+                  }}
+                >
+                  <option value="off">{t('drawPage.graph.triggerOff')}</option>
+                  {node.kind === 'image' ? (
+                    <>
+                      <option value="outpaint">{t('drawPage.graph.triggerOutpaint')}</option>
+                      <option value="upscale">{t('drawPage.graph.triggerUpscale')}</option>
+                    </>
+                  ) : (
+                    <option value="generate_video">{t('drawPage.graph.triggerVideo')}</option>
+                  )}
+                </select>
+              ) : null}
               {node.kind === 'image' && node.imageOperations?.length ? (
                 advancedDrawEnabled ? (
                   <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
