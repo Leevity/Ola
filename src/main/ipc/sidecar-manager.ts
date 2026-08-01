@@ -123,6 +123,7 @@ type CachedAgentStreamRun = {
   sessionId: string
   ownerWindowId: number
   frames: AgentStreamEnvelope[]
+  terminal: boolean
   expiresAt: number
   timer: NodeJS.Timeout
 }
@@ -559,6 +560,7 @@ export function registerSidecarHandlers(): void {
         sessionId: envelope.sessionId,
         ownerWindowId: targetWindow.id,
         frames: [],
+        terminal: false,
         expiresAt: 0,
         timer: setTimeout(() => {}, 0)
       }
@@ -574,6 +576,9 @@ export function registerSidecarHandlers(): void {
     const previous = cached.frames.at(-1)
     if (previous && envelope.seq <= previous.seq) return
     cached.frames.push(envelope)
+    cached.terminal ||= envelope.events.some(
+      (event) => event.type === 'loop_end' || event.type === 'error'
+    )
     if (cached.frames.length > AGENT_STREAM_REPLAY_MAX_FRAMES) {
       cached.frames.splice(0, cached.frames.length - AGENT_STREAM_REPLAY_MAX_FRAMES)
     }
@@ -1126,6 +1131,52 @@ export function registerSidecarHandlers(): void {
       }
 
       return { recoverable: true, frames, firstAvailableSeq, lastAvailableSeq }
+    }
+  )
+
+  registerMessagePackInvokeHandler<undefined>('agent:runtime-state', (event) => {
+    const sourceWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!isUsableRendererWindow(sourceWindow)) return { runs: [] }
+
+    const now = Date.now()
+    const runs = Array.from(agentStreamReplayCache.entries())
+      .filter(([, cached]) => {
+        return (
+          cached.ownerWindowId === sourceWindow.id && cached.expiresAt > now && !cached.terminal
+        )
+      })
+      .map(([runId, cached]) => ({
+        runId,
+        sessionId: cached.sessionId,
+        assistantMessageId: runId,
+        lastSeq: cached.frames.at(-1)?.seq ?? -1,
+        status: 'running' as const
+      }))
+    return { runs }
+  })
+
+  registerMessagePackInvokeHandler<{ runId?: string; sinceSeq?: number }>(
+    'agent:attach-run',
+    (event, { runId: rawRunId, sinceSeq: rawSinceSeq }) => {
+      const runId = readNonEmptyString(rawRunId)
+      const sinceSeq = Number.isSafeInteger(rawSinceSeq) ? Number(rawSinceSeq) : -1
+      if (!runId || sinceSeq < -1) {
+        return { attached: false, frames: [], reason: 'not_found' }
+      }
+      const cached = agentStreamReplayCache.get(runId)
+      if (!cached || cached.expiresAt <= Date.now()) {
+        return { attached: false, frames: [], reason: 'not_found' }
+      }
+      const sourceWindow = BrowserWindow.fromWebContents(event.sender)
+      if (!isUsableRendererWindow(sourceWindow) || sourceWindow.id !== cached.ownerWindowId) {
+        return { attached: false, frames: [], reason: 'not_owner' }
+      }
+      return {
+        attached: true,
+        frames: cached.frames.filter((frame) => frame.seq > sinceSeq),
+        terminal: cached.terminal,
+        lastSeq: cached.frames.at(-1)?.seq ?? -1
+      }
     }
   )
 
