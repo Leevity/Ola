@@ -13,10 +13,15 @@ import {
   appendRuntimeToolUse,
   completeRuntimeThinking,
   mergeRuntimeMessageUsage,
+  updateRuntimeMessage,
   setRuntimeThinkingEncryptedContent,
   updateRuntimeToolUseInput
 } from './session-runtime-router'
 import { sessionSidecarRunIds } from './session-run-registry'
+import {
+  hasCompleteAgentRunJournal,
+  resolveAgentRunAttachSequence
+} from '../../../../shared/agent-runtime-recovery'
 
 const attachedRuns = new Map<string, () => void>()
 
@@ -99,6 +104,8 @@ async function attachRun(run: {
   runId: string
   sessionId: string
   assistantMessageId: string
+  firstSeq: number
+  lastSeq: number
 }): Promise<void> {
   if (attachedRuns.has(run.runId)) return
   await useChatStore
@@ -114,6 +121,11 @@ async function attachRun(run: {
       content: [],
       createdAt: Date.now()
     })
+  } else if (hasCompleteAgentRunJournal(run.firstSeq)) {
+    updateRuntimeMessage(run.sessionId, run.assistantMessageId, {
+      content: [],
+      usage: undefined
+    })
   }
   sessionSidecarRunIds.set(run.sessionId, run.runId)
   useChatStore.getState().setStreamingMessageId(run.sessionId, run.assistantMessageId)
@@ -126,7 +138,11 @@ async function attachRun(run: {
 
   const response = await agentBridge.attachAgentRun(
     run.runId,
-    agentStream.getLastSeq(run.runId) ?? -1
+    resolveAgentRunAttachSequence({
+      firstSeq: run.firstSeq,
+      lastSeq: run.lastSeq,
+      receiverLastSeq: agentStream.getLastSeq(run.runId)
+    })
   )
   if (!response.attached) {
     finishRun(run.runId, run.sessionId, null)

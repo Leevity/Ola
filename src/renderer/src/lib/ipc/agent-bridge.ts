@@ -150,6 +150,7 @@ class AgentBridgeClient {
       runId: string
       sessionId: string
       assistantMessageId: string
+      firstSeq: number
       lastSeq: number
       status: 'running'
     }>
@@ -159,6 +160,7 @@ class AgentBridgeClient {
         runId: string
         sessionId: string
         assistantMessageId: string
+        firstSeq: number
         lastSeq: number
         status: 'running'
       }>
@@ -172,6 +174,7 @@ class AgentBridgeClient {
     attached: boolean
     frames: import('../../../../shared/agent-stream-protocol').AgentStreamEnvelope[]
     terminal?: boolean
+    firstSeq?: number
     lastSeq?: number
     reason?: 'not_found' | 'not_owner'
   }> {
@@ -179,6 +182,7 @@ class AgentBridgeClient {
       attached: boolean
       frames: import('../../../../shared/agent-stream-protocol').AgentStreamEnvelope[]
       terminal?: boolean
+      firstSeq?: number
       lastSeq?: number
       reason?: 'not_found' | 'not_owner'
     }
