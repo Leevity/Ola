@@ -2,6 +2,7 @@
 import path from 'node:path'
 import {
   preserveViewportOffsetAfterPrepend,
+  resolveChatAutoScrollState,
   shouldCompensateTranscriptRowResize
 } from '../src/renderer/src/components/chat/chat-scroll-policy'
 
@@ -22,6 +23,45 @@ assert(
     followingOutput: false
   }),
   'a resized row fully above the viewport should preserve the anchor'
+)
+assert(
+  resolveChatAutoScrollState({
+    mode: 'stream',
+    distanceToBottom: 40,
+    bottomThreshold: 80,
+    previousOffset: 500,
+    currentOffset: 490,
+    correctionEpsilon: 2,
+    isProgrammatic: false,
+    isOutputting: true
+  }).mode === 'off',
+  'a deliberate upward scroll must pause streaming follow immediately'
+)
+assert(
+  resolveChatAutoScrollState({
+    mode: 'off',
+    distanceToBottom: 0,
+    bottomThreshold: 80,
+    previousOffset: 490,
+    currentOffset: 520,
+    correctionEpsilon: 2,
+    isProgrammatic: false,
+    isOutputting: true
+  }).mode === 'stream',
+  'manual scrolling to the true bottom must resume streaming follow'
+)
+assert(
+  resolveChatAutoScrollState({
+    mode: 'off',
+    distanceToBottom: 20,
+    bottomThreshold: 80,
+    previousOffset: 490,
+    currentOffset: 520,
+    correctionEpsilon: 2,
+    isProgrammatic: false,
+    isOutputting: true
+  }).mode === 'off',
+  'entering only the tolerance zone must not unexpectedly resume follow'
 )
 assert(
   !shouldCompensateTranscriptRowResize({

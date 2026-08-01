@@ -34,6 +34,7 @@ import {
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import {
   preserveViewportOffsetAfterPrepend,
+  resolveChatAutoScrollState,
   shouldCompensateTranscriptRowResize
 } from './chat-scroll-policy'
 import { DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL } from '../../../../shared/messagepack/binary-ipc'
@@ -260,7 +261,6 @@ const EMPTY_MESSAGES: UnifiedMessage[] = []
 const EMPTY_TEAM_HISTORY: ActiveTeam[] = []
 const AUTO_SCROLL_BOTTOM_THRESHOLD = 24
 const STREAMING_AUTO_SCROLL_BOTTOM_THRESHOLD = 80
-const STREAMING_AUTO_SCROLL_STOP_THRESHOLD = 240
 const TAIL_STATIC_MESSAGE_COUNT = 4
 const TAIL_LIVE_MESSAGE_COUNT = 6
 const INITIAL_SCROLL_SETTLE_FRAMES = 2
@@ -1548,25 +1548,23 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     const threshold = isSessionOutputting
       ? STREAMING_AUTO_SCROLL_BOTTOM_THRESHOLD
       : AUTO_SCROLL_BOTTOM_THRESHOLD
-    const nextAtBottom = distanceToBottom <= threshold
     const previousOffset = lastScrollOffsetRef.current
     const currentOffset = ref.scrollTop
-    const scrolledUp = currentOffset < previousOffset - BOTTOM_SCROLL_CORRECTION_EPSILON
     const isProgrammaticScroll = window.performance.now() < programmaticScrollUntilRef.current
 
     lastScrollOffsetRef.current = currentOffset
-
-    if (
-      scrolledUp &&
-      distanceToBottom > STREAMING_AUTO_SCROLL_STOP_THRESHOLD &&
-      !isProgrammaticScroll
-    ) {
-      autoScrollModeRef.current = 'off'
-    } else if (nextAtBottom && isSessionOutputting && autoScrollModeRef.current === 'off') {
-      autoScrollModeRef.current = 'stream'
-    }
-
-    setIsAtBottom((prev) => (prev === nextAtBottom ? prev : nextAtBottom))
+    const next = resolveChatAutoScrollState({
+      mode: autoScrollModeRef.current,
+      distanceToBottom,
+      bottomThreshold: threshold,
+      previousOffset,
+      currentOffset,
+      correctionEpsilon: BOTTOM_SCROLL_CORRECTION_EPSILON,
+      isProgrammatic: isProgrammaticScroll,
+      isOutputting: isSessionOutputting
+    })
+    autoScrollModeRef.current = next.mode
+    setIsAtBottom((previous) => (previous === next.isAtBottom ? previous : next.isAtBottom))
   }, [isSessionOutputting])
 
   const setActiveAssistantRailIds = React.useCallback((nextIds: Set<string>) => {
@@ -1873,10 +1871,16 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
 
   React.useEffect(() => {
     const wasOutputting = wasSessionOutputtingRef.current
-    if (!wasOutputting && isSessionOutputting && isAtBottom && !pendingAskUserQuestion) {
+    if (
+      !wasOutputting &&
+      isSessionOutputting &&
+      isAtBottom &&
+      autoScrollModeRef.current !== 'off' &&
+      !pendingAskUserQuestion
+    ) {
       autoScrollModeRef.current = 'stream'
     } else if (wasOutputting && !isSessionOutputting && autoScrollModeRef.current === 'stream') {
-      autoScrollModeRef.current = 'off'
+      autoScrollModeRef.current = 'user'
     }
     wasSessionOutputtingRef.current = isSessionOutputting
   }, [isAtBottom, isSessionOutputting, pendingAskUserQuestion])
