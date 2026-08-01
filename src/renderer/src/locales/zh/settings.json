@@ -267,6 +267,10 @@
       "effectiveFallback": "系统 Documents 目录"
     },
     "autoApproveWarning": "危险：所有工具调用将自动执行，无需确认",
+    "advancedDraw": "高级画布工具",
+    "advancedDrawDesc": "启用可选的图像操作、提示词预设和素材工作流。",
+    "videoGeneration": "视频生成",
+    "videoGenerationDesc": "启用可选的视频任务界面，仍需配置相应服务商。",
     "devMode": "开发者模式",
     "devModeDesc": "当错误发生时在AI响应中显示请求调试信息",
     "contextCompression": "上下文记忆压缩",

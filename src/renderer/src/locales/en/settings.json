@@ -267,6 +267,10 @@
       "effectiveFallback": "System Documents folder"
     },
     "autoApproveWarning": "Dangerous: All tool calls will execute automatically without confirmation",
+    "advancedDraw": "Advanced canvas tools",
+    "advancedDrawDesc": "Enable optional image operations, prompt presets, and asset workflows.",
+    "videoGeneration": "Video generation",
+    "videoGenerationDesc": "Enable optional video task interfaces. Provider configuration is still required.",
     "devMode": "Developer Mode",
     "devModeDesc": "Show request debug info in AI responses when errors occur",
     "contextCompression": "Context Memory Compression",
