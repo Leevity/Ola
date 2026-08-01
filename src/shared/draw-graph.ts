@@ -59,6 +59,14 @@ export interface DrawGraphEdge {
   target: string
 }
 
+export interface DrawGraphChangeRecord {
+  id: string
+  source: 'assistant'
+  action: 'add_node' | 'connect'
+  summary: string
+  createdAt: number
+}
+
 export interface DrawGraphProject {
   version: typeof DRAW_GRAPH_SCHEMA_VERSION
   id: string
@@ -66,6 +74,7 @@ export interface DrawGraphProject {
   updatedAt: number
   nodes: DrawGraphNode[]
   edges: DrawGraphEdge[]
+  changes?: DrawGraphChangeRecord[]
 }
 
 export function createEmptyDrawGraphProject(id = 'default'): DrawGraphProject {
@@ -109,8 +118,23 @@ export function isValidDrawGraphProject(value: unknown): value is DrawGraphProje
     !Number.isFinite(project.updatedAt) ||
     !Array.isArray(project.nodes) ||
     !Array.isArray(project.edges) ||
+    (project.changes !== undefined &&
+      (!Array.isArray(project.changes) || project.changes.length > 1_000)) ||
     project.nodes.length > DRAW_GRAPH_MAX_NODES ||
     project.edges.length > DRAW_GRAPH_MAX_EDGES
+  )
+    return false
+
+  if (
+    project.changes?.some(
+      (change) =>
+        !change ||
+        !isBoundedString(change.id, 128) ||
+        change.source !== 'assistant' ||
+        !['add_node', 'connect'].includes(change.action) ||
+        !isBoundedString(change.summary, 2_000) ||
+        !Number.isFinite(change.createdAt)
+    )
   )
     return false
 
