@@ -14,6 +14,28 @@ valid.nodes.push({
   content: ''
 })
 assert.equal(isValidDrawGraphProject(valid), true)
+assert.equal(
+  isValidDrawGraphProject({
+    ...valid,
+    changes: [
+      {
+        id: 'change-1',
+        source: 'assistant',
+        action: 'add_node',
+        summary: 'Add image node',
+        createdAt: Date.now()
+      }
+    ]
+  }),
+  true
+)
+assert.equal(
+  isValidDrawGraphProject({
+    ...valid,
+    changes: [{ id: 'change-1', source: 'unknown', action: 'erase', summary: '', createdAt: 0 }]
+  }),
+  false
+)
 assert.equal(isValidDrawGraphProject({ ...valid, id: '../escape' }), false)
 assert.equal(isValidDrawGraphProject({ ...valid, nodes: [...valid.nodes, valid.nodes[0]] }), false)
 assert.equal(

@@ -35,6 +35,7 @@ import {
 } from '@renderer/lib/draw-image-operations'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
+import { useDrawGraphStore } from '@renderer/stores/draw-graph-store'
 import {
   createEmptyDrawGraphProject,
   type DrawGraphNode,
@@ -62,7 +63,9 @@ function toAssetRef(asset: AssetLibraryItem): DrawGraphAssetRef {
 
 export function DrawGraphCanvas(): React.JSX.Element {
   const { t } = useTranslation('layout')
-  const [project, setProject] = useState(() => createEmptyDrawGraphProject())
+  const project = useDrawGraphStore((state) => state.project)
+  const setProject = useDrawGraphStore((state) => state.setProject)
+  const loadProject = useDrawGraphStore((state) => state.loadProject)
   const [selected, setSelected] = useState<string[]>([])
   const [zoom, setZoom] = useState(1)
   const [history, setHistory] = useState<Snapshot[]>([])
@@ -94,12 +97,10 @@ export function DrawGraphCanvas(): React.JSX.Element {
     void ipcClient
       .invoke('draw-graph:list')
       .then((value) => setProjects(value as Array<{ id: string; name: string }>))
-    void ipcClient.invoke('draw-graph:load', { id: 'default' }).then((value) => {
-      const result = value as { project?: DrawGraphProject }
-      if (result.project) setProject(result.project)
+    void loadProject('default').then(() => {
       loaded.current = true
     })
-  }, [])
+  }, [loadProject])
 
   const refreshVideoTasks = useCallback(async (): Promise<void> => {
     const items = (await ipcClient.invoke('media:tasks-list')) as VideoTask[]
@@ -122,9 +123,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
 
   const openProject = (id: string): void => {
     loaded.current = false
-    void ipcClient.invoke('draw-graph:load', { id }).then((value) => {
-      const result = value as { project: DrawGraphProject }
-      setProject(result.project)
+    void loadProject(id).then(() => {
       setHistory([])
       setFuture([])
       loaded.current = true
@@ -723,7 +722,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
       })
       return changed ? { ...current, nodes } : current
     })
-  }, [videoTasks])
+  }, [setProject, videoTasks])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
