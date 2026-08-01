@@ -1022,10 +1022,24 @@ internal static partial class SkillCatalog
         string sourceHash)
     {
         var stagingDir = targetDir + $".update-{Guid.NewGuid():N}";
+        var previousDir = targetDir + $".previous-{Guid.NewGuid():N}";
         CopyDirectory(sourceDir, stagingDir);
         WriteBuiltinMarker(stagingDir, name, sourceHash);
-        Directory.Delete(targetDir, recursive: true);
-        Directory.Move(stagingDir, targetDir);
+        Directory.Move(targetDir, previousDir);
+        try
+        {
+            Directory.Move(stagingDir, targetDir);
+            Directory.Delete(previousDir, recursive: true);
+        }
+        catch
+        {
+            if (!Directory.Exists(targetDir) && Directory.Exists(previousDir))
+            {
+                Directory.Move(previousDir, targetDir);
+            }
+            if (Directory.Exists(stagingDir)) Directory.Delete(stagingDir, recursive: true);
+            throw;
+        }
     }
 
     private static string ComputeSkillDirectoryHash(string root)
