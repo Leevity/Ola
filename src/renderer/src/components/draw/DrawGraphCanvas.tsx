@@ -40,6 +40,7 @@ import {
 import type { VideoProviderCapability, VideoTask } from '../../../../shared/media-runtime'
 import { AssetLibraryDialog, type AssetLibraryItem } from './graph/AssetLibraryDialog'
 import { MaskEditorDialog } from './graph/MaskEditorDialog'
+import { PromptLibraryDialog } from './graph/PromptLibraryDialog'
 
 type Snapshot = Pick<DrawGraphProject, 'nodes' | 'edges'>
 
@@ -68,6 +69,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [maskBrushSize, setMaskBrushSize] = useState(48)
   const [assetLibraryOpen, setAssetLibraryOpen] = useState(false)
   const [assetLibrary, setAssetLibrary] = useState<AssetLibraryItem[]>([])
+  const [promptLibraryOpen, setPromptLibraryOpen] = useState(false)
   const advancedDrawEnabled = useSettingsStore((state) => state.advancedDrawEnabled)
   const videoGenerationEnabled = useSettingsStore((state) => state.videoGenerationEnabled)
   const loaded = useRef(false)
@@ -250,6 +252,31 @@ export function DrawGraphCanvas(): React.JSX.Element {
       setSelected([node.id])
     }
     setAssetLibraryOpen(false)
+  }
+
+  const usePrompt = ({ title, prompt }: { title: string; prompt: string }): void => {
+    const selectedNode = nodeMap.get(selected[0])
+    if (selectedNode?.kind === 'text') {
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.id === selectedNode.id ? { ...node, title, content: prompt } : node
+        )
+      }))
+      return
+    }
+    const node: DrawGraphNode = {
+      id: nanoid(),
+      kind: 'text',
+      x: 80 + project.nodes.length * 24,
+      y: 80 + project.nodes.length * 20,
+      width: 260,
+      height: 160,
+      title,
+      content: prompt
+    }
+    commit((current) => ({ ...current, nodes: [...current.nodes, node] }))
+    setSelected([node.id])
   }
 
   const setOperationState = (
@@ -594,7 +621,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
           {t('drawPage.graph.config')}
         </Button>
         {advancedDrawEnabled ? (
-          <Button size="sm" variant="ghost" onClick={() => addNode('text')}>
+          <Button size="sm" variant="ghost" onClick={() => setPromptLibraryOpen(true)}>
             {t('drawPage.graph.promptLibrary')}
           </Button>
         ) : null}
@@ -951,6 +978,11 @@ export function DrawGraphCanvas(): React.JSX.Element {
         onStrokesChange={setMaskStrokes}
         onBrushSizeChange={setMaskBrushSize}
         onSave={() => void saveMaskEdit()}
+      />
+      <PromptLibraryDialog
+        open={promptLibraryOpen}
+        onOpenChange={setPromptLibraryOpen}
+        onUsePrompt={usePrompt}
       />
     </div>
   )
