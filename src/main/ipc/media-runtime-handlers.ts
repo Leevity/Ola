@@ -1,4 +1,4 @@
-import { app, protocol } from 'electron'
+import { app, BrowserWindow, protocol, type IpcMainInvokeEvent } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -17,7 +17,7 @@ import {
   downloadVideoResult,
   getSeedanceTaskStatus
 } from '../media/seedance-video-adapter'
-import { registerMessagePackHandler } from './messagepack-handler'
+import { registerMessagePackHandler as registerRawMessagePackHandler } from './messagepack-handler'
 
 interface PersistedVideoTask extends VideoTask {
   remoteTaskId?: string
@@ -35,6 +35,24 @@ let tasksLoaded = false
 let persistQueue = Promise.resolve()
 const cacheDir = (): string => path.join(app.getPath('userData'), 'media-cache')
 const tasksPath = (): string => path.join(app.getPath('userData'), 'media-tasks.json')
+
+function registerMessagePackHandler<TArgs, TResult = unknown>(
+  channel: string,
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<TResult> | TResult
+): void {
+  registerRawMessagePackHandler<TArgs, TResult>(channel, async (args, event) => {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    if (
+      !ownerWindow ||
+      ownerWindow.isDestroyed() ||
+      ownerWindow.webContents !== event.sender ||
+      event.senderFrame !== event.sender.mainFrame
+    ) {
+      throw new Error('Unauthorized media IPC sender')
+    }
+    return await handler(args, event)
+  })
+}
 
 function publicTask(task: PersistedVideoTask): VideoTask {
   const { remoteTaskId: _remoteTaskId, pollFailures: _pollFailures, ...value } = task
@@ -145,9 +163,18 @@ async function cleanupCache(): Promise<{ bytes: number; removed: number }> {
   for (const entry of entries) {
     if (bytes <= MEDIA_CACHE_MAX_BYTES) break
     await fs.rm(entry.path, { force: true })
+    const removedName = path.basename(entry.path)
+    for (const task of tasks.values()) {
+      if (task.outputUrl === removedName) {
+        task.outputUrl = undefined
+        task.outputBytes = undefined
+        task.updatedAt = Date.now()
+      }
+    }
     bytes -= entry.size
     removed += 1
   }
+  if (removed > 0) await persistTasks()
   return { bytes, removed }
 }
 
