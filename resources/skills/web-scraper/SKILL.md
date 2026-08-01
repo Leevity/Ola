@@ -1,7 +1,6 @@
 ---
 name: web-scraper
-description: Scrape web pages, search the internet, and extract structured content using Python. Use when the user wants to fetch a webpage, search for information online, extract links, or crawl JavaScript-rendered dynamic pages.
-compatibility: Requires Python 3. Lightweight mode needs requests, beautifulsoup4, readability-lxml, html2text. Dynamic mode needs crawl4ai. Search needs duckduckgo-search.
+description: Scrape web pages, search the internet, and extract structured content with Python. Use to fetch pages, extract links or article text, search the web, or crawl JavaScript-rendered sites with the bundled lightweight and dynamic scripts.
 ---
 
 # Web Scraper

@@ -1,7 +1,6 @@
 ---
 name: csv-pipeline
-description: Process, transform, analyze, and report on CSV and JSON data files. Use when the user needs to filter rows, join datasets, compute aggregates, convert formats, deduplicate, or generate summary reports from tabular data. Works with any CSV, TSV, or JSON Lines file.
-compatibility: Requires Python 3. No external dependencies beyond Python standard library (csv, json modules).
+description: Process, transform, analyze, and report on CSV, TSV, JSON, and JSON Lines data. Use for filtering, joining, aggregating, converting, deduplicating, validating, or producing summary reports from tabular files with Python standard-library tooling.
 ---
 
 # CSV Data Pipeline

@@ -1,7 +1,6 @@
 ---
 name: docx
-description: 'Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When GLM needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks'
-license: Proprietary. LICENSE.txt has complete terms
+description: Create, edit, inspect, and validate professional DOCX documents while preserving formatting. Use for document generation, text extraction, tracked changes, comments, OOXML edits, layout-sensitive updates, and render-based quality checks.
 ---
 
 # DOCX creation, editing, and analysis

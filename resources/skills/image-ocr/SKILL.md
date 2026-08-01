@@ -1,7 +1,6 @@
 ---
 name: image-ocr
-description: Extract text from images using Python OCR. Use when the user wants to read text from screenshots, photos of documents, scanned pages, or any image containing text. Supports PNG, JPEG, TIFF, BMP, and WebP formats.
-compatibility: Requires Python 3 and pytesseract + Pillow (pip install pytesseract Pillow). Also requires Tesseract OCR engine installed on the system.
+description: Extract and structure text from screenshots, scanned pages, document photos, and other images with Python, Pillow, pytesseract, and Tesseract. Use for PNG, JPEG, TIFF, BMP, or WebP OCR, preprocessing, confidence review, and text export.
 ---
 
 # Image OCR

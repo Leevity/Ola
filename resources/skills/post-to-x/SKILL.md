@@ -1,4 +1,5 @@
 ---
+name: post-to-x
 description: Post tweets to X.com (Twitter) using the system browser's login state
 ---
 
