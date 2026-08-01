@@ -1,8 +1,8 @@
 import { toolRegistry } from '../agent/tool-registry'
 import { encodeStructuredToolResult } from './tool-result-format'
 import type {
+  MediaRuntimeStatus,
   VideoGenerationRequest,
-  VideoProviderCapability,
   VideoTask
 } from '../../../../shared/media-runtime'
 import type { ToolHandler } from './tool-types'
@@ -28,11 +28,8 @@ const videoGenerationHandler: ToolHandler = {
     }
   },
   execute: async (input, context) => {
-    const status = (await context.ipc.invoke('media:status')) as {
-      videoGenerationEnabled: boolean
-      capabilities: VideoProviderCapability[]
-    }
-    if (!status.videoGenerationEnabled) throw new Error('Video generation is disabled')
+    const status = (await context.ipc.invoke('media:status')) as MediaRuntimeStatus
+    if (!status.settings.videoGenerationEnabled) throw new Error('Video generation is disabled')
     const capability =
       status.capabilities.find((item) => item.providerId === input.providerId) ??
       status.capabilities[0]
