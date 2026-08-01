@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import {
   Crop,
+  Camera,
   Expand,
   FolderPlus,
   Image,
@@ -20,16 +21,20 @@ import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { cn } from '@renderer/lib/utils'
+import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
+import { generateNativeOpenAIImages } from '@renderer/lib/api/openai-images-provider'
 import {
   buildMask,
   cropRaster,
   expandRaster,
   normalizeImageFile,
+  rasterSourceToDataUrl,
   upscaleRaster,
   type MaskStroke,
   type RasterAsset
 } from '@renderer/lib/draw-image-operations'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useProviderStore } from '@renderer/stores/provider-store'
 import {
   createEmptyDrawGraphProject,
   type DrawGraphNode,
@@ -41,6 +46,7 @@ import type { VideoProviderCapability, VideoTask } from '../../../../shared/medi
 import { AssetLibraryDialog, type AssetLibraryItem } from './graph/AssetLibraryDialog'
 import { MaskEditorDialog } from './graph/MaskEditorDialog'
 import { PromptLibraryDialog } from './graph/PromptLibraryDialog'
+import { AngleGenerationDialog } from './graph/AngleGenerationDialog'
 
 type Snapshot = Pick<DrawGraphProject, 'nodes' | 'edges'>
 
@@ -70,9 +76,19 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [assetLibraryOpen, setAssetLibraryOpen] = useState(false)
   const [assetLibrary, setAssetLibrary] = useState<AssetLibraryItem[]>([])
   const [promptLibraryOpen, setPromptLibraryOpen] = useState(false)
+  const [angleNodeId, setAngleNodeId] = useState<string | null>(null)
+  const imageOperationControllers = useRef(new Map<string, AbortController>())
   const advancedDrawEnabled = useSettingsStore((state) => state.advancedDrawEnabled)
   const videoGenerationEnabled = useSettingsStore((state) => state.videoGenerationEnabled)
   const loaded = useRef(false)
+
+  useEffect(
+    () => () => {
+      for (const controller of imageOperationControllers.current.values()) controller.abort()
+      imageOperationControllers.current.clear()
+    },
+    []
+  )
 
   useEffect(() => {
     void ipcClient
@@ -282,7 +298,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const setOperationState = (
     nodeId: string,
     operationId: string,
-    state: 'queued' | 'running' | 'completed' | 'failed',
+    state: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled',
     patch?: { outputAssetId?: string; error?: string }
   ): void => {
     setProject((current) => ({
@@ -412,6 +428,133 @@ export function DrawGraphCanvas(): React.JSX.Element {
     setMaskNodeId(node.id)
     setMaskStrokes([])
     setMaskBrushSize(Math.max(8, Math.round(Math.min(node.asset.width, node.asset.height) * 0.05)))
+  }
+
+  const generateAngles = async (angles: string[], instructions: string): Promise<void> => {
+    const sourceNode = nodeMap.get(angleNodeId ?? '')
+    if (!sourceNode?.asset) return
+    const setSourceError = (message: string): void =>
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((node) =>
+          node.id === sourceNode.id ? { ...node, error: message } : node
+        )
+      }))
+
+    const providerConfig = useProviderStore.getState().getImageProviderConfig()
+    if (!providerConfig?.providerId) {
+      setSourceError(
+        t('drawPage.graph.imageProviderRequired', {
+          defaultValue: 'Configure an enabled image generation model first.'
+        })
+      )
+      return
+    }
+    let source: Awaited<ReturnType<typeof rasterSourceToDataUrl>>
+    try {
+      if (!(await ensureProviderAuthReady(providerConfig.providerId))) return
+      source = await rasterSourceToDataUrl(`ola-draw-asset://${sourceNode.asset.id}`)
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : String(error))
+      return
+    }
+    const operations = angles.map((angle) => ({
+      id: nanoid(),
+      angle,
+      controller: new AbortController()
+    }))
+    for (const operation of operations) {
+      imageOperationControllers.current.set(operation.id, operation.controller)
+    }
+    commit((current) => ({
+      ...current,
+      nodes: current.nodes.map((node) =>
+        node.id === sourceNode.id
+          ? {
+              ...node,
+              error: undefined,
+              imageOperations: [
+                ...(node.imageOperations ?? []),
+                ...operations.map((operation) => ({
+                  id: operation.id,
+                  type: 'angle' as const,
+                  value: 1,
+                  parameters: { angle: operation.angle, instructions },
+                  state: 'queued' as const
+                }))
+              ]
+            }
+          : node
+      )
+    }))
+    setAngleNodeId(null)
+
+    for (const [index, operation] of operations.entries()) {
+      if (operation.controller.signal.aborted) continue
+      setOperationState(sourceNode.id, operation.id, 'running')
+      const prompt = [
+        `Render the same subject from a ${operation.angle.replaceAll('-', ' ')} camera angle.`,
+        'Preserve identity, materials, colors, proportions, lighting continuity, and background style.',
+        instructions
+      ]
+        .filter(Boolean)
+        .join(' ')
+      try {
+        const outputs = await generateNativeOpenAIImages({
+          config: providerConfig,
+          prompt,
+          images: [{ dataUrl: source.dataUrl, mediaType: 'image/png' }],
+          signal: operation.controller.signal
+        })
+        if (operation.controller.signal.aborted) {
+          setOperationState(sourceNode.id, operation.id, 'cancelled')
+          continue
+        }
+        const generated = outputs[0]
+        if (!generated) throw new Error('Image provider returned no output')
+        const outputDataUrl =
+          generated.sourceType === 'base64'
+            ? `data:${generated.mediaType};base64,${generated.data}`
+            : (await rasterSourceToDataUrl(generated.data)).dataUrl
+        const outputAsset = await saveAsset(outputDataUrl)
+        const outputNodeId = nanoid()
+        const outputNode: DrawGraphNode = {
+          ...sourceNode,
+          id: outputNodeId,
+          x: sourceNode.x + sourceNode.width + 80,
+          y: sourceNode.y + index * (sourceNode.height + 32),
+          title: `${sourceNode.title} · ${operation.angle}`,
+          asset: toAssetRef(outputAsset),
+          imageOperations: [],
+          status: 'completed',
+          error: undefined
+        }
+        commit((current) => ({
+          ...current,
+          nodes: [...current.nodes, outputNode],
+          edges: [...current.edges, { id: nanoid(), source: sourceNode.id, target: outputNodeId }]
+        }))
+        setOperationState(sourceNode.id, operation.id, 'completed', {
+          outputAssetId: outputAsset.id
+        })
+        void refreshAssetLibrary()
+      } catch (error) {
+        if (operation.controller.signal.aborted) {
+          setOperationState(sourceNode.id, operation.id, 'cancelled')
+        } else {
+          setOperationState(sourceNode.id, operation.id, 'failed', {
+            error: error instanceof Error ? error.message : String(error)
+          })
+        }
+      } finally {
+        imageOperationControllers.current.delete(operation.id)
+      }
+    }
+  }
+
+  const cancelImageOperation = (nodeId: string, operationId: string): void => {
+    imageOperationControllers.current.get(operationId)?.abort()
+    setOperationState(nodeId, operationId, 'cancelled')
   }
 
   const saveMaskEdit = async (): Promise<void> => {
@@ -665,6 +808,15 @@ export function DrawGraphCanvas(): React.JSX.Element {
             >
               {t('drawPage.graph.upscale')}
             </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={selectedImageBusy || !nodeMap.get(selected[0])?.asset}
+              onClick={() => setAngleNodeId(selected[0])}
+            >
+              <Camera className="size-4" />
+              {t('drawPage.graph.multiAngle', { defaultValue: 'Angles' })}
+            </Button>
           </>
         ) : null}
         <div className="ml-auto flex gap-1">
@@ -841,6 +993,21 @@ export function DrawGraphCanvas(): React.JSX.Element {
                             {t('drawPage.graph.retry', { defaultValue: 'Retry' })}
                           </Button>
                         ) : null}
+                        {operation.type === 'angle' &&
+                        ['queued', 'running'].includes(operation.state ?? '') ? (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => cancelImageOperation(node.id, operation.id)}
+                          >
+                            {t('drawPage.graph.cancel', { defaultValue: 'Cancel' })}
+                          </Button>
+                        ) : null}
+                        {operation.type === 'angle' && operation.state === 'failed' ? (
+                          <Button size="sm" variant="ghost" onClick={() => setAngleNodeId(node.id)}>
+                            {t('drawPage.graph.retry', { defaultValue: 'Retry' })}
+                          </Button>
+                        ) : null}
                       </div>
                     ))}
                   </div>
@@ -983,6 +1150,14 @@ export function DrawGraphCanvas(): React.JSX.Element {
         open={promptLibraryOpen}
         onOpenChange={setPromptLibraryOpen}
         onUsePrompt={usePrompt}
+      />
+      <AngleGenerationDialog
+        open={angleNodeId !== null}
+        busy={selectedImageBusy}
+        onOpenChange={(open) => {
+          if (!open) setAngleNodeId(null)
+        }}
+        onGenerate={(angles, instructions) => void generateAngles(angles, instructions)}
       />
     </div>
   )

@@ -7,7 +7,7 @@ const canvas = fs.readFileSync('src/renderer/src/components/draw/DrawGraphCanvas
 const handlers = fs.readFileSync('src/main/ipc/draw-graph-handlers.ts', 'utf8')
 const settings = fs.readFileSync('src/renderer/src/stores/settings-store.ts', 'utf8')
 
-for (const operation of ['crop', 'mask', 'expand', 'outpaint', 'upscale']) {
+for (const operation of ['crop', 'mask', 'expand', 'outpaint', 'upscale', 'angle']) {
   assert.match(schema, new RegExp(`'${operation}'`))
 }
 for (const operation of ['cropRaster', 'buildMask', 'expandRaster', 'upscaleRaster']) {
@@ -23,6 +23,10 @@ assert.match(canvas, /draw-graph:asset-save/)
 assert.match(canvas, /maskAssetId/)
 assert.match(canvas, /nodes: \[\.\.\.current\.nodes, outputNode\]/)
 assert.match(canvas, /source: sourceNode\.id, target: outputNodeId/)
+assert.match(canvas, /AngleGenerationDialog/)
+assert.match(canvas, /generateNativeOpenAIImages/)
+assert.match(canvas, /imageOperationControllers/)
+assert.match(canvas, /setOperationState\(sourceNode\.id, operation\.id, 'cancelled'\)/)
 const png = Buffer.alloc(24)
 Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png)
 png.writeUInt32BE(640, 16)
