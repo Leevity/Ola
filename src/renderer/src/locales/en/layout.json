@@ -790,6 +790,10 @@
       "estimatedCost": "Estimated cost",
       "outputSize": "Output size",
       "deleteOutput": "Delete output",
+      "triggerOff": "Trigger: off",
+      "triggerOutpaint": "Trigger: outpaint",
+      "triggerUpscale": "Trigger: upscale",
+      "triggerVideo": "Trigger: generate video",
       "minimap": "Minimap",
       "node": {
         "image": "Image Node",

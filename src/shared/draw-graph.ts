@@ -42,6 +42,12 @@ export interface DrawGraphNode {
   outputAssetId?: string
   error?: string
   asset?: DrawGraphAssetRef
+  trigger?: {
+    enabled: boolean
+    action: 'outpaint' | 'upscale' | 'generate_video'
+    lastRunKey?: string
+    lastTriggeredAt?: number
+  }
   video?: {
     providerId?: string
     model?: string
@@ -178,6 +184,14 @@ export function isValidDrawGraphProject(value: unknown): value is DrawGraphProje
       !isBoundedString(node.title, 500) ||
       !isBoundedString(node.content, 2_000_000) ||
       (node.error !== undefined && !isBoundedString(node.error, 20_000)) ||
+      (node.trigger !== undefined &&
+        (!node.trigger ||
+          typeof node.trigger.enabled !== 'boolean' ||
+          !['outpaint', 'upscale', 'generate_video'].includes(node.trigger.action) ||
+          (node.trigger.lastRunKey !== undefined &&
+            !isBoundedString(node.trigger.lastRunKey, 2_000)) ||
+          (node.trigger.lastTriggeredAt !== undefined &&
+            !Number.isFinite(node.trigger.lastTriggeredAt)))) ||
       (node.asset !== undefined &&
         (!node.asset ||
           !/^[a-f0-9-]{36}\.(png|jpg)$/.test(node.asset.id) ||
