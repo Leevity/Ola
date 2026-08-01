@@ -282,6 +282,8 @@ interface SettingsStore {
   providerRetryMaxAttempts: number
   editorWorkspaceEnabled: boolean
   editorRemoteLanguageServiceEnabled: boolean
+  advancedDrawEnabled: boolean
+  videoGenerationEnabled: boolean
   maxParallelToolCalls: number
   maxConcurrentSubAgents: number
   toolResultFormat: 'toon' | 'json'
@@ -403,6 +405,8 @@ export const useSettingsStore = create<SettingsStore>()(
       providerRetryMaxAttempts: DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS,
       editorWorkspaceEnabled: false,
       editorRemoteLanguageServiceEnabled: false,
+      advancedDrawEnabled: false,
+      videoGenerationEnabled: false,
       maxParallelToolCalls: DEFAULT_MAX_PARALLEL_TOOL_CALLS,
       maxConcurrentSubAgents: DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
       toolResultFormat: 'toon',
@@ -801,6 +805,8 @@ export const useSettingsStore = create<SettingsStore>()(
         if (state.memoryDailyRollupEnabled === undefined) {
           state.memoryDailyRollupEnabled = state.memoryAutomationDailyRollupEnabled
         }
+        if (state.advancedDrawEnabled === undefined) state.advancedDrawEnabled = false
+        if (state.videoGenerationEnabled === undefined) state.videoGenerationEnabled = false
         return state as unknown as SettingsStore
       },
       partialize: (state) => ({
@@ -832,6 +838,8 @@ export const useSettingsStore = create<SettingsStore>()(
         providerRetryMaxAttempts: clampProviderRetryMaxAttempts(state.providerRetryMaxAttempts),
         editorWorkspaceEnabled: state.editorWorkspaceEnabled,
         editorRemoteLanguageServiceEnabled: state.editorRemoteLanguageServiceEnabled,
+        advancedDrawEnabled: state.advancedDrawEnabled,
+        videoGenerationEnabled: state.videoGenerationEnabled,
         maxParallelToolCalls: clampMaxParallelToolCalls(state.maxParallelToolCalls),
         maxConcurrentSubAgents: clampMaxConcurrentSubAgents(state.maxConcurrentSubAgents),
         toolResultFormat: state.toolResultFormat,

@@ -1607,6 +1607,38 @@ function GeneralPanel(): React.JSX.Element {
 
       <Separator />
 
+      <section className="space-y-3">
+        <div className="flex items-center justify-between max-w-lg">
+          <div>
+            <label className="text-sm font-medium">{t('general.advancedDraw')}</label>
+            <p className="text-xs text-muted-foreground">{t('general.advancedDrawDesc')}</p>
+          </div>
+          <Switch
+            checked={settings.advancedDrawEnabled}
+            onCheckedChange={(checked) => settings.updateSettings({ advancedDrawEnabled: checked })}
+          />
+        </div>
+      </section>
+
+      <Separator />
+
+      <section className="space-y-3">
+        <div className="flex items-center justify-between max-w-lg">
+          <div>
+            <label className="text-sm font-medium">{t('general.videoGeneration')}</label>
+            <p className="text-xs text-muted-foreground">{t('general.videoGenerationDesc')}</p>
+          </div>
+          <Switch
+            checked={settings.videoGenerationEnabled}
+            onCheckedChange={(checked) =>
+              settings.updateSettings({ videoGenerationEnabled: checked })
+            }
+          />
+        </div>
+      </section>
+
+      <Separator />
+
       {/* Developer Mode */}
       <section className="space-y-3">
         <div className="flex items-center justify-between max-w-lg">
