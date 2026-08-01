@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
+import {
+  hasCompleteAgentRunJournal,
+  resolveAgentRunAttachSequence
+} from '../src/shared/agent-runtime-recovery.ts'
 
 const manager = await readFile('src/main/ipc/sidecar-manager.ts', 'utf8')
 const receiver = await readFile('src/renderer/src/lib/ipc/agent-stream-receiver.ts', 'utf8')
@@ -26,7 +30,7 @@ const workerJson = await readFile(
 )
 const packageJson = await readFile('package.json', 'utf8')
 
-assert.match(manager, /const AGENT_STREAM_REPLAY_MAX_FRAMES = 512/)
+assert.match(manager, /const AGENT_STREAM_REPLAY_MAX_FRAMES = 5_000/)
 assert.match(manager, /const AGENT_STREAM_REPLAY_TERMINAL_TTL_MS = 60_000/)
 assert.match(manager, /const agentStreamReplayCache = new Map<string, CachedAgentStreamRun>\(\)/)
 assert.match(manager, /cacheSentAgentStreamFrames\(targetWindow, batch\.frames\)/)
@@ -48,6 +52,7 @@ assert.match(manager, /'agent:attach-run'/)
 assert.match(manager, /cached\.ownerWindowId === sourceWindow\.id/)
 assert.match(manager, /!cached\.terminal/)
 assert.match(manager, /cached\.frames\.filter\(\(frame\) => frame\.seq > sinceSeq\)/)
+assert.match(manager, /firstSeq: cached\.frames\[0\]\?\.seq \?\? -1/)
 assert.match(manager, /'agent:run-snapshot'/)
 assert.match(manager, /isAgentRunOwnedBy\(event, runId, runWindowIds\)/)
 assert.match(manager, /reason: 'not_owner'/)
@@ -85,6 +90,14 @@ assert.match(reattach, /agentBridge\.attachAgentRun\(/)
 assert.match(reattach, /agentStream\.ingest\(response\.frames\)/)
 assert.match(reattach, /loadRecentSessionMessages\(run\.sessionId, true\)/)
 assert.match(reattach, /setStreamingMessageId\(run\.sessionId, run\.assistantMessageId\)/)
+assert.match(reattach, /hasCompleteAgentRunJournal\(run\.firstSeq\)/)
+assert.match(reattach, /content: \[\]/)
+assert.match(reattach, /resolveAgentRunAttachSequence\(/)
+assert.equal(hasCompleteAgentRunJournal(1), true)
+assert.equal(hasCompleteAgentRunJournal(38), false)
+assert.equal(resolveAgentRunAttachSequence({ firstSeq: 1, lastSeq: 80 }), -1)
+assert.equal(resolveAgentRunAttachSequence({ firstSeq: 38, lastSeq: 80 }), 80)
+assert.equal(resolveAgentRunAttachSequence({ firstSeq: 1, lastSeq: 80, receiverLastSeq: 72 }), 72)
 assert.match(app, /reattachActiveAgentRuns\(\)/)
 assert.match(packageJson, /"verify:agent-stream-replay"/)
 assert.match(packageJson, /npm run verify:agent-stream-replay/)

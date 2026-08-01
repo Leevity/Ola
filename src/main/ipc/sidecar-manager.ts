@@ -506,7 +506,7 @@ export function registerSidecarHandlers(): void {
   const agentStreamReplayCache = new Map<string, CachedAgentStreamRun>()
   const goalRuntimeObservationChains = new Map<string, Promise<void>>()
 
-  const AGENT_STREAM_REPLAY_MAX_FRAMES = 512
+  const AGENT_STREAM_REPLAY_MAX_FRAMES = 5_000
   const AGENT_STREAM_REPLAY_MAX_RUNS = 64
   const AGENT_STREAM_REPLAY_ACTIVE_TTL_MS = 10 * 60_000
   const AGENT_STREAM_REPLAY_TERMINAL_TTL_MS = 60_000
@@ -1149,6 +1149,7 @@ export function registerSidecarHandlers(): void {
         runId,
         sessionId: cached.sessionId,
         assistantMessageId: runId,
+        firstSeq: cached.frames[0]?.seq ?? -1,
         lastSeq: cached.frames.at(-1)?.seq ?? -1,
         status: 'running' as const
       }))
@@ -1175,6 +1176,7 @@ export function registerSidecarHandlers(): void {
         attached: true,
         frames: cached.frames.filter((frame) => frame.seq > sinceSeq),
         terminal: cached.terminal,
+        firstSeq: cached.frames[0]?.seq ?? -1,
         lastSeq: cached.frames.at(-1)?.seq ?? -1
       }
     }
