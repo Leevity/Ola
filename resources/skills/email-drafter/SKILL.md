@@ -1,7 +1,6 @@
 ---
 name: email-drafter
-description: Generate professional email drafts using Python templates. Use when the user needs to compose business emails, follow-ups, introductions, meeting requests, or other professional correspondence. Supports multiple tones, languages, and email types with structured output.
-compatibility: Requires Python 3. No external dependencies (stdlib only).
+description: Generate professional email drafts using deterministic Python templates. Use for business correspondence, follow-ups, introductions, meeting requests, multilingual drafts, tone variants, and structured email output.
 ---
 
 # Email Drafter

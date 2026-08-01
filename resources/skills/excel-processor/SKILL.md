@@ -1,7 +1,6 @@
 ---
 name: excel-processor
-description: Read, write, analyze, and format Excel spreadsheets (.xlsx). Use when the user needs to create Excel files, extract data from spreadsheets, apply formulas, format cells, or generate Excel reports from data. Supports multiple sheets, charts, and conditional formatting.
-compatibility: Requires Python 3 and openpyxl (pip install openpyxl).
+description: Read, write, analyze, and format Excel workbooks with Python and openpyxl. Use for creating .xlsx files, extracting data, applying formulas and styles, building charts, conditional formatting, or generating multi-sheet reports.
 ---
 
 # Excel Processor
