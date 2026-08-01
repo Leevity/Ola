@@ -10,12 +10,22 @@ const canvasHandler: ToolHandler = {
     inputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', enum: ['inspect', 'add_node', 'connect'] },
+        action: {
+          type: 'string',
+          enum: ['inspect', 'add_node', 'update_node', 'delete_nodes', 'connect', 'disconnect']
+        },
         kind: { type: 'string', enum: ['image', 'text', 'config'] },
         title: { type: 'string' },
         content: { type: 'string' },
         source: { type: 'string' },
         target: { type: 'string' },
+        nodeId: { type: 'string' },
+        nodeIds: { type: 'array', items: { type: 'string' } },
+        edgeId: { type: 'string' },
+        x: { type: 'number' },
+        y: { type: 'number' },
+        width: { type: 'number' },
+        height: { type: 'number' },
         projectId: { type: 'string' }
       },
       required: ['action']
@@ -44,6 +54,30 @@ const canvasHandler: ToolHandler = {
         })
       )
     }
+    if (input.action === 'update_node' && typeof input.nodeId === 'string') {
+      return JSON.stringify(
+        await useDrawGraphStore.getState().applyAssistantAction({
+          action: 'update_node',
+          nodeId: input.nodeId,
+          patch: {
+            ...(typeof input.title === 'string' ? { title: input.title } : {}),
+            ...(typeof input.content === 'string' ? { content: input.content } : {}),
+            ...(typeof input.x === 'number' ? { x: input.x } : {}),
+            ...(typeof input.y === 'number' ? { y: input.y } : {}),
+            ...(typeof input.width === 'number' ? { width: input.width } : {}),
+            ...(typeof input.height === 'number' ? { height: input.height } : {})
+          }
+        })
+      )
+    }
+    if (input.action === 'delete_nodes' && Array.isArray(input.nodeIds)) {
+      return JSON.stringify(
+        await useDrawGraphStore.getState().applyAssistantAction({
+          action: 'delete_nodes',
+          nodeIds: input.nodeIds.filter((id): id is string => typeof id === 'string')
+        })
+      )
+    }
     if (
       input.action === 'connect' &&
       typeof input.source === 'string' &&
@@ -54,6 +88,16 @@ const canvasHandler: ToolHandler = {
           action: 'connect',
           source: input.source,
           target: input.target
+        })
+      )
+    }
+    if (input.action === 'disconnect') {
+      return JSON.stringify(
+        await useDrawGraphStore.getState().applyAssistantAction({
+          action: 'disconnect',
+          ...(typeof input.edgeId === 'string' ? { edgeId: input.edgeId } : {}),
+          ...(typeof input.source === 'string' ? { source: input.source } : {}),
+          ...(typeof input.target === 'string' ? { target: input.target } : {})
         })
       )
     }

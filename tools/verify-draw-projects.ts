@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import fs from 'node:fs'
-import { createEmptyDrawGraphProject, isValidDrawGraphProject } from '../src/shared/draw-graph'
+import {
+  createEmptyDrawGraphProject,
+  isValidDrawGraphProject,
+  wouldCreateDrawGraphCycle
+} from '../src/shared/draw-graph'
 
 const valid = createEmptyDrawGraphProject('project-1')
 valid.nodes.push({
@@ -14,6 +18,23 @@ valid.nodes.push({
   content: ''
 })
 assert.equal(isValidDrawGraphProject(valid), true)
+assert.equal(wouldCreateDrawGraphCycle([], 'node-1', 'node-1'), true)
+assert.equal(
+  wouldCreateDrawGraphCycle(
+    [{ id: 'edge-1', source: 'node-1', target: 'node-2' }],
+    'node-2',
+    'node-1'
+  ),
+  true
+)
+assert.equal(
+  wouldCreateDrawGraphCycle(
+    [{ id: 'edge-1', source: 'node-1', target: 'node-2' }],
+    'node-2',
+    'node-3'
+  ),
+  false
+)
 assert.equal(
   isValidDrawGraphProject({
     ...valid,

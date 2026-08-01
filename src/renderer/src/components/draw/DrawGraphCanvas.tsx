@@ -38,6 +38,7 @@ import { useProviderStore } from '@renderer/stores/provider-store'
 import { useDrawGraphStore } from '@renderer/stores/draw-graph-store'
 import {
   createEmptyDrawGraphProject,
+  wouldCreateDrawGraphCycle,
   type DrawGraphNode,
   type DrawGraphAssetRef,
   type DrawGraphImageOperation,
@@ -202,6 +203,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
     if (selected.length !== 2) return
     const [source, target] = selected
     if (project.edges.some((edge) => edge.source === source && edge.target === target)) return
+    if (wouldCreateDrawGraphCycle(project.edges, source, target)) return
     commit((current) => ({
       ...current,
       edges: [...current.edges, { id: nanoid(), source, target }]
