@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
-import http from 'node:http'
 import fs from 'node:fs'
+import http from 'node:http'
 import {
   cancelSeedanceTask,
   createSeedanceTask,
@@ -88,5 +88,14 @@ assert.match(runtime, /schedulePoll/)
 assert.match(runtime, /downloadVideoResult/)
 assert.match(runtime, /Cancel an active video task before deleting it/)
 assert.doesNotMatch(runtime, /apiKey\s*:/)
+
+const tool = fs.readFileSync('src/renderer/src/lib/tools/video-generation-tool.ts', 'utf8')
+const toolRegistry = fs.readFileSync('src/renderer/src/lib/tools/index.ts', 'utf8')
+assert.match(tool, /name: 'GenerateVideo'/)
+assert.match(tool, /type: 'video_generation_task'/)
+assert.match(tool, /requiresApproval: \(\) => true/)
+assert.match(toolRegistry, /updateVideoGenerationToolRegistration/)
+assert.match(toolRegistry, /videoGenerationEnabled/)
+assert.match(toolRegistry, /unregisterVideoGenerationTool/)
 
 console.log('Media runtime verification passed')

@@ -19,6 +19,11 @@ import { refreshDynamicToolCatalog } from './dynamic-tool-catalog'
 import { registerCodeCompatibleTools } from './code-compatible-tool'
 import { isCanvasToolRegistered, registerCanvasTool, unregisterCanvasTool } from './canvas-tool'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import {
+  isVideoGenerationToolRegistered,
+  registerVideoGenerationTool,
+  unregisterVideoGenerationTool
+} from './video-generation-tool'
 
 let _allToolsRegistered = false
 
@@ -40,6 +45,7 @@ export async function registerAllTools(): Promise<void> {
   registerGoalTools()
   registerMemoryTools()
   updateCanvasToolRegistration(useSettingsStore.getState().advancedDrawEnabled)
+  updateVideoGenerationToolRegistration(useSettingsStore.getState().videoGenerationEnabled)
 
   // Skills and SubAgents are user-editable catalogs; load them once here and
   // refresh them again before every request via ensureRequestToolCatalogFresh().
@@ -71,6 +77,15 @@ export function updateCanvasToolRegistration(enabled: boolean): void {
     registerCanvasTool()
   } else if (!enabled && isRegistered) {
     unregisterCanvasTool()
+  }
+}
+
+export function updateVideoGenerationToolRegistration(enabled: boolean): void {
+  const isRegistered = isVideoGenerationToolRegistered()
+  if (enabled && !isRegistered) {
+    registerVideoGenerationTool()
+  } else if (!enabled && isRegistered) {
+    unregisterVideoGenerationTool()
   }
 }
 
