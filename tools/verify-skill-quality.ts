@@ -4,7 +4,10 @@ import path from 'node:path'
 
 const root = path.resolve('resources/skills')
 const entries = await readdir(root, { withFileTypes: true })
-const skillNames = entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort()
+const skillNames = entries
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => entry.name)
+  .sort()
 
 assert(skillNames.length > 0, 'expected bundled skills')
 
@@ -34,7 +37,11 @@ for (const folderName of skillNames) {
   const metadataPath = path.join(root, folderName, 'agents', 'openai.yaml')
   try {
     const metadata = await readFile(metadataPath, 'utf8')
-    assert.match(metadata, /default_prompt:\s*["'].*\$[a-z0-9-]+/s, `${folderName}: default prompt must mention the skill`)
+    assert.match(
+      metadata,
+      /default_prompt:\s*["'].*\$[a-z0-9-]+/s,
+      `${folderName}: default prompt must mention the skill`
+    )
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code
     if (code !== 'ENOENT') throw error
