@@ -15,6 +15,7 @@ import {
   Type,
   Video,
   Play,
+  Sparkles,
   Undo2
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -36,6 +37,9 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useDrawGraphStore } from '@renderer/stores/draw-graph-store'
+import { useChatStore } from '@renderer/stores/chat-store'
+import { getSessionInputDraftKey, useInputDraftStore } from '@renderer/stores/input-draft-store'
+import { useUIStore } from '@renderer/stores/ui-store'
 import {
   createEmptyDrawGraphProject,
   wouldCreateDrawGraphCycle,
@@ -153,6 +157,19 @@ export function DrawGraphCanvas(): React.JSX.Element {
     setProject(next)
     setProjects((items) => [...items, { id, name: next.name }])
     loaded.current = true
+  }
+
+  const openCanvasAssistant = async (): Promise<void> => {
+    const chat = useChatStore.getState()
+    const sessionId = chat.createSession('cowork', chat.activeProjectId)
+    chat.updateSessionTitle(sessionId, t('drawPage.graph.assistantTitle'))
+    await useInputDraftStore.getState().setDraft(getSessionInputDraftKey(sessionId), {
+      text: t('drawPage.graph.assistantDraft', { projectId: project.id }),
+      images: [],
+      skill: null,
+      selectedFiles: []
+    })
+    useUIStore.getState().navigateToSession(sessionId)
   }
 
   useEffect(() => {
@@ -858,9 +875,15 @@ export function DrawGraphCanvas(): React.JSX.Element {
           {t('drawPage.graph.config')}
         </Button>
         {advancedDrawEnabled ? (
-          <Button size="sm" variant="ghost" onClick={() => setPromptLibraryOpen(true)}>
-            {t('drawPage.graph.promptLibrary')}
-          </Button>
+          <>
+            <Button size="sm" variant="ghost" onClick={() => setPromptLibraryOpen(true)}>
+              {t('drawPage.graph.promptLibrary')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => void openCanvasAssistant()}>
+              <Sparkles className="size-4" />
+              {t('drawPage.graph.assistantTitle')}
+            </Button>
+          </>
         ) : null}
         <Button size="sm" variant="outline" disabled={selected.length !== 2} onClick={connect}>
           <Link2 className="size-4" />

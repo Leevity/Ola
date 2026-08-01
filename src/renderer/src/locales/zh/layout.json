@@ -783,6 +783,8 @@
       "upscale": "放大",
       "project": "画布",
       "promptLibrary": "提示词库",
+      "assistantTitle": "画布助手",
+      "assistantDraft": "请帮我完善画布项目 {{projectId}}。先检查画布并说明准备进行的调整，修改画布时只能使用 CanvasOperation。",
       "assetLibrary": "资产库",
       "assets": "项资产",
       "videoProviderDisabled": "请先配置并启用视频服务商，再运行此节点",
