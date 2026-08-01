@@ -32,6 +32,15 @@ export interface DrawGraphNode {
   status?: DrawGraphOperationState
   outputAssetId?: string
   error?: string
+  video?: {
+    providerId?: string
+    model?: string
+    aspectRatio?: string
+    durationSeconds?: number
+    resolution?: string
+    taskId?: string
+    outputUrl?: string
+  }
 }
 
 export interface DrawGraphEdge {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { nanoid } from 'nanoid'
 import {
   Crop,
@@ -13,6 +13,7 @@ import {
   Settings2,
   Type,
   Video,
+  Play,
   Undo2
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -25,6 +26,7 @@ import {
   type DrawGraphNode,
   type DrawGraphProject
 } from '../../../../shared/draw-graph'
+import type { VideoProviderCapability, VideoTask } from '../../../../shared/media-runtime'
 
 type Snapshot = Pick<DrawGraphProject, 'nodes' | 'edges'>
 
@@ -36,6 +38,8 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [history, setHistory] = useState<Snapshot[]>([])
   const [future, setFuture] = useState<Snapshot[]>([])
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
+  const [videoCapabilities, setVideoCapabilities] = useState<VideoProviderCapability[]>([])
+  const [videoTasks, setVideoTasks] = useState<Map<string, VideoTask>>(new Map())
   const advancedDrawEnabled = useSettingsStore((state) => state.advancedDrawEnabled)
   const videoGenerationEnabled = useSettingsStore((state) => state.videoGenerationEnabled)
   const loaded = useRef(false)
@@ -50,6 +54,25 @@ export function DrawGraphCanvas(): React.JSX.Element {
       loaded.current = true
     })
   }, [])
+
+  const refreshVideoTasks = useCallback(async (): Promise<void> => {
+    const items = (await ipcClient.invoke('media:tasks-list')) as VideoTask[]
+    setVideoTasks(new Map(items.map((task) => [task.id, task])))
+  }, [])
+
+  useEffect(() => {
+    if (!videoGenerationEnabled) {
+      setVideoCapabilities([])
+      return
+    }
+    void ipcClient.invoke('media:status').then((value) => {
+      const status = value as { capabilities?: VideoProviderCapability[] }
+      setVideoCapabilities(status.capabilities ?? [])
+    })
+    void refreshVideoTasks()
+    const timer = window.setInterval(() => void refreshVideoTasks(), 3000)
+    return () => window.clearInterval(timer)
+  }, [refreshVideoTasks, videoGenerationEnabled])
 
   const openProject = (id: string): void => {
     loaded.current = false
@@ -153,6 +176,117 @@ export function DrawGraphCanvas(): React.JSX.Element {
       )
     }))
   }
+
+  const generateVideo = async (node: DrawGraphNode): Promise<void> => {
+    const selectedCapability =
+      videoCapabilities.find(
+        (item) =>
+          item.providerId === node.video?.providerId &&
+          item.models.includes(node.video?.model ?? '')
+      ) ?? videoCapabilities[0]
+    const model = node.video?.model ?? selectedCapability?.models[0]
+    if (!selectedCapability || !model || !node.content.trim()) return
+    commit((current) => ({
+      ...current,
+      nodes: current.nodes.map((item) =>
+        item.id === node.id ? { ...item, status: 'queued', error: undefined } : item
+      )
+    }))
+    try {
+      const task = (await ipcClient.invoke('media:task-create', {
+        provider: selectedCapability.provider,
+        providerId: selectedCapability.providerId,
+        model,
+        prompt: node.content,
+        aspectRatio: node.video?.aspectRatio ?? '16:9',
+        durationSeconds: node.video?.durationSeconds ?? 5,
+        resolution: node.video?.resolution ?? '720p'
+      })) as VideoTask
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((item) =>
+          item.id === node.id
+            ? {
+                ...item,
+                status: task.state,
+                video: {
+                  ...item.video,
+                  providerId: task.providerId,
+                  model: task.model,
+                  taskId: task.id
+                }
+              }
+            : item
+        )
+      }))
+      void refreshVideoTasks()
+    } catch (error) {
+      commit((current) => ({
+        ...current,
+        nodes: current.nodes.map((item) =>
+          item.id === node.id
+            ? {
+                ...item,
+                status: 'failed',
+                error: error instanceof Error ? error.message : String(error)
+              }
+            : item
+        )
+      }))
+    }
+  }
+
+  const cancelVideo = async (node: DrawGraphNode): Promise<void> => {
+    if (!node.video?.taskId) return
+    await ipcClient.invoke('media:task-cancel', { id: node.video.taskId })
+    await refreshVideoTasks()
+  }
+
+  const deleteVideoOutput = async (node: DrawGraphNode): Promise<void> => {
+    if (!node.video?.taskId) return
+    await ipcClient.invoke('media:task-delete', { id: node.video.taskId })
+    commit((current) => ({
+      ...current,
+      nodes: current.nodes.map((item) =>
+        item.id === node.id
+          ? {
+              ...item,
+              status: 'idle',
+              error: undefined,
+              video: { ...item.video, taskId: undefined, outputUrl: undefined }
+            }
+          : item
+      )
+    }))
+    await refreshVideoTasks()
+  }
+
+  useEffect(() => {
+    if (videoTasks.size === 0) return
+    setProject((current) => {
+      let changed = false
+      const nodes = current.nodes.map((node) => {
+        if (!node.video?.taskId) return node
+        const task = videoTasks.get(node.video.taskId)
+        if (!task) return node
+        const outputUrl = task.outputUrl ? `ola-media://${task.id}` : undefined
+        if (
+          node.status === task.state &&
+          node.error === task.error &&
+          node.video.outputUrl === outputUrl
+        )
+          return node
+        changed = true
+        return {
+          ...node,
+          status: task.state,
+          error: task.error,
+          video: { ...node.video, outputUrl }
+        }
+      })
+      return changed ? { ...current, nodes } : current
+    })
+  }, [videoTasks])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-muted/10">
@@ -346,15 +480,73 @@ export function DrawGraphCanvas(): React.JSX.Element {
               ) : null}
               {node.kind === 'video' ? (
                 <div className="mt-2 space-y-1 text-[10px] text-muted-foreground">
+                  {videoGenerationEnabled && videoCapabilities.length > 0 ? (
+                    <>
+                      <select
+                        className="h-7 w-full rounded border bg-background px-1"
+                        value={`${node.video?.providerId ?? videoCapabilities[0].providerId}:${node.video?.model ?? videoCapabilities[0].models[0]}`}
+                        onChange={(event) => {
+                          const [providerId, model] = event.target.value.split(':')
+                          setProject((current) => ({
+                            ...current,
+                            nodes: current.nodes.map((item) =>
+                              item.id === node.id
+                                ? { ...item, video: { ...item.video, providerId, model } }
+                                : item
+                            )
+                          }))
+                        }}
+                      >
+                        {videoCapabilities.flatMap((capability) =>
+                          capability.models.map((model) => (
+                            <option
+                              key={`${capability.providerId}:${model}`}
+                              value={`${capability.providerId}:${model}`}
+                            >
+                              {capability.providerName} · {model}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={
+                          !node.content.trim() || ['queued', 'running'].includes(node.status ?? '')
+                        }
+                        onClick={() => void generateVideo(node)}
+                      >
+                        <Play className="size-3" />
+                        {t('drawPage.graph.generate', { defaultValue: 'Generate' })}
+                      </Button>
+                      {node.video?.taskId && ['queued', 'running'].includes(node.status ?? '') ? (
+                        <Button size="sm" variant="ghost" onClick={() => void cancelVideo(node)}>
+                          {t('drawPage.graph.cancel', { defaultValue: 'Cancel' })}
+                        </Button>
+                      ) : null}
+                    </>
+                  ) : (
+                    <div>
+                      {videoGenerationEnabled
+                        ? t('drawPage.graph.videoProviderDisabled')
+                        : t('drawPage.graph.optionalCapabilityDisabled')}
+                    </div>
+                  )}
+                  {node.video?.outputUrl ? (
+                    <video className="w-full rounded" controls src={node.video.outputUrl} />
+                  ) : null}
+                  {node.error ? <div className="text-destructive">{node.error}</div> : null}
                   <div>
-                    {videoGenerationEnabled
-                      ? t('drawPage.graph.videoProviderDisabled')
-                      : t('drawPage.graph.optionalCapabilityDisabled')}
+                    {node.status ?? 'idle'} · {t('drawPage.graph.estimatedCost')}: —
                   </div>
-                  <div>
-                    {t('drawPage.graph.estimatedCost')}: — · {t('drawPage.graph.outputSize')}: —
-                  </div>
-                  <Button size="sm" variant="ghost" disabled>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={
+                      !node.video?.taskId || ['queued', 'running'].includes(node.status ?? '')
+                    }
+                    onClick={() => void deleteVideoOutput(node)}
+                  >
                     {t('drawPage.graph.deleteOutput')}
                   </Button>
                 </div>
