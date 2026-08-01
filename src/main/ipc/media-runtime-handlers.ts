@@ -6,14 +6,59 @@ import {
   MEDIA_CACHE_MAX_BYTES,
   MEDIA_FILE_MAX_BYTES,
   type MediaPluginSettings,
+  type VideoGenerationRequest,
   type VideoTask
 } from '../../shared/media-runtime'
 import { registerMessagePackHandler } from './messagepack-handler'
 
 const tasks = new Map<string, VideoTask>()
-const settings: MediaPluginSettings = { seedanceEnabled: false, xaiEnabled: false }
+const settings: MediaPluginSettings = {
+  videoGenerationEnabled: false,
+  seedanceEnabled: false,
+  xaiEnabled: false
+}
 let protocolRegistered = false
+let tasksLoaded = false
 const cacheDir = (): string => path.join(app.getPath('userData'), 'media-cache')
+const tasksPath = (): string => path.join(app.getPath('userData'), 'media-tasks.json')
+
+async function loadTasks(): Promise<void> {
+  if (tasksLoaded) return
+  tasksLoaded = true
+  try {
+    const parsed = JSON.parse(await fs.readFile(tasksPath(), 'utf8')) as VideoTask[]
+    for (const task of parsed) {
+      if (!task?.id) continue
+      tasks.set(task.id, task.state === 'running' ? { ...task, state: 'queued' } : task)
+    }
+  } catch {
+    // A missing or invalid task index starts clean; cached media remains untouched.
+  }
+}
+
+async function persistTasks(): Promise<void> {
+  const filePath = tasksPath()
+  const tempPath = `${filePath}.tmp`
+  await fs.mkdir(path.dirname(filePath), { recursive: true })
+  await fs.writeFile(tempPath, JSON.stringify(Array.from(tasks.values())), 'utf8')
+  await fs.rename(tempPath, filePath)
+}
+
+function validateVideoRequest(input: VideoGenerationRequest): VideoGenerationRequest {
+  const prompt = input.prompt?.trim()
+  if (!prompt) throw new Error('Video prompt is required')
+  if (input.durationSeconds !== undefined && input.durationSeconds <= 0) {
+    throw new Error('Video duration must be greater than zero')
+  }
+  for (const value of [input.firstFrameUrl, input.lastFrameUrl]) {
+    if (!value) continue
+    const protocol = new URL(value).protocol
+    if (!['file:', 'ola-media:', 'data:'].includes(protocol)) {
+      throw new Error('Video frame input uses an unsupported protocol')
+    }
+  }
+  return { ...input, prompt }
+}
 
 async function cacheEntries(): Promise<Array<{ path: string; size: number; mtimeMs: number }>> {
   try {
@@ -70,40 +115,61 @@ function registerLocalMediaProtocol(): void {
 
 export function registerMediaRuntimeHandlers(): void {
   registerLocalMediaProtocol()
-  registerMessagePackHandler('media:status', async () => ({
-    settings,
-    ...(await cleanupCache()),
-    maxBytes: MEDIA_CACHE_MAX_BYTES
-  }))
-  registerMessagePackHandler('media:tasks-list', async () => Array.from(tasks.values()))
-  registerMessagePackHandler<{ provider: 'seedance' | 'xai'; prompt: string }>(
-    'media:task-create',
+  registerMessagePackHandler('media:status', async () => {
+    await loadTasks()
+    return { settings, ...(await cleanupCache()), maxBytes: MEDIA_CACHE_MAX_BYTES }
+  })
+  registerMessagePackHandler<Partial<MediaPluginSettings>>(
+    'media:settings-update',
     async (input) => {
-      const enabled = input.provider === 'seedance' ? settings.seedanceEnabled : settings.xaiEnabled
-      if (!enabled) throw new Error('Optional video provider plugin is disabled')
-      const now = Date.now()
-      const task: VideoTask = {
-        id: randomUUID(),
-        provider: input.provider,
-        prompt: input.prompt,
-        state: 'queued',
-        estimatedCostUsd: null,
-        progress: 0,
-        createdAt: now,
-        updatedAt: now
+      if (typeof input.videoGenerationEnabled === 'boolean') {
+        settings.videoGenerationEnabled = input.videoGenerationEnabled
       }
-      tasks.set(task.id, task)
-      return task
+      if (typeof input.seedanceEnabled === 'boolean')
+        settings.seedanceEnabled = input.seedanceEnabled
+      if (typeof input.xaiEnabled === 'boolean') settings.xaiEnabled = input.xaiEnabled
+      return { ...settings }
     }
   )
+  registerMessagePackHandler('media:tasks-list', async () => {
+    await loadTasks()
+    return Array.from(tasks.values())
+  })
+  registerMessagePackHandler<VideoGenerationRequest>('media:task-create', async (rawInput) => {
+    await loadTasks()
+    if (!settings.videoGenerationEnabled) throw new Error('Video generation is disabled')
+    const input = validateVideoRequest(rawInput)
+    const enabled = input.provider === 'seedance' ? settings.seedanceEnabled : settings.xaiEnabled
+    if (!enabled) throw new Error('Optional video provider plugin is disabled')
+    const now = Date.now()
+    const task: VideoTask = {
+      id: randomUUID(),
+      provider: input.provider,
+      prompt: input.prompt,
+      request: input,
+      state: 'queued',
+      estimatedCostUsd: null,
+      progress: 0,
+      createdAt: now,
+      updatedAt: now
+    }
+    tasks.set(task.id, task)
+    await persistTasks()
+    return task
+  })
   registerMessagePackHandler<{ id: string }>('media:task-cancel', async ({ id }) => {
+    await loadTasks()
     const task = tasks.get(id)
     if (task && task.state !== 'completed')
       tasks.set(id, { ...task, state: 'cancelled', updatedAt: Date.now() })
+    await persistTasks()
     return { success: Boolean(task) }
   })
-  registerMessagePackHandler<{ id: string }>('media:task-delete', async ({ id }) => ({
-    success: tasks.delete(id)
-  }))
+  registerMessagePackHandler<{ id: string }>('media:task-delete', async ({ id }) => {
+    await loadTasks()
+    const success = tasks.delete(id)
+    await persistTasks()
+    return { success }
+  })
   registerMessagePackHandler('media:cache-cleanup', cleanupCache)
 }
