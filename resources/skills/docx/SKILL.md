@@ -273,7 +273,7 @@ doc.save('output.docx')
 
 **Key points:**
 
-- Install: `pip install python-docx` or `bun add python-docx`
+- Install the Python package with the active interpreter: `python3 -m pip install python-docx`
 - Works directly on .docx files (no need to unpack/pack)
 - Simple API, reliable results
 - Comments appear in Word's comment pane with Z.ai as author
