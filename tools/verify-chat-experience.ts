@@ -82,6 +82,14 @@ assert(
 )
 assert(collapsiblePanel.includes('useReducedMotion'), 'reduced-motion handling is missing')
 assert(
+  collapsiblePanel.includes('new ResizeObserver(measure)'),
+  'dynamic height observer is missing'
+)
+assert(
+  collapsiblePanel.includes("height: reduceMotion ? 'auto' : contentHeight"),
+  'dynamic content height is not connected to the transition'
+)
+assert(
   planReviewCard.includes('navigator.clipboard.writeText'),
   'plan markdown copy action is missing'
 )
