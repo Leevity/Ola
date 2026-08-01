@@ -204,6 +204,7 @@ function App(): React.JSX.Element {
   const cronLogBufferRef = useRef<CronAgentLogEntry[]>([])
   const cronLogFlushTimerRef = useRef<number | null>(null)
   const onboardingCompleted = useSettingsStore((s) => s.onboardingCompleted)
+  const videoGenerationEnabled = useSettingsStore((s) => s.videoGenerationEnabled)
   const [settingsHydrated, setSettingsHydrated] = useState(() =>
     useSettingsStore.persist.hasHydrated()
   )
@@ -216,6 +217,17 @@ function App(): React.JSX.Element {
       )
     })
   }, [])
+
+  useEffect(() => {
+    void ipcClient
+      .invoke('media:settings-update', { videoGenerationEnabled })
+      .catch((error) =>
+        console.warn(
+          '[App] Failed to update media capability state',
+          error instanceof Error ? error.message : String(error)
+        )
+      )
+  }, [videoGenerationEnabled])
 
   // Initialize plugin auto-reply agent loop listener only in the main app window.
   usePluginAutoReply(!sessionWindowView && !sshWindowView)
