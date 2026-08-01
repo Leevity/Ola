@@ -58,6 +58,8 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'sidecar:request',
   'sidecar:can-handle',
   'agent:stream-replay',
+  'agent:runtime-state',
+  'agent:attach-run',
   'agent:run-snapshot',
   'codegraph:status',
   'provider:mirror-snapshot',

@@ -145,6 +145,45 @@ class AgentBridgeClient {
     }
   }
 
+  async getAgentRuntimeState(): Promise<{
+    runs: Array<{
+      runId: string
+      sessionId: string
+      assistantMessageId: string
+      lastSeq: number
+      status: 'running'
+    }>
+  }> {
+    return (await ipcClient.invoke('agent:runtime-state')) as {
+      runs: Array<{
+        runId: string
+        sessionId: string
+        assistantMessageId: string
+        lastSeq: number
+        status: 'running'
+      }>
+    }
+  }
+
+  async attachAgentRun(
+    runId: string,
+    sinceSeq = -1
+  ): Promise<{
+    attached: boolean
+    frames: import('../../../../shared/agent-stream-protocol').AgentStreamEnvelope[]
+    terminal?: boolean
+    lastSeq?: number
+    reason?: 'not_found' | 'not_owner'
+  }> {
+    return (await ipcClient.invoke('agent:attach-run', { runId, sinceSeq })) as {
+      attached: boolean
+      frames: import('../../../../shared/agent-stream-protocol').AgentStreamEnvelope[]
+      terminal?: boolean
+      lastSeq?: number
+      reason?: 'not_found' | 'not_owner'
+    }
+  }
+
   async cancelAgent(
     runId: string,
     toolUseId?: string
