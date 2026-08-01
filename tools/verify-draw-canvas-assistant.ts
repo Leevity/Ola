@@ -4,5 +4,7 @@ const tool = fs.readFileSync('src/renderer/src/lib/tools/canvas-tool.ts', 'utf8'
 const registry = fs.readFileSync('src/renderer/src/lib/tools/index.ts', 'utf8')
 assert.match(tool, /name: 'CanvasOperation'/)
 assert.match(tool, /requiresApproval: \(input\) => input.action !== 'inspect'/)
-assert.match(registry, /registerCanvasTool\(\)/)
+assert.match(registry, /updateCanvasToolRegistration/)
+assert.match(registry, /advancedDrawEnabled/)
+assert.match(registry, /unregisterCanvasTool/)
 console.log('Draw canvas assistant verification passed')

@@ -17,7 +17,8 @@ import { registerGoalTools } from './goal-tool'
 import { registerMemoryTools } from './memory-tool'
 import { refreshDynamicToolCatalog } from './dynamic-tool-catalog'
 import { registerCodeCompatibleTools } from './code-compatible-tool'
-import { registerCanvasTool } from './canvas-tool'
+import { isCanvasToolRegistered, registerCanvasTool, unregisterCanvasTool } from './canvas-tool'
+import { useSettingsStore } from '@renderer/stores/settings-store'
 
 let _allToolsRegistered = false
 
@@ -38,7 +39,7 @@ export async function registerAllTools(): Promise<void> {
   registerNotifyTool()
   registerGoalTools()
   registerMemoryTools()
-  registerCanvasTool()
+  updateCanvasToolRegistration(useSettingsStore.getState().advancedDrawEnabled)
 
   // Skills and SubAgents are user-editable catalogs; load them once here and
   // refresh them again before every request via ensureRequestToolCatalogFresh().
@@ -61,6 +62,15 @@ export function updateWebSearchToolRegistration(enabled: boolean): void {
     registerWebSearchTool()
   } else if (!enabled && isRegistered) {
     unregisterWebSearchTool()
+  }
+}
+
+export function updateCanvasToolRegistration(enabled: boolean): void {
+  const isRegistered = isCanvasToolRegistered()
+  if (enabled && !isRegistered) {
+    registerCanvasTool()
+  } else if (!enabled && isRegistered) {
+    unregisterCanvasTool()
   }
 }
 
