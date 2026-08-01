@@ -1213,6 +1213,8 @@
     "modelCategorySpeech": "Speech",
     "modelCategoryEmbedding": "Embedding",
     "modelCategoryImage": "Image",
+    "modelCategoryVideo": "Video",
+    "seedanceVideo": "Seedance video",
     "maxOutputTokens": "Max Output Tokens",
     "pricing": "Pricing",
     "modelConfig": "Model config",

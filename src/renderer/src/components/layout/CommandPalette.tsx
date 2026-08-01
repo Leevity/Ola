@@ -41,6 +41,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 
 const MODEL_PRESETS: Record<ProviderType, string[]> = {
+  'seedance-video': [],
   anthropic: [
     'claude-sonnet-4-5-20250929',
     'claude-opus-4-5-20251101',

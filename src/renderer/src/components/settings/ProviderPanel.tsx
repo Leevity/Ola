@@ -16,6 +16,7 @@ import {
   Image as ImageIcon,
   Mic,
   Shapes,
+  Video,
   Sparkles,
   Copy,
   MonitorSmartphone,
@@ -530,6 +531,7 @@ function AddProviderDialog({
                 <SelectItem value="openai-responses">{t('provider.openaiResponses')}</SelectItem>
                 <SelectItem value="anthropic">{t('provider.anthropicMessages')}</SelectItem>
                 <SelectItem value="gemini">Gemini</SelectItem>
+                <SelectItem value="seedance-video">{t('provider.seedanceVideo')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -939,6 +941,9 @@ function ModelFormDialog({
                 <SelectItem value="gemini" className="text-xs">
                   Gemini
                 </SelectItem>
+                <SelectItem value="seedance-video" className="text-xs">
+                  {t('provider.seedanceVideo')}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -963,6 +968,9 @@ function ModelFormDialog({
                 </SelectItem>
                 <SelectItem value="image" className="text-xs">
                   {t('provider.modelCategoryImage')}
+                </SelectItem>
+                <SelectItem value="video" className="text-xs">
+                  {t('provider.modelCategoryVideo')}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -3175,6 +3183,9 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 <SelectItem value="gemini" className="text-xs">
                   Gemini
                 </SelectItem>
+                <SelectItem value="seedance-video" className="text-xs">
+                  {t('provider.seedanceVideo')}
+                </SelectItem>
               </SelectContent>
             </Select>
           </section>
@@ -3304,6 +3315,12 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                       key: 'category-image',
                       icon: ImageIcon,
                       label: t('provider.modelCategoryImage')
+                    })
+                  } else if (model.category === 'video') {
+                    capabilityIndicators.push({
+                      key: 'category-video',
+                      icon: Video,
+                      label: t('provider.modelCategoryVideo')
                     })
                   } else if (model.category === 'speech') {
                     capabilityIndicators.push({
@@ -3761,6 +3778,12 @@ export function ModelManagementPanel(): React.JSX.Element {
                     key: 'category-image',
                     icon: ImageIcon,
                     label: t('provider.modelCategoryImage')
+                  })
+                } else if (model.category === 'video') {
+                  capabilityIndicators.push({
+                    key: 'category-video',
+                    icon: Video,
+                    label: t('provider.modelCategoryVideo')
                   })
                 } else if (model.category === 'speech') {
                   capabilityIndicators.push({
