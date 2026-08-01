@@ -1,4 +1,5 @@
 import type { ChannelIncomingMessageData } from '../../channel-types'
+import { encodeMessageReplyReference } from '../../message-reply-reference'
 
 /**
  * Parse a Discord WebSocket message frame into normalized data.
@@ -19,7 +20,7 @@ export function parseDiscordWsMessage(raw: string): ChannelIncomingMessageData |
         senderId: msg.author?.id ?? '',
         senderName: msg.author?.username ?? '',
         content: msg.content ?? '',
-        messageId: msg.id ?? '',
+        messageId: encodeMessageReplyReference(msg.channel_id ?? '', msg.id ?? ''),
         timestamp
       }
     }
@@ -31,7 +32,7 @@ export function parseDiscordWsMessage(raw: string): ChannelIncomingMessageData |
         senderId: data.senderId ?? '',
         senderName: data.senderName ?? '',
         content: data.content,
-        messageId: data.messageId ?? '',
+        messageId: encodeMessageReplyReference(data.chatId, data.messageId ?? ''),
         timestamp: data.timestamp ?? Date.now()
       }
     }

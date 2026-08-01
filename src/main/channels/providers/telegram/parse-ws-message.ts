@@ -1,4 +1,5 @@
 import type { ChannelIncomingMessageData } from '../../channel-types'
+import { encodeMessageReplyReference } from '../../message-reply-reference'
 
 /**
  * Parse a Telegram WebSocket message frame into normalized data.
@@ -19,7 +20,10 @@ export function parseTelegramWsMessage(raw: string): ChannelIncomingMessageData 
         senderId: String(msg.from?.id ?? ''),
         senderName: [msg.from?.first_name, msg.from?.last_name].filter(Boolean).join(' ') || '',
         content: msg.text ?? '',
-        messageId: String(msg.message_id ?? ''),
+        messageId: encodeMessageReplyReference(
+          String(msg.chat?.id ?? ''),
+          String(msg.message_id ?? '')
+        ),
         timestamp
       }
     }
@@ -31,7 +35,7 @@ export function parseTelegramWsMessage(raw: string): ChannelIncomingMessageData 
         senderId: data.senderId ?? '',
         senderName: data.senderName ?? '',
         content: data.content,
-        messageId: data.messageId ?? '',
+        messageId: encodeMessageReplyReference(data.chatId, data.messageId ?? ''),
         timestamp: data.timestamp ?? Date.now()
       }
     }
