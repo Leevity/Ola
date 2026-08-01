@@ -78,6 +78,14 @@ function formatBytes(value?: number): string {
   return `${amount >= 100 ? amount.toFixed(0) : amount.toFixed(1)} ${units[index]}`
 }
 
+function formatDuration(seconds?: number): string {
+  if (!seconds || !Number.isFinite(seconds)) return '--'
+  if (seconds < 60) return `${Math.ceil(seconds)}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = Math.ceil(seconds % 60)
+  return `${minutes}m ${remainder}s`
+}
+
 function formatTaskTitle(task: SftpTransferTask): string {
   if (task.type === 'remote-copy') return 'Remote copy'
   if (task.type === 'download') return 'Download'
@@ -174,11 +182,13 @@ function HostSidebar({
 function TransferTaskList({
   tasks,
   onCancel,
+  onPause,
   onRetry,
   onClear
 }: {
   tasks: SftpTransferTask[]
   onCancel: (taskId: string) => void
+  onPause: (taskId: string) => void
   onRetry: (taskId: string) => void
   onClear: (taskId: string) => void
 }): React.JSX.Element {
@@ -209,7 +219,7 @@ function TransferTaskList({
           const task = tasks[virtualRow.index]
           if (!task) return null
           const percent = task.progress?.percent ?? 0
-          const active = !['done', 'error', 'canceled'].includes(task.stage)
+          const active = !['done', 'error', 'canceled', 'paused'].includes(task.stage)
 
           return (
             <div
@@ -234,14 +244,24 @@ function TransferTaskList({
                   </div>
 
                   <div className="flex gap-2">
-                    {task.stage === 'error' && task.request ? (
+                    {['error', 'paused'].includes(task.stage) && task.request ? (
                       <Button
                         variant="outline"
                         size="sm"
                         className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
                         onClick={() => onRetry(task.taskId)}
                       >
-                        {t('sftp.retryTask', { defaultValue: 'Resume' })}
+                        {t('sftp.retryTask')}
+                      </Button>
+                    ) : null}
+                    {task.stage === 'transferring' && task.request ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
+                        onClick={() => onPause(task.taskId)}
+                      >
+                        {t('sftp.pauseTask')}
                       </Button>
                     ) : null}
                     <Button
@@ -277,6 +297,15 @@ function TransferTaskList({
                   </div>
                 </div>
               </div>
+              <div className="mt-1 flex justify-between text-[0.72rem] text-muted-foreground">
+                <span>
+                  {formatBytes(task.progress?.speedBytesPerSecond)}/s ·{' '}
+                  {t('sftp.remaining', {
+                    duration: formatDuration(task.progress?.remainingSeconds)
+                  })}
+                </span>
+                <span>{t('sftp.retryCount', { count: task.retryCount ?? 0 })}</span>
+              </div>
             </div>
           )
         })}
@@ -291,6 +320,7 @@ function InspectorPanel({
   setTab,
   tasks,
   onCancelTask,
+  onPauseTask,
   onRetryTask,
   onClearTask,
   activePane,
@@ -306,6 +336,7 @@ function InspectorPanel({
   setTab: (tab: SftpInspectorTab) => void
   tasks: SftpTransferTask[]
   onCancelTask: (taskId: string) => void
+  onPauseTask: (taskId: string) => void
   onRetryTask: (taskId: string) => void
   onClearTask: (taskId: string) => void
   activePane: SftpPaneId
@@ -348,6 +379,7 @@ function InspectorPanel({
           <TransferTaskList
             tasks={tasks}
             onCancel={onCancelTask}
+            onPause={onPauseTask}
             onRetry={onRetryTask}
             onClear={onClearTask}
           />
@@ -500,6 +532,7 @@ export function SshSftpWorkspace(): React.JSX.Element {
   const setSftpInspectorTab = useSshStore((state) => state.setSftpInspectorTab)
   const startTransfer = useSshStore((state) => state.startTransfer)
   const cancelTransfer = useSshStore((state) => state.cancelTransfer)
+  const pauseTransfer = useSshStore((state) => state.pauseTransfer)
   const retryTransfer = useSshStore((state) => state.retryTransfer)
   const clearTransferTask = useSshStore((state) => state.clearTransferTask)
 
@@ -1120,6 +1153,7 @@ export function SshSftpWorkspace(): React.JSX.Element {
                       setTab={setSftpInspectorTab}
                       tasks={orderedTasks}
                       onCancelTask={(taskId) => void cancelTransfer(taskId)}
+                      onPauseTask={(taskId) => void pauseTransfer(taskId)}
                       onRetryTask={(taskId) => void retryTransfer(taskId)}
                       onClearTask={clearTransferTask}
                       activePane={activePaneId}
@@ -1166,6 +1200,7 @@ export function SshSftpWorkspace(): React.JSX.Element {
                 setTab={setSftpInspectorTab}
                 tasks={orderedTasks}
                 onCancelTask={(taskId) => void cancelTransfer(taskId)}
+                onPauseTask={(taskId) => void pauseTransfer(taskId)}
                 onRetryTask={(taskId) => void retryTransfer(taskId)}
                 onClearTask={clearTransferTask}
                 activePane={activePaneId}

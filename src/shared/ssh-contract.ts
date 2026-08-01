@@ -118,6 +118,7 @@ export type SftpTransferStage =
   | 'preparing'
   | 'transferring'
   | 'cleanup'
+  | 'paused'
   | 'done'
   | 'error'
   | 'canceled'
@@ -127,6 +128,8 @@ export type SftpTransferProgress = {
   percent?: number
   processedItems?: number
   totalItems?: number
+  speedBytesPerSecond?: number
+  remainingSeconds?: number
 }
 export type SftpTransferTask = {
   taskId: string
@@ -140,6 +143,7 @@ export type SftpTransferTask = {
   updatedAt: number
   conflictPolicy?: SftpConflictPolicy
   request?: SftpTransferRequest
+  retryCount?: number
 }
 export type SftpConnectionStatus = 'idle' | 'connecting' | 'connected' | 'error'
 export type SftpConnectionState = {

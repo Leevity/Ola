@@ -289,7 +289,11 @@
       "session": "Session status",
       "transfers": "Transfer overview",
       "uploadPanel": "Current uploads",
-      "retryTask": "Resume"
+      "retryTask": "Resume",
+      "pauseTask": "Pause",
+      "remaining": "{{duration}} remaining",
+      "retryCount_one": "{{count}} retry",
+      "retryCount_other": "{{count}} retries"
     },
     "uploads": {
       "title": "Uploads",

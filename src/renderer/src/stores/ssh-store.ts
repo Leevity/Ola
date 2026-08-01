@@ -24,6 +24,7 @@ import type {
   SshUploadTask,
   SshWorkspaceSection
 } from '../../../shared/ssh-contract'
+import { enrichTransferProgress } from './ssh/transfers'
 
 export type * from '../../../shared/ssh-contract'
 
@@ -144,6 +145,8 @@ const SLOT_ACQUIRE_TIMEOUT_MS = 10000
 
 let uploadEventsSubscribed = false
 let transferEventsSubscribed = false
+const pausedTransferIds = new Set<string>()
+
 let sshConfigChangedSubscribed = false
 let sshStatusSubscribed = false
 
@@ -239,24 +242,30 @@ function ensureTransferEventsSubscribed(): void {
     }
     if (!data.taskId || !data.type || !data.stage) return
 
-    useSshStore.setState((state) => ({
-      transferTasks: {
-        ...state.transferTasks,
-        [data.taskId!]: {
-          ...(state.transferTasks[data.taskId!] ?? {}),
-          taskId: data.taskId!,
-          type: data.type!,
-          stage: data.stage!,
-          sourceConnectionId: data.sourceConnectionId ?? null,
-          targetConnectionId: data.targetConnectionId ?? null,
-          progress: data.progress,
-          message: data.message,
-          currentItem: data.currentItem,
-          conflictPolicy: data.conflictPolicy,
-          updatedAt: Date.now()
+    useSshStore.setState((state) => {
+      const previous = state.transferTasks[data.taskId!]
+      const now = Date.now()
+      const stage =
+        data.stage === 'canceled' && pausedTransferIds.has(data.taskId!) ? 'paused' : data.stage!
+      return {
+        transferTasks: {
+          ...state.transferTasks,
+          [data.taskId!]: {
+            ...(previous ?? {}),
+            taskId: data.taskId!,
+            type: data.type!,
+            stage,
+            sourceConnectionId: data.sourceConnectionId ?? null,
+            targetConnectionId: data.targetConnectionId ?? null,
+            progress: enrichTransferProgress(previous, data.progress, now),
+            message: data.message,
+            currentItem: data.currentItem,
+            conflictPolicy: data.conflictPolicy,
+            updatedAt: now
+          }
         }
       }
-    }))
+    })
   })
 }
 
@@ -530,6 +539,7 @@ export interface SshStore {
   setSftpInspectorTab: (tab: SftpInspectorTab) => void
   startTransfer: (args: SftpTransferRequest) => Promise<string | null>
   retryTransfer: (taskId: string) => Promise<string | null>
+  pauseTransfer: (taskId: string) => Promise<void>
   cancelTransfer: (taskId: string) => Promise<void>
   clearTransferTask: (taskId: string) => void
 }
@@ -1135,13 +1145,41 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   },
 
   cancelTransfer: async (taskId) => {
+    pausedTransferIds.delete(taskId)
     await ipcClient.invoke(IPC.SSH_FS_TRANSFER_CANCEL, { taskId })
   },
 
+  pauseTransfer: async (taskId) => {
+    const task = get().transferTasks[taskId]
+    if (!task?.request || task.stage !== 'transferring') return
+    pausedTransferIds.add(taskId)
+    await ipcClient.invoke(IPC.SSH_FS_TRANSFER_CANCEL, { taskId })
+    set((state) => ({
+      transferTasks: {
+        ...state.transferTasks,
+        [taskId]: { ...state.transferTasks[taskId], stage: 'paused', updatedAt: Date.now() }
+      }
+    }))
+  },
+
   retryTransfer: async (taskId) => {
-    const request = get().transferTasks[taskId]?.request
+    const previous = get().transferTasks[taskId]
+    const request = previous?.request
     if (!request) return null
-    return await get().startTransfer({ ...request, resume: true })
+    pausedTransferIds.delete(taskId)
+    const nextTaskId = await get().startTransfer({ ...request, resume: true })
+    if (nextTaskId) {
+      set((state) => ({
+        transferTasks: {
+          ...state.transferTasks,
+          [nextTaskId]: {
+            ...state.transferTasks[nextTaskId],
+            retryCount: (previous.retryCount ?? 0) + 1
+          }
+        }
+      }))
+    }
+    return nextTaskId
   },
 
   clearTransferTask: (taskId) => {
