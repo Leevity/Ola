@@ -20,6 +20,7 @@ import { ThemeProvider } from './components/theme-provider'
 import { ThemeRuntimeSync } from './components/theme-runtime-sync'
 import { ErrorBoundary } from './components/error-boundary'
 import { useSettingsStore } from './stores/settings-store'
+import { useRemoteAccountStore } from './stores/remote-account-store'
 import { initProviderStore, useProviderStore } from './stores/provider-store'
 import { initAppPluginStore, useAppPluginStore } from './stores/app-plugin-store'
 import { initExtensionStore } from './stores/extension-store'
@@ -213,6 +214,50 @@ function App(): React.JSX.Element {
   const [settingsHydrated, setSettingsHydrated] = useState(() =>
     useSettingsStore.persist.hasHydrated()
   )
+
+  useEffect(() => {
+    void useRemoteAccountStore.getState().hydrate()
+  }, [])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const state = useRemoteAccountStore.getState()
+      if (state.account && state.device) {
+        void state.heartbeatDevice().catch(() => undefined)
+        void state
+          .syncModelConfig()
+          .then((result) => {
+            const model = result.model as
+              | { provider?: string; model?: string; baseUrl?: string; enabled?: boolean }
+              | undefined
+            if (!result.configured || !model?.model || model.enabled === false || !state.token) return
+
+            const providerId = 'ola-account-gateway'
+            const provider = useProviderStore.getState().providers.find((item) => item.id === providerId)
+            const syncedProvider = {
+              name: 'Ola 云端模型',
+              type: 'openai-chat' as const,
+              apiKey: state.token,
+              baseUrl: model.baseUrl?.trim() || `${state.apiBaseUrl}/v1`,
+              enabled: true,
+              requiresApiKey: true,
+              models: [{ id: model.model, name: model.model, enabled: true, category: 'chat' as const }],
+              defaultModel: model.model,
+              createdAt: provider?.createdAt ?? Date.now()
+            }
+            if (provider) {
+              useProviderStore.getState().updateProvider(providerId, syncedProvider)
+            } else {
+              useProviderStore.getState().addProvider({ id: providerId, ...syncedProvider })
+            }
+            useProviderStore.getState().setActiveProvider(providerId)
+            useProviderStore.getState().setActiveModel(model.model)
+          })
+          .catch(() => undefined)
+      }
+    }, 30_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     void reattachActiveAgentRuns().catch((error) => {

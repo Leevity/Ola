@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   Cable,
@@ -27,12 +27,17 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { Switch } from '@renderer/components/ui/switch'
 import type {
   RemoteConnection,
   RemoteConnectionKind,
   RemoteSession
 } from '@renderer/lib/remote/remote-types'
 import { useRemoteStore } from '@renderer/stores/remote-store'
+import { useRemoteAccountStore } from '@renderer/stores/remote-account-store'
+import { useRemoteSignalingStore } from '@renderer/stores/remote-signaling-store'
+import { useRemotePeerStore } from '@renderer/stores/remote-peer-store'
+import { useRemoteCaptureStore } from '@renderer/stores/remote-capture-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { SshPage } from '@renderer/components/ssh/SshPage'
@@ -52,6 +57,12 @@ type EditorState = {
   username: string
   domain: string
   password: string
+  /** VNC image quality 0-9 (drives Tight JPEG quality; higher = sharper, more bandwidth). */
+  vncQuality: number
+  /** VNC encoding preference. Raw trades bandwidth for fidelity; Tight/ZRLE compress more. */
+  vncEncoding: 'tight' | 'zrle' | 'raw'
+  /** VNC read-only mode; disables pointer/keyboard input forwarding. */
+  vncViewOnly: boolean
 }
 
 const emptyEditor = (kind: DirectKind = 'rdp'): EditorState => ({
@@ -62,7 +73,10 @@ const emptyEditor = (kind: DirectKind = 'rdp'): EditorState => ({
   port: kind === 'rdp' ? '3389' : '5900',
   username: '',
   domain: '',
-  password: ''
+  password: '',
+  vncQuality: 6,
+  vncEncoding: 'tight',
+  vncViewOnly: false
 })
 
 function connectionIcon(kind: RemoteConnectionKind): React.JSX.Element {
@@ -215,7 +229,10 @@ export function RemotePage({
       port: String(connection.port ?? (connection.kind === 'rdp' ? 3389 : 5900)),
       username: connection.username ?? '',
       domain: connection.rdp?.domain ?? '',
-      password: ''
+      password: '',
+      vncQuality: connection.vnc?.quality ?? 6,
+      vncEncoding: connection.vnc?.encoding ?? 'tight',
+      vncViewOnly: connection.vnc?.viewOnly ?? false
     })
   }
 
@@ -257,7 +274,15 @@ export function RemotePage({
                 editor.kind === 'rdp'
                   ? { launchMode: 'embedded', domain: editor.domain.trim() || null }
                   : null,
-              vnc: editor.kind === 'vnc' ? { launchMode: 'novnc' } : null
+              vnc:
+                editor.kind === 'vnc'
+                  ? {
+                      launchMode: 'novnc',
+                      quality: editor.vncQuality,
+                      encoding: editor.vncEncoding,
+                      viewOnly: editor.vncViewOnly
+                    }
+                  : null
             }
           })
         : await createConnection({
@@ -271,7 +296,15 @@ export function RemotePage({
               editor.kind === 'rdp'
                 ? { launchMode: 'embedded', domain: editor.domain.trim() || null }
                 : null,
-            vnc: editor.kind === 'vnc' ? { launchMode: 'novnc' } : null
+            vnc:
+              editor.kind === 'vnc'
+                ? {
+                    launchMode: 'novnc',
+                    quality: editor.vncQuality,
+                    encoding: editor.vncEncoding,
+                    viewOnly: editor.vncViewOnly
+                  }
+                : null
           })
       setEditor(null)
       toast.success(editor.id ? t('remote.connectionUpdated') : t('remote.connectionSaved'))
@@ -312,7 +345,19 @@ export function RemotePage({
       setActiveSurface(`remote:${session.id}`)
       toast.success(t('remote.sessionStarted'))
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : String(error))
+      const message = error instanceof Error ? error.message : String(error)
+      const isMac = /Mac/.test(navigator.userAgent)
+      if (connection.kind === 'vnc' && isMac) {
+        toast.error(
+          t('remote.noVncMacFailure', {
+            defaultValue:
+              'Cannot reach the macOS VNC server. Open System Settings → General → Sharing → Screen Sharing, allow VNC viewers, and verify the host port (5900 by default). The built-in macOS Screen Sharing service speaks RFB over TCP only and does not speak the WebSocket protocol that noVNC requires — connect over an SSH tunnel with a websockify bridge, or use an external vnc:// viewer.'
+          }),
+          { description: message }
+        )
+      } else {
+        toast.error(message)
+      }
     }
   }
 
@@ -332,7 +377,7 @@ export function RemotePage({
   return (
     <div ref={workspaceRef} className="flex h-full min-h-0 flex-col bg-background">
       <header
-        className={`titlebar-drag relative flex h-12 shrink-0 items-end border-b pr-4 ${fullscreen ? 'hidden' : ''} ${
+        className={`${standalone ? 'titlebar-drag' : ''} relative flex h-12 shrink-0 items-end border-b pr-4 ${fullscreen ? 'hidden' : ''} ${
           standalone && isMac ? 'pl-[78px]' : 'pl-3'
         }`}
       >
@@ -468,7 +513,7 @@ export function RemotePage({
           <button
             type="button"
             onClick={() => setLauncherOpen((open) => !open)}
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="titlebar-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
             title={t('remote.newSession')}
           >
             <Plus className="size-4" />
@@ -476,7 +521,7 @@ export function RemotePage({
           <button
             type="button"
             onClick={() => void toggleFullscreen()}
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="titlebar-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             <Maximize2 className="size-4" />
           </button>
@@ -533,7 +578,7 @@ export function RemotePage({
         className={
           section === 'direct' &&
           (activeSurface.startsWith('workspace:') || activeSurface.startsWith('remote:'))
-            ? 'flex min-h-0 flex-1'
+            ? 'flex h-full min-h-0 flex-1'
             : 'hidden'
         }
       >
@@ -597,7 +642,7 @@ export function RemotePage({
                         <button
                           type="button"
                           onClick={() => editConnection(connection)}
-                          className="rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
+                          className="titlebar-no-drag rounded-md p-1.5 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground group-hover:opacity-100"
                           title={t('remote.editDevice')}
                         >
                           <Pencil className="size-3.5" />
@@ -646,7 +691,7 @@ export function RemotePage({
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-y-auto">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {activeSession ? (
             <DirectSessionWorkspace
               sessions={viewerSessions}
@@ -672,18 +717,7 @@ export function RemotePage({
             : 'hidden'
         }
       >
-        <FutureWorkspace
-          icon={Server}
-          eyebrow={t('remote.remoteService')}
-          title={t('remote.managedTitle')}
-          description={t('remote.managedDescription')}
-          points={[
-            t('remote.managedPointOne'),
-            t('remote.managedPointTwo'),
-            t('remote.managedPointThree')
-          ]}
-          action={t('remote.configureServiceLater')}
-        />
+        <ManagedAccountWorkspace />
       </div>
       <div
         className={
@@ -855,7 +889,7 @@ function DirectSessionWorkspace({
 }): React.JSX.Element {
   const { t } = useTranslation('layout')
   return (
-    <div className="flex h-full min-h-[520px] flex-col bg-zinc-950">
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-zinc-950">
       <div className="hidden">
         {sessions.map((session) => {
           const connection = connections.find((item) => item.id === session.connectionId)
@@ -903,7 +937,9 @@ function DirectSessionWorkspace({
           <div
             key={session.id}
             className={
-              session.id === activeSessionId ? 'absolute inset-0' : 'invisible absolute inset-0'
+              session.id === activeSessionId
+                ? 'absolute inset-0 flex min-h-0 min-w-0 w-full'
+                : 'invisible absolute inset-0 flex min-h-0 min-w-0 w-full'
             }
           >
             <ActiveViewer
@@ -938,7 +974,7 @@ function ActiveViewer({
     []
   )
   return (
-    <div className="flex min-h-full flex-col bg-zinc-950">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-950">
       <div className="flex items-center justify-between border-b border-white/10 bg-zinc-950 px-4 py-2 text-white">
         <div className="flex min-w-0 items-center gap-3">
           <span
@@ -962,13 +998,14 @@ function ActiveViewer({
           {t('remote.disconnectSignaling')}
         </Button>
       </div>
-      <div className="min-h-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1">
         {session.viewerType === 'rdp' ? (
           <IronRdpViewer remoteSession={session} onStatusChange={updateViewerStatus} />
         ) : (
           <NoVncViewer
             sessionId={session.id}
             viewerUrl={session.viewerUrl as string}
+            connection={connection}
             onStatusChange={updateViewerStatus}
           />
         )}
@@ -1103,6 +1140,77 @@ function ConnectionEditor({
                 </Field>
               </div>
             </div>
+
+            {value.kind === 'vnc' ? (
+              <div className="border-t pt-5">
+                <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                  <Monitor className="size-3.5" />
+                  {t('remote.vncImageQuality', { defaultValue: 'Image quality' })}
+                </div>
+                <div className="space-y-4">
+                  <Field
+                    label={t('remote.vncQuality', {
+                      defaultValue: 'Quality (sharpness vs. speed)'
+                    })}
+                    hint={t('remote.vncQualityHint', {
+                      defaultValue:
+                        'Higher = crisper but uses more bandwidth; lower reduces lag and the "mosaic" effect on slow links.'
+                    })}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="range"
+                        min={0}
+                        max={9}
+                        step={1}
+                        value={value.vncQuality}
+                        onChange={(event) => update({ vncQuality: Number(event.target.value) })}
+                        className="min-w-0 flex-1 accent-primary"
+                      />
+                      <span className="w-8 shrink-0 text-right font-mono text-xs text-muted-foreground">
+                        {value.vncQuality}
+                      </span>
+                    </div>
+                  </Field>
+                  <Field
+                    label={t('remote.vncEncoding', { defaultValue: 'Encoding' })}
+                    hint={t('remote.vncEncodingHint', {
+                      defaultValue:
+                        'Tight/ZRLE compress the stream (lower bandwidth); Raw sends pixels uncompressed (best fidelity, highest bandwidth).'
+                    })}
+                  >
+                    <select
+                      value={value.vncEncoding}
+                      onChange={(event) =>
+                        update({ vncEncoding: event.target.value as EditorState['vncEncoding'] })
+                      }
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="tight">
+                        {t('remote.vncEncodingTight', { defaultValue: 'Tight (recommended)' })}
+                      </option>
+                      <option value="zrle">
+                        {t('remote.vncEncodingZrle', { defaultValue: 'ZRLE' })}
+                      </option>
+                      <option value="raw">
+                        {t('remote.vncEncodingRaw', { defaultValue: 'Raw (uncompressed)' })}
+                      </option>
+                    </select>
+                  </Field>
+                  <Field
+                    label={t('remote.vncViewOnly', { defaultValue: 'View only' })}
+                    hint={t('remote.vncViewOnlyHint', {
+                      defaultValue: 'Disables mouse and keyboard input forwarding for this session.'
+                    })}
+                  >
+                    <Switch
+                      checked={value.vncViewOnly}
+                      onCheckedChange={(checked) => update({ vncViewOnly: checked })}
+                    />
+                  </Field>
+                </div>
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -1161,6 +1269,73 @@ function Field({
       {children}
     </label>
   )
+}
+
+function ManagedAccountWorkspace(): React.JSX.Element {
+  const { t } = useTranslation('layout')
+  const account = useRemoteAccountStore((state) => state.account)
+  const device = useRemoteAccountStore((state) => state.device)
+  const apiBaseUrl = useRemoteAccountStore((state) => state.apiBaseUrl)
+  const setApiBaseUrl = useRemoteAccountStore((state) => state.setApiBaseUrl)
+  const login = useRemoteAccountStore((state) => state.login)
+  const register = useRemoteAccountStore((state) => state.register)
+  const logout = useRemoteAccountStore((state) => state.logout)
+  const registerDevice = useRemoteAccountStore((state) => state.registerDevice)
+  const devices = useRemoteAccountStore((state) => state.devices)
+  const loadDevices = useRemoteAccountStore((state) => state.loadDevices)
+  const issueDeviceSignalToken = useRemoteAccountStore((state) => state.issueDeviceSignalToken)
+  const autoResolvePairing = useRemoteAccountStore((state) => state.autoResolvePairing)
+  const connectSignaling = useRemoteSignalingStore((state) => state.connect)
+  const startControllerSession = useRemotePeerStore((state) => state.startControllerSession)
+  const remoteStream = useRemotePeerStore((state) => state.remoteStream)
+  const peerStatus = useRemotePeerStore((state) => state.status)
+  const closePeerSession = useRemotePeerStore((state) => state.closeSession)
+  const listenForIncoming = useRemotePeerStore((state) => state.listenForIncoming)
+  const captureStatus = useRemoteCaptureStore((state) => state.status)
+  const startCapture = useRemoteCaptureStore((state) => state.startProbe)
+  const stopCapture = useRemoteCaptureStore((state) => state.stop)
+  const captureError = useRemoteCaptureStore((state) => state.error)
+  const loading = useRemoteAccountStore((state) => state.loading)
+  const [registerMode, setRegisterMode] = useState(false)
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [deviceName, setDeviceName] = useState(t('remote.defaultDeviceName'))
+  const [error, setError] = useState('')
+  const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null)
+  const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  useEffect(() => { if (account && device) void loadDevices().catch(() => undefined) }, [account, device, loadDevices])
+  useEffect(() => {
+    if (!account || !device) return undefined
+    let active = true
+    void issueDeviceSignalToken()
+      .then((signalToken) => {
+        if (active) return connectSignaling(signalToken)
+        return undefined
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [account, device, issueDeviceSignalToken, connectSignaling])
+  useEffect(() => { if (!device) return undefined; return listenForIncoming(device.id, true) }, [device, listenForIncoming])
+  useEffect(() => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream }, [remoteStream])
+  const submit = async (): Promise<void> => {
+    setError('')
+    try {
+      if (registerMode) await register(email, password)
+      else await login(email, password)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+  }
+  const connectSameAccountDevice = async (targetDeviceId: string): Promise<void> => {
+    setConnectingDeviceId(targetDeviceId); setError('')
+    try {
+      const signalToken = await issueDeviceSignalToken()
+      await connectSignaling(signalToken)
+      const authorization = await autoResolvePairing(targetDeviceId)
+      await startControllerSession(targetDeviceId, { sessionId: authorization.sessionId, ticket: authorization.sessionTicket }, authorization.iceServers)
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } finally { setConnectingDeviceId(null) }
+  }
+  return <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-10 py-12"><div className="w-full max-w-2xl"><div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary"><ShieldCheck className="size-4" /> {t('remote.olaAccountTitle')}</div><h2 className="mt-5 text-3xl font-semibold tracking-tight">{t('remote.olaAccountTitle')}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">{t('remote.olaAccountDescription')}</p>{account ? <div className="mt-8 space-y-4 rounded-xl border p-5"><div><p className="text-sm font-medium">{t('remote.accountLoggedIn', { email: account.email })}</p><p className="mt-1 text-xs text-muted-foreground">{device ? `${t('remote.currentDevice')}: ${device.deviceName}` : t('remote.signalingRequiresDevice')}</p></div>{!device ? <div className="flex flex-wrap items-end gap-3"><label className="min-w-[240px] flex-1 text-xs font-medium">{t('remote.deviceNamePlaceholder')}<Input className="mt-2" value={deviceName} onChange={(event) => setDeviceName(event.target.value)} /></label><Button disabled={loading} onClick={() => void registerDevice(deviceName)}>{t('remote.registerDevice')}</Button></div> : <><div className="rounded-lg bg-muted/40 p-3 text-xs">当前连接状态：{peerStatus}</div><div className="flex flex-wrap items-center gap-2 rounded-lg border p-3"><span className="min-w-0 flex-1 text-xs">屏幕共享：{captureStatus === 'capturing' ? '已开启，被控时将共享当前屏幕' : captureStatus === 'requesting' ? '正在请求权限…' : '未开启'}</span><Button size="sm" variant="outline" disabled={captureStatus === 'requesting'} onClick={() => void (captureStatus === 'capturing' ? stopCapture() : startCapture())}>{captureStatus === 'capturing' ? '停止共享' : '开启屏幕共享'}</Button></div>{captureError && <p className="text-sm text-destructive">{captureError}</p>}<div className="space-y-2"><p className="text-xs font-medium">同账户设备</p>{devices.filter((item) => item.id !== device?.id).map((item) => <div key={item.id} className="flex items-center gap-3 rounded-lg border p-3"><span className="size-2 rounded-full bg-emerald-500" /><span className="min-w-0 flex-1 truncate text-sm">{item.deviceName}</span><span className="text-xs text-muted-foreground">{item.isOnline ? '在线' : '离线'}</span><Button size="sm" disabled={!item.isOnline || connectingDeviceId === item.id} onClick={() => void connectSameAccountDevice(item.id)}>{connectingDeviceId === item.id ? '连接中…' : '免密连接'}</Button></div>)}</div>{remoteStream && <video className="aspect-video w-full rounded-lg bg-black object-contain" autoPlay playsInline srcObject={remoteStream as never} />}{peerStatus !== 'idle' && <Button variant="outline" onClick={closePeerSession}>断开连接</Button>}</>}<Button variant="outline" onClick={logout}>{t('remote.logout')}</Button></div> : <div className="mt-8 space-y-4 rounded-xl border p-5"><label className="block text-xs font-medium">{t('remote.emailPlaceholder')}<Input className="mt-2" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label className="block text-xs font-medium">{t('remote.passwordPlaceholder')}<Input className="mt-2" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error ? <p className="text-sm text-destructive">{error}</p> : null}<div className="flex flex-wrap gap-2"><Button disabled={loading || !email || !password} onClick={() => void submit()}>{registerMode ? t('remote.register') : t('remote.login')}</Button><Button variant="ghost" onClick={() => setRegisterMode((value) => !value)}>{registerMode ? t('remote.login') : t('remote.register')}</Button></div></div>}<label className="mt-6 block text-xs font-medium">API 服务地址<Input className="mt-2" value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} /></label></div></div>
 }
 
 function FutureWorkspace({
