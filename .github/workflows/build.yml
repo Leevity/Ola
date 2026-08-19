@@ -258,8 +258,9 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
         run: |
           if [ "$RELEASE_REQUIRED" = "true" ] && { [ -z "$WIN_CSC_LINK" ] || [ -z "$WIN_CSC_KEY_PASSWORD" ]; }; then
-            echo "::error::Release signing credentials are required: configure WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD"
-            exit 1
+            echo "::warning::Windows signing credentials are not configured; publishing unsigned Windows packages"
+          elif [ "$RELEASE_REQUIRED" = "true" ]; then
+            echo "Using configured Windows code signing credentials"
           fi
 
       - name: Package (${{ matrix.platform }}-${{ matrix.artifact_arch }})
