@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect } from 'react'
 import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
+import { useLiveCompressionStore } from '@renderer/stores/live-compression-store'
 import i18n from '@renderer/locales'
 import { useChatStore, type Session } from '@renderer/stores/chat-store'
 import {
@@ -5650,11 +5651,15 @@ export function useChatActions(): {
                 }
 
                 case 'context_compression_start': {
+                  useLiveCompressionStore.getState().start(sessionId!)
                   break
                 }
 
                 case 'context_compressed':
                   {
+                    useLiveCompressionStore.getState().complete(sessionId!, {
+                      keptMessageCount: event.keptMessageCount
+                    })
                     const compressedMessages = extractCompactArtifactMessages(
                       event.compactArtifacts ?? event.messages
                     )
@@ -5715,6 +5720,7 @@ export function useChatActions(): {
                   break
 
                 case 'error': {
+                  useLiveCompressionStore.getState().fail(sessionId!)
                   streamDeltaBuffer.flushNow()
                   const errorMessage = normalizeContinuationErrorMessage(event.error.message)
                   console.error('[Agent Loop Error]', event.error)
