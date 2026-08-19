@@ -258,7 +258,7 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
         run: |
           if [ "$RELEASE_REQUIRED" = "true" ] && { [ -z "$WIN_CSC_LINK" ] || [ -z "$WIN_CSC_KEY_PASSWORD" ]; }; then
-            echo "::warning::Windows signing credentials are not configured; publishing unsigned Windows packages"
+            echo "::warning::Release signing credentials are required for signed Windows packages; credentials are not configured, publishing unsigned Windows packages"
           elif [ "$RELEASE_REQUIRED" = "true" ]; then
             echo "Using configured Windows code signing credentials"
           fi
