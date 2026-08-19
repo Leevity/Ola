@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { CheckCircle2, Loader2 } from 'lucide-react'
 import type { UnifiedMessage } from '@renderer/lib/api/types'
+import { useLiveCompressionStore } from '@renderer/stores/live-compression-store'
 
 /**
  * Inline status card rendered in place of a synthetic system message whose
@@ -58,6 +59,30 @@ export function CompressionStatusMessage({
           })}
         </span>
       ) : null}
+    </div>
+  )
+}
+
+export function LiveCompressionStatus({ sessionId }: { sessionId: string }): React.JSX.Element | null {
+  const { t } = useTranslation('agent')
+  const entry = useLiveCompressionStore((state) => state.bySessionId[sessionId])
+  if (!entry || entry.state !== 'compressing') return null
+
+  return (
+    <div className="pointer-events-none absolute bottom-4 left-1/2 z-20 w-[min(520px,calc(100%-2rem))] -translate-x-1/2">
+      <div className="rounded-md border border-amber-500/30 bg-background/95 px-3 py-2 text-[12px] shadow-lg backdrop-blur">
+        <div className="flex items-center gap-2">
+          <Loader2 className="size-3.5 shrink-0 animate-spin text-amber-600 dark:text-amber-400" />
+          <span className="font-medium text-foreground">
+            {t('contextCompression.compressing', { defaultValue: 'Compressing context…' })}
+          </span>
+        </div>
+        {entry.draft ? (
+          <p className="mt-1.5 max-h-20 overflow-hidden whitespace-pre-wrap text-[11px] text-muted-foreground">
+            {entry.draft}
+          </p>
+        ) : null}
+      </div>
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore, type ActiveTeam } from '@renderer/stores/team-store'
 import { cn } from '@renderer/lib/utils'
 import { MessageItem } from './MessageItem'
+import { LiveCompressionStatus } from './CompressionStatusMessage'
 import {
   buildChatRenderableMessageMetaFromAnalysis,
   buildTranscriptStaticAnalysis,
@@ -2190,6 +2191,8 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
           void handleJumpToConversationTarget({ messageId: item.id, sortOrder: item.sortOrder })
         }
       />
+
+      {targetSessionId ? <LiveCompressionStatus sessionId={targetSessionId} /> : null}
 
       {!isAtBottom && messages.length > 0 && (
         <button
