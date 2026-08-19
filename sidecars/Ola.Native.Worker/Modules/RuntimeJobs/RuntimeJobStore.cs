@@ -5,14 +5,16 @@ internal static class RuntimeJobStore
 {
     public static RuntimeJobMutationResult SubmitRun(string runId, string sessionId, JsonElement parameters)
     {
-        var json = $"{{\"jobId\":{Quote(runId)},\"runId\":{Quote(runId)},\"sessionId\":{Quote(sessionId)},\"method\":\"agent/run\",\"idempotencyKey\":{Quote(runId)},\"laneKey\":{Quote(sessionId)},\"params\":{parameters.GetRawText()}}}";
+        var dbPath = JsonHelpers.GetString(parameters, "dbPath");
+        var json = $"{{\"jobId\":{Quote(runId)},\"runId\":{Quote(runId)},\"sessionId\":{Quote(sessionId)},\"method\":\"agent/run\",\"idempotencyKey\":{Quote(runId)},\"laneKey\":{Quote(sessionId)},\"dbPath\":{Quote(dbPath ?? string.Empty)},\"params\":{parameters.GetRawText()}}}";
         using var document = JsonDocument.Parse(json);
         return Submit(document.RootElement);
     }
 
-    public static RuntimeJobRecord? SetState(string jobId, string state, string? errorCode = null, string? errorMessage = null)
+    public static RuntimeJobRecord? SetState(string jobId, string state, JsonElement parameters, string? errorCode = null, string? errorMessage = null)
     {
-        var json = $"{{\"jobId\":{Quote(jobId)},\"state\":{Quote(state)}" +
+        var dbPath = JsonHelpers.GetString(parameters, "dbPath");
+        var json = $"{{\"jobId\":{Quote(jobId)},\"state\":{Quote(state)},\"dbPath\":{Quote(dbPath ?? string.Empty)}" +
             (errorCode is null ? string.Empty : $",\"errorCode\":{Quote(errorCode)}") +
             (errorMessage is null ? string.Empty : $",\"errorMessage\":{Quote(errorMessage)}") + "}";
         using var document = JsonDocument.Parse(json);
@@ -21,7 +23,8 @@ internal static class RuntimeJobStore
 
     public static RuntimeJobRecord? Cancel(string jobId)
     {
-        return SetState(jobId, "cancelled", "cancelled", "Job cancellation requested.");
+        using var document = JsonDocument.Parse("{}");
+        return SetState(jobId, "cancelled", document.RootElement, "cancelled", "Job cancellation requested.");
     }
 
     public static void AppendEvent(string jobId, long seq, string payloadJson, bool terminal)
