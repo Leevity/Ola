@@ -38,6 +38,8 @@
 [JsonSerializable(typeof(AgentRuntimeToolUseBlock))]
 [JsonSerializable(typeof(AgentRuntimeToolResult))]
 [JsonSerializable(typeof(AgentRuntimeToolResult[]))]
+[JsonSerializable(typeof(RuntimeToolResultRecord))]
+[JsonSerializable(typeof(List<RuntimeToolResultRecord>), TypeInfoPropertyName = "ListRuntimeToolResultRecord")]
 [JsonSerializable(typeof(AgentRuntimeToolCallState))]
 [JsonSerializable(typeof(AgentRuntimeImageError))]
 [JsonSerializable(typeof(AgentRuntimeRequestDebugInfo))]

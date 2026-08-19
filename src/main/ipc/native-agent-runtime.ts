@@ -115,6 +115,14 @@ export class NativeAgentRuntimeManager {
     return { ...snapshot, generation: worker.generation }
   }
 
+  async lookupToolResults(sessionId: string, toolUseIds: string[]): Promise<unknown> {
+    await this.ensureStarted()
+    return await getNativeWorker().request('agent/tool-results-lookup', {
+      sessionId,
+      toolUseIds
+    }, 10_000)
+  }
+
   async request(method: string, params?: unknown, timeoutMs = 30_000): Promise<unknown> {
     await this.ensureStarted()
     const result = await getNativeWorker().request(method, params ?? {}, timeoutMs)

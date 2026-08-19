@@ -394,6 +394,22 @@ internal static class DbSchemaMigrator
             );
 
             CREATE INDEX IF NOT EXISTS idx_draw_runs_created_at ON draw_runs(created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS runtime_tool_results (
+              session_id TEXT NOT NULL,
+              tool_use_id TEXT NOT NULL,
+              run_id TEXT NOT NULL,
+              tool_name TEXT NOT NULL,
+              status TEXT NOT NULL,
+              content_json TEXT NOT NULL,
+              is_error INTEGER NOT NULL DEFAULT 0,
+              started_at INTEGER,
+              completed_at INTEGER NOT NULL,
+              PRIMARY KEY (session_id, tool_use_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_runtime_tool_results_run
+              ON runtime_tool_results(run_id, completed_at);
             """);
     }
 
