@@ -450,12 +450,6 @@ const menuGroupDefs: Array<{
         labelKey: 'permission.title',
         descKey: 'permission.subtitle'
       },
-      {
-        id: 'hooks',
-        icon: <Workflow className="size-4" />,
-        labelKey: 'hooks.title',
-        descKey: 'hooks.subtitle'
-      }
     ]
   },
   {
@@ -479,12 +473,6 @@ const menuGroupDefs: Array<{
         labelKey: 'model.title',
         descKey: 'model.subtitle'
       },
-      {
-        id: 'aiCoding',
-        icon: <Code2 className="size-4" />,
-        labelKey: 'aiCoding.title',
-        descKey: 'aiCoding.subtitle'
-      }
     ]
   },
   {

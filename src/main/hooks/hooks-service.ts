@@ -12,6 +12,9 @@ import type {
 import { hooksConfigPaths, loadHooksConfig } from './hooks-loader'
 import { HooksRunner } from './hooks-runner'
 
+// Temporarily disabled while the automation hook workflow is being redesigned.
+const AUTOMATION_HOOKS_ENABLED = false
+
 interface HooksState {
   version: 1
   trustedKeys: string[]
@@ -126,6 +129,7 @@ export class HooksService {
     event: HookEvent,
     invocation: Omit<HookInvocation, 'event' | 'version'>
   ): Promise<HookOutput[]> {
+    if (!AUTOMATION_HOOKS_ENABLED) return []
     const hooks = (await this.list(invocation.projectPath)).filter(
       (hook) => hook.enabled && hook.event === event && hook.trustState === 'trusted'
     )
