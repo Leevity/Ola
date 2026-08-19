@@ -54,6 +54,7 @@ internal static class AgentRuntimeTools
         var initialMessageCount = CountArray(parameters, "messages");
         var state = new AgentRuntimeRunState(runId, sessionId);
         state.ReplaceParameters(parameters.Clone());
+        RuntimeJobStore.SubmitRun(runId, sessionId, parameters);
 
         if (!ActiveRuns.TryAdd(runId, state))
         {
@@ -237,13 +238,16 @@ internal static class AgentRuntimeTools
             }
 
             await OpenAIChatRuntime.ExecuteLoopAsync(state.Parameters, state, context);
+            RuntimeJobStore.SetState(state.RunId, "succeeded");
         }
         catch (OperationCanceledException) when (state.IsCancellationRequested)
         {
+            RuntimeJobStore.SetState(state.RunId, "cancelled");
             await EmitAsync(state, context, new AgentRuntimeStreamEvent("loop_end", Reason: "aborted"));
         }
         catch (Exception ex)
         {
+            RuntimeJobStore.SetState(state.RunId, "failed", "runtime_error", ex.Message);
             WorkerLog.Warn(
                 $"agent run failed runId={state.RunId} error={ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
             await EmitAsync(
