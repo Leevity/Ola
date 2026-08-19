@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Scaffold and validate Ola Custom Extension V1 folders."""
 
 from __future__ import annotations
