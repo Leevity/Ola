@@ -6452,6 +6452,7 @@ export async function sendImplementPlan(planId: string): Promise<void> {
 
     usePlanStore.getState().beginImplementation(planId)
   } catch (error) {
+    useAgentStore.getState().setSessionStatus(latestPlan.sessionId, null)
     if (shouldSwitchToCodeMode && previousMode) {
       chatStore.updateSessionMode(latestPlan.sessionId, previousMode)
       if (chatStore.activeSessionId === latestPlan.sessionId && previousUiMode) {
@@ -6546,6 +6547,7 @@ export async function sendImplementPlanInNewSession(planId: string): Promise<voi
     uiStore.exitPlanMode(latestPlan.sessionId)
     uiStore.navigateToSession(newSessionId)
   } catch (error) {
+    useAgentStore.getState().setSessionStatus(newSessionId, null)
     toast.error(
       i18n.t('plan.executeFailed', {
         ns: 'cowork',
