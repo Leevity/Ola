@@ -433,7 +433,6 @@ jobs:
         shell: bash
         env:
           OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
-          OLA_REQUIRE_SIGNATURE: ${{ inputs.publish && secrets.CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'true' || 'false' }}
         run: node scripts/verify-release-artifacts.mjs --platform linux --assets release-assets --checksums release-assets/SHA256SUMS-linux-${{ matrix.artifact_arch }}.txt --sbom release-assets/Ola-linux-${{ matrix.artifact_arch }}.spdx.json
 
       - name: Upload Linux artifacts
@@ -715,6 +714,7 @@ jobs:
         shell: bash
         env:
           OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+          OLA_REQUIRE_SIGNATURE: ${{ inputs.publish && secrets.CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'true' || 'false' }}
         run: node scripts/verify-release-artifacts.mjs --platform mac --assets release-assets --checksums release-assets/SHA256SUMS-mac-${{ matrix.artifact_arch }}.txt --smoke-dir dist --sbom release-assets/Ola-mac-${{ matrix.artifact_arch }}.spdx.json
 
       - name: Upload macOS artifacts
