@@ -21,7 +21,7 @@ internal sealed class AgentRuntimeModule : IWorkerModule
         context.Register(AgentRuntimeContract.ReverseResponseRoute, AgentRuntimeTools.ReverseResponse);
         context.Register(AgentRuntimeContract.ReverseCancelRoute, AgentRuntimeTools.ReverseCancel);
         context.Register(AgentRuntimeContract.SessionVisibilityRoute, AgentRuntimeTools.SessionVisibility);
-        context.Register("agent/tool-results-lookup", AgentRuntimeToolResultJournal.Lookup);
+        context.Register(AgentRuntimeContract.ToolResultsLookupRoute, AgentRuntimeToolResultJournal.Lookup);
         context.Register("team-runtime/create", AgentRuntimeTeamRuntimeApi.Create);
         context.Register("team-runtime/delete", AgentRuntimeTeamRuntimeApi.Delete);
         context.Register("team-runtime/message-append", AgentRuntimeTeamRuntimeApi.AppendMessage);

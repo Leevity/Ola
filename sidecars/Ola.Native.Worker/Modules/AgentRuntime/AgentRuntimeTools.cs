@@ -295,7 +295,8 @@ internal static class AgentRuntimeTools
                 state.RunId,
                 envelope.Seq,
                 JsonSerializer.Serialize(envelope, WorkerJsonContext.Default.AgentRuntimeStreamEnvelope),
-                events.Any(item => item.Type is "loop_end" or "error"));
+                events.Any(item => item.Type is "loop_end" or "error"),
+                state.Parameters);
         }
         catch (Exception ex)
         {
