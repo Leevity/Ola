@@ -61,20 +61,23 @@ type RemoteAccountStore = {
   hydrate: () => Promise<void>
   register: (email: string, password: string) => Promise<void>
   login: (email: string, password: string) => Promise<void>
+  startBrowserLogin: () => Promise<void>
   logout: () => void
   registerDevice: (deviceName: string) => Promise<void>
   issueDeviceSignalToken: () => Promise<string>
   loadDevices: () => Promise<void>
   loadSessionAudits: () => Promise<void>
   heartbeatDevice: () => Promise<void>
+  syncModelConfig: () => Promise<Record<string, unknown>>
   setAllowRemoteControl: (allow: boolean) => Promise<void>
   createPairingCode: () => Promise<void>
   revokePairingCode: () => Promise<void>
   resolvePairingCode: (code: string) => Promise<ResolvedPairing>
+  autoResolvePairing: (controlledDeviceId: string) => Promise<ResolvedPairing>
 }
 
 const STORAGE_KEY = 'ola.remote.account'
-const DEFAULT_API_BASE_URL = 'http://127.0.0.1:7300'
+const DEFAULT_API_BASE_URL = 'http://localhost:7300'
 
 function loadPersistedState(): Pick<
   RemoteAccountStore,
@@ -151,6 +154,11 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
           'hydrate'
         )
         set({ token: 'main-process', account: result.account, device: result.device })
+        if (!result.device) {
+          await get().registerDevice('Ola Desktop')
+        } else {
+          await get().loadDevices()
+        }
       } catch {
         set({ token: null, account: null, device: null })
       }
@@ -179,6 +187,15 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         })
         set({ token: 'main-process', account: result.account, device: null })
         persist({ apiBaseUrl, token: null, account: result.account, device: null })
+      } finally {
+        set({ loading: false })
+      }
+    },
+    startBrowserLogin: async () => {
+      const { apiBaseUrl } = get()
+      set({ loading: true })
+      try {
+        await request(apiBaseUrl, 'oauth-start')
       } finally {
         set({ loading: false })
       }
@@ -243,6 +260,12 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       })
       set({ device: result.device })
     },
+    syncModelConfig: async () => {
+      const { apiBaseUrl } = get()
+      const result = await request<Record<string, unknown>>(apiBaseUrl, 'model-config')
+      window.localStorage.setItem(`${STORAGE_KEY}.modelConfig`, JSON.stringify(result))
+      return result
+    },
     setAllowRemoteControl: async (allow) => {
       if (allow) {
         await get().createPairingCode()
@@ -277,6 +300,14 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         deviceId: device.id,
         sessionId
       })
+      set({ resolvedPairing: result })
+      return result
+    },
+    autoResolvePairing: async (controlledDeviceId) => {
+      const { apiBaseUrl, token, device } = get()
+      if (!token || !device) throw new Error('Login and device registration are required')
+      const sessionId = globalThis.crypto?.randomUUID?.() ?? `remote-${Date.now()}-${Math.random()}`
+      const result = await request<ResolvedPairing>(apiBaseUrl, 'pairing-auto-resolve', { controllerDeviceId: device.id, controlledDeviceId, sessionId })
       set({ resolvedPairing: result })
       return result
     }

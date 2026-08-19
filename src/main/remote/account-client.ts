@@ -1,7 +1,7 @@
-import { app, safeStorage } from 'electron'
+import { app, safeStorage, shell } from 'electron'
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { randomUUID } from 'crypto'
+import { createHash, randomBytes, randomUUID } from 'crypto'
 import { setRemoteControlAllowed } from './authorization-state'
 
 type RemoteAuthState = {
@@ -15,15 +15,19 @@ export type RemoteAccountOperation =
   | 'hydrate'
   | 'register'
   | 'login'
+  | 'oauth-start'
+  | 'oauth-callback'
   | 'logout'
   | 'device-register'
   | 'device-list'
   | 'session-list'
   | 'device-heartbeat'
+  | 'model-config'
   | 'device-signaling-token'
   | 'pairing-create'
   | 'pairing-revoke'
   | 'pairing-resolve'
+  | 'pairing-auto-resolve'
 
 export type RemoteAccountRequest = {
   apiBaseUrl: string
@@ -32,6 +36,7 @@ export type RemoteAccountRequest = {
 }
 
 let memoryState: RemoteAuthState | null = null
+let pendingOAuthState: { apiBaseUrl: string; state: string; verifier: string; createdAt: number } | null = null
 
 function vaultPath(): string {
   return join(app.getPath('userData'), 'remote-auth.bin')
@@ -41,10 +46,23 @@ function validateBaseUrl(value: string): string {
   const url = new URL(value)
   const local =
     url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1'
-  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:')) {
+  const tailscaleDevHost =
+    !app.isPackaged &&
+    /^100\.(6[4-9]|[78]\d|9\d|1[01]\d|12[0-7])\.(?:\d{1,3})\.(?:\d{1,3})$/.test(
+      url.hostname
+    )
+  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:') && !(tailscaleDevHost && url.protocol === 'http:')) {
     throw new Error('Remote API must use HTTPS except for localhost development')
   }
   return url.toString().replace(/\/$/, '')
+}
+
+function oauthWebBaseUrl(apiBaseUrl: string): string {
+  const apiUrl = new URL(apiBaseUrl)
+  if (apiUrl.port === '7300') {
+    apiUrl.port = '4310'
+  }
+  return apiUrl.toString().replace(/\/$/, '')
 }
 
 async function loadState(): Promise<RemoteAuthState | null> {
@@ -86,7 +104,14 @@ async function apiRequest<T>(
     body: body ? JSON.stringify(body) : undefined
   })
   const text = await response.text()
-  const result = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+  let result: Record<string, unknown> = {}
+  if (text) {
+    try {
+      result = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      throw new Error(`Remote API returned invalid JSON (${response.status}) at ${path}: ${text.slice(0, 180)}`)
+    }
+  }
   if (!response.ok)
     throw new Error(String(result.error || response.statusText || 'Remote API failed'))
   return result as T
@@ -104,15 +129,19 @@ const REMOTE_ACCOUNT_OPERATIONS = new Set<RemoteAccountOperation>([
   'hydrate',
   'register',
   'login',
+  'oauth-start',
+  'oauth-callback',
   'logout',
   'device-register',
   'device-list',
   'session-list',
   'device-heartbeat',
+  'model-config',
   'device-signaling-token',
   'pairing-create',
   'pairing-revoke',
-  'pairing-resolve'
+  'pairing-resolve',
+  'pairing-auto-resolve'
 ])
 
 function validateAccountRequest(request: RemoteAccountRequest): Record<string, unknown> {
@@ -145,15 +174,19 @@ function validateAccountRequest(request: RemoteAccountRequest): Record<string, u
     hydrate: [],
     register: ['email', 'password'],
     login: ['email', 'password'],
+    'oauth-start': [],
+    'oauth-callback': ['callbackUrl'],
     logout: [],
     'device-register': ['deviceName', 'platform', 'fingerprint'],
     'device-list': [],
     'session-list': [],
     'device-heartbeat': ['deviceId'],
+    'model-config': [],
     'device-signaling-token': ['deviceId'],
     'pairing-create': ['deviceId'],
     'pairing-revoke': ['deviceId'],
-    'pairing-resolve': ['deviceId', 'code', 'sessionId']
+    'pairing-resolve': ['deviceId', 'code', 'sessionId'],
+    'pairing-auto-resolve': ['controllerDeviceId', 'controlledDeviceId', 'sessionId']
   }
   const allowed = new Set(allowedByOperation[request.operation])
   const unknownPayloadKey = Object.keys(payload).find((key) => !allowed.has(key))
@@ -165,6 +198,48 @@ function validateAccountRequest(request: RemoteAccountRequest): Record<string, u
 export async function invokeRemoteAccount(request: RemoteAccountRequest): Promise<unknown> {
   const payload = validateAccountRequest(request)
   const apiBaseUrl = validateBaseUrl(request.apiBaseUrl)
+  if (request.operation === 'oauth-start') {
+    const state = randomUUID()
+    const verifier = randomBytes(32).toString('base64url')
+    const challenge = createHash('sha256').update(verifier).digest('base64url')
+    pendingOAuthState = { apiBaseUrl, state, verifier, createdAt: Date.now() }
+    const authorizeUrl = new URL(`${oauthWebBaseUrl(apiBaseUrl)}/oauth/authorize`)
+    authorizeUrl.searchParams.set('client_id', 'ola-desktop')
+    authorizeUrl.searchParams.set('redirect_uri', 'ola://auth/callback')
+    authorizeUrl.searchParams.set('response_type', 'code')
+    authorizeUrl.searchParams.set('state', state)
+    authorizeUrl.searchParams.set('code_challenge', challenge)
+    authorizeUrl.searchParams.set('code_challenge_method', 'S256')
+    await shell.openExternal(authorizeUrl.toString())
+    return { started: true }
+  }
+  if (request.operation === 'oauth-callback') {
+    const callbackUrl = requiredString(payload, 'callbackUrl')
+    const callback = new URL(callbackUrl)
+    const code = callback.searchParams.get('code')
+    const state = callback.searchParams.get('state')
+    if (!code || !state || !pendingOAuthState || pendingOAuthState.state !== state) {
+      throw new Error('Invalid or expired Ola authorization callback')
+    }
+    if (Date.now() - pendingOAuthState.createdAt > 5 * 60 * 1000) {
+      pendingOAuthState = null
+      throw new Error('Ola authorization callback expired')
+    }
+    const result = await apiRequest<{ access_token: string; account: Record<string, unknown> }>(
+      pendingOAuthState.apiBaseUrl,
+      '/api/oauth/token',
+      {
+        grant_type: 'authorization_code',
+        client_id: 'ola-desktop',
+        code,
+        redirect_uri: 'ola://auth/callback',
+        code_verifier: pendingOAuthState.verifier
+      }
+    )
+    pendingOAuthState = null
+    await saveState({ apiBaseUrl, token: result.access_token, account: result.account, device: null })
+    return { account: result.account, device: null }
+  }
   if (request.operation === 'register' || request.operation === 'login') {
     setRemoteControlAllowed(false)
     const email = requiredString(payload, 'email')
@@ -181,6 +256,10 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
   }
 
   const state = await loadState()
+  if (request.operation === 'model-config') {
+    if (!state?.token) throw new Error('Login is required before syncing model configuration')
+    return apiRequest(apiBaseUrl, '/api/account/model-config', {}, state.token)
+  }
   if (request.operation === 'logout') {
     setRemoteControlAllowed(false)
     if (state?.token) {
@@ -221,6 +300,11 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     return apiRequest(apiBaseUrl, '/api/devices', undefined, state.token)
   if (request.operation === 'session-list')
     return apiRequest(apiBaseUrl, '/api/sessions', undefined, state.token)
+  if (request.operation === 'pairing-auto-resolve') {
+    const result = await apiRequest(apiBaseUrl, '/api/pairing/auto-resolve', { controllerDeviceId: requiredString(payload, 'controllerDeviceId'), controlledDeviceId: requiredString(payload, 'controlledDeviceId'), sessionId: requiredString(payload, 'sessionId') }, state.token)
+    setRemoteControlAllowed(true)
+    return result
+  }
   const deviceID = requiredString(payload, 'deviceId')
   if (request.operation === 'device-heartbeat') {
     return apiRequest(apiBaseUrl, `/api/devices/${deviceID}/heartbeat`, {}, state.token)
@@ -255,4 +339,13 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     )
   }
   throw new Error('Unsupported remote account operation')
+}
+
+export async function handleRemoteOAuthCallback(callbackUrl: string): Promise<unknown> {
+  if (!pendingOAuthState) throw new Error('No pending Ola authorization request')
+  return invokeRemoteAccount({
+    apiBaseUrl: pendingOAuthState.apiBaseUrl,
+    operation: 'oauth-callback',
+    payload: { callbackUrl }
+  })
 }
