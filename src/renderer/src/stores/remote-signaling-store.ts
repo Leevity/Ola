@@ -27,7 +27,7 @@ type RemoteSignalingStore = {
 }
 
 const STORAGE_KEY = 'ola.remote.signaling'
-const DEFAULT_SIGNAL_URL = 'ws://127.0.0.1:7301/ws/signaling'
+const DEFAULT_SIGNAL_URL = 'ws://100.64.0.6:7301/ws/signaling'
 
 let socket: WebSocket | null = null
 const listeners = new Set<RemoteSignalListener>()
