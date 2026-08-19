@@ -164,8 +164,8 @@ function assertMacArtifact(artifacts, smokeDir, requireSignature) {
   if (!app) {
     throw new Error(`macOS packed app bundle was not found under ${smokeDir}`)
   }
-  run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
   if (requireSignature) {
+    run('codesign', ['--verify', '--deep', '--strict', '--verbose=2', app])
     run('spctl', ['--assess', '--type', 'execute', '--verbose=4', app])
     run('spctl', [
       '--assess',
@@ -176,6 +176,8 @@ function assertMacArtifact(artifacts, smokeDir, requireSignature) {
       '--verbose=4',
       dmg
     ])
+  } else {
+    console.log('macOS package signature verification skipped for unsigned release')
   }
 }
 
