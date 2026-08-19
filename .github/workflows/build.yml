@@ -48,6 +48,18 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Cache build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/.nuget/packages
+          key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ola-build-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
         with:
@@ -141,6 +153,18 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Cache build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/.nuget/packages
+          key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ola-build-${{ runner.os }}-${{ runner.arch }}-
+
       - name: Install Linux build dependencies
         run: sudo apt-get update && sudo apt-get install -y build-essential libx11-dev libxtst-dev libpng++-dev
 
@@ -215,6 +239,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Cache build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/.nuget/packages
+          key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ola-build-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
@@ -502,6 +538,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Cache build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/.nuget/packages
+          key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ola-build-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v5
