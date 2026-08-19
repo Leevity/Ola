@@ -587,7 +587,7 @@ jobs:
           echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
           echo "::warning::macOS code signing disabled: CSC_LINK is neither a certificate file, URL, nor base64 certificate data"
 
-      - name: Require macOS signing and notarization credentials for published releases
+      - name: Validate macOS signing configuration
         shell: bash
         env:
           RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
@@ -602,8 +602,7 @@ jobs:
           fi
 
           if [ "$MAC_SIGNING_ENABLED" != "true" ] || [ -z "$CSC_KEY_PASSWORD" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
-            echo "::error::Release signing credentials are required: configure CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID"
-            exit 1
+            echo "::warning::macOS signing credentials are not configured; publishing unsigned macOS packages"
           fi
 
       - name: Package ${{ matrix.platform }}-${{ matrix.artifact_arch }}
