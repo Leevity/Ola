@@ -77,7 +77,7 @@ type RemoteAccountStore = {
 }
 
 const STORAGE_KEY = 'ola.remote.account'
-const DEFAULT_API_BASE_URL = 'http://localhost:7300'
+const DEFAULT_API_BASE_URL = 'http://100.64.0.6:7300'
 
 function loadPersistedState(): Pick<
   RemoteAccountStore,
