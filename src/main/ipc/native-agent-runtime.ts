@@ -122,10 +122,14 @@ export class NativeAgentRuntimeManager {
 
   async lookupToolResults(sessionId: string, toolUseIds: string[]): Promise<unknown> {
     await this.ensureStarted()
-    return await getNativeWorker().request('agent/tool-results-lookup', {
-      sessionId,
-      toolUseIds
-    }, 10_000)
+    return await getNativeWorker().request(
+      'agent/tool-results-lookup',
+      {
+        sessionId,
+        toolUseIds
+      },
+      10_000
+    )
   }
 
   async getRuntimeJob(jobId: string): Promise<RuntimeJobRecord | null> {
@@ -135,12 +139,16 @@ export class NativeAgentRuntimeManager {
       { jobId },
       10_000
     )
-    return result.found === true ? result.job ?? null : null
+    return result.found === true ? (result.job ?? null) : null
   }
 
   async listRuntimeJobs(limit = 100): Promise<RuntimeJobRecord[]> {
     await this.ensureStarted()
-    return await getNativeWorker().request<RuntimeJobRecord[]>(RUNTIME_JOB_ROUTES.list, { limit }, 10_000)
+    return await getNativeWorker().request<RuntimeJobRecord[]>(
+      RUNTIME_JOB_ROUTES.list,
+      { limit },
+      10_000
+    )
   }
 
   async cancelRuntimeJob(jobId: string): Promise<RuntimeJobRecord | null> {

@@ -78,7 +78,8 @@ class WorkerClient {
         })
         socket.once('error', () => {
           socket.destroy()
-          if (Date.now() - startedAt > 10_000) reject(new Error('Timed out connecting to Ola Native Worker.'))
+          if (Date.now() - startedAt > 10_000)
+            reject(new Error('Timed out connecting to Ola Native Worker.'))
           else setTimeout(attempt, 40)
         })
       }
@@ -144,7 +145,9 @@ async function main(): Promise<void> {
   try {
     await client.request('db/initialize', {})
     if (command === 'jobs') {
-      printJson(await client.request('runtime/jobs-list', { limit: Number(option('--limit') ?? 100) }))
+      printJson(
+        await client.request('runtime/jobs-list', { limit: Number(option('--limit') ?? 100) })
+      )
       return
     }
     if (command === 'job') {
@@ -177,7 +180,9 @@ async function main(): Promise<void> {
       await new Promise<void>((resolve) => {
         const timer = setInterval(async () => {
           if (!run.runId) return
-          const status = await client.request<{ active?: boolean }>('agent/run-status', { runId: run.runId })
+          const status = await client.request<{ active?: boolean }>('agent/run-status', {
+            runId: run.runId
+          })
           if (!status.active) {
             clearInterval(timer)
             resolve()

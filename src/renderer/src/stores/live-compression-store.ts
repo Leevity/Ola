@@ -17,7 +17,10 @@ interface LiveCompressionStore {
   bySessionId: Record<string, LiveCompressionEntry>
   start: (sessionId: string, attempt?: number, maxAttempts?: number) => void
   updateDraft: (sessionId: string, draft: string, attempt?: number) => void
-  complete: (sessionId: string, details?: Pick<LiveCompressionEntry, 'preTokens' | 'keptMessageCount'>) => void
+  complete: (
+    sessionId: string,
+    details?: Pick<LiveCompressionEntry, 'preTokens' | 'keptMessageCount'>
+  ) => void
   fail: (sessionId: string) => void
   clear: (sessionId: string) => void
 }

@@ -63,7 +63,11 @@ export function CompressionStatusMessage({
   )
 }
 
-export function LiveCompressionStatus({ sessionId }: { sessionId: string }): React.JSX.Element | null {
+export function LiveCompressionStatus({
+  sessionId
+}: {
+  sessionId: string
+}): React.JSX.Element | null {
   const { t } = useTranslation('agent')
   const entry = useLiveCompressionStore((state) => state.bySessionId[sessionId])
   if (!entry || entry.state !== 'compressing') return null
