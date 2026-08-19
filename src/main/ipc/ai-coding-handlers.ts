@@ -14,6 +14,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
 const STORAGE_KEY = 'ola-ai-coding-configs'
+const AI_CODING_ENABLED = false
 const execFileAsync = promisify(execFile)
 
 function isTrustedAiCodingIpcSender(event: IpcMainInvokeEvent): boolean {
@@ -54,10 +55,11 @@ async function writeConfigs(configs: AiCodingConfig[]): Promise<void> {
 export function registerAiCodingHandlers(): void {
   registerMessagePackHandler<undefined>('ai-coding:configs-list', async () => ({
     success: true,
-    configs: await readAiCodingConfigs()
+    configs: AI_CODING_ENABLED ? await readAiCodingConfigs() : []
   }))
 
   registerMessagePackHandler<Partial<AiCodingConfig>>('ai-coding:configs-save', async (input) => {
+    if (!AI_CODING_ENABLED) return { success: false, error: 'feature_disabled' }
     const now = Date.now()
     const configs = await readAiCodingConfigs()
     const existing = input.id ? configs.find((config) => config.id === input.id) : undefined
@@ -76,6 +78,7 @@ export function registerAiCodingHandlers(): void {
   })
 
   registerMessagePackHandler<{ id: string }>('ai-coding:configs-delete', async ({ id }) => {
+    if (!AI_CODING_ENABLED) return { success: false, error: 'feature_disabled' }
     const configs = await readAiCodingConfigs()
     const next = configs.filter((config) => config.id !== id)
     await writeConfigs(next)
@@ -85,6 +88,7 @@ export function registerAiCodingHandlers(): void {
   registerMessagePackHandler<{ configId: string; cwd: string; projectId?: string | null }>(
     'ai-coding:terminal-launch',
     async (input, event) => {
+      if (!AI_CODING_ENABLED) return { success: false, error: 'feature_disabled' }
       if (!isTrustedAiCodingIpcSender(event)) {
         return { success: false, error: 'Unauthorized AI coding IPC sender' }
       }
