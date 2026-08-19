@@ -319,6 +319,16 @@ internal static class AgentRuntimeGeminiProvider
             writer.WritePropertyName("parts");
             writer.WriteStartArray();
 
+            if (message.ContentBlocks is not null)
+            {
+                foreach (var block in message.ContentBlocks)
+                {
+                    if (JsonHelpers.GetString(block, "type") != "image") continue;
+                    WriteImagePart(writer, block);
+                    wroteContent = true;
+                }
+            }
+
             if (!string.IsNullOrEmpty(message.Text))
             {
                 writer.WriteStartObject();
@@ -372,6 +382,35 @@ internal static class AgentRuntimeGeminiProvider
             writer.WriteEndObject();
         }
         writer.WriteEndArray();
+    }
+
+    private static void WriteImagePart(Utf8JsonWriter writer, JsonElement block)
+    {
+        if (!block.TryGetProperty("source", out var source) || source.ValueKind != JsonValueKind.Object)
+            return;
+
+        var sourceType = JsonHelpers.GetString(source, "type");
+        var mediaType = JsonHelpers.GetString(source, "mediaType") ?? "image/png";
+        if (sourceType == "base64" && JsonHelpers.GetString(source, "data") is { Length: > 0 } data)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("inlineData");
+            writer.WriteStartObject();
+            writer.WriteString("mimeType", mediaType);
+            writer.WriteString("data", data);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
+        else if (sourceType == "url" && JsonHelpers.GetString(source, "url") is { Length: > 0 } url)
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("fileData");
+            writer.WriteStartObject();
+            writer.WriteString("mimeType", mediaType);
+            writer.WriteString("fileUri", url);
+            writer.WriteEndObject();
+            writer.WriteEndObject();
+        }
     }
 
     private static void WriteToolResultContent(Utf8JsonWriter writer, JsonElement content)
