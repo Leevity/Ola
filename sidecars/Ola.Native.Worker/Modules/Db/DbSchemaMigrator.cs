@@ -430,6 +430,17 @@ internal static class DbSchemaMigrator
               ON runtime_jobs(idempotency_key) WHERE idempotency_key IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_runtime_jobs_session_created
               ON runtime_jobs(session_id, created_at DESC);
+
+            CREATE TABLE IF NOT EXISTS runtime_job_events (
+              job_id TEXT NOT NULL,
+              seq INTEGER NOT NULL,
+              payload_json TEXT NOT NULL,
+              terminal INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL,
+              PRIMARY KEY (job_id, seq)
+            );
+            CREATE INDEX IF NOT EXISTS idx_runtime_job_events_created
+              ON runtime_job_events(job_id, seq);
             """);
     }
 
