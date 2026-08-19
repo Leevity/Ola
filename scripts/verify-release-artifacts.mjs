@@ -203,7 +203,10 @@ const checksumsPath = resolve(
     : join(assetsDirectory, 'SHA256SUMS.txt')
 )
 const smokeDir = resolve(args.includes('--smoke-dir') ? readArgument('--smoke-dir') : 'dist')
-const requireSignature = process.env.OLA_RELEASE_REQUIRED === 'true'
+const requireSignature =
+  process.env.OLA_REQUIRE_SIGNATURE !== undefined
+    ? process.env.OLA_REQUIRE_SIGNATURE === 'true'
+    : process.env.OLA_RELEASE_REQUIRED === 'true'
 
 if (!existsSync(assetsDirectory))
   throw new Error(`Assets directory does not exist: ${assetsDirectory}`)
