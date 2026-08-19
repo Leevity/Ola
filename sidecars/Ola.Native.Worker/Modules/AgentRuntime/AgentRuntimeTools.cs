@@ -65,6 +65,7 @@ internal static class AgentRuntimeTools
             $"agent run accepted runtime=native-aot runId={runId} sessionId={FormatLogValue(sessionId)} " +
             $"messages={initialMessageCount}");
 
+        RuntimeJobStore.SetState(runId, "running");
         _ = Task.Run(async () => await ExecuteRunAsync(state, context), CancellationToken.None);
 
         return Task.FromResult(WorkerResponse.Json(
@@ -143,6 +144,7 @@ internal static class AgentRuntimeTools
         }
 
         state.Cancel("user");
+        RuntimeJobStore.SetState(runId, "cancelling", "cancel_requested", "Cancellation requested by user.");
         WorkerLog.Info($"agent run cancel requested runId={runId}");
         return WorkerResponse.Json(
             new AgentRuntimeCancelResult(true, runId, null),

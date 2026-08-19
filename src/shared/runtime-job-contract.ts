@@ -2,7 +2,8 @@ export const RUNTIME_JOB_ROUTES = {
   submit: 'runtime/jobs-submit',
   get: 'runtime/jobs-get',
   list: 'runtime/jobs-list',
-  setState: 'runtime/jobs-state'
+  setState: 'runtime/jobs-state',
+  cancel: 'runtime/jobs-cancel'
 } as const
 
 export type RuntimeJobState =
