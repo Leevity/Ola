@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
 
 const MCP_URL = 'https://gwmcp.lkcoffee.com/order/user/mcp'
 const TOKEN_GUIDE =
@@ -771,7 +771,7 @@ async function cancelOrder(input, ctx) {
   })
 }
 
-globalThis.openCoworkExtension = {
+globalThis.olaExtension = {
   handlers: {
     checkToken,
     listTools,

@@ -82,6 +82,39 @@ func TestSignalingTokenRequiresDeviceOwnership(t *testing.T) {
 	}
 }
 
+func TestControlPlaneAccountRolesAndTeamApproval(t *testing.T) {
+	t.Setenv("OLA_SYSTEM_ADMIN_EMAILS", "system@example.com")
+	st := store.NewMemoryStore()
+	revoker := &revokeRecorder{}
+	handler := NewRouter(testConfig(), st, revoker)
+	adminToken, _ := registerAccountAndDevice(t, handler, "system@example.com")
+	ownerToken, _ := registerAccountAndDevice(t, handler, "owner@example.com")
+
+	adminMe := requestJSON(t, handler, http.MethodGet, "/api/control/me", nil, adminToken)
+	if adminMe["role"] != "system_admin" {
+		t.Fatalf("expected system admin role: %#v", adminMe)
+	}
+	team := requestJSON(t, handler, http.MethodPost, "/api/control/teams", map[string]any{"name": "Ola Team"}, ownerToken)
+	teamValue, ok := team["team"].(map[string]any)
+	if !ok || teamValue["status"] != "pending" {
+		t.Fatalf("team should start pending: %#v", team)
+	}
+	applications := requestJSON(t, handler, http.MethodGet, "/api/control/team-applications", nil, adminToken)
+	if applications["_status"] != float64(http.StatusOK) {
+		t.Fatalf("admin should read applications: %#v", applications)
+	}
+	teamID, _ := teamValue["id"].(string)
+	review := requestJSON(t, handler, http.MethodPost, "/api/control/team-applications", map[string]any{"teamId": teamID, "action": "approve"}, adminToken)
+	reviewTeam, _ := review["team"].(map[string]any)
+	if reviewTeam["status"] != "approved" {
+		t.Fatalf("team approval failed: %#v", review)
+	}
+	ownerMe := requestJSON(t, handler, http.MethodGet, "/api/control/me", nil, ownerToken)
+	if ownerMe["role"] != "team_admin" {
+		t.Fatalf("owner role should become team admin: %#v", ownerMe)
+	}
+}
+
 func TestRevokeNotifiesSignalingHub(t *testing.T) {
 	revoker := &revokeRecorder{}
 	handler := NewRouter(testConfig(), store.NewMemoryStore(), revoker)

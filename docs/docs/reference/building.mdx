@@ -1,4 +1,4 @@
----
+﻿---
 title: 构建与打包
 description: 构建 Ola 生产版本并打包为各平台安装包。
 ---
@@ -11,7 +11,10 @@ description: 构建 Ola 生产版本并打包为各平台安装包。
 # 类型检查 + 构建（推荐）
 npm run build
 
-# 构建各平台安装包
+# 生成未打包应用，检查包体
+npm run build:unpack
+
+# 构建各平台安装包（会自动发布并校验两个 Worker）
 npm run build:win    # Windows (.exe)
 npm run build:mac    # macOS (.dmg)
 npm run build:linux  # Linux (.AppImage / .deb)
@@ -31,7 +34,8 @@ npm run build:linux  # Linux (.AppImage / .deb)
 
 1. **electron-vite**：统一的 Vite 构建配置，支持主进程/预加载/渲染进程三入口
 2. **electron-builder**：打包为各平台安装包
-3. **better-sqlite3** 和 **node-pty** 等原生模块通过 `postinstall` 脚本为 Electron 重建
+3. `npm run package:prepare` 会发布 Native Worker 与 CodeGraph Worker、严格校验资产，再执行 TypeScript 与 electron-vite 构建
+4. **better-sqlite3**、**@jitsi/robotjs**、**ssh2** 等原生模块通过 `postinstall` 脚本为 Electron 重建；Windows 下 `node-pty` 会被 `postinstall` 跳过，CI 在 Linux/macOS 上构建
 
 ## 自动更新 / Auto Update
 

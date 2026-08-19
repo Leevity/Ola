@@ -1,4 +1,4 @@
-import type { ToolResultContent } from '@renderer/lib/api/types'
+﻿import type { ToolResultContent } from '@renderer/lib/api/types'
 import {
   decodeStructuredToolResult,
   encodeStructuredToolResult
@@ -17,9 +17,10 @@ function contentAsText(content?: ToolResultContent): string | null {
 }
 
 export function encodeExtensionToolResult(
-  result: Omit<ExtensionToolResult, '__openCoworkExtensionResult'>
+  result: Omit<ExtensionToolResult, '__olaExtensionResult' | '__openCoworkExtensionResult'>
 ): string {
   return encodeStructuredToolResult({
+    __olaExtensionResult: true,
     __openCoworkExtensionResult: true,
     ...result
   })
@@ -30,7 +31,8 @@ export function parseExtensionToolResult(content?: ToolResultContent): Extension
   if (!text) return null
   const parsed = decodeStructuredToolResult(text)
   if (!parsed || Array.isArray(parsed)) return null
-  if (parsed.__openCoworkExtensionResult !== true) return null
+  if (parsed.__olaExtensionResult !== true && parsed.__openCoworkExtensionResult !== true)
+    return null
   if (typeof parsed.extensionId !== 'string') return null
   return parsed as unknown as ExtensionToolResult
 }

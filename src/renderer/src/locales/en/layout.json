@@ -1251,7 +1251,11 @@
     "websockify": "websockify",
     "embeddedNoVnc": "Embedded noVNC",
     "noVncSecurityFailure": "The VNC server rejected the connection security handshake.",
-    "noVncCredentialsRequired": "This VNC server requires credentials. Use an external viewer because stored passwords are not exposed to the shared renderer.",
+    "noVncSecurityFailureMac": "Cannot reach the macOS VNC server. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and verify the host port (5900 by default). The built-in macOS Screen Sharing service speaks RFB over TCP only — it does not speak the WebSocket protocol that noVNC requires, so connect over an SSH tunnel + websockify bridge, or use the external VNC client.",
+    "noVncMacUnreachable": "Cannot reach the macOS VNC bridge. Enable Screen Sharing (System Settings → General → Sharing → Screen Sharing) and confirm the host port (5900 by default). macOS Screen Sharing speaks RFB over TCP only — it does not speak WebSocket. Connect over an SSH tunnel + websockify bridge, or use the external VNC client.",
+    "noVncMacRefused": "The macOS VNC server refused the connection. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and check the firewall allows inbound TCP 5900.",
+    "noVncSecurityFailureMac": "Cannot reach the macOS VNC server. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and verify the host port (5900 by default). macOS Screen Sharing speaks RFB over TCP, not the WebSocket protocol that noVNC requires, so connect through an SSH tunnel + websockify bridge, or use the external VNC client.",
+    "noVncCredentialsRequired": "This VNC server requires credentials. The embedded noVNC viewer cannot reach the stored password safely, so use the external VNC client.",
     "bytes": "bytes",
     "statusIdle": "Idle",
     "statusConnecting": "Connecting",
@@ -1327,6 +1331,20 @@
     "password": "Password",
     "passwordKeepHint": "Leave blank to keep the current password",
     "vaultHint": "Stored in the system credential vault",
+    "vncImageQuality": "Image quality",
+    "vncQuality": "Quality (sharpness vs. speed)",
+    "vncQualityHint": "Higher is crisper but uses more bandwidth; lower reduces lag and the \"mosaic\" effect on slow links.",
+    "vncEncoding": "Encoding",
+    "vncEncodingHint": "Tight/ZRLE compress the stream (lower bandwidth); Raw sends pixels uncompressed (best fidelity, highest bandwidth).",
+    "vncEncodingTight": "Tight (recommended)",
+    "vncEncodingZrle": "ZRLE",
+    "vncEncodingRaw": "Raw (uncompressed)",
+    "vncViewOnly": "View only",
+    "vncViewOnlyHint": "Disables mouse and keyboard input forwarding for this session.",
+    "scaleFit": "Fit",
+    "scaleFill": "Fill",
+    "scaleOriginal": "100%",
+    "cycleScaleMode": "Switch scale mode",
     "rdpCredentialRequired": "Windows RDP requires a username and password.",
     "saveDevice": "Save",
     "saveAndConnect": "Save and connect",
@@ -1389,5 +1407,27 @@
     "terminalExited": "Terminal session ended",
     "terminalExitedWithError": "Terminal session exited",
     "exitCode": "Exit code: {{code}}"
+  },
+  "accountAuth": {
+    "login": "Sign in",
+    "loginTitle": "Sign in to Ola",
+    "registerTitle": "Create an Ola account",
+    "description": "Sign in to sync your account, devices, and team settings.",
+    "serverUrl": "Server URL",
+    "email": "Email",
+    "password": "Password",
+    "register": "Create account",
+    "back": "Back to Ola",
+    "switchToRegister": "New to Ola? Create an account",
+    "switchToLogin": "Already have an account? Sign in",
+    "loginSuccess": "Signed in and account synced",
+    "registerSuccess": "Account created and synced",
+    "loginFailed": "Sign-in failed. Check the server URL and account details"
+    ,"browserDescription": "Ola will open the account website for sign-in. Your password is never collected by the desktop app."
+    ,"openBrowserLogin": "Open account website"
+    ,"browserOpened": "Account website opened. Finish sign-in and authorize Ola."
+    ,"callbackHint": "After authorization, your browser will return to Ola automatically."
+    ,"serverLabel": "Account website"
+    ,"waitingForCallback": "Waiting for authorization to return to Ola..."
   }
 }

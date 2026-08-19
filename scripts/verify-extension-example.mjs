@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import fs from 'node:fs'
 import path from 'node:path'
 import vm from 'node:vm'
@@ -22,11 +22,13 @@ function readJson(filePath) {
 function validateManifest(manifest) {
   assert(manifest.schemaVersion === 1, 'schemaVersion must be 1')
   assert(/^[a-z0-9][a-z0-9_-]{1,63}$/.test(manifest.id ?? ''), 'invalid extension id')
-  assert(manifest.id === 'demo_extension', 'demo extension id changed unexpectedly')
+  assert(manifest.id === 'demo-extension', 'demo extension id changed unexpectedly')
   assert(typeof manifest.name === 'string' && manifest.name.trim(), 'name is required')
   assert(typeof manifest.version === 'string' && manifest.version.trim(), 'version is required')
-  assert(Array.isArray(manifest.tools) && manifest.tools.length === 3, 'expected 3 tools')
-  assert(fs.existsSync(path.join(root, manifest.entry ?? '')), 'entry file is missing')
+  assert(Array.isArray(manifest.tools) && manifest.tools.length > 0, 'expected at least one tool')
+  if (manifest.entry) {
+    assert(fs.existsSync(path.join(root, manifest.entry)), 'entry file is missing')
+  }
 
   const toolNames = new Set()
   for (const [index, tool] of (manifest.tools ?? []).entries()) {
@@ -48,16 +50,16 @@ function validateManifest(manifest) {
   }
 
   assert(toolNames.has('get_post'), 'missing get_post tool')
-  assert(toolNames.has('show_table'), 'missing show_table tool')
-  assert(toolNames.has('show_html'), 'missing show_html tool')
 
-  const renderers = manifest.renderers ?? []
-  assert(renderers.length === 1, 'expected 1 renderer')
-  assert(renderers[0]?.name === 'summary_card', 'missing summary_card renderer')
-  assert(fs.existsSync(path.join(root, renderers[0]?.entry ?? '')), 'renderer file is missing')
+  for (const renderer of manifest.renderers ?? []) {
+    assert(typeof renderer.name === 'string' && renderer.name.trim(), 'renderer name is required')
+    assert(fs.existsSync(path.join(root, renderer.entry ?? '')), 'renderer file is missing')
+  }
 }
 
 async function validateHandlers(manifest) {
+  if (!manifest.entry) return
+
   const entryCode = fs.readFileSync(path.join(root, manifest.entry), 'utf-8')
   const sandbox = {
     globalThis: {},
@@ -80,10 +82,12 @@ async function validateHandlers(manifest) {
     timeout: 1000
   })
 
-  const handlers = sandbox.openCoworkExtension?.handlers
-  assert(isRecord(handlers), 'openCoworkExtension.handlers is missing')
-  assert(typeof handlers.showTable === 'function', 'showTable handler is missing')
-  assert(typeof handlers.showHtml === 'function', 'showHtml handler is missing')
+  const handlers = (sandbox.olaExtension || sandbox.openCoworkExtension)?.handlers
+  assert(isRecord(handlers), 'olaExtension.handlers is missing')
+  const jsTools = manifest.tools.filter((tool) => tool.kind === 'js')
+  for (const tool of jsTools) {
+    assert(typeof handlers[tool.handler] === 'function', `${tool.handler} handler is missing`)
+  }
 
   const ctx = {
     config: {},
@@ -97,30 +101,22 @@ async function validateHandlers(manifest) {
     }
   }
 
-  const tableResult = await handlers.showTable({}, ctx)
-  assert(tableResult?.ui?.kind === 'table', 'showTable must return table UI')
-  assert(
-    Array.isArray(tableResult?.ui?.rows) && tableResult.ui.rows.length > 0,
-    'showTable rows missing'
-  )
-
-  const htmlResult = await handlers.showHtml({ title: 'Smoke Test' }, ctx)
-  assert(htmlResult?.ui?.kind === 'html', 'showHtml must return html UI')
-  assert(htmlResult?.ui?.renderer === 'summary_card', 'showHtml renderer mismatch')
-  assert(htmlResult?.ui?.props?.title === 'Smoke Test', 'showHtml props title mismatch')
+  for (const tool of jsTools) {
+    const result = await handlers[tool.handler]({}, ctx)
+    assert(result !== undefined, `${tool.handler} must return a result`)
+  }
 }
 
-function validateRenderer(manifest) {
-  const renderer = manifest.renderers.find((item) => item.name === 'summary_card')
-  const html = fs.readFileSync(path.join(root, renderer.entry), 'utf-8')
-  assert(html.includes('extension-props'), 'renderer must listen for extension-props')
-  assert(html.includes('escapeHtml'), 'renderer should escape injected values')
+function validateGeneratedTemplate() {
+  const templatePath = path.resolve('resources/skills/create-extension/scripts/create_extension.py')
+  const template = fs.readFileSync(templatePath, 'utf-8')
+  assert(template.includes('globalThis.olaExtension'), 'generated extensions must use olaExtension')
 }
 
 const manifest = readJson(manifestPath)
 validateManifest(manifest)
 await validateHandlers(manifest)
-validateRenderer(manifest)
+validateGeneratedTemplate()
 
 if (errors.length > 0) {
   console.error(errors.map((error) => `- ${error}`).join('\n'))

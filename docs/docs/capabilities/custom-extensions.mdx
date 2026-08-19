@@ -1,4 +1,4 @@
----
+﻿---
 title: 自定义插件
 description: 使用 Extensions 为 Ola 添加自定义 Agent 工具和响应 UI。
 ---
@@ -186,10 +186,10 @@ JS 工具运行在隐藏 iframe 沙箱里：
 - 直接 `fetch()` 会被禁用
 - 只能通过 `ctx.fetch`、`ctx.storage`、`ctx.config` 与宿主交互
 
-`index.js` 必须设置 `globalThis.openCoworkExtension`：
+`index.js` 应设置 `globalThis.olaExtension`：
 
 ```js
-globalThis.openCoworkExtension = {
+globalThis.olaExtension = {
   handlers: {
     async showTable(input, ctx) {
       return {
@@ -243,7 +243,7 @@ Extension 工具结果会编码成现有 structured tool result，不改变 prov
 
 ```ts
 {
-  __openCoworkExtensionResult: true,
+  __olaExtensionResult: true,
   extensionId: 'demo_extension',
   toolName: 'show_table',
   text: '...',
@@ -252,7 +252,7 @@ Extension 工具结果会编码成现有 structured tool result，不改变 prov
 }
 ```
 
-Agent 仍然收到普通 tool result，聊天 UI 会识别 `__openCoworkExtensionResult` 并渲染更友好的结果卡片。
+Agent 仍然收到普通 tool result，聊天 UI 会识别 `__olaExtensionResult` 并渲染更友好的结果卡片。`globalThis.openCoworkExtension` 和 `__openCoworkExtensionResult` 在 V1 期间继续兼容，便于已安装扩展平滑迁移。
 
 ## 响应 UI / Response UI
 

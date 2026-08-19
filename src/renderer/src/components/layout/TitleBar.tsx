@@ -118,6 +118,7 @@ export function TitleBar({
   const mode = useUIStore((s) => s.mode)
   const setMode = useUIStore((s) => s.setMode)
   const settingsPageOpen = useUIStore((s) => s.settingsPageOpen)
+  const accountAuthPageOpen = useUIStore((s) => s.accountAuthPageOpen)
   const skillsPageOpen = useUIStore((s) => s.skillsPageOpen)
   const soulsPageOpen = useUIStore((s) => s.soulsPageOpen)
   const resourcesPageOpen = useUIStore((s) => s.resourcesPageOpen)
@@ -180,6 +181,7 @@ export function TitleBar({
 
   const chatSurfaceActive =
     !settingsPageOpen &&
+    !accountAuthPageOpen &&
     !skillsPageOpen &&
     !soulsPageOpen &&
     !resourcesPageOpen &&

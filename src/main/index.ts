@@ -61,6 +61,7 @@ import { registerInputHandlers } from './ipc/input-handlers'
 import { registerInputDraftHandlers } from './ipc/input-draft-handlers'
 import { registerHooksHandlers } from './ipc/hooks-handlers'
 import { closeAllRemoteSessions, registerRemoteHandlers } from './ipc/remote-handlers'
+import { handleRemoteOAuthCallback } from './remote/account-client'
 import { registerNotifyHandlers } from './ipc/notify-handlers'
 import {
   installBuiltinPets,
@@ -1359,7 +1360,29 @@ if (!gotSingleInstanceLock) {
 }
 
 if (gotSingleInstanceLock) {
+  const handleProtocolArguments = (commandLine: string[]): void => {
+    const rawCallback = commandLine.find((arg) => arg.includes('ola://auth/callback'))
+    const callbackUrl = rawCallback?.slice(rawCallback.indexOf('ola://auth/callback')).replace(/^['"]|['"]$/g, '')
+    if (callbackUrl) {
+      console.log('[RemoteAuth] OAuth callback received')
+      void handleRemoteOAuthCallback(callbackUrl).catch((error) => {
+        console.error('[RemoteAuth] OAuth callback failed:', error)
+      })
+    }
+  }
+
+  app.on('open-url', (event, url) => {
+    event.preventDefault()
+    if (url.startsWith('ola://auth/callback')) {
+      console.log('[RemoteAuth] OAuth callback received via open-url')
+      void handleRemoteOAuthCallback(url).catch((error) => {
+        console.error('[RemoteAuth] OAuth callback failed:', error)
+      })
+    }
+  })
+
   app.on('second-instance', (_event, commandLine) => {
+    handleProtocolArguments(commandLine)
     const shouldOpenSsh = commandLine.some((arg) => arg.includes('appView=ssh'))
     if (shouldOpenSsh) {
       showSshWindow()
@@ -1369,6 +1392,14 @@ if (gotSingleInstanceLock) {
   })
 
   app.whenReady().then(async () => {
+    if (app.isPackaged) {
+      app.setAsDefaultProtocolClient('ola')
+    } else {
+      // In dev mode Electron itself is the protocol executable. Without the
+      // app path, Windows treats ola://auth/callback as the Electron app path.
+      app.setAsDefaultProtocolClient('ola', process.execPath, [app.getAppPath()])
+    }
+    handleProtocolArguments(process.argv)
     recordStartupStep('app_when_ready', 'start')
     // Import @electron-toolkit/utils after app is ready
     const utils = await runLoggedStartupStepAsync(

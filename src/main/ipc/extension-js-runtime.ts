@@ -1,4 +1,4 @@
-import vm from 'vm'
+﻿import vm from 'vm'
 import type {
   ExtensionFetchRequest,
   ExtensionFetchResponse,
@@ -35,6 +35,9 @@ type ExtensionMutationResult = {
 }
 
 type ExtensionJsSandbox = Record<string, unknown> & {
+  olaExtension?: {
+    handlers?: Record<string, unknown>
+  }
   openCoworkExtension?: {
     handlers?: Record<string, unknown>
   }
@@ -298,7 +301,7 @@ function normalizeJsResult(
   extension: ExtensionInstance,
   tool: ExtensionToolDefinition,
   value: unknown
-): Omit<ExtensionToolResult, '__openCoworkExtensionResult'> {
+): Omit<ExtensionToolResult, '__olaExtensionResult' | '__openCoworkExtensionResult'> {
   if (isRecord(value)) {
     return {
       extensionId: extension.id,
@@ -318,9 +321,10 @@ function normalizeJsResult(
 }
 
 function encodeExtensionToolResult(
-  result: Omit<ExtensionToolResult, '__openCoworkExtensionResult'>
+  result: Omit<ExtensionToolResult, '__olaExtensionResult' | '__openCoworkExtensionResult'>
 ): string {
   return JSON.stringify({
+    __olaExtensionResult: true,
     __openCoworkExtensionResult: true,
     ...result
   })
@@ -408,7 +412,7 @@ export async function executeJsExtensionToolInMain(
     const invocation = new vm.Script(
       `
       (async () => {
-        const extension = globalThis.openCoworkExtension;
+        const extension = globalThis.olaExtension || globalThis.openCoworkExtension;
         const handler = extension && extension.handlers && extension.handlers[${JSON.stringify(tool.handler)}];
         if (typeof handler !== 'function') {
           throw new Error('Extension handler not found: ${String(tool.handler).replace(/'/g, "\\'")}');

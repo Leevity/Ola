@@ -90,11 +90,12 @@
     "dev:raw": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "node ./scripts/postinstall.mjs",
-    "build:unpack": "npm run build && electron-builder --dir",
-    "build:win": "npm run build && electron-builder --win",
-    "build:win:green": "npm run build && electron-builder --win zip -c.extraMetadata.olaDistribution=green -c.directories.output=dist-green --publish never",
-    "build:mac": "electron-vite build && electron-builder --mac",
-    "build:linux": "electron-vite build && electron-builder --linux"
+    "package:prepare": "npm run native:publish && npm run worker:assets:verify && npm run build",
+    "build:unpack": "npm run package:prepare && electron-builder --dir",
+    "build:win": "npm run package:prepare && electron-builder --win",
+    "build:win:green": "npm run package:prepare && electron-builder --win zip -c.extraMetadata.olaDistribution=green -c.directories.output=dist-green --publish never",
+    "build:mac": "npm run package:prepare && electron-builder --mac",
+    "build:linux": "npm run package:prepare && electron-builder --linux"
   },
   "dependencies": {
     "@base-ui/react": "^1.1.0",

@@ -1,4 +1,4 @@
-using System.Buffers;
+﻿using System.Buffers;
 using System.Net;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -253,6 +253,7 @@ internal static partial class ExtensionHttpToolExecutor
         using (var writer = new Utf8JsonWriter(stream, WriterOptions))
         {
             writer.WriteStartObject();
+            writer.WriteBoolean("__olaExtensionResult", true);
             writer.WriteBoolean("__openCoworkExtensionResult", true);
             writer.WriteString("extensionId", result.ExtensionId);
             writer.WriteString("toolName", result.ToolName);

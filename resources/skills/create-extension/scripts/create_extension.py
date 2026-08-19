@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Scaffold and validate Ola Custom Extension V1 folders."""
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ def build_js_manifest(extension_id: str, name: str, description: str) -> dict:
 
 
 def build_js_entry(name: str) -> str:
-    return f"""globalThis.openCoworkExtension = {{
+    return f"""globalThis.olaExtension = {{
   handlers: {{
     async showSummary(input, ctx) {{
       const query = typeof input.query === 'string' ? input.query : ''

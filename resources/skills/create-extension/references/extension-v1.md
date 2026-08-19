@@ -1,4 +1,4 @@
-# Ola Custom Extension V1
+﻿# Ola Custom Extension V1
 
 Use this reference when creating or modifying Ola Custom Extensions.
 
@@ -126,10 +126,10 @@ return {
 }
 ```
 
-`index.js` must set `globalThis.openCoworkExtension`:
+`index.js` should set `globalThis.olaExtension`: `globalThis.openCoworkExtension` remains supported for existing extensions during the V1 compatibility period.
 
 ```js
-globalThis.openCoworkExtension = {
+globalThis.olaExtension = {
   handlers: {
     async showSummary(input, ctx) {
       const previous = await ctx.storage.get('last_query')
@@ -156,7 +156,7 @@ Available JS context:
 
 If a tool does not appear, check that the extension is enabled and the tool request happens after
 the extension was enabled. If network fails, check `permissions.network`. If JS fails, confirm the
-manifest `entry`, tool `handler`, and `globalThis.openCoworkExtension.handlers` names match.
+manifest `entry`, tool `handler`, and `globalThis.olaExtension.handlers` names match.
 
 V1 does not support zip or remote install, React component packages, custom message providers, or
 direct filesystem/shell/Electron access.

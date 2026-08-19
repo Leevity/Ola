@@ -1251,7 +1251,11 @@
     "websockify": "websockify",
     "embeddedNoVnc": "内嵌 noVNC",
     "noVncSecurityFailure": "VNC 服务器拒绝了安全握手。",
-    "noVncCredentialsRequired": "此 VNC 服务器需要凭据。为避免向共享渲染进程暴露已保存密码，请改用外部查看器。",
+    "noVncSecurityFailureMac": "无法连接到 macOS VNC 服务器。请在“系统设置 → 通用 → 共享 → 屏幕共享”中启用屏幕共享并允许 VNC 观看，确认主机端口（默认 5900）。macOS 自带屏幕共享仅支持 RFB over TCP，不支持 WebSocket；请通过 SSH 隧道 + websockify 桥接，或使用外部 VNC 客户端。",
+    "noVncMacUnreachable": "无法访问 macOS VNC 桥接。请在“系统设置 → 通用 → 共享 → 屏幕共享”中启用屏幕共享并确认主机端口（默认 5900）。macOS 自带屏幕共享仅支持 RFB over TCP，不支持 WebSocket；请通过 SSH 隧道 + websockify 桥接，或使用外部 VNC 客户端。",
+    "noVncMacRefused": "macOS VNC 服务器拒绝了连接。请在“系统设置 → 通用 → 共享”中启用屏幕共享并允许 VNC 观看，同时确认防火墙已放行入站 TCP 5900。",
+    "noVncSecurityFailureMac": "无法连接 macOS VNC 服务器。请在「系统设置 → 通用 → 共享」中打开「屏幕共享」，允许 VNC 查看器访问，并确认端口（默认 5900）。macOS 屏幕共享只支持 RFB over TCP，不支持 noVNC 所需的 WebSocket 协议，请改用 SSH 隧道 + websockify 桥接，或直接使用外部 VNC 客户端。",
+    "noVncCredentialsRequired": "此 VNC 服务器需要凭据。嵌入式 noVNC 无法安全地拿到已保存的密码，请改用外部查看器。",
     "bytes": "字节",
     "statusIdle": "空闲",
     "statusConnecting": "连接中",
@@ -1327,6 +1331,20 @@
     "password": "密码",
     "passwordKeepHint": "留空则保留原密码",
     "vaultHint": "保存到系统凭据库",
+    "vncImageQuality": "图像质量",
+    "vncQuality": "画质（清晰度与流畅度权衡）",
+    "vncQualityHint": "数值越高画面越清晰但占用带宽越大；在慢速网络下调低可减少卡顿和“马赛克”感。",
+    "vncEncoding": "编码方式",
+    "vncEncodingHint": "Tight/ZRLE 会压缩画面（降低带宽）；Raw 不压缩（画质最好但带宽占用最高）。",
+    "vncEncodingTight": "Tight（推荐）",
+    "vncEncodingZrle": "ZRLE",
+    "vncEncodingRaw": "Raw（不压缩）",
+    "vncViewOnly": "仅查看",
+    "vncViewOnlyHint": "启用后禁止向远端发送鼠标和键盘输入。",
+    "scaleFit": "适应",
+    "scaleFill": "拉伸",
+    "scaleOriginal": "100%",
+    "cycleScaleMode": "切换缩放模式",
     "rdpCredentialRequired": "Windows RDP 需要用户名和密码。",
     "saveDevice": "保存",
     "saveAndConnect": "保存并连接",
@@ -1389,5 +1407,27 @@
     "terminalExited": "终端会话已结束",
     "terminalExitedWithError": "终端会话已退出",
     "exitCode": "退出码：{{code}}"
+  },
+  "accountAuth": {
+    "login": "登录",
+    "loginTitle": "登录 Ola 账户",
+    "registerTitle": "注册 Ola 账户",
+    "description": "登录后即可同步账户、设备和团队配置。",
+    "serverUrl": "服务端地址",
+    "email": "邮箱",
+    "password": "密码",
+    "register": "注册并登录",
+    "back": "返回 Ola",
+    "switchToRegister": "还没有账户？立即注册",
+    "switchToLogin": "已有账户？返回登录",
+    "loginSuccess": "登录成功，账户已同步",
+    "registerSuccess": "注册成功，账户已同步",
+    "loginFailed": "登录失败，请检查服务端地址和账户信息"
+    ,"browserDescription": "Ola 将打开管理站完成注册或登录，不会在客户端收集你的密码。"
+    ,"openBrowserLogin": "打开管理站登录"
+    ,"browserOpened": "管理站已打开，请完成登录并授权 Ola"
+    ,"callbackHint": "完成授权后，浏览器会自动返回 Ola。"
+    ,"serverLabel": "认证站点"
+    ,"waitingForCallback": "等待授权返回 Ola..."
   }
 }

@@ -3,7 +3,9 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -48,6 +50,12 @@ CREATE TABLE IF NOT EXISTS devices (
   device_name VARCHAR(100) NOT NULL, platform VARCHAR(40) NOT NULL, device_fingerprint TEXT,
   is_online BOOLEAN NOT NULL DEFAULT false, last_seen TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE TABLE IF NOT EXISTS device_configs (
+  device_id UUID PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+  version BIGINT NOT NULL DEFAULT 0,
+  config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_devices_account_fingerprint
   ON devices(account_id, device_fingerprint) WHERE device_fingerprint IS NOT NULL AND device_fingerprint <> '';
 CREATE TABLE IF NOT EXISTS pairing_codes (
@@ -62,11 +70,50 @@ CREATE TABLE IF NOT EXISTS remote_sessions (
 ALTER TABLE remote_sessions ADD COLUMN IF NOT EXISTS client_session_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_devices_account ON devices(account_id);
 CREATE INDEX IF NOT EXISTS idx_pairing_expires ON pairing_codes(expires_at);
-CREATE INDEX IF NOT EXISTS idx_remote_sessions_started ON remote_sessions(started_at);`)
+CREATE INDEX IF NOT EXISTS idx_remote_sessions_started ON remote_sessions(started_at);
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS system_role VARCHAR(32) NOT NULL DEFAULT 'personal_user';
+CREATE TABLE IF NOT EXISTS organizations (
+  id UUID PRIMARY KEY, name VARCHAR(100) NOT NULL, status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  created_by UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS organization_members (
+  organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  account_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  role VARCHAR(32) NOT NULL DEFAULT 'member', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (organization_id, account_id)
+);
+CREATE TABLE IF NOT EXISTS organization_applications (
+  id UUID PRIMARY KEY, organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  applicant_id UUID NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  status VARCHAR(20) NOT NULL DEFAULT 'pending', created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), reviewed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS model_configs (
+  id UUID PRIMARY KEY, organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  provider VARCHAR(80) NOT NULL, model VARCHAR(160) NOT NULL, base_url TEXT, credential_ref TEXT,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE, is_default BOOLEAN NOT NULL DEFAULT FALSE, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_org_members_account ON organization_members(account_id);
+CREATE INDEX IF NOT EXISTS idx_org_apps_status ON organization_applications(status);
+CREATE INDEX IF NOT EXISTS idx_model_configs_org ON model_configs(organization_id);
+CREATE TABLE IF NOT EXISTS control_plane_state (id SMALLINT PRIMARY KEY CHECK (id = 1), payload JSONB NOT NULL, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());`)
 	if err == nil {
 		_, err = s.db.ExecContext(ctx, `CREATE UNIQUE INDEX IF NOT EXISTS idx_remote_sessions_client_session
   ON remote_sessions(client_session_id) WHERE client_session_id IS NOT NULL`)
 	}
+	return err
+}
+
+func (s *PostgresStore) LoadControlPlaneState() ([]byte, error) {
+	var payload []byte
+	err := s.db.QueryRow(`SELECT payload FROM control_plane_state WHERE id=1`).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return payload, err
+}
+
+func (s *PostgresStore) SaveControlPlaneState(payload []byte) error {
+	_, err := s.db.Exec(`INSERT INTO control_plane_state (id,payload,updated_at) VALUES (1,$1,NOW()) ON CONFLICT (id) DO UPDATE SET payload=EXCLUDED.payload,updated_at=NOW()`, payload)
 	return err
 }
 
@@ -258,6 +305,37 @@ func (s *PostgresStore) HeartbeatDevice(accountID, deviceID string) (Device, err
 		return Device{}, errors.New("device not found")
 	}
 	return device, err
+}
+
+func (s *PostgresStore) GetDeviceConfig(accountID, deviceID string) (DeviceConfig, error) {
+	var result DeviceConfig
+	result.DeviceID = deviceID
+	var raw []byte
+	err := s.db.QueryRow(`SELECT d.id, COALESCE(c.version,0), COALESCE(c.config,'{}'::jsonb), COALESCE(c.updated_at,NOW()) FROM devices d LEFT JOIN device_configs c ON c.device_id=d.id WHERE d.id=$1 AND d.account_id=$2`, deviceID, accountID).Scan(&result.DeviceID, &result.Version, &raw, &result.UpdatedAt)
+	if err != nil {
+		return DeviceConfig{}, errors.New("device not found")
+	}
+	result.ETag = fmt.Sprintf("%d", result.Version)
+	if err := json.Unmarshal(raw, &result.Config); err != nil {
+		result.Config = map[string]any{}
+	}
+	return result, nil
+}
+
+func (s *PostgresStore) PutDeviceConfig(accountID, deviceID string, expectedVersion int64, value any) (DeviceConfig, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return DeviceConfig{}, errors.New("invalid configuration")
+	}
+	var result DeviceConfig
+	var stored []byte
+	err = s.db.QueryRow(`INSERT INTO device_configs(device_id,version,config,updated_at) SELECT d.id,1,$3,NOW() FROM devices d WHERE d.id=$1 AND d.account_id=$2 AND $4=0 ON CONFLICT (device_id) DO UPDATE SET version=device_configs.version+1, config=EXCLUDED.config, updated_at=NOW() WHERE device_configs.version=$4 RETURNING device_id,version,config,updated_at`, deviceID, accountID, raw, expectedVersion).Scan(&result.DeviceID, &result.Version, &stored, &result.UpdatedAt)
+	if err != nil {
+		return DeviceConfig{}, errors.New("configuration version conflict or device not found")
+	}
+	result.ETag = fmt.Sprintf("%d", result.Version)
+	_ = json.Unmarshal(stored, &result.Config)
+	return result, nil
 }
 
 func (s *PostgresStore) SavePairingCode(code, deviceID string, ttl time.Duration) (PairingCode, error) {

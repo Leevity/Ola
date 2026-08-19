@@ -80,12 +80,26 @@ if (codeGraphResult.status !== 0) {
   process.exit(codeGraphResult.status ?? 1)
 }
 
-rmSync(outputDir, { recursive: true, force: true })
-mkdirSync(outputDir, { recursive: true })
-cpSync(tempOutputDir, outputDir, { recursive: true })
 const codeGraphOutputDir = join(outputDir, 'codegraph-worker')
-mkdirSync(codeGraphOutputDir, { recursive: true })
-cpSync(codeGraphTempOutputDir, codeGraphOutputDir, { recursive: true })
+
+try {
+  rmSync(outputDir, { recursive: true, force: true })
+  mkdirSync(outputDir, { recursive: true })
+  cpSync(tempOutputDir, outputDir, { recursive: true })
+  mkdirSync(codeGraphOutputDir, { recursive: true })
+  cpSync(codeGraphTempOutputDir, codeGraphOutputDir, { recursive: true })
+} catch (error) {
+  rmSync(tempOutputDir, { recursive: true, force: true })
+  rmSync(codeGraphTempOutputDir, { recursive: true, force: true })
+  if (error?.code === 'EPERM' && process.platform === 'win32') {
+    console.error(
+      '[publish-native-worker] Cannot replace resources/native-worker because Ola or a worker is running. ' +
+        'Close Ola completely, then run npm run native:publish again.'
+    )
+    process.exit(1)
+  }
+  throw error
+}
 
 // The .dSYM bundle is crash-symbolication debug info (StripSymbols moves DWARF
 // there) — never loaded at runtime, and resources/** ships into the installer, so
