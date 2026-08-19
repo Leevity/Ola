@@ -448,7 +448,7 @@ const menuGroupDefs: Array<{
         icon: <ShieldCheck className="size-4" />,
         labelKey: 'permission.title',
         descKey: 'permission.subtitle'
-      },
+      }
     ]
   },
   {
@@ -471,7 +471,7 @@ const menuGroupDefs: Array<{
         icon: <BrainCircuit className="size-4" />,
         labelKey: 'model.title',
         descKey: 'model.subtitle'
-      },
+      }
     ]
   },
   {
