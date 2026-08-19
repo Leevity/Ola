@@ -27,3 +27,43 @@ node server/scripts/smoke.mjs
 The smoke proves device-token issuance, one-time pairing authorization, authorization stripping,
 authorized offer forwarding, immediate two-peer revoke, stats persistence, and account-scoped audit
 queries. A separate two-device WebRTC run is still required to prove P2P and TURN media transport.
+## Control plane and model gateway
+
+The API process exposes the authenticated control plane under `/api/control/*` and
+an OpenAI-compatible model gateway under `/v1/*`.
+
+For local development, set `OLA_REMOTE_DEV_MODE=1` and optionally:
+
+```text
+OLA_CONTROL_PLANE_STATE_PATH=.ola-control-plane.json
+OLA_SYSTEM_ADMIN_EMAILS=admin@example.com
+OLA_MODEL_BASE_URL=https://api.openai.com/v1
+OLA_MODEL_API_KEY=replace-me
+OLA_MODEL_DEFAULT=gpt-4.1
+```
+
+The state path is an atomic local development store. With `OLA_REMOTE_DATABASE_URL` configured,
+the API persists control-plane state through the `control_plane_state` PostgreSQL row; the
+schema is also included in `migrations/002_control_plane.sql` for managed migrations.
+
+The separate admin site is in `../../Ola-admin` and can be started with:
+
+```bash
+cd Ola-admin
+npm install
+npm run dev
+```
+
+Set `VITE_API_BASE_URL` to the API origin and `VITE_SIGNAL_URL` to the signaling WebSocket URL
+when the API/signaling services are not running on localhost.
+
+Development-only test accounts are seeded automatically when `OLA_REMOTE_DEV_MODE=1`:
+
+```text
+System admin:  admin@ola.test       / OlaAdmin123!
+Team admin:    team-admin@ola.test  / OlaTeam123!
+Basic user:    user@ola.test        / OlaUser123!
+```
+
+The seed can be disabled with `OLA_REMOTE_DEV_SEED=0`. These accounts are never created by the
+production startup path.

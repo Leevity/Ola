@@ -1,4 +1,4 @@
-import { create } from 'zustand'
+﻿import { create } from 'zustand'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import type {
@@ -22,6 +22,11 @@ export type RemoteClientStatus = {
   installHintCode?: string | null
   error?: string
   websockifyAvailable?: boolean
+  hints?: {
+    needsScreenSharingEnabled?: boolean
+    needsVncServerInstalled?: boolean
+    expectedPort?: number
+  }
 }
 
 type RemoteStore = {

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
+﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
 
 const MCP_URL = 'https://gwmcp.lkcoffee.com/order/user/mcp'
 const TOKEN_GUIDE =

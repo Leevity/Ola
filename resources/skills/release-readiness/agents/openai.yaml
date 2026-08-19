@@ -1,4 +1,4 @@
 interface:
-  display_name: "Release Readiness"
-  short_description: "Audit repositories for concrete release blockers"
-  default_prompt: "Use $release-readiness to audit this repository for release blockers and verification gaps."
+  display_name: 'Release Readiness'
+  short_description: 'Audit repositories for concrete release blockers'
+  default_prompt: 'Use $release-readiness to audit this repository for release blockers and verification gaps.'

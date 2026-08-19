@@ -1,4 +1,4 @@
----
+﻿---
 title: Troubleshooting
 description: Symptom-first checks for local setup, docs, models, channels, and tools.
 ---
@@ -11,10 +11,11 @@ description: Symptom-first checks for local setup, docs, models, channels, and t
 
 <Runbook>
   <RunbookStep title="Check Node.js">
-    确认 Node.js 版本满足项目要求，当前项目要求 Node.js 18 或更高。
+    确认 Node.js 22+ 与 npm 10+；从源码启动还需要 .NET 10 SDK。
   </RunbookStep>
-  <RunbookStep title="Reinstall dependencies">
-    重新安装依赖并执行 native module rebuild。
+  <RunbookStep title="Rebuild native runtime">
+    重新安装依赖后运行 `npm run native:publish`。如果 Windows 报 Worker 文件被拒绝访问，先完全退出
+    Ola 再重试。
   </RunbookStep>
   <RunbookStep title="Run type check">
     如果应用无法编译，先用类型检查确认不是 TypeScript 或路径别名问题。
@@ -23,7 +24,7 @@ description: Symptom-first checks for local setup, docs, models, channels, and t
 
 <CommandGroup title="App checks">
   <CommandItem label="Install" command="npm install" />
-  <CommandItem label="Rebuild" command="npm run postinstall" />
+  <CommandItem label="Publish workers" command="npm run native:publish" />
   <CommandItem label="Types" command="npm run typecheck" />
 </CommandGroup>
 

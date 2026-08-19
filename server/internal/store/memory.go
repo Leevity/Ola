@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -33,6 +34,14 @@ type Device struct {
 	IsOnline    bool       `json:"isOnline"`
 	LastSeen    *time.Time `json:"lastSeen,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
+}
+
+type DeviceConfig struct {
+	DeviceID  string    `json:"deviceId"`
+	Version   int64     `json:"version"`
+	ETag      string    `json:"etag"`
+	Config    any       `json:"config"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type PairingCode struct {
@@ -64,6 +73,7 @@ type MemoryStore struct {
 	devices        map[string]Device
 	pairingCodes   map[string]PairingCode
 	remoteSessions map[string]RemoteSessionAudit
+	deviceConfigs  map[string]DeviceConfig
 }
 
 type Store interface {
@@ -77,6 +87,8 @@ type Store interface {
 	SavePairingCode(code string, deviceID string, ttl time.Duration) (PairingCode, error)
 	ResolvePairingCode(code string) (PairingCode, Device, error)
 	RevokePairingCodesForDevice(accountID string, deviceID string) (int, error)
+	GetDeviceConfig(accountID, deviceID string) (DeviceConfig, error)
+	PutDeviceConfig(accountID, deviceID string, expectedVersion int64, config any) (DeviceConfig, error)
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -87,7 +99,39 @@ func NewMemoryStore() *MemoryStore {
 		devices:        make(map[string]Device),
 		pairingCodes:   make(map[string]PairingCode),
 		remoteSessions: make(map[string]RemoteSessionAudit),
+		deviceConfigs:  make(map[string]DeviceConfig),
 	}
+}
+
+func (s *MemoryStore) GetDeviceConfig(accountID, deviceID string) (DeviceConfig, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	device, ok := s.devices[deviceID]
+	if !ok || device.AccountID != accountID {
+		return DeviceConfig{}, errors.New("device not found")
+	}
+	config, ok := s.deviceConfigs[deviceID]
+	if !ok {
+		return DeviceConfig{DeviceID: deviceID, Version: 0, ETag: "0", Config: map[string]any{}}, nil
+	}
+	return config, nil
+}
+
+func (s *MemoryStore) PutDeviceConfig(accountID, deviceID string, expectedVersion int64, value any) (DeviceConfig, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	device, ok := s.devices[deviceID]
+	if !ok || device.AccountID != accountID {
+		return DeviceConfig{}, errors.New("device not found")
+	}
+	current := s.deviceConfigs[deviceID]
+	if current.Version != expectedVersion {
+		return DeviceConfig{}, errors.New("configuration version conflict")
+	}
+	now := time.Now()
+	updated := DeviceConfig{DeviceID: deviceID, Version: expectedVersion + 1, ETag: fmt.Sprintf("%d", expectedVersion+1), Config: value, UpdatedAt: now}
+	s.deviceConfigs[deviceID] = updated
+	return updated, nil
 }
 
 func (s *MemoryStore) RemoteSessionStarted(sessionID, controllerAccountID, controllerDeviceID, controlledDeviceID string, startedAt time.Time) error {

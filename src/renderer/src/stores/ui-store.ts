@@ -374,6 +374,9 @@ interface UIStore {
   settingsTab: SettingsTab
   openSettingsPage: (tab?: SettingsTab) => void
   closeSettingsPage: () => void
+  accountAuthPageOpen: boolean
+  openAccountAuthPage: () => void
+  closeAccountAuthPage: () => void
   setSettingsTab: (tab: SettingsTab) => void
   skillsPageOpen: boolean
   openSkillsPage: () => void
@@ -1302,6 +1305,22 @@ export const useUIStore = create<UIStore>()(
           replaceChatRouteFromCurrentState(get().chatView)
         }
       },
+      accountAuthPageOpen: false,
+      openAccountAuthPage: () =>
+        set({
+          accountAuthPageOpen: true,
+          settingsPageOpen: false,
+          remotePageOpen: false,
+          skillsPageOpen: false,
+          soulsPageOpen: false,
+          syncPageOpen: false,
+          resourcesPageOpen: false,
+          translatePageOpen: false,
+          drawPageOpen: false,
+          tasksPageOpen: false,
+          ...closeRightSidePanels()
+        }),
+      closeAccountAuthPage: () => set({ accountAuthPageOpen: false }),
       setSettingsTab: (tab) => {
         set({ settingsTab: tab })
         if (get().settingsPageOpen || parseSettingsRoute(window.location.hash)) {

@@ -1,4 +1,4 @@
-export type ExtensionToolKind = 'http' | 'js'
+﻿export type ExtensionToolKind = 'http' | 'js'
 export type ExtensionUiKind = 'card' | 'table' | 'form' | 'chart' | 'html' | 'component'
 
 export interface ExtensionConfigFieldSchema {
@@ -85,6 +85,7 @@ export interface ExtensionInstance {
 
 export interface ExtensionToolResult {
   __olaExtensionResult: true
+  __olaExtensionResult?: true
   extensionId: string
   toolName?: string
   text?: string

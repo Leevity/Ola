@@ -1,4 +1,4 @@
-import vm from 'vm'
+﻿import vm from 'vm'
 import type {
   ExtensionFetchRequest,
   ExtensionFetchResponse,
@@ -35,6 +35,9 @@ type ExtensionMutationResult = {
 }
 
 type ExtensionJsSandbox = Record<string, unknown> & {
+  olaExtension?: {
+    handlers?: Record<string, unknown>
+  }
   olaExtension?: {
     handlers?: Record<string, unknown>
   }
@@ -298,7 +301,7 @@ function normalizeJsResult(
   extension: ExtensionInstance,
   tool: ExtensionToolDefinition,
   value: unknown
-): Omit<ExtensionToolResult, '__olaExtensionResult'> {
+): Omit<ExtensionToolResult, '__olaExtensionResult' | '__olaExtensionResult'> {
   if (isRecord(value)) {
     return {
       extensionId: extension.id,
@@ -318,9 +321,10 @@ function normalizeJsResult(
 }
 
 function encodeExtensionToolResult(
-  result: Omit<ExtensionToolResult, '__olaExtensionResult'>
+  result: Omit<ExtensionToolResult, '__olaExtensionResult' | '__olaExtensionResult'>
 ): string {
   return JSON.stringify({
+    __olaExtensionResult: true,
     __olaExtensionResult: true,
     ...result
   })
@@ -408,7 +412,7 @@ export async function executeJsExtensionToolInMain(
     const invocation = new vm.Script(
       `
       (async () => {
-        const extension = globalThis.olaExtension;
+        const extension = globalThis.olaExtension || globalThis.olaExtension;
         const handler = extension && extension.handlers && extension.handlers[${JSON.stringify(tool.handler)}];
         if (typeof handler !== 'function') {
           throw new Error('Extension handler not found: ${String(tool.handler).replace(/'/g, "\\'")}');

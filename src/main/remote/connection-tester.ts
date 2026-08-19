@@ -1,4 +1,4 @@
-import { createConnection } from 'net'
+﻿import { createConnection } from 'net'
 import type { RemoteConnectionTestResult } from '../../shared/remote-control'
 
 const TEST_TIMEOUT_MS = 5_000
@@ -43,16 +43,33 @@ export function testRemoteEndpoint(
       resolve(result)
     }
     socket.setTimeout(TEST_TIMEOUT_MS)
-    socket.once('connect', () =>
-      finish({
-        success: true,
-        host: normalizedHost,
-        port,
-        latencyMs: Date.now() - startedAt,
-        category: 'reachable',
-        message: 'TCP endpoint is reachable'
-      })
-    )
+    socket.once('connect', () => {
+      // Send the VNC ProtocolVersion handshake so the test distinguishes "port
+      // open" from "VNC actually answering". Mac Screen Sharing responds
+      // with `RFB 003.008\n`; macOS without Screen Sharing enabled accepts
+      // the TCP connection but stays silent, which we surface as a
+      // distinct category.
+      let protocol = ''
+      const onData = (chunk: Buffer): void => {
+        protocol += chunk.toString('ascii')
+        if (protocol.length >= 12) {
+          socket.off('data', onData)
+          finish({
+            success: true,
+            host: normalizedHost,
+            port,
+            latencyMs: Date.now() - startedAt,
+            category: 'reachable',
+            message: protocol.startsWith('RFB ')
+              ? `VNC server answered (${protocol.split('\n')[0].trim()})`
+              : 'TCP endpoint is reachable (no VNC banner)'
+          })
+        }
+      }
+      socket.on('data', onData)
+      socket.write('RFB 003.008\n')
+      socket.setTimeout(TEST_TIMEOUT_MS)
+    })
     socket.once('timeout', () =>
       finish({
         success: false,

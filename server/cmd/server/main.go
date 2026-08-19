@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
+	"ola-remote-server/internal/bootstrap"
 	"ola-remote-server/internal/config"
 	"ola-remote-server/internal/httpapi"
 	"ola-remote-server/internal/signaling"
@@ -28,6 +30,11 @@ func main() {
 		}
 		log.Println("OLA_REMOTE_JWT_SECRET is not set; using development-only JWT secret")
 	}
+	if cfg.DevelopmentMode {
+		if os.Getenv("OLA_SYSTEM_ADMIN_EMAILS") == "" {
+			_ = os.Setenv("OLA_SYSTEM_ADMIN_EMAILS", "admin@ola.test")
+		}
+	}
 	var st store.Store = store.NewMemoryStore()
 	if cfg.DatabaseURL != "" {
 		postgresStore, err := store.NewPostgresStore(context.Background(), cfg.DatabaseURL)
@@ -42,6 +49,9 @@ func main() {
 			log.Fatal("OLA_REMOTE_DATABASE_URL is required unless OLA_REMOTE_DEV_MODE=1")
 		}
 		log.Println("Ola Remote persistence: in-memory development fallback")
+	}
+	if cfg.DevelopmentMode {
+		bootstrap.SeedDevelopmentAccounts(st)
 	}
 	hub := signaling.NewHub([]byte(cfg.JWTSecret))
 	hub.SetActiveSessionTTL(cfg.ActiveSessionTTL)

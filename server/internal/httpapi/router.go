@@ -15,6 +15,7 @@ import (
 
 	"ola-remote-server/internal/auth"
 	"ola-remote-server/internal/config"
+	"ola-remote-server/internal/modelgateway"
 	"ola-remote-server/internal/pairing"
 	"ola-remote-server/internal/store"
 )
@@ -39,6 +40,8 @@ type API struct {
 	tokens      AccountTokenRevoker
 	pairing     EphemeralPairingState
 	authLimiter AuthAttemptLimiter
+	control     *controlPlane
+	models      *modelgateway.Gateway
 }
 
 type DeviceSessionRevoker interface {
@@ -78,7 +81,7 @@ func NewRouter(cfg config.Config, st store.Store, revoker DeviceSessionRevoker) 
 	if !ok {
 		tokens = newLocalTokenRevoker()
 	}
-	api := &API{cfg: cfg, store: st, revoker: revoker, limiter: limiter, tokens: tokens}
+	api := &API{cfg: cfg, store: st, revoker: revoker, limiter: limiter, tokens: tokens, control: newControlPlane(st), models: modelgateway.New()}
 	api.authLimiter, _ = revoker.(AuthAttemptLimiter)
 	if api.authLimiter == nil {
 		api.authLimiter = newLocalAuthLimiter()
@@ -100,6 +103,9 @@ func NewRouter(cfg config.Config, st store.Store, revoker DeviceSessionRevoker) 
 	mux.HandleFunc("/api/pairing/refresh", api.withAuth(api.createPairing))
 	mux.HandleFunc("/api/pairing/revoke", api.withAuth(api.revokePairing))
 	mux.HandleFunc("/api/pairing/resolve", api.withAuth(api.resolvePairing))
+	api.registerControlPlaneRoutes(mux)
+	mux.HandleFunc("/v1/models", api.withAuth(api.modelList))
+	mux.HandleFunc("/v1/chat/completions", api.withAuth(api.modelChatCompletions))
 	return withCORS(mux, cfg.DevelopmentMode)
 }
 
@@ -245,6 +251,10 @@ func (api *API) listSessions(w http.ResponseWriter, r *http.Request, account sto
 }
 
 func (api *API) deviceAction(w http.ResponseWriter, r *http.Request, account store.Account) {
+	if strings.HasSuffix(r.URL.Path, "/config") {
+		api.deviceConfig(w, r, account)
+		return
+	}
 	if !requireMethod(w, r, http.MethodPost) {
 		return
 	}

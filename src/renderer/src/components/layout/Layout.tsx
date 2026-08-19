@@ -17,6 +17,7 @@ import { KeyboardShortcutsDialog } from '@renderer/components/settings/KeyboardS
 import { PermissionDialog } from '@renderer/components/cowork/PermissionDialog'
 import { ConversationGuideDialog } from '@renderer/components/chat/ConversationGuideDialog'
 import { SettingsPage } from '@renderer/components/settings/SettingsPage'
+import { AccountAuthPage } from '@renderer/components/account/AccountAuthPage'
 import { CommandPalette } from './CommandPalette'
 import { SessionConversationPane } from './SessionConversationPane'
 import { WorkingFolderSheet } from './WorkingFolderSheet'
@@ -328,6 +329,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   }, [activeSessionId])
 
   const settingsPageOpen = useUIStore((s) => s.settingsPageOpen)
+  const accountAuthPageOpen = useUIStore((s) => s.accountAuthPageOpen)
   const conversationGuideOpen = useUIStore((s) => s.conversationGuideOpen)
   const setConversationGuideOpen = useUIStore((s) => s.setConversationGuideOpen)
   const skillsPageOpen = useUIStore((s) => s.skillsPageOpen)
@@ -698,7 +700,13 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   ])
 
   const showEmbeddedSidebar = leftSidebarOpen && !settingsPageOpen
-  const mainContent = settingsPageOpen ? (
+  const mainContent = accountAuthPageOpen ? (
+    <div className="h-screen overflow-hidden bg-background">
+      <PageTransition key="account-auth-page-shell" className="h-full min-h-0 w-full overflow-hidden">
+        <AccountAuthPage />
+      </PageTransition>
+    </div>
+  ) : settingsPageOpen ? (
     <div className="h-screen overflow-hidden bg-background">
       <PageTransition key="settings-page-shell" className="h-full min-h-0 w-full overflow-hidden">
         <Suspense fallback={<LazyPageFallback />}>

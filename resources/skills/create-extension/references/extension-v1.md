@@ -1,4 +1,4 @@
-# Ola Custom Extension V1
+﻿# Ola Custom Extension V1
 
 Use this reference when creating or modifying Ola Custom Extensions.
 
@@ -126,7 +126,7 @@ return {
 }
 ```
 
-`index.js` must set `globalThis.olaExtension`:
+`index.js` should set `globalThis.olaExtension`: `globalThis.olaExtension` remains supported for existing extensions during the V1 compatibility period.
 
 ```js
 globalThis.olaExtension = {
