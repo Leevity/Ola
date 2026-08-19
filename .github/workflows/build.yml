@@ -823,6 +823,9 @@ jobs:
     needs: [prepare, build, build-macos, publish-macos-update-metadata]
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository for gh release context
+        uses: actions/checkout@v4
+
       - name: Publish verified draft Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
