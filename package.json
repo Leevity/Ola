@@ -88,6 +88,7 @@
     "start": "electron-vite preview",
     "dev": "node ./scripts/launch-dev.mjs",
     "dev:raw": "electron-vite dev",
+    "cli": "node --experimental-strip-types cli/src/index.ts",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "node ./scripts/postinstall.mjs",
     "package:prepare": "npm run native:publish && npm run worker:assets:verify && npm run build",
