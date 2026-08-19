@@ -28,8 +28,7 @@ import {
   Network,
   PawPrint,
   KeyRound,
-  ShieldCheck,
-  Workflow
+  ShieldCheck
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { AnimatePresence } from 'motion/react'
