@@ -21,6 +21,7 @@ internal static class AgentRuntimeContract
     public const string ReverseResponseRoute = "agent/reverse-response";
     public const string ReverseCancelRoute = "agent/reverse-cancel";
     public const string SessionVisibilityRoute = "agent/session-visibility";
+    public const string ToolResultsLookupRoute = "agent/tool-results-lookup";
 
     public static readonly HashSet<string> Capabilities = new(StringComparer.Ordinal)
     {

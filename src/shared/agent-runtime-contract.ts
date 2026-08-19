@@ -18,7 +18,8 @@ export const AGENT_RUNTIME_ROUTES = {
   debugBodyRead: 'agent/debug-body-read',
   reverseResponse: 'agent/reverse-response',
   reverseCancel: 'agent/reverse-cancel',
-  sessionVisibility: 'agent/session-visibility'
+  sessionVisibility: 'agent/session-visibility',
+  toolResultsLookup: 'agent/tool-results-lookup'
 } as const
 
 export type AgentRuntimeRoute = (typeof AGENT_RUNTIME_ROUTES)[keyof typeof AGENT_RUNTIME_ROUTES]

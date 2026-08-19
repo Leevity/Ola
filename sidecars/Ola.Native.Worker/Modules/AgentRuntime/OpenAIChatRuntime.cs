@@ -1039,6 +1039,16 @@ internal static class OpenAIChatRuntime
             var completedAt = NowMs();
             var status = result.IsError ? "error" : "completed";
             var boundedContent = LimitToolResultContent(result.Content);
+            AgentRuntimeToolResultJournal.Persist(
+                state.SessionId,
+                call.Id,
+                state.RunId,
+                call.Name,
+                status,
+                boundedContent,
+                result.IsError,
+                startedAt,
+                completedAt);
             boundedContent = await RunPostToolHookAsync(
                 parameters, call, boundedContent, state, context);
             await AgentRuntimeTools.EmitAsync(
