@@ -27,9 +27,9 @@ internal static class RuntimeJobStore
         return SetState(jobId, "cancelled", document.RootElement, "cancelled", "Job cancellation requested.");
     }
 
-    public static void AppendEvent(string jobId, long seq, string payloadJson, bool terminal)
+    public static void AppendEvent(string jobId, long seq, string payloadJson, bool terminal, JsonElement parameters)
     {
-        using var connection = DbConnectionFactory.OpenReadWriteCreate(DbConnectionFactory.ResolveDbPath(default));
+        using var connection = DbConnectionFactory.OpenReadWriteCreate(DbConnectionFactory.ResolveDbPath(parameters));
         using var command = connection.CreateCommand();
         command.CommandText = "INSERT OR REPLACE INTO runtime_job_events(job_id,seq,payload_json,terminal,created_at) VALUES($jobId,$seq,$payload,$terminal,$now)";
         Add(command, "$jobId", jobId); Add(command, "$seq", seq); Add(command, "$payload", payloadJson); Add(command, "$terminal", terminal ? 1 : 0); Add(command, "$now", Now()); command.ExecuteNonQuery();
