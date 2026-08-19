@@ -19,6 +19,11 @@ internal static class RuntimeJobStore
         return SetState(document.RootElement);
     }
 
+    public static RuntimeJobRecord? Cancel(string jobId)
+    {
+        return SetState(jobId, "cancelled", "cancelled", "Job cancellation requested.");
+    }
+
     public static RuntimeJobMutationResult Submit(JsonElement p)
     {
         var jobId = Required(p, "jobId");
