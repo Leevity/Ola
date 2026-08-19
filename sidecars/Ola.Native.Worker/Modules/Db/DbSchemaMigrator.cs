@@ -410,6 +410,26 @@ internal static class DbSchemaMigrator
 
             CREATE INDEX IF NOT EXISTS idx_runtime_tool_results_run
               ON runtime_tool_results(run_id, completed_at);
+
+            CREATE TABLE IF NOT EXISTS runtime_jobs (
+              job_id TEXT PRIMARY KEY,
+              run_id TEXT,
+              session_id TEXT,
+              method TEXT NOT NULL,
+              state TEXT NOT NULL,
+              idempotency_key TEXT,
+              lane_key TEXT,
+              params_json TEXT NOT NULL DEFAULT '{}',
+              error_code TEXT,
+              error_message TEXT,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              finished_at INTEGER
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_jobs_idempotency
+              ON runtime_jobs(idempotency_key) WHERE idempotency_key IS NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_runtime_jobs_session_created
+              ON runtime_jobs(session_id, created_at DESC);
             """);
     }
 

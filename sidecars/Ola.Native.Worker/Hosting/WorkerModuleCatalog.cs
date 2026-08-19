@@ -13,6 +13,7 @@ internal static class WorkerModuleCatalog
         new SkillModule(),
         new ExtensionModule(),
         new AgentRuntimeModule(),
+        new RuntimeJobModule(),
         new AgentChangeModule(),
         new OpenAIImagesModule(),
         new OpenAIAudioModule(),

@@ -3,6 +3,7 @@ import {
   type NativeWorkerLifecycleEvent,
   type NativeWorkerRawEventFrame
 } from '../lib/native-worker'
+import { RUNTIME_JOB_ROUTES, type RuntimeJobRecord } from '../../shared/runtime-job-contract'
 
 type RawEventHandler = (frame: NativeWorkerRawEventFrame) => void
 type RequestHandler = (id: number | string, method: string, params: unknown) => Promise<unknown>
@@ -121,6 +122,21 @@ export class NativeAgentRuntimeManager {
       sessionId,
       toolUseIds
     }, 10_000)
+  }
+
+  async getRuntimeJob(jobId: string): Promise<RuntimeJobRecord | null> {
+    await this.ensureStarted()
+    const result = await getNativeWorker().request<{ found?: boolean; job?: RuntimeJobRecord }>(
+      RUNTIME_JOB_ROUTES.get,
+      { jobId },
+      10_000
+    )
+    return result.found === true ? result.job ?? null : null
+  }
+
+  async listRuntimeJobs(limit = 100): Promise<RuntimeJobRecord[]> {
+    await this.ensureStarted()
+    return await getNativeWorker().request<RuntimeJobRecord[]>(RUNTIME_JOB_ROUTES.list, { limit }, 10_000)
   }
 
   async request(method: string, params?: unknown, timeoutMs = 30_000): Promise<unknown> {
