@@ -587,7 +587,7 @@ jobs:
           echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
           echo "::warning::macOS code signing disabled: CSC_LINK is neither a certificate file, URL, nor base64 certificate data"
 
-      - name: Validate macOS signing configuration
+      - name: Require macOS signing and notarization credentials for published releases
         shell: bash
         env:
           RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
