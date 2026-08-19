@@ -1286,6 +1286,8 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   const issueDeviceSignalToken = useRemoteAccountStore((state) => state.issueDeviceSignalToken)
   const autoResolvePairing = useRemoteAccountStore((state) => state.autoResolvePairing)
   const connectSignaling = useRemoteSignalingStore((state) => state.connect)
+  const signalUrl = useRemoteSignalingStore((state) => state.signalUrl)
+  const setSignalUrl = useRemoteSignalingStore((state) => state.setSignalUrl)
   const startControllerSession = useRemotePeerStore((state) => state.startControllerSession)
   const remoteStream = useRemotePeerStore((state) => state.remoteStream)
   const peerStatus = useRemotePeerStore((state) => state.status)
@@ -1492,6 +1494,15 @@ function ManagedAccountWorkspace(): React.JSX.Element {
             className="mt-2"
             value={apiBaseUrl}
             onChange={(event) => setApiBaseUrl(event.target.value)}
+          />
+        </label>
+        <label className="block text-xs font-medium">
+          信令服务地址
+          <Input
+            className="mt-2"
+            value={signalUrl}
+            onChange={(event) => setSignalUrl(event.target.value)}
+            placeholder="ws://100.64.0.6:7301/ws/signaling"
           />
         </label>
       </div>
