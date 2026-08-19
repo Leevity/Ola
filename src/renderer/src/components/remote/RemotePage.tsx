@@ -1303,7 +1303,9 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   const [error, setError] = useState('')
   const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  useEffect(() => { if (account && device) void loadDevices().catch(() => undefined) }, [account, device, loadDevices])
+  useEffect(() => {
+    if (account && device) void loadDevices().catch(() => undefined)
+  }, [account, device, loadDevices])
   useEffect(() => {
     if (!account || !device) return undefined
     let active = true
@@ -1317,25 +1319,184 @@ function ManagedAccountWorkspace(): React.JSX.Element {
       active = false
     }
   }, [account, device, issueDeviceSignalToken, connectSignaling])
-  useEffect(() => { if (!device) return undefined; return listenForIncoming(device.id, true) }, [device, listenForIncoming])
-  useEffect(() => { if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream }, [remoteStream])
+  useEffect(() => {
+    if (!device) return undefined
+    return listenForIncoming(device.id, true)
+  }, [device, listenForIncoming])
+  useEffect(() => {
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream
+  }, [remoteStream])
   const submit = async (): Promise<void> => {
     setError('')
     try {
       if (registerMode) await register(email, password)
       else await login(email, password)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    }
   }
   const connectSameAccountDevice = async (targetDeviceId: string): Promise<void> => {
-    setConnectingDeviceId(targetDeviceId); setError('')
+    setConnectingDeviceId(targetDeviceId)
+    setError('')
     try {
       const signalToken = await issueDeviceSignalToken()
       await connectSignaling(signalToken)
       const authorization = await autoResolvePairing(targetDeviceId)
-      await startControllerSession(targetDeviceId, { sessionId: authorization.sessionId, ticket: authorization.sessionTicket }, authorization.iceServers)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)) } finally { setConnectingDeviceId(null) }
+      await startControllerSession(
+        targetDeviceId,
+        { sessionId: authorization.sessionId, ticket: authorization.sessionTicket },
+        authorization.iceServers
+      )
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setConnectingDeviceId(null)
+    }
   }
-  return <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-10 py-12"><div className="w-full max-w-2xl"><div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary"><ShieldCheck className="size-4" /> {t('remote.olaAccountTitle')}</div><h2 className="mt-5 text-3xl font-semibold tracking-tight">{t('remote.olaAccountTitle')}</h2><p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">{t('remote.olaAccountDescription')}</p>{account ? <div className="mt-8 space-y-4 rounded-xl border p-5"><div><p className="text-sm font-medium">{t('remote.accountLoggedIn', { email: account.email })}</p><p className="mt-1 text-xs text-muted-foreground">{device ? `${t('remote.currentDevice')}: ${device.deviceName}` : t('remote.signalingRequiresDevice')}</p></div>{!device ? <div className="flex flex-wrap items-end gap-3"><label className="min-w-[240px] flex-1 text-xs font-medium">{t('remote.deviceNamePlaceholder')}<Input className="mt-2" value={deviceName} onChange={(event) => setDeviceName(event.target.value)} /></label><Button disabled={loading} onClick={() => void registerDevice(deviceName)}>{t('remote.registerDevice')}</Button></div> : <><div className="rounded-lg bg-muted/40 p-3 text-xs">当前连接状态：{peerStatus}</div><div className="flex flex-wrap items-center gap-2 rounded-lg border p-3"><span className="min-w-0 flex-1 text-xs">屏幕共享：{captureStatus === 'capturing' ? '已开启，被控时将共享当前屏幕' : captureStatus === 'requesting' ? '正在请求权限…' : '未开启'}</span><Button size="sm" variant="outline" disabled={captureStatus === 'requesting'} onClick={() => void (captureStatus === 'capturing' ? stopCapture() : startCapture())}>{captureStatus === 'capturing' ? '停止共享' : '开启屏幕共享'}</Button></div>{captureError && <p className="text-sm text-destructive">{captureError}</p>}<div className="space-y-2"><p className="text-xs font-medium">同账户设备</p>{devices.filter((item) => item.id !== device?.id).map((item) => <div key={item.id} className="flex items-center gap-3 rounded-lg border p-3"><span className="size-2 rounded-full bg-emerald-500" /><span className="min-w-0 flex-1 truncate text-sm">{item.deviceName}</span><span className="text-xs text-muted-foreground">{item.isOnline ? '在线' : '离线'}</span><Button size="sm" disabled={!item.isOnline || connectingDeviceId === item.id} onClick={() => void connectSameAccountDevice(item.id)}>{connectingDeviceId === item.id ? '连接中…' : '免密连接'}</Button></div>)}</div>{remoteStream && <video className="aspect-video w-full rounded-lg bg-black object-contain" autoPlay playsInline srcObject={remoteStream as never} />}{peerStatus !== 'idle' && <Button variant="outline" onClick={closePeerSession}>断开连接</Button>}</>}<Button variant="outline" onClick={logout}>{t('remote.logout')}</Button></div> : <div className="mt-8 space-y-4 rounded-xl border p-5"><label className="block text-xs font-medium">{t('remote.emailPlaceholder')}<Input className="mt-2" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label><label className="block text-xs font-medium">{t('remote.passwordPlaceholder')}<Input className="mt-2" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>{error ? <p className="text-sm text-destructive">{error}</p> : null}<div className="flex flex-wrap gap-2"><Button disabled={loading || !email || !password} onClick={() => void submit()}>{registerMode ? t('remote.register') : t('remote.login')}</Button><Button variant="ghost" onClick={() => setRegisterMode((value) => !value)}>{registerMode ? t('remote.login') : t('remote.register')}</Button></div></div>}<label className="mt-6 block text-xs font-medium">API 服务地址<Input className="mt-2" value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} /></label></div></div>
+  return (
+    <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-10 py-12">
+      <div className="w-full max-w-2xl">
+        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary">
+          <ShieldCheck className="size-4" /> {t('remote.olaAccountTitle')}
+        </div>
+        <h2 className="mt-5 text-3xl font-semibold tracking-tight">
+          {t('remote.olaAccountTitle')}
+        </h2>
+        <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
+          {t('remote.olaAccountDescription')}
+        </p>
+        {account ? (
+          <div className="mt-8 space-y-4 rounded-xl border p-5">
+            <div>
+              <p className="text-sm font-medium">
+                {t('remote.accountLoggedIn', { email: account.email })}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {device
+                  ? `${t('remote.currentDevice')}: ${device.deviceName}`
+                  : t('remote.signalingRequiresDevice')}
+              </p>
+            </div>
+            {!device ? (
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="min-w-[240px] flex-1 text-xs font-medium">
+                  {t('remote.deviceNamePlaceholder')}
+                  <Input
+                    className="mt-2"
+                    value={deviceName}
+                    onChange={(event) => setDeviceName(event.target.value)}
+                  />
+                </label>
+                <Button disabled={loading} onClick={() => void registerDevice(deviceName)}>
+                  {t('remote.registerDevice')}
+                </Button>
+              </div>
+            ) : (
+              <>
+                <div className="rounded-lg bg-muted/40 p-3 text-xs">当前连接状态：{peerStatus}</div>
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+                  <span className="min-w-0 flex-1 text-xs">
+                    屏幕共享：
+                    {captureStatus === 'capturing'
+                      ? '已开启，被控时将共享当前屏幕'
+                      : captureStatus === 'requesting'
+                        ? '正在请求权限…'
+                        : '未开启'}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={captureStatus === 'requesting'}
+                    onClick={() =>
+                      void (captureStatus === 'capturing' ? stopCapture() : startCapture())
+                    }
+                  >
+                    {captureStatus === 'capturing' ? '停止共享' : '开启屏幕共享'}
+                  </Button>
+                </div>
+                {captureError && <p className="text-sm text-destructive">{captureError}</p>}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium">同账户设备</p>
+                  {devices
+                    .filter((item) => item.id !== device?.id)
+                    .map((item) => (
+                      <div key={item.id} className="flex items-center gap-3 rounded-lg border p-3">
+                        <span className="size-2 rounded-full bg-emerald-500" />
+                        <span className="min-w-0 flex-1 truncate text-sm">{item.deviceName}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {item.isOnline ? '在线' : '离线'}
+                        </span>
+                        <Button
+                          size="sm"
+                          disabled={!item.isOnline || connectingDeviceId === item.id}
+                          onClick={() => void connectSameAccountDevice(item.id)}
+                        >
+                          {connectingDeviceId === item.id ? '连接中…' : '免密连接'}
+                        </Button>
+                      </div>
+                    ))}
+                </div>
+                {remoteStream && (
+                  <video
+                    className="aspect-video w-full rounded-lg bg-black object-contain"
+                    autoPlay
+                    playsInline
+                    srcObject={remoteStream as never}
+                  />
+                )}
+                {peerStatus !== 'idle' && (
+                  <Button variant="outline" onClick={closePeerSession}>
+                    断开连接
+                  </Button>
+                )}
+              </>
+            )}
+            <Button variant="outline" onClick={logout}>
+              {t('remote.logout')}
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-8 space-y-4 rounded-xl border p-5">
+            <label className="block text-xs font-medium">
+              {t('remote.emailPlaceholder')}
+              <Input
+                className="mt-2"
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+              />
+            </label>
+            <label className="block text-xs font-medium">
+              {t('remote.passwordPlaceholder')}
+              <Input
+                className="mt-2"
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+            </label>
+            {error ? <p className="text-sm text-destructive">{error}</p> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button disabled={loading || !email || !password} onClick={() => void submit()}>
+                {registerMode ? t('remote.register') : t('remote.login')}
+              </Button>
+              <Button variant="ghost" onClick={() => setRegisterMode((value) => !value)}>
+                {registerMode ? t('remote.login') : t('remote.register')}
+              </Button>
+            </div>
+          </div>
+        )}
+        <label className="mt-6 block text-xs font-medium">
+          API 服务地址
+          <Input
+            className="mt-2"
+            value={apiBaseUrl}
+            onChange={(event) => setApiBaseUrl(event.target.value)}
+          />
+        </label>
+      </div>
+    </div>
+  )
 }
 
 function FutureWorkspace({

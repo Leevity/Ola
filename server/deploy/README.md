@@ -27,6 +27,7 @@ node server/scripts/smoke.mjs
 The smoke proves device-token issuance, one-time pairing authorization, authorization stripping,
 authorized offer forwarding, immediate two-peer revoke, stats persistence, and account-scoped audit
 queries. A separate two-device WebRTC run is still required to prove P2P and TURN media transport.
+
 ## Control plane and model gateway
 
 The API process exposes the authenticated control plane under `/api/control/*` and

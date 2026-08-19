@@ -1422,12 +1422,12 @@
     "switchToLogin": "Already have an account? Sign in",
     "loginSuccess": "Signed in and account synced",
     "registerSuccess": "Account created and synced",
-    "loginFailed": "Sign-in failed. Check the server URL and account details"
-    ,"browserDescription": "Ola will open the account website for sign-in. Your password is never collected by the desktop app."
-    ,"openBrowserLogin": "Open account website"
-    ,"browserOpened": "Account website opened. Finish sign-in and authorize Ola."
-    ,"callbackHint": "After authorization, your browser will return to Ola automatically."
-    ,"serverLabel": "Account website"
-    ,"waitingForCallback": "Waiting for authorization to return to Ola..."
+    "loginFailed": "Sign-in failed. Check the server URL and account details",
+    "browserDescription": "Ola will open the account website for sign-in. Your password is never collected by the desktop app.",
+    "openBrowserLogin": "Open account website",
+    "browserOpened": "Account website opened. Finish sign-in and authorize Ola.",
+    "callbackHint": "After authorization, your browser will return to Ola automatically.",
+    "serverLabel": "Account website",
+    "waitingForCallback": "Waiting for authorization to return to Ola..."
   }
 }

@@ -1362,7 +1362,9 @@ if (!gotSingleInstanceLock) {
 if (gotSingleInstanceLock) {
   const handleProtocolArguments = (commandLine: string[]): void => {
     const rawCallback = commandLine.find((arg) => arg.includes('ola://auth/callback'))
-    const callbackUrl = rawCallback?.slice(rawCallback.indexOf('ola://auth/callback')).replace(/^['"]|['"]$/g, '')
+    const callbackUrl = rawCallback
+      ?.slice(rawCallback.indexOf('ola://auth/callback'))
+      .replace(/^['"]|['"]$/g, '')
     if (callbackUrl) {
       console.log('[RemoteAuth] OAuth callback received')
       void handleRemoteOAuthCallback(callbackUrl).catch((error) => {

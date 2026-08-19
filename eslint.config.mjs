@@ -14,6 +14,8 @@ export default defineConfig(
       '**/build',
       '**/.next/**',
       'docs/**',
+      'tmp/**',
+      '.tmp-*.cjs',
       '**/.claude/**'
     ]
   },
@@ -47,6 +49,7 @@ export default defineConfig(
         }
       ],
       'react-refresh/only-export-components': 'off',
+      'react/no-unknown-property': ['error', { ignore: ['srcObject'] }],
       'react-hooks/immutability': 'off',
       'react-hooks/purity': 'off',
       'react-hooks/refs': 'off',
