@@ -43,10 +43,21 @@ export function AccountAuthPage(): React.JSX.Element {
   }
 
   const submitPasswordLogin = async (): Promise<void> => {
-    if (!email.trim() || !password) { setError('请输入邮箱和密码'); return }
-    if (!captcha.trim()) { setError('请输入验证码'); return }
+    if (!email.trim() || !password) {
+      setError('请输入邮箱和密码')
+      return
+    }
+    if (!captcha.trim()) {
+      setError('请输入验证码')
+      return
+    }
     setError('')
-    try { await login(email, password); close() } catch (loginError) { setError(loginError instanceof Error ? loginError.message : '登录失败') }
+    try {
+      await login(email, password)
+      close()
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : '登录失败')
+    }
   }
 
   return (
@@ -61,28 +72,78 @@ export function AccountAuthPage(): React.JSX.Element {
             <ShieldCheck className="size-5" />
           </div>
           <h1 className="text-2xl font-semibold">{t('accountAuth.loginTitle')}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{t('accountAuth.browserDescription')}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t('accountAuth.browserDescription')}
+          </p>
         </div>
         <div className="mb-4 grid grid-cols-2 rounded-lg bg-muted p-1 text-sm">
-          <button className={`rounded-md px-3 py-2 ${mode === 'browser' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`} onClick={() => setMode('browser')}>浏览器登录</button>
-          <button className={`rounded-md px-3 py-2 ${mode === 'password' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`} onClick={() => setMode('password')}>账号密码</button>
+          <button
+            className={`rounded-md px-3 py-2 ${mode === 'browser' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+            onClick={() => setMode('browser')}
+          >
+            浏览器登录
+          </button>
+          <button
+            className={`rounded-md px-3 py-2 ${mode === 'password' ? 'bg-background shadow-sm' : 'text-muted-foreground'}`}
+            onClick={() => setMode('password')}
+          >
+            账号密码
+          </button>
         </div>
-        {mode === 'password' ? <div className="space-y-3">
-          <input className="h-10 w-full rounded-md border bg-background px-3 text-sm" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="邮箱" />
-          <input className="h-10 w-full rounded-md border bg-background px-3 text-sm" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="密码" />
-          <input className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={captcha} onChange={(event) => setCaptcha(event.target.value)} placeholder="验证码" />
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button className="w-full" disabled={loading} onClick={() => void submitPasswordLogin()}>{loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}登录 Ola</Button>
-        </div> : <div className="space-y-4">
-          <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
-            {t('accountAuth.serverLabel')}: <span className="break-all text-foreground">{apiBaseUrl}</span>
+        {mode === 'password' ? (
+          <div className="space-y-3">
+            <input
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="邮箱"
+            />
+            <input
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              type="password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder="密码"
+            />
+            <input
+              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+              value={captcha}
+              onChange={(event) => setCaptcha(event.target.value)}
+              placeholder="验证码"
+            />
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button
+              className="w-full"
+              disabled={loading}
+              onClick={() => void submitPasswordLogin()}
+            >
+              {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}登录 Ola
+            </Button>
           </div>
-          <Button className="w-full" disabled={loading || waiting} onClick={() => void openLogin()}>
-            {loading ? <Loader2 className="mr-2 size-4 animate-spin" /> : <ExternalLink className="mr-2 size-4" />}
-            {waiting ? t('accountAuth.waitingForCallback') : t('accountAuth.openBrowserLogin')}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground">{t('accountAuth.callbackHint')}</p>
-        </div>}
+        ) : (
+          <div className="space-y-4">
+            <div className="rounded-lg bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+              {t('accountAuth.serverLabel')}:{' '}
+              <span className="break-all text-foreground">{apiBaseUrl}</span>
+            </div>
+            <Button
+              className="w-full"
+              disabled={loading || waiting}
+              onClick={() => void openLogin()}
+            >
+              {loading ? (
+                <Loader2 className="mr-2 size-4 animate-spin" />
+              ) : (
+                <ExternalLink className="mr-2 size-4" />
+              )}
+              {waiting ? t('accountAuth.waitingForCallback') : t('accountAuth.openBrowserLogin')}
+            </Button>
+            <p className="text-center text-xs text-muted-foreground">
+              {t('accountAuth.callbackHint')}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

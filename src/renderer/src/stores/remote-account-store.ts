@@ -307,7 +307,11 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       const { apiBaseUrl, token, device } = get()
       if (!token || !device) throw new Error('Login and device registration are required')
       const sessionId = globalThis.crypto?.randomUUID?.() ?? `remote-${Date.now()}-${Math.random()}`
-      const result = await request<ResolvedPairing>(apiBaseUrl, 'pairing-auto-resolve', { controllerDeviceId: device.id, controlledDeviceId, sessionId })
+      const result = await request<ResolvedPairing>(apiBaseUrl, 'pairing-auto-resolve', {
+        controllerDeviceId: device.id,
+        controlledDeviceId,
+        sessionId
+      })
       set({ resolvedPairing: result })
       return result
     }

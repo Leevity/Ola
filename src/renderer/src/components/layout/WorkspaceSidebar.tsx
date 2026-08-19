@@ -2117,21 +2117,66 @@ export function WorkspaceSidebar(): React.JSX.Element {
         <div className="mt-auto px-2 pb-2 pt-1.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className={cn('h-12 w-full justify-start gap-2 rounded-xl px-2 text-left', SIDEBAR_TREE_ROW_CLASS, SIDEBAR_TREE_HOVER_CLASS)}>
+              <Button
+                variant="ghost"
+                className={cn(
+                  'h-12 w-full justify-start gap-2 rounded-xl px-2 text-left',
+                  SIDEBAR_TREE_ROW_CLASS,
+                  SIDEBAR_TREE_HOVER_CLASS
+                )}
+              >
                 <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold">
                   {(account?.displayName || account?.email || 'O')[0].toUpperCase()}
                 </span>
-                <span className="min-w-0 flex-1 truncate"><span className="block truncate text-[12px]">{account?.displayName || account?.email || t('accountAuth.login')}</span><span className="block truncate text-[10px] text-muted-foreground">{account ? 'Ola account' : '未登录'}</span></span>
+                <span className="min-w-0 flex-1 truncate">
+                  <span className="block truncate text-[12px]">
+                    {account?.displayName || account?.email || t('accountAuth.login')}
+                  </span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {account ? 'Ola account' : '未登录'}
+                  </span>
+                </span>
                 <UserCircle2 className="size-4 shrink-0 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-64 rounded-xl p-1.5">
-              <DropdownMenuLabel className="px-3 py-2"><span className="block truncate">{account?.displayName || 'Ola 用户'}</span><span className="block truncate text-xs font-normal text-muted-foreground">{account?.email || '登录后同步账户、团队和设备'}</span></DropdownMenuLabel>
+              <DropdownMenuLabel className="px-3 py-2">
+                <span className="block truncate">{account?.displayName || 'Ola 用户'}</span>
+                <span className="block truncate text-xs font-normal text-muted-foreground">
+                  {account?.email || '登录后同步账户、团队和设备'}
+                </span>
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {account ? <DropdownMenuItem onClick={() => void ipcClient.invoke(IPC.SHELL_OPEN_EXTERNAL, 'https://lbxai.cn/account')}><UserCircle2 className="size-4" />账户中心</DropdownMenuItem> : <DropdownMenuItem onClick={openAccountAuthPage}><UserCircle2 className="size-4" />登录 Ola</DropdownMenuItem>}
-              <DropdownMenuItem onClick={() => useUIStore.getState().openSettingsPage('general')}><Settings className="size-4" />{t('sidebar.systemSettings')}<span className="ml-auto text-[10px] text-muted-foreground">⌘,</span></DropdownMenuItem>
-              {account && <DropdownMenuItem onClick={() => useRemoteAccountStore.getState().logout()}><UserCircle2 className="size-4" />退出登录</DropdownMenuItem>}
-              <DropdownMenuSeparator /><div className="px-3 py-1 text-[10px] text-muted-foreground">Ola v{packageJson.version}</div>
+              {account ? (
+                <DropdownMenuItem
+                  onClick={() =>
+                    void ipcClient.invoke(IPC.SHELL_OPEN_EXTERNAL, 'https://lbxai.cn/account')
+                  }
+                >
+                  <UserCircle2 className="size-4" />
+                  账户中心
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onClick={openAccountAuthPage}>
+                  <UserCircle2 className="size-4" />
+                  登录 Ola
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={() => useUIStore.getState().openSettingsPage('general')}>
+                <Settings className="size-4" />
+                {t('sidebar.systemSettings')}
+                <span className="ml-auto text-[10px] text-muted-foreground">⌘,</span>
+              </DropdownMenuItem>
+              {account && (
+                <DropdownMenuItem onClick={() => useRemoteAccountStore.getState().logout()}>
+                  <UserCircle2 className="size-4" />
+                  退出登录
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <div className="px-3 py-1 text-[10px] text-muted-foreground">
+                Ola v{packageJson.version}
+              </div>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

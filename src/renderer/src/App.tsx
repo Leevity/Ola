@@ -230,10 +230,13 @@ function App(): React.JSX.Element {
             const model = result.model as
               | { provider?: string; model?: string; baseUrl?: string; enabled?: boolean }
               | undefined
-            if (!result.configured || !model?.model || model.enabled === false || !state.token) return
+            if (!result.configured || !model?.model || model.enabled === false || !state.token)
+              return
 
             const providerId = 'ola-account-gateway'
-            const provider = useProviderStore.getState().providers.find((item) => item.id === providerId)
+            const provider = useProviderStore
+              .getState()
+              .providers.find((item) => item.id === providerId)
             const syncedProvider = {
               name: 'Ola 云端模型',
               type: 'openai-chat' as const,
@@ -241,7 +244,9 @@ function App(): React.JSX.Element {
               baseUrl: model.baseUrl?.trim() || `${state.apiBaseUrl}/v1`,
               enabled: true,
               requiresApiKey: true,
-              models: [{ id: model.model, name: model.model, enabled: true, category: 'chat' as const }],
+              models: [
+                { id: model.model, name: model.model, enabled: true, category: 'chat' as const }
+              ],
               defaultModel: model.model,
               createdAt: provider?.createdAt ?? Date.now()
             }

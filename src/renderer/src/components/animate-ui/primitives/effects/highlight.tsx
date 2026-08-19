@@ -22,7 +22,7 @@ const DEFAULT_BOUNDS_OFFSET: Bounds = {
 }
 
 type HighlightContextType<T extends string> = {
-  as?: keyof HTMLElementTagNameMap
+  as?: React.ElementType
   mode: HighlightMode
   activeValue: T | null
   setActiveValue: (value: T | null) => void
@@ -118,7 +118,7 @@ type HighlightProps<T extends React.ElementType = 'div'> =
 
 function Highlight<T extends React.ElementType = 'div'>({ ref, ...props }: HighlightProps<T>) {
   const {
-    as: Component = 'div',
+    as: As = 'div',
     children,
     value,
     defaultValue,
@@ -134,6 +134,7 @@ function Highlight<T extends React.ElementType = 'div'>({ ref, ...props }: Highl
     exitDelay = 200,
     mode = 'children'
   } = props
+  const Component = As as React.ElementType
 
   const localRef = React.useRef<HTMLDivElement>(null)
   React.useImperativeHandle(ref, () => localRef.current as HTMLDivElement)

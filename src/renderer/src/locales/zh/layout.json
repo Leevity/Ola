@@ -1422,12 +1422,12 @@
     "switchToLogin": "已有账户？返回登录",
     "loginSuccess": "登录成功，账户已同步",
     "registerSuccess": "注册成功，账户已同步",
-    "loginFailed": "登录失败，请检查服务端地址和账户信息"
-    ,"browserDescription": "Ola 将打开管理站完成注册或登录，不会在客户端收集你的密码。"
-    ,"openBrowserLogin": "打开管理站登录"
-    ,"browserOpened": "管理站已打开，请完成登录并授权 Ola"
-    ,"callbackHint": "完成授权后，浏览器会自动返回 Ola。"
-    ,"serverLabel": "认证站点"
-    ,"waitingForCallback": "等待授权返回 Ola..."
+    "loginFailed": "登录失败，请检查服务端地址和账户信息",
+    "browserDescription": "Ola 将打开管理站完成注册或登录，不会在客户端收集你的密码。",
+    "openBrowserLogin": "打开管理站登录",
+    "browserOpened": "管理站已打开，请完成登录并授权 Ola",
+    "callbackHint": "完成授权后，浏览器会自动返回 Ola。",
+    "serverLabel": "认证站点",
+    "waitingForCallback": "等待授权返回 Ola..."
   }
 }

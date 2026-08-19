@@ -36,7 +36,12 @@ export type RemoteAccountRequest = {
 }
 
 let memoryState: RemoteAuthState | null = null
-let pendingOAuthState: { apiBaseUrl: string; state: string; verifier: string; createdAt: number } | null = null
+let pendingOAuthState: {
+  apiBaseUrl: string
+  state: string
+  verifier: string
+  createdAt: number
+} | null = null
 
 function vaultPath(): string {
   return join(app.getPath('userData'), 'remote-auth.bin')
@@ -48,10 +53,12 @@ function validateBaseUrl(value: string): string {
     url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '::1'
   const tailscaleDevHost =
     !app.isPackaged &&
-    /^100\.(6[4-9]|[78]\d|9\d|1[01]\d|12[0-7])\.(?:\d{1,3})\.(?:\d{1,3})$/.test(
-      url.hostname
-    )
-  if (url.protocol !== 'https:' && !(local && url.protocol === 'http:') && !(tailscaleDevHost && url.protocol === 'http:')) {
+    /^100\.(6[4-9]|[78]\d|9\d|1[01]\d|12[0-7])\.(?:\d{1,3})\.(?:\d{1,3})$/.test(url.hostname)
+  if (
+    url.protocol !== 'https:' &&
+    !(local && url.protocol === 'http:') &&
+    !(tailscaleDevHost && url.protocol === 'http:')
+  ) {
     throw new Error('Remote API must use HTTPS except for localhost development')
   }
   return url.toString().replace(/\/$/, '')
@@ -109,7 +116,9 @@ async function apiRequest<T>(
     try {
       result = JSON.parse(text) as Record<string, unknown>
     } catch {
-      throw new Error(`Remote API returned invalid JSON (${response.status}) at ${path}: ${text.slice(0, 180)}`)
+      throw new Error(
+        `Remote API returned invalid JSON (${response.status}) at ${path}: ${text.slice(0, 180)}`
+      )
     }
   }
   if (!response.ok)
@@ -237,7 +246,12 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
       }
     )
     pendingOAuthState = null
-    await saveState({ apiBaseUrl, token: result.access_token, account: result.account, device: null })
+    await saveState({
+      apiBaseUrl,
+      token: result.access_token,
+      account: result.account,
+      device: null
+    })
     return { account: result.account, device: null }
   }
   if (request.operation === 'register' || request.operation === 'login') {
@@ -301,7 +315,16 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
   if (request.operation === 'session-list')
     return apiRequest(apiBaseUrl, '/api/sessions', undefined, state.token)
   if (request.operation === 'pairing-auto-resolve') {
-    const result = await apiRequest(apiBaseUrl, '/api/pairing/auto-resolve', { controllerDeviceId: requiredString(payload, 'controllerDeviceId'), controlledDeviceId: requiredString(payload, 'controlledDeviceId'), sessionId: requiredString(payload, 'sessionId') }, state.token)
+    const result = await apiRequest(
+      apiBaseUrl,
+      '/api/pairing/auto-resolve',
+      {
+        controllerDeviceId: requiredString(payload, 'controllerDeviceId'),
+        controlledDeviceId: requiredString(payload, 'controlledDeviceId'),
+        sessionId: requiredString(payload, 'sessionId')
+      },
+      state.token
+    )
     setRemoteControlAllowed(true)
     return result
   }

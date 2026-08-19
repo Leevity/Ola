@@ -702,7 +702,10 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const showEmbeddedSidebar = leftSidebarOpen && !settingsPageOpen
   const mainContent = accountAuthPageOpen ? (
     <div className="h-screen overflow-hidden bg-background">
-      <PageTransition key="account-auth-page-shell" className="h-full min-h-0 w-full overflow-hidden">
+      <PageTransition
+        key="account-auth-page-shell"
+        className="h-full min-h-0 w-full overflow-hidden"
+      >
         <AccountAuthPage />
       </PageTransition>
     </div>

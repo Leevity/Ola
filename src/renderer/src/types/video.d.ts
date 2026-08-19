@@ -1,7 +1,7 @@
 import 'react'
 
 declare module 'react' {
-  interface VideoHTMLAttributes<T> {
+  interface VideoHTMLAttributes<_T> {
     srcObject?: MediaStream | null
   }
 }
