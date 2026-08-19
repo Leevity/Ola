@@ -289,6 +289,18 @@ internal static class AgentRuntimeTools
             state.SessionId,
             state.NextSeq(),
             events);
+        try
+        {
+            RuntimeJobStore.AppendEvent(
+                state.RunId,
+                envelope.Seq,
+                JsonSerializer.Serialize(envelope, WorkerJsonContext.Default.AgentRuntimeStreamEnvelope),
+                events.Any(item => item.Type is "loop_end" or "error"));
+        }
+        catch (Exception ex)
+        {
+            WorkerLog.Warn($"agent stream event persistence failed runId={state.RunId}: {ex.Message}");
+        }
         if (state.EventObserver is not null)
         {
             await state.EventObserver(events);

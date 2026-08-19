@@ -4,7 +4,16 @@ export const RUNTIME_JOB_ROUTES = {
   list: 'runtime/jobs-list',
   setState: 'runtime/jobs-state',
   cancel: 'runtime/jobs-cancel'
+  ,events: 'runtime/jobs-events'
 } as const
+
+export interface RuntimeJobEventRecord {
+  jobId: string
+  seq: number
+  payloadJson: string
+  terminal: boolean
+  createdAt: number
+}
 
 export type RuntimeJobState =
   | 'queued'

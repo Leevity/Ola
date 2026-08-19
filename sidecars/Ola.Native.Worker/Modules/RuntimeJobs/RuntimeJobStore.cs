@@ -24,6 +24,24 @@ internal static class RuntimeJobStore
         return SetState(jobId, "cancelled", "cancelled", "Job cancellation requested.");
     }
 
+    public static void AppendEvent(string jobId, long seq, string payloadJson, bool terminal)
+    {
+        using var connection = DbConnectionFactory.OpenReadWriteCreate(DbConnectionFactory.ResolveDbPath(default));
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT OR REPLACE INTO runtime_job_events(job_id,seq,payload_json,terminal,created_at) VALUES($jobId,$seq,$payload,$terminal,$now)";
+        Add(command, "$jobId", jobId); Add(command, "$seq", seq); Add(command, "$payload", payloadJson); Add(command, "$terminal", terminal ? 1 : 0); Add(command, "$now", Now()); command.ExecuteNonQuery();
+    }
+
+    public static List<RuntimeJobEventRecord> ReplayEvents(JsonElement p)
+    {
+        var jobId = Required(p, "jobId"); var after = p.TryGetProperty("afterSeq", out var raw) && raw.TryGetInt64(out var value) ? value : 0;
+        var limit = p.TryGetProperty("limit", out var limitRaw) && limitRaw.TryGetInt32(out var parsed) ? Math.Clamp(parsed, 1, 4096) : 1024;
+        using var connection = DbConnectionFactory.OpenReadWriteCreate(DbConnectionFactory.ResolveDbPath(p)); using var command = connection.CreateCommand();
+        command.CommandText = "SELECT job_id,seq,payload_json,terminal,created_at FROM runtime_job_events WHERE job_id=$jobId AND seq>$after ORDER BY seq LIMIT $limit";
+        Add(command, "$jobId", jobId); Add(command, "$after", after); Add(command, "$limit", limit); using var reader = command.ExecuteReader();
+        var result = new List<RuntimeJobEventRecord>(); while (reader.Read()) result.Add(new(reader.GetString(0), reader.GetInt64(1), reader.GetString(2), reader.GetInt32(3) != 0, reader.GetInt64(4))); return result;
+    }
+
     public static RuntimeJobMutationResult Submit(JsonElement p)
     {
         var jobId = Required(p, "jobId");

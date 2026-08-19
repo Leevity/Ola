@@ -3,7 +3,11 @@ import {
   type NativeWorkerLifecycleEvent,
   type NativeWorkerRawEventFrame
 } from '../lib/native-worker'
-import { RUNTIME_JOB_ROUTES, type RuntimeJobRecord } from '../../shared/runtime-job-contract'
+import {
+  RUNTIME_JOB_ROUTES,
+  type RuntimeJobEventRecord,
+  type RuntimeJobRecord
+} from '../../shared/runtime-job-contract'
 
 type RawEventHandler = (frame: NativeWorkerRawEventFrame) => void
 type RequestHandler = (id: number | string, method: string, params: unknown) => Promise<unknown>
@@ -144,6 +148,15 @@ export class NativeAgentRuntimeManager {
     return await getNativeWorker().request<RuntimeJobRecord | null>(
       'runtime/jobs-cancel',
       { jobId },
+      10_000
+    )
+  }
+
+  async replayRuntimeJobEvents(jobId: string, afterSeq = 0): Promise<RuntimeJobEventRecord[]> {
+    await this.ensureStarted()
+    return await getNativeWorker().request<RuntimeJobEventRecord[]>(
+      RUNTIME_JOB_ROUTES.events,
+      { jobId, afterSeq },
       10_000
     )
   }
