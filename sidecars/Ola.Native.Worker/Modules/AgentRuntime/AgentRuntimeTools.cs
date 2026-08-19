@@ -65,7 +65,7 @@ internal static class AgentRuntimeTools
             $"agent run accepted runtime=native-aot runId={runId} sessionId={FormatLogValue(sessionId)} " +
             $"messages={initialMessageCount}");
 
-        RuntimeJobStore.SetState(runId, "running");
+        RuntimeJobStore.SetState(runId, "running", parameters);
         _ = Task.Run(async () => await ExecuteRunAsync(state, context), CancellationToken.None);
 
         return Task.FromResult(WorkerResponse.Json(
@@ -144,7 +144,7 @@ internal static class AgentRuntimeTools
         }
 
         state.Cancel("user");
-        RuntimeJobStore.SetState(runId, "cancelling", "cancel_requested", "Cancellation requested by user.");
+        RuntimeJobStore.SetState(runId, "cancelling", parameters, "cancel_requested", "Cancellation requested by user.");
         WorkerLog.Info($"agent run cancel requested runId={runId}");
         return WorkerResponse.Json(
             new AgentRuntimeCancelResult(true, runId, null),
@@ -240,16 +240,16 @@ internal static class AgentRuntimeTools
             }
 
             await OpenAIChatRuntime.ExecuteLoopAsync(state.Parameters, state, context);
-            RuntimeJobStore.SetState(state.RunId, "succeeded");
+            RuntimeJobStore.SetState(state.RunId, "succeeded", state.Parameters);
         }
         catch (OperationCanceledException) when (state.IsCancellationRequested)
         {
-            RuntimeJobStore.SetState(state.RunId, "cancelled");
+            RuntimeJobStore.SetState(state.RunId, "cancelled", state.Parameters);
             await EmitAsync(state, context, new AgentRuntimeStreamEvent("loop_end", Reason: "aborted"));
         }
         catch (Exception ex)
         {
-            RuntimeJobStore.SetState(state.RunId, "failed", "runtime_error", ex.Message);
+            RuntimeJobStore.SetState(state.RunId, "failed", state.Parameters, "runtime_error", ex.Message);
             WorkerLog.Warn(
                 $"agent run failed runId={state.RunId} error={ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
             await EmitAsync(
