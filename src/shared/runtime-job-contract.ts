@@ -3,8 +3,8 @@ export const RUNTIME_JOB_ROUTES = {
   get: 'runtime/jobs-get',
   list: 'runtime/jobs-list',
   setState: 'runtime/jobs-state',
-  cancel: 'runtime/jobs-cancel'
-  ,events: 'runtime/jobs-events'
+  cancel: 'runtime/jobs-cancel',
+  events: 'runtime/jobs-events'
 } as const
 
 export interface RuntimeJobEventRecord {
