@@ -28,7 +28,8 @@ import {
   Network,
   PawPrint,
   KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  MousePointer2
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
 import { AnimatePresence } from 'motion/react'
@@ -102,6 +103,8 @@ import { ModelIcon, ProviderIcon } from './provider-icons'
 import { AutoMemoryPanel } from '@renderer/components/memory/AutoMemoryPanel'
 import { PetPanel } from './PetPanel'
 import { CredentialsPanel } from '@renderer/components/credentials/CredentialsPanel'
+import { ProjectWikiPanel } from './ProjectWikiPanel'
+import { DesktopAutomationPanel } from './DesktopAutomationPanel'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import {
@@ -135,6 +138,7 @@ import {
   DEFAULT_SSH_TERMINAL_THEME_PRESET
 } from '@renderer/lib/theme-presets'
 import { WindowControls } from '@renderer/components/layout/WindowControls'
+import { isSettingsFullPanelTab, normalizeSettingsTab } from './settings-nav'
 import {
   DEFAULT_BUILTIN_SOUL_TEMPLATE_ID,
   type BuiltinSoulTemplateWithContent
@@ -471,6 +475,23 @@ const menuGroupDefs: Array<{
         icon: <BrainCircuit className="size-4" />,
         labelKey: 'model.title',
         descKey: 'model.subtitle'
+      }
+    ]
+  },
+  {
+    labelKey: 'page.groups.capabilities',
+    items: [
+      {
+        id: 'wiki',
+        icon: <BookOpen className="size-4" />,
+        labelKey: 'wiki.title',
+        descKey: 'wiki.subtitle'
+      },
+      {
+        id: 'desktopAutomation',
+        icon: <MousePointer2 className="size-4" />,
+        labelKey: 'desktopAutomation.title',
+        descKey: 'desktopAutomation.subtitle'
       }
     ]
   },
@@ -3833,6 +3854,8 @@ const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   skillsmarket: SkillsMarketPanel,
   pet: PetPanel,
   credentials: CredentialsPanel,
+  wiki: ProjectWikiPanel,
+  desktopAutomation: DesktopAutomationPanel,
   about: AboutPanel
 }
 
@@ -3843,7 +3866,7 @@ export function SettingsPage(): React.JSX.Element {
   const closeSettingsPage = useUIStore((s) => s.closeSettingsPage)
   const isMac = useMemo(() => /Mac/.test(navigator.userAgent), [])
 
-  const effectiveSettingsTab = settingsTab === 'channel' ? 'general' : settingsTab
+  const effectiveSettingsTab = normalizeSettingsTab(settingsTab)
   const ActivePanel = panelMap[effectiveSettingsTab]
 
   return (
@@ -3919,13 +3942,7 @@ export function SettingsPage(): React.JSX.Element {
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-5">
           {/* Content */}
           <AnimatePresence mode="wait">
-            {effectiveSettingsTab === 'provider' ||
-            effectiveSettingsTab === 'modelManagement' ||
-            effectiveSettingsTab === 'aiCoding' ||
-            effectiveSettingsTab === 'plugin' ||
-            effectiveSettingsTab === 'extension' ||
-            effectiveSettingsTab === 'mcp' ||
-            effectiveSettingsTab === 'credentials' ? (
+            {isSettingsFullPanelTab(effectiveSettingsTab) ? (
               <div className="flex-1 min-h-0 min-w-0 overflow-hidden" key="full-panel">
                 <SlideIn
                   key={effectiveSettingsTab}

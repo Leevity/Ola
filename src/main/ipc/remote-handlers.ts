@@ -39,6 +39,7 @@ import {
 import { testRemoteEndpoint } from '../remote/connection-tester'
 import type { RemoteConnectionTestResult } from '../../shared/remote-control'
 import { setRemoteControlAllowed } from '../remote/authorization-state'
+import { listRemoteAudit, recordRemoteAudit } from '../remote/remote-audit'
 
 function isTrustedRemoteIpcSender(event: IpcMainInvokeEvent): boolean {
   const ownerWindow = BrowserWindow.fromWebContents(event.sender)
@@ -337,7 +338,9 @@ export function registerRemoteHandlers(): void {
     const ownerWebContentsId = getRemoteSessionOwner(event)
     const sessionId = value.sessionId as string | null
     if (sessionId === null) {
-      return clearRemoteInputSession(ownerWebContentsId)
+      const success = clearRemoteInputSession(ownerWebContentsId)
+      recordRemoteAudit({ action: 'input_disable', ownerWebContentsId, success })
+      return success
         ? { success: true }
         : { success: false, error: 'Remote input is owned by another window' }
     }
@@ -345,6 +348,7 @@ export function registerRemoteHandlers(): void {
       return { success: false, error: 'Remote session is owned by another window' }
     }
     setRemoteInputSession(sessionId, (value.displayId as string | null) ?? null, ownerWebContentsId)
+    recordRemoteAudit({ action: 'input_enable', sessionId, ownerWebContentsId, success: true })
     return { success: true }
   })
 
@@ -356,8 +360,21 @@ export function registerRemoteHandlers(): void {
     if (!isRemoteInputSessionOwnedBy(args?.sessionId, ownerWebContentsId)) {
       return { success: false, error: 'Remote input is owned by another window' }
     }
-    return dispatchRemoteInput(args)
+    const result = dispatchRemoteInput(args)
+    recordRemoteAudit({
+      action: 'input',
+      sessionId: args?.sessionId,
+      ownerWebContentsId,
+      success: result.success,
+      error: result.success ? undefined : result.error
+    })
+    return result
   })
+
+  registerTrustedRemoteMessagePackHandler<
+    { limit?: number },
+    { entries: ReturnType<typeof listRemoteAudit> }
+  >('remote:audit:list', (args) => ({ entries: listRemoteAudit(args?.limit) }))
 
   registerTrustedRemoteMessagePackHandler<RemoteAccountRequest, unknown>(
     'remote:account:invoke',

@@ -226,6 +226,8 @@ export type SettingsTab =
   | 'websearch'
   | 'skillsmarket'
   | 'credentials'
+  | 'wiki'
+  | 'desktopAutomation'
   | 'pet'
   | 'about'
 

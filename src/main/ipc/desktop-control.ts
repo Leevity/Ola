@@ -1,5 +1,6 @@
 import { desktopCapturer, screen, systemPreferences } from 'electron'
 import { createRequire } from 'module'
+import { recordDesktopFlowStep } from '../desktop/desktop-flow-recorder'
 
 export const DESKTOP_SCREENSHOT_CAPTURE = 'desktop:screenshot:capture'
 export const DESKTOP_INPUT_CLICK = 'desktop:input:click'
@@ -213,6 +214,12 @@ export function desktopInputClick(
       robot.mouseClick(button)
     }
 
+    recordDesktopFlowStep({
+      type: action === 'double_click' ? 'double_click' : 'click',
+      x,
+      y,
+      button
+    })
     return { success: true, x, y, button, action }
   } catch (error) {
     return {
@@ -258,6 +265,7 @@ export function desktopInputType(
     if (typeof args.text === 'string') {
       robot.setKeyboardDelay(0)
       robot.typeString(args.text)
+      recordDesktopFlowStep({ type: 'type', text: args.text })
       return { success: true, mode: 'text', textLength: args.text.length }
     }
 
@@ -276,9 +284,11 @@ export function desktopInputType(
           args.action,
           modifiers.length === 0 ? undefined : (modifiers as string[])
         )
+        recordDesktopFlowStep({ type: 'keypress', key: args.key, keys: args.modifiers ?? [] })
         return { success: true, mode: 'key', key: args.key, action: args.action }
       }
       robot.keyTap(resolved)
+      recordDesktopFlowStep({ type: 'keypress', key: args.key })
       return { success: true, mode: 'key', key: args.key }
     }
 
@@ -295,6 +305,7 @@ export function desktopInputType(
       const modifiers = keys.slice(0, -1)
       const mainKey = keys[keys.length - 1]
       robot.keyTap(mainKey, modifiers.length === 1 ? modifiers[0] : modifiers)
+      recordDesktopFlowStep({ type: 'keypress', keys: args.hotkey })
       return { success: true, mode: 'hotkey', hotkey: args.hotkey }
     }
 
@@ -342,6 +353,14 @@ export function desktopInputScroll(
     }
 
     robot.scrollMouse(Math.round(scrollX), Math.round(scrollY))
+
+    recordDesktopFlowStep({
+      type: 'scroll',
+      x: x ?? undefined,
+      y: y ?? undefined,
+      scrollX,
+      scrollY
+    })
 
     return {
       success: true,

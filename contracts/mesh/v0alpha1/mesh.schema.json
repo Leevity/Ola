@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ola.local/contracts/mesh/v0alpha1/mesh.schema.json",
+  "title": "Ola Mesh v0alpha1",
+  "type": "object",
+  "oneOf": [{ "$ref": "#/$defs/capabilityTicket" }, { "$ref": "#/$defs/taskEvent" }],
+  "$defs": {
+    "capabilityId": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}(\\.[a-z][a-z0-9_-]{0,31})+$",
+      "maxLength": 128
+    },
+    "capabilityTicket": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "issuer",
+        "ticketId",
+        "accountId",
+        "subjectNodeId",
+        "targetNodeId",
+        "sessionId",
+        "capabilities",
+        "nonce",
+        "issuedAt",
+        "expiresAt"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "v0alpha1" },
+        "issuer": { "const": "ola-control-plane" },
+        "ticketId": { "type": "string", "maxLength": 128 },
+        "accountId": { "type": "string", "maxLength": 128 },
+        "subjectNodeId": { "type": "string", "maxLength": 128 },
+        "targetNodeId": { "type": "string", "maxLength": 128 },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "capabilities": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/capabilityId" },
+          "uniqueItems": true
+        },
+        "nonce": { "type": "string", "minLength": 32, "maxLength": 128 },
+        "issuedAt": { "type": "integer", "minimum": 0 },
+        "expiresAt": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "taskEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocolVersion",
+        "eventId",
+        "sequence",
+        "taskId",
+        "sessionId",
+        "type",
+        "timestamp",
+        "payload"
+      ],
+      "properties": {
+        "protocolVersion": { "const": "v0alpha1" },
+        "eventId": { "type": "string", "maxLength": 128 },
+        "sequence": { "type": "integer", "minimum": 1 },
+        "taskId": { "type": "string", "maxLength": 128 },
+        "sessionId": { "type": "string", "maxLength": 128 },
+        "type": {
+          "enum": [
+              "task.command",
+              "task.started",
+            "task.stdout",
+            "task.stderr",
+            "task.progress",
+            "task.approval_required",
+            "task.completed",
+            "task.failed",
+            "task.cancelled"
+          ]
+        },
+        "timestamp": { "type": "integer", "minimum": 0 },
+        "payload": { "type": "object" }
+      }
+    }
+  }
+}

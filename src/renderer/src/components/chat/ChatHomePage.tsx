@@ -13,6 +13,7 @@ import {
   NewSessionProjectSelector,
   type NewSessionProjectOption
 } from './NewSessionProjectSelector'
+import { ChatHomeInsights } from './ChatHomeInsights'
 
 type HomeProjectSnapshot = NewSessionProjectOption
 
@@ -315,6 +316,8 @@ export function ChatHomePage(): React.JSX.Element {
                 </button>
               ))}
             </div>
+
+            <ChatHomeInsights />
           </div>
         </div>
       </div>

@@ -114,6 +114,7 @@ import { resolveProviderUserAgent } from '@renderer/lib/api/api-user-agent'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { ProviderIcon, ModelIcon } from './provider-icons'
+import { ProviderHealthPanel } from './ProviderHealthPanel'
 import {
   clampCompressionThreshold,
   DEFAULT_CONTEXT_COMPRESSION_THRESHOLD,
@@ -4476,6 +4477,7 @@ export function ProviderPanel(): React.JSX.Element {
 
   return (
     <div className="flex h-full flex-col overflow-hidden bg-background">
+      <ProviderHealthPanel />
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left: Provider list */}
         <div className="flex w-60 shrink-0 flex-col border-r bg-muted/10">

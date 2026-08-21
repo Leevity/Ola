@@ -1,0 +1,56 @@
+---
+title: Linux / Raspberry Pi Mesh Node 与 CLI
+---
+
+# Linux / Raspberry Pi Mesh Node 与 CLI
+
+Linux Node 是 Ola Mesh 的第三类执行终端，不依赖 Electron，也不要求把移动
+端的 agent loop 搬到树莓派。它只实现协议适配、身份、心跳、事件接收和后续
+能力执行边界。
+
+## 当前实现
+
+- `server/internal/meshclient`：Ed25519 identity、manifest proof、节点注册、
+  心跳、节点列表、ticket 和 task event API。
+- `server/cmd/ola-node`：Linux/ARM64 daemon。默认只声明 `system.info` 和事件接收，使用
+  `--watch` 轮询事件；`terminal.execute` 必须显式声明并额外使用 `--enable-shell`。
+- `server/cmd/ola`：CLI：
+
+  ```text
+  ola mesh nodes --api ... --token ...
+  ola mesh heartbeat --node node-...
+  ola mesh events --node node-... --after 0
+  ola mesh command --subject node-phone --target node-pi --session s-1 \
+    --command 'uname -a' --sequence 1
+  ```
+
+- `server/deploy/ola-node.service.example`：systemd 安全基线，包含独立用户、
+  `NoNewPrivileges`、只读系统目录和受限写目录。
+
+## Raspberry Pi arm64 构建
+
+在构建机执行：
+
+```bash
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ola-node ./cmd/ola-node
+GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o ola ./cmd/ola
+```
+
+Pi 上的 `/etc/ola-node/mesh.env` 必须由 root 拥有且权限为 `0600`，至少包含：
+
+```text
+OLA_API_URL=https://mesh.example.com
+OLA_TOKEN=<short-lived-or-revocable-account-token>
+OLA_DEVICE_ID=<device-registered-in-the-account>
+```
+
+不要把 token 写入 Git、systemd unit、shell history、进程参数或日志。systemd
+示例通过 `EnvironmentFile` 注入 token，不把它放进 `ExecStart`。生产环境应进一步
+把长期账号 token 换成专门的 Node bootstrap/rotation 凭证。
+
+## 安全边界
+
+当前 `ola-node` 只在同时满足 `terminal.execute` manifest、`--enable-shell`、
+本地 delivery ticket 校验后执行 shell，并有 30 秒超时和 16KB 输出限制。下一阶段
+仍需补逐次用户审批、取消、沙箱/非 root 强制和更细粒度审计。这样 CLI 是控制入口，
+但不会因为 CLI 存在就获得任意远程 root 能力。

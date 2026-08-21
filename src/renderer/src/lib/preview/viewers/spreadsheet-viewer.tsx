@@ -61,16 +61,38 @@ function toCSV(data: string[][]): string {
 
 // --- XLSX helpers (lazy-loaded) ---
 
+const MAX_SPREADSHEET_BYTES = 25 * 1024 * 1024
+const MAX_SPREADSHEET_SHEETS = 64
+const MAX_SPREADSHEET_CELLS = 1_000_000
+
+function assertSpreadsheetLimits(byteLength: number, sheetCount: number, cellCount: number): void {
+  if (byteLength > MAX_SPREADSHEET_BYTES) {
+    throw new Error('Spreadsheet is too large to preview safely (maximum 25 MB).')
+  }
+  if (sheetCount > MAX_SPREADSHEET_SHEETS) {
+    throw new Error('Spreadsheet has too many sheets to preview safely.')
+  }
+  if (cellCount > MAX_SPREADSHEET_CELLS) {
+    throw new Error('Spreadsheet has too many cells to preview safely.')
+  }
+}
+
 async function parseXlsx(
   base64: string
 ): Promise<{ sheets: string[]; data: Map<string, string[][]> }> {
-  const XLSX = await import('xlsx')
+  const XLSX = await import('@e965/xlsx')
+  const byteLength = Math.floor((base64.length * 3) / 4)
+  assertSpreadsheetLimits(byteLength, 0, 0)
   const buffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
   const wb = XLSX.read(buffer, { type: 'array' })
+  assertSpreadsheetLimits(buffer.byteLength, wb.SheetNames.length, 0)
   const data = new Map<string, string[][]>()
+  let cellCount = 0
   for (const name of wb.SheetNames) {
     const sheet = wb.Sheets[name]
     const rows: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+    cellCount += rows.reduce((total, row) => total + row.length, 0)
+    assertSpreadsheetLimits(buffer.byteLength, wb.SheetNames.length, cellCount)
     data.set(
       name,
       rows.map((r) => r.map(String))
@@ -94,7 +116,12 @@ async function buildWorkbookBase64(
   filePath: string,
   sheetsData: Map<string, string[][]>
 ): Promise<string> {
-  const XLSX = await import('xlsx')
+  const XLSX = await import('@e965/xlsx')
+  const cellCount = [...sheetsData.values()].reduce(
+    (total, rows) => total + rows.reduce((rowTotal, row) => rowTotal + row.length, 0),
+    0
+  )
+  assertSpreadsheetLimits(0, sheetsData.size, cellCount)
   const wb = XLSX.utils.book_new()
   for (const [name, rows] of sheetsData) {
     const ws = XLSX.utils.aoa_to_sheet(rows)

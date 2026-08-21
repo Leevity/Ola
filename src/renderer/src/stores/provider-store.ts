@@ -16,6 +16,7 @@ import { normalizeResponsesImageGenerationConfig } from '../lib/api/responses-im
 import { resolveProviderUserAgent } from '../lib/api/api-user-agent'
 import { configStorage } from '../lib/ipc/config-storage'
 import { useSettingsStore, resolveReasoningEffortForModel } from './settings-store'
+import { resolveProviderServiceTier } from '../../../shared/provider-service-tier'
 
 export { builtinProviderPresets }
 export type { BuiltinProviderPreset }
@@ -465,9 +466,12 @@ function resolveServiceTier(
   model: AIModelConfig | null | undefined,
   providerBuiltinId?: string
 ): ProviderConfig['serviceTier'] | undefined {
-  if (providerBuiltinId === 'codex-oauth') return model?.serviceTier
-  if (!useSettingsStore.getState().fastModeEnabled) return undefined
-  return model?.serviceTier
+  const serviceTier = resolveProviderServiceTier({
+    fastModeEnabled: useSettingsStore.getState().fastModeEnabled,
+    providerBuiltinId,
+    modelServiceTier: model?.serviceTier
+  })
+  return serviceTier === 'priority' ? serviceTier : undefined
 }
 
 function resolveProviderAccountId(provider: AIProvider): string | undefined {

@@ -1,9 +1,12 @@
 ﻿import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import { useShallow } from 'zustand/react/shallow'
-import { Brain, FileText, Loader2, ScrollText, StopCircle, icons } from 'lucide-react'
+import { Brain, CircleAlert, FileText, Loader2, ScrollText, StopCircle, icons } from 'lucide-react'
 
-import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
+import {
+  decodeStructuredToolResult,
+  formatToolErrorForDisplay
+} from '@renderer/lib/tools/tool-result-format'
 import { formatTokens, getBillableTotalTokens } from '@renderer/lib/format-tokens'
 import { parseSubAgentMeta } from '@renderer/lib/agent/sub-agents/create-tool'
 import { subAgentRegistry } from '@renderer/lib/agent/sub-agents/registry'
@@ -23,6 +26,7 @@ interface SubAgentCardProps {
   toolUseId: string
   input: Record<string, unknown>
   output?: ToolResultContent
+  error?: string
   isLive?: boolean
   sessionId?: string | null
 }
@@ -165,6 +169,7 @@ function SubAgentCardInner({
   toolUseId,
   input,
   output,
+  error,
   isLive = false,
   sessionId
 }: SubAgentCardProps): React.JSX.Element {
@@ -218,7 +223,7 @@ function SubAgentCardInner({
   const reportStatus = tracked?.reportStatus
   const isRunning = (tracked?.isRunning ?? false) && !isQueued
   const isCompleted = !isRunning && !isQueued && (!!output || !!tracked)
-  const historicalError = outputStr
+  const historicalErrorMessage = outputStr
     ? (() => {
         const parsedOutput = decodeStructuredToolResult(outputStr)
         if (
@@ -226,18 +231,31 @@ function SubAgentCardInner({
           !Array.isArray(parsedOutput) &&
           typeof parsedOutput.error === 'string'
         ) {
-          return true
+          return formatToolErrorForDisplay(parsedOutput.error)
         }
 
         const parsedHistText = decodeStructuredToolResult(histText)
-        return !!(
+        if (
           parsedHistText &&
           !Array.isArray(parsedHistText) &&
           typeof parsedHistText.error === 'string'
-        )
+        ) {
+          return formatToolErrorForDisplay(parsedHistText.error)
+        }
+        return ''
       })()
-    : false
-  const isError = tracked?.success === false || !!tracked?.errorMessage || historicalError
+    : ''
+  const historicalError = Boolean(historicalErrorMessage)
+  const isError =
+    tracked?.success === false || !!tracked?.errorMessage || !!error || historicalError
+  const errorText = isError
+    ? formatToolErrorForDisplay(
+        tracked?.errorMessage?.trim() ||
+          error?.trim() ||
+          historicalErrorMessage ||
+          t('subAgent.failureUnknown', { defaultValue: 'Sub-Agent execution failed' })
+      )
+    : ''
 
   const [now, setNow] = React.useState(tracked?.startedAt ?? 0)
   React.useEffect(() => {
@@ -346,7 +364,7 @@ function SubAgentCardInner({
           handleOpenPanel()
         }
       }}
-      title={`${t('subAgent.viewDetails')} · ${metaText}`}
+      title={`${t('subAgent.viewDetails')} · ${metaText}${errorText ? ` · ${errorText}` : ''}`}
       className={cn(
         'group relative my-2 w-full rounded-[9px] px-3 py-2.5 text-left transition-colors',
         'hover:bg-[#242424] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/35',
@@ -406,6 +424,12 @@ function SubAgentCardInner({
           <DotMatrix filled={meterFill} tone={meterTone} />
         </div>
       </div>
+      {errorText ? (
+        <div className="mt-2 flex items-start gap-1.5 pl-10 text-[11px] leading-4 text-red-200/85">
+          <CircleAlert className="mt-0.5 size-3 shrink-0" aria-hidden="true" />
+          <span className="line-clamp-2 break-words">{errorText}</span>
+        </div>
+      ) : null}
       {canCancel || cancelPending ? (
         <button
           type="button"

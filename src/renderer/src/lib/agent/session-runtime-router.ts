@@ -11,6 +11,10 @@ import { summarizeToolInputForHistory } from '@renderer/lib/tools/tool-input-san
 import { useBackgroundSessionStore } from '@renderer/stores/background-session-store'
 import { recordStreamingForegroundFlush } from '@renderer/lib/streaming-perf'
 import { createResidentRequestDebugInfo } from '@renderer/lib/debug-store'
+import {
+  useRuntimeProjectionStore,
+  type RuntimeProjectionPatch
+} from '@renderer/stores/runtime-projection-store'
 import { mergeUsageSnapshot } from './usage-merge'
 
 /**
@@ -75,6 +79,10 @@ export function setSessionForegroundVisibility(sessionId: string, visible: boole
 // enough for the user to notice activity.
 const _pendingSessionUpdates = new Map<string, ReturnType<typeof setTimeout>>()
 const MARK_SESSION_UPDATE_DEBOUNCE_MS = 500
+
+function touchRuntimeProjection(sessionId: string, patch?: RuntimeProjectionPatch): void {
+  useRuntimeProjectionStore.getState().touch(sessionId, patch)
+}
 
 function debouncedMarkSessionUpdate(sessionId: string): void {
   if (_pendingSessionUpdates.has(sessionId)) return
@@ -207,6 +215,7 @@ export function updateRuntimeMessage(
   messageId: string,
   patch: Partial<UnifiedMessage>
 ): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId })
   const residentPatch = sanitizeRuntimeMessagePatch(patch)
 
   emitSessionRuntimeSync({ kind: 'update_message', sessionId, messageId, patch: residentPatch })
@@ -239,6 +248,7 @@ export function mergeRuntimeMessageUsage(
   messageId: string,
   patch: Partial<TokenUsage>
 ): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId })
   if (isSessionForeground(sessionId)) {
     const chatStore = useChatStore.getState()
     const currentMessage = chatStore
@@ -258,6 +268,7 @@ export function mergeRuntimeMessageUsage(
 
 export function appendRuntimeTextDelta(sessionId: string, messageId: string, text: string): void {
   if (!text) return
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId })
   emitSessionRuntimeSync({ kind: 'append_text_delta', sessionId, messageId, text })
 
   if (isSessionForeground(sessionId)) {
@@ -289,6 +300,10 @@ export function appendRuntimeThinkingDelta(
 ): void {
   const cleanedThinking = stripThinkTagMarkers(thinking)
   if (!cleanedThinking) return
+  touchRuntimeProjection(sessionId, {
+    assistantMessageId: messageId,
+    thinkingMessageId: messageId
+  })
   emitSessionRuntimeSync({
     kind: 'append_thinking_delta',
     sessionId,
@@ -336,6 +351,10 @@ export function setRuntimeThinkingEncryptedContent(
   provider: 'anthropic' | 'openai-responses' | 'google'
 ): void {
   if (!encryptedContent) return
+  touchRuntimeProjection(sessionId, {
+    assistantMessageId: messageId,
+    thinkingMessageId: messageId
+  })
   emitSessionRuntimeSync({
     kind: 'set_thinking_encrypted',
     sessionId,
@@ -404,6 +423,7 @@ export function setRuntimeThinkingEncryptedContent(
 }
 
 export function completeRuntimeThinking(sessionId: string, messageId: string): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId, thinkingMessageId: null })
   emitSessionRuntimeSync({ kind: 'complete_thinking', sessionId, messageId })
 
   if (isSessionForeground(sessionId)) {
@@ -426,6 +446,7 @@ export function appendRuntimeToolUse(
   messageId: string,
   toolUse: ToolUseBlock
 ): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId, toolUse: true })
   const normalizedToolUse: ToolUseBlock = {
     ...toolUse,
     input: summarizeToolInputForHistory(toolUse.name, toolUse.input)
@@ -460,6 +481,7 @@ export function updateRuntimeToolUseInput(
   toolUseId: string,
   input: Record<string, unknown>
 ): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId })
   emitSessionRuntimeSync({
     kind: 'update_tool_use_input',
     sessionId,
@@ -491,6 +513,7 @@ export function appendRuntimeContentBlock(
   messageId: string,
   block: ContentBlock
 ): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: messageId })
   emitSessionRuntimeSync({ kind: 'append_content_block', sessionId, messageId, block })
 
   if (isSessionForeground(sessionId)) {
@@ -511,6 +534,7 @@ export function appendRuntimeContentBlock(
 }
 
 export function addRuntimeMessage(sessionId: string, message: UnifiedMessage): void {
+  touchRuntimeProjection(sessionId, { assistantMessageId: message.id })
   emitSessionRuntimeSync({ kind: 'add_message', sessionId, message })
 
   if (isSessionForeground(sessionId)) {

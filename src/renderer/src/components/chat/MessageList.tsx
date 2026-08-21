@@ -9,6 +9,7 @@ import { useChatStore } from '@renderer/stores/chat-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore, type ActiveTeam } from '@renderer/stores/team-store'
+import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
 import { cn } from '@renderer/lib/utils'
 import { MessageItem } from './MessageItem'
 import { LiveCompressionStatus } from './CompressionStatusMessage'
@@ -279,6 +280,7 @@ const MIN_RENDERABLE_HISTORY_ROWS = 3
 const VIRTUAL_ROW_ESTIMATED_HEIGHT = 180
 const VIRTUAL_ROW_OVERSCAN = 8
 const INITIAL_TAIL_RENDER_COUNT = 12
+const TURN_SPACER_MIN_HEIGHT = 24
 const EMPTY_ORCHESTRATION_STATE = { runs: [], byId: new Map(), byMessageId: new Map() }
 const MESSAGE_COLUMN_CLASS = 'mx-auto w-full max-w-[820px] px-5'
 const MESSAGE_COLUMN_COMPACT_CLASS = 'mx-auto w-full max-w-[720px] px-5'
@@ -299,6 +301,7 @@ interface MessageListSessionSelection {
   messageCount: number
   workingFolder?: string
   loadedRangeStart: number
+  loadedRangeEnd: number
   projectId?: string
 }
 
@@ -315,6 +318,7 @@ const EMPTY_MESSAGE_LIST_SESSION_SELECTION: MessageListSessionSelection = {
   messagesLoaded: false,
   messageCount: 0,
   loadedRangeStart: 0,
+  loadedRangeEnd: 0,
   projectId: undefined,
   workingFolder: undefined
 }
@@ -466,6 +470,7 @@ function selectMessageListSession(
     messageCount: session.messageCount ?? 0,
     workingFolder: session.workingFolder,
     loadedRangeStart: session.loadedRangeStart ?? 0,
+    loadedRangeEnd: session.loadedRangeEnd ?? 0,
     projectId: session.projectId
   }
 }
@@ -564,6 +569,21 @@ function areMessageRowPropsEqual(prev: MessageRowProps, next: MessageRowProps): 
 
 function getDistanceToBottom(ref: HTMLDivElement): number {
   return Math.max(0, ref.scrollHeight - ref.scrollTop - ref.clientHeight)
+}
+
+function measureRenderedTurnHeight(list: HTMLElement, lastUserMessageId: string): number | null {
+  const userElement = list.querySelector<HTMLElement>(
+    `[data-message-id="${CSS.escape(lastUserMessageId)}"]`
+  )
+  if (!userElement) return null
+
+  const userTop = userElement.getBoundingClientRect().top
+  let bottom = userElement.getBoundingClientRect().bottom
+  for (const element of list.querySelectorAll<HTMLElement>('[data-message-id]')) {
+    const rect = element.getBoundingClientRect()
+    if (rect.bottom > userTop + 1) bottom = Math.max(bottom, rect.bottom)
+  }
+  return Math.max(0, Math.round(bottom - userTop))
 }
 
 function findPendingAskUserQuestion(
@@ -1141,6 +1161,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     messageCount: activeSessionMessageCount,
     workingFolder: activeWorkingFolder,
     loadedRangeStart,
+    loadedRangeEnd,
     projectId: activeProjectId
   } = sessionSelection
   const activeProjectName = useChatStore((s) => {
@@ -1186,7 +1207,11 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   const sessionRequestRetryState = useAgentStore((s) =>
     activeSessionId ? (s.sessionRequestRetryState[activeSessionId] ?? null) : null
   )
-  const isSessionOutputting = hasStreamingMessage || hasActiveToolCallOutput
+  const runtimeProjection = useRuntimeProjectionStore((state) =>
+    activeSessionId ? state.projections[activeSessionId] : undefined
+  )
+  const hasProjectedRuntime = runtimeProjection?.status === 'running'
+  const isSessionOutputting = hasStreamingMessage || hasActiveToolCallOutput || hasProjectedRuntime
   const canSessionTriggerStreamingAutoScroll =
     (isMainChatSession || isDetachedSessionView) && isSessionOutputting
 
@@ -1252,6 +1277,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   const [assistantRailMeasureVersion, setAssistantRailMeasureVersion] = React.useState(0)
   const [highlightedMessageId, setHighlightedMessageId] = React.useState<string | null>(null)
   const [isLoadingOlderMessages, setIsLoadingOlderMessages] = React.useState(false)
+  const [isLoadingNewerMessages, setIsLoadingNewerMessages] = React.useState(false)
   const [messageLocatorSnapshot, setMessageLocatorSnapshot] = React.useState<{
     sessionId: string | null
     rows: MessageLocatorIndexRow[]
@@ -1472,6 +1498,14 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   }, [inlineCompactSummaryState.summaryIds, renderableMessages])
   const hasLoadOlderRow = loadedRangeStart > 0
   const virtualRowCount = rows.length + (hasLoadOlderRow ? 1 : 0)
+  const lastUserMessageId = React.useMemo(
+    () =>
+      [...messages]
+        .reverse()
+        .find((message) => message.role === 'user' && message.source !== 'team')?.id ?? null,
+    [messages]
+  )
+  const [turnSpacerHeight, setTurnSpacerHeight] = React.useState(TURN_SPACER_MIN_HEIGHT)
   const canAutoScroll = React.useCallback(() => {
     const mode = autoScrollModeRef.current
     return mode === 'user' || (mode === 'stream' && canSessionTriggerStreamingAutoScroll)
@@ -1506,12 +1540,36 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       if (hasLoadOlderRow && index === 0) return `load-older:${activeSessionId ?? 'none'}`
       const row = rows[index - (hasLoadOlderRow ? 1 : 0)]
       return row?.key ?? `row:${index}`
-    }
+    },
+    paddingEnd: turnSpacerHeight
   })
   // Visible transcript rows grow in place. Only compensate rows that are fully above the
   // viewport; bottom-following remains owned by the chat scroll state machine.
   rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     shouldAdjustScrollPositionOnItemSizeChange
+  const virtualListTotalSize = rowVirtualizer.getTotalSize()
+
+  const syncTurnSpacer = React.useCallback(() => {
+    const viewport = listRef.current
+    if (!viewport || !lastUserMessageId || rows.length === 0) {
+      setTurnSpacerHeight((current) =>
+        current === TURN_SPACER_MIN_HEIGHT ? current : TURN_SPACER_MIN_HEIGHT
+      )
+      return
+    }
+
+    const renderedHeight = measureRenderedTurnHeight(viewport, lastUserMessageId)
+    if (renderedHeight === null) return
+    const nextHeight = Math.max(
+      TURN_SPACER_MIN_HEIGHT,
+      Math.round(viewport.clientHeight - renderedHeight)
+    )
+    setTurnSpacerHeight((current) => (Math.abs(current - nextHeight) <= 2 ? current : nextHeight))
+  }, [lastUserMessageId, rows.length])
+
+  React.useLayoutEffect(() => {
+    syncTurnSpacer()
+  }, [lastUserMessageId, rows.length, syncTurnSpacer, virtualListTotalSize])
   const pendingAskUserQuestion = React.useMemo(
     () => findPendingAskUserQuestion(rows, toolResultsLookup, messageLookup),
     [messageLookup, rows, toolResultsLookup]
@@ -1750,6 +1808,32 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     syncBottomState
   ])
 
+  const loadNewerMessages = React.useCallback(async (): Promise<number> => {
+    if (!activeSessionId || isLoadingNewerMessages || loadedRangeEnd >= activeSessionMessageCount) {
+      return 0
+    }
+
+    setIsLoadingNewerMessages(true)
+    try {
+      const loaded = await useChatStore.getState().loadNewerSessionMessages(activeSessionId)
+      if (loaded > 0) {
+        await new Promise<void>((resolve) => {
+          window.requestAnimationFrame(() => resolve())
+        })
+        requestAssistantRailSync()
+      }
+      return loaded
+    } finally {
+      setIsLoadingNewerMessages(false)
+    }
+  }, [
+    activeSessionId,
+    activeSessionMessageCount,
+    isLoadingNewerMessages,
+    loadedRangeEnd,
+    requestAssistantRailSync
+  ])
+
   const requestScrollToBottom = React.useCallback(
     ({
       behavior = 'auto',
@@ -1818,9 +1902,21 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     ) {
       void loadOlderMessages()
     }
+    if (
+      ref &&
+      !isLoadingNewerMessages &&
+      loadedRangeEnd < activeSessionMessageCount &&
+      getDistanceToBottom(ref) <= OLDER_MESSAGE_LOAD_SCROLL_THRESHOLD
+    ) {
+      void loadNewerMessages()
+    }
   }, [
+    activeSessionMessageCount,
+    isLoadingNewerMessages,
+    loadNewerMessages,
     isLoadingOlderMessages,
     loadOlderMessages,
+    loadedRangeEnd,
     loadedRangeStart,
     requestAssistantRailSync,
     syncBottomState

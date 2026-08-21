@@ -2225,6 +2225,7 @@ export function AssistantMessage({
               toolUseId={block.id}
               input={block.input}
               output={result?.content}
+              error={effectiveLiveToolCallMap?.get(block.id)?.error}
               isLive={!!isStreaming}
               sessionId={sessionId}
             />
