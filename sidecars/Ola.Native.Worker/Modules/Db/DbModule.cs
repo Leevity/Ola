@@ -142,5 +142,11 @@
         context.Register("db/sync-save-metadata", DbSyncTools.SaveMetadata);
         context.Register("db/qq-wakeup-resolve", DbQqWakeupTools.ResolveEligibility);
         context.Register("db/qq-wakeup-mark-sent", DbQqWakeupTools.MarkSent);
+        context.Register("db/wiki-get", DbCapabilityTools.WikiGet);
+        context.Register("db/wiki-save", DbCapabilityTools.WikiSave);
+        context.Register("db/wiki-delete", DbCapabilityTools.WikiDelete);
+        context.Register("db/desktop-flows-list", DbCapabilityTools.FlowList);
+        context.Register("db/desktop-flow-save", DbCapabilityTools.FlowSave);
+        context.Register("db/desktop-flow-delete", DbCapabilityTools.FlowDelete);
     }
 }

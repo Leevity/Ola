@@ -30,6 +30,19 @@ export type RemoteSessionAudit = {
   bytesTransferred: number
 }
 
+export type MeshNode = {
+  nodeId: string
+  deviceId: string
+  platform: 'android' | 'ios' | 'linux' | 'macos' | 'windows'
+  runtime: string
+  runtimeVersion: string
+  publicKey: string
+  capabilities: Array<{ id: string; risk: 'low' | 'medium' | 'high'; version?: string }>
+  manifestVersion: number
+  createdAt: string
+  updatedAt: string
+}
+
 type PairingResponse = {
   code: string
   expiresAt: string
@@ -52,6 +65,7 @@ type RemoteAccountStore = {
   account: RemoteAccount | null
   device: RemoteDevice | null
   devices: RemoteDevice[]
+  meshNodes: MeshNode[]
   sessionAudits: RemoteSessionAudit[]
   pairingCode: PairingResponse | null
   resolvedPairing: ResolvedPairing | null
@@ -66,6 +80,7 @@ type RemoteAccountStore = {
   registerDevice: (deviceName: string) => Promise<void>
   issueDeviceSignalToken: () => Promise<string>
   loadDevices: () => Promise<void>
+  loadMeshNodes: () => Promise<void>
   loadSessionAudits: () => Promise<void>
   heartbeatDevice: () => Promise<void>
   syncModelConfig: () => Promise<Record<string, unknown>>
@@ -131,6 +146,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
   return {
     ...persisted,
     devices: [],
+    meshNodes: [],
     sessionAudits: [],
     pairingCode: null,
     resolvedPairing: null,
@@ -153,11 +169,20 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
           apiBaseUrl,
           'hydrate'
         )
+        // A browser session is not the same as an Ola desktop token. When
+        // OAuth has not completed yet, stop here instead of trying to
+        // register a device and masking the real login state with a second
+        // "Remote login is required" error.
+        if (!result.account) {
+          set({ token: null, account: null, device: null })
+          return
+        }
         set({ token: 'main-process', account: result.account, device: result.device })
         if (!result.device) {
           await get().registerDevice('Ola Desktop')
         } else {
           await get().loadDevices()
+          await get().loadMeshNodes()
         }
       } catch {
         set({ token: null, account: null, device: null })
@@ -173,6 +198,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         })
         set({ token: 'main-process', account: result.account, device: null })
         persist({ apiBaseUrl, token: null, account: result.account, device: null })
+        await get().registerDevice('Ola Desktop')
       } finally {
         set({ loading: false })
       }
@@ -187,6 +213,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         })
         set({ token: 'main-process', account: result.account, device: null })
         persist({ apiBaseUrl, token: null, account: result.account, device: null })
+        await get().registerDevice('Ola Desktop')
       } finally {
         set({ loading: false })
       }
@@ -208,6 +235,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         account: null,
         device: null,
         devices: [],
+        meshNodes: [],
         sessionAudits: [],
         pairingCode: null,
         resolvedPairing: null,
@@ -227,7 +255,9 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         })
         set({ device: result.device })
         persist({ apiBaseUrl, token, account: get().account, device: result.device })
+        await request(apiBaseUrl, 'mesh-node-register', { deviceId: result.device.id })
         await get().loadDevices()
+        await get().loadMeshNodes()
       } finally {
         set({ loading: false })
       }
@@ -246,6 +276,12 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       const result = await request<{ devices: RemoteDevice[] }>(apiBaseUrl, 'device-list')
       set({ devices: result.devices })
     },
+    loadMeshNodes: async () => {
+      const { apiBaseUrl, token } = get()
+      if (!token) return
+      const result = await request<{ nodes: MeshNode[] }>(apiBaseUrl, 'mesh-node-list')
+      set({ meshNodes: result.nodes })
+    },
     loadSessionAudits: async () => {
       const { apiBaseUrl, token } = get()
       if (!token) return
@@ -259,6 +295,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         deviceId: device.id
       })
       set({ device: result.device })
+      await request(apiBaseUrl, 'mesh-node-heartbeat', { nodeId: `node-${device.id}` })
     },
     syncModelConfig: async () => {
       const { apiBaseUrl } = get()

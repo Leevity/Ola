@@ -2100,13 +2100,18 @@ export function InputArea({
 
   const getPastedImageFiles = React.useCallback(
     (clipboardData: DataTransfer | null | undefined): File[] => {
-      if (!supportsVision || !clipboardData) return []
+      // Keep pasted images in the draft even when model metadata does not advertise
+      // vision. Some OpenAI-compatible providers omit that capability flag although
+      // the selected model accepts image blocks. The provider/runtime can reject an
+      // unsupported image explicitly; silently dropping it here makes the user send
+      // a different request than the one shown in the composer.
+      if (!clipboardData) return []
       return Array.from(clipboardData.items)
         .filter((item) => item.kind === 'file' && ACCEPTED_IMAGE_TYPES.includes(item.type))
         .map((item) => item.getAsFile())
         .filter(Boolean) as File[]
     },
-    [supportsVision]
+    []
   )
 
   const removeQueuedImage = React.useCallback((id: string) => {
@@ -3005,9 +3010,7 @@ export function InputArea({
       )
       if (result.canceled || paths.length === 0) return
 
-      const imagePaths = supportsVision
-        ? paths.filter((filePath) => Boolean(getImageMediaTypeForPath(filePath)))
-        : []
+      const imagePaths = paths.filter((filePath) => Boolean(getImageMediaTypeForPath(filePath)))
       const filePaths = paths.filter((filePath) => !imagePaths.includes(filePath))
       const imageFallbackPaths: string[] = []
 
@@ -3038,7 +3041,7 @@ export function InputArea({
       console.error('[InputArea] Failed to attach media:', error)
       toast.error(t('input.attachMediaFailed'))
     }
-  }, [addFilesToEditor, readImagePathAsAttachment, supportsVision, t])
+  }, [addFilesToEditor, readImagePathAsAttachment, t])
 
   const handlePreviewFile = React.useCallback(
     (fileId: string) => {

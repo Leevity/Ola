@@ -9,7 +9,11 @@ import {
   resolveReasoningEffortForModel,
   useSettingsStore
 } from '@renderer/stores/settings-store'
-import { modelSupportsVision, useProviderStore } from '@renderer/stores/provider-store'
+import {
+  modelSupportsComputerUse,
+  modelSupportsVision,
+  useProviderStore
+} from '@renderer/stores/provider-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useBackgroundSessionStore } from '@renderer/stores/background-session-store'
@@ -147,6 +151,7 @@ import {
 import type { CompressionConfig } from '@renderer/lib/agent/context-compression'
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { useAppPluginStore } from '@renderer/stores/app-plugin-store'
+import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import {
   registerPluginTools,
@@ -371,9 +376,26 @@ function addMessageWithSync(sessionId: string, message: UnifiedMessage): void {
   emitSessionRuntimeSync({ kind: 'add_message', sessionId, message })
 }
 
+function buildUserMessageContent(
+  text: string,
+  images?: ImageAttachment[],
+  prefixBlocks: Array<Extract<ContentBlock, { type: 'text' }>> = []
+): UnifiedMessage['content'] {
+  const blocks = [...prefixBlocks]
+  if (text) blocks.push({ type: 'text', text })
+
+  if (images && images.length > 0) {
+    return [...blocks, ...images.map(imageAttachmentToContentBlock)]
+  }
+
+  if (blocks.length === 1 && blocks[0]) return blocks[0].text
+  return blocks
+}
+
 function setStreamingMessageIdWithSync(sessionId: string, messageId: string | null): void {
   if (messageId === null) {
     flushRuntimeForegroundMutations()
+    useRuntimeProjectionStore.getState().finish(sessionId, 'completed')
   }
   useChatStore.getState().setStreamingMessageId(sessionId, messageId)
   emitSessionRuntimeSync({ kind: 'set_streaming_message', sessionId, messageId })
@@ -1648,6 +1670,46 @@ async function resolveMainRequestProvider(options: {
   }
 }
 
+async function resolveHealthyAutoProvider(options: {
+  providerConfig: ProviderConfig | null
+  modelConfig: AIModelConfig | null
+  requiresVision: boolean
+}): Promise<{ providerConfig: ProviderConfig | null; modelConfig: AIModelConfig | null }> {
+  if (!options.providerConfig?.providerId) return options
+  const providerStore = useProviderStore.getState()
+  const candidates = providerStore.providers.flatMap((provider) =>
+    provider.models
+      .filter((model) => model.enabled !== false)
+      .map((model) => ({
+        providerId: provider.id,
+        modelId: model.id,
+        enabled: provider.enabled !== false,
+        supportsVision: modelSupportsVision(model, model.type ?? provider.type),
+        supportsComputerUse: modelSupportsComputerUse(model, model.type ?? provider.type)
+      }))
+  )
+  const resolution = (await ipcClient.invoke('provider:fallback:resolve', {
+    preferredProviderId: options.providerConfig.providerId,
+    preferredModelId: options.providerConfig.model,
+    candidates,
+    requireVision: options.requiresVision
+  })) as { selected?: { providerId: string; modelId: string } | null }
+  const selected = resolution.selected
+  if (
+    !selected ||
+    (selected.providerId === options.providerConfig.providerId &&
+      selected.modelId === options.providerConfig.model)
+  ) {
+    return options
+  }
+  const providerConfig = providerStore.getProviderConfigById(selected.providerId, selected.modelId)
+  if (!providerConfig) return options
+  return {
+    providerConfig,
+    modelConfig: findProviderModel(selected.providerId, selected.modelId).modelConfig
+  }
+}
+
 function messageContainsImage(message: UnifiedMessage): boolean {
   return Array.isArray(message.content) && message.content.some((block) => block.type === 'image')
 }
@@ -2016,19 +2078,10 @@ export function quotePendingSessionMessageIntoConversation(
   if (target.text) {
     textBlocks.push({ type: 'text', text: target.text })
   }
-  let userContent: string | ContentBlock[]
-  if (hasImages) {
-    userContent = [...textBlocks, ...(target.images ?? []).map(imageAttachmentToContentBlock)]
-  } else if (textBlocks.length === 1 && textBlocks[0]?.type === 'text') {
-    userContent = textBlocks[0].text
-  } else {
-    userContent = textBlocks
-  }
-
   const userMsg: UnifiedMessage = {
     id: nanoid(),
     role: 'user',
-    content: userContent,
+    content: buildUserMessageContent(target.text ?? '', target.images, textBlocks),
     createdAt: Date.now(),
     source: 'quoted'
   }
@@ -3815,9 +3868,17 @@ export function useChatActions(): {
           isContinue: source === 'continue',
           requiresVision: latestUserHasImages
         })
+        const healthyProvider =
+          resolvedSessionModelSelection.effectiveMode === 'auto'
+            ? await resolveHealthyAutoProvider({
+                providerConfig: providerResolution.providerConfig,
+                modelConfig: providerResolution.modelConfig,
+                requiresVision: latestUserHasImages
+              })
+            : providerResolution
         const baseProviderConfig = buildProviderConfigWithRuntimeSettings(
-          providerResolution.providerConfig,
-          providerResolution.modelConfig,
+          healthyProvider.providerConfig,
+          healthyProvider.modelConfig,
           sessionId,
           settings
         )
@@ -3963,7 +4024,6 @@ export function useChatActions(): {
         const isQueuedInsertion = source === 'queued'
         let expectedUserRequestMessage: UnifiedMessage | null = null
         if (shouldAppendUserMessage) {
-          let userContent: string | ContentBlock[]
           const textBlocks: Array<Extract<ContentBlock, { type: 'text' }>> = []
           const hasImages = Boolean(images && images.length > 0)
           const textForUserBlock =
@@ -3994,22 +4054,10 @@ export function useChatActions(): {
             })
           }
 
-          if (textForUserBlock) {
-            textBlocks.push({ type: 'text', text: textForUserBlock })
-          }
-
-          if (hasImages) {
-            userContent = [...textBlocks, ...(images ?? []).map(imageAttachmentToContentBlock)]
-          } else if (textBlocks.length === 1 && textBlocks[0]?.type === 'text') {
-            userContent = textBlocks[0].text
-          } else {
-            userContent = textBlocks
-          }
-
           const userMsg: UnifiedMessage = {
             id: nanoid(),
             role: 'user',
-            content: userContent,
+            content: buildUserMessageContent(textForUserBlock, images, textBlocks),
             createdAt: Date.now(),
             ...(selectedFileReadContext.meta
               ? { meta: { selectedFileReads: selectedFileReadContext.meta } }
@@ -4782,7 +4830,9 @@ export function useChatActions(): {
               sessionId,
               sidecarRequest,
               signal: abortController.signal,
-              logLabel: 'agent'
+              logLabel: 'agent',
+              onRunIdAssigned: (runId) =>
+                useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
             })
 
             let thinkingDone = false
@@ -6704,7 +6754,9 @@ async function runSimpleChat(
         sessionId,
         sidecarRequest,
         signal,
-        logLabel: 'chat'
+        logLabel: 'chat',
+        onRunIdAssigned: (runId) =>
+          useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
       })
     } else {
       stream = streamSidecarProviderTurn({

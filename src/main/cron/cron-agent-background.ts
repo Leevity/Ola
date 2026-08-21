@@ -32,6 +32,9 @@ import {
 } from '../db/cron-dao'
 import { getNativeAgentRuntimeManager } from '../ipc/native-agent-runtime'
 import { getDefaultApiUserAgent, resolveApiUserAgent } from '../lib/api-user-agent'
+import { resolveProviderServiceTier } from '../../shared/provider-service-tier'
+import { listProviderHealth } from '../provider/provider-health-registry'
+import { resolveProviderFallback } from '../provider/provider-fallback-resolver'
 
 const DEFAULT_AGENT = 'CronAgent'
 const RESPONSES_SESSION_SCOPE_AGENT_MAIN = 'agent-main'
@@ -549,6 +552,11 @@ function buildProviderConfigById(
     modelId,
     thinkingConfig
   })
+  const serviceTier = resolveProviderServiceTier({
+    fastModeEnabled: settings.fastModeEnabled === true,
+    providerBuiltinId: provider.builtinId,
+    modelServiceTier: model?.serviceTier
+  })
   return {
     type: requestType,
     apiKey: provider.apiKey,
@@ -577,7 +585,7 @@ function buildProviderConfigById(
       ? { enableSystemPromptCache: model.enableSystemPromptCache }
       : {}),
     cacheTtl: model?.cacheTtl ?? provider.cacheTtl,
-    ...(model?.serviceTier ? { serviceTier: model.serviceTier } : {}),
+    ...(serviceTier ? { serviceTier } : {}),
     ...(websocketUrl ? { websocketUrl } : {}),
     ...(websocketMode ? { websocketMode } : {}),
     maxTokens: getEffectiveMaxTokens(settings, model),
@@ -615,7 +623,14 @@ async function resolveCronProviderConfig(
       const modelId = modelOverride || resolveProviderDefaultModelId(provider)
       if (modelId) {
         const direct = buildProviderConfigById(state, settings, providerId, modelId)
-        if (direct && (direct.apiKey || direct.requiresApiKey === false)) {
+        const providerHealth = listProviderHealth().providers.find(
+          (item) => item.providerKey === providerId || item.providerKey === provider.builtinId
+        )
+        if (
+          direct &&
+          providerHealth?.status !== 'down' &&
+          (direct.apiKey || direct.requiresApiKey === false)
+        ) {
           return direct
         }
       }
@@ -624,6 +639,41 @@ async function resolveCronProviderConfig(
       )
     } else {
       console.warn(`[CronAgent] Provider ${providerId} not found in persisted state`)
+    }
+  }
+
+  const explicitHealth = providerId
+    ? listProviderHealth().providers.find((item) => item.providerKey === providerId)
+    : undefined
+  if (providerId && explicitHealth?.status === 'down') {
+    const fallbackCandidates = state.providers.flatMap((provider) =>
+      provider.models
+        .filter((model) => model.enabled !== false)
+        .map((model) => ({
+          providerId: provider.id,
+          modelId: model.id,
+          enabled: provider.enabled !== false
+        }))
+    )
+    const fallback = resolveProviderFallback({
+      preferredProviderId: providerId,
+      preferredModelId: modelOverride,
+      candidates: fallbackCandidates,
+      health: listProviderHealth().providers
+    })
+    if (fallback.selected) {
+      const selected = buildProviderConfigById(
+        state,
+        settings,
+        fallback.selected.providerId,
+        fallback.selected.modelId
+      )
+      if (selected && (selected.apiKey || selected.requiresApiKey === false)) {
+        console.warn(
+          `[CronAgent] using healthy provider fallback ${fallback.selected.providerId}/${fallback.selected.modelId}`
+        )
+        return selected
+      }
     }
   }
 

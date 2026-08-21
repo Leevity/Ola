@@ -57,3 +57,9 @@ export function isStructuredToolErrorText(text: string): boolean {
   const keys = Object.keys(parsed)
   return keys.length === 1 && typeof parsed.error === 'string'
 }
+
+export function formatToolErrorForDisplay(message: string, maxLength = 4_000): string {
+  const normalized = message.replace(/\r\n/g, '\n').trim()
+  if (normalized.length <= maxLength) return normalized
+  return `${normalized.slice(0, Math.max(0, maxLength - 1)).trimEnd()}…`
+}

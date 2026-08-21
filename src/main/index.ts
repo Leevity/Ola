@@ -70,6 +70,7 @@ import {
   togglePetWindow
 } from './ipc/pet-handlers'
 import { registerScreenshotHandlers } from './ipc/screenshot-handlers'
+import { registerDesktopFlowHandlers } from './ipc/desktop-flow-handlers'
 import { registerWebSearchHandlers } from './ipc/web-search-handlers'
 import { registerBrowserHandlers } from './ipc/browser-handlers'
 import { registerAiCodingHandlers } from './ipc/ai-coding-handlers'
@@ -81,6 +82,8 @@ import { registerMediaRuntimeHandlers } from './ipc/media-runtime-handlers'
 import { registerGitHandlers } from './ipc/git-handlers'
 import { registerMigrationHandlers } from './ipc/migration-handlers'
 import { registerSyncHandlers } from './ipc/sync-handlers'
+import { registerWikiHandlers } from './ipc/wiki-handlers'
+import { registerProviderHandlers } from './ipc/provider-handlers'
 import { registerSidecarHandlers, getSidecarManager } from './ipc/sidecar-manager'
 import { registerCodeGraphHandlers } from './ipc/codegraph-handlers'
 import { getNativeWorker, stopNativeWorker } from './lib/native-worker'
@@ -1361,10 +1364,14 @@ if (!gotSingleInstanceLock) {
 
 if (gotSingleInstanceLock) {
   const handleProtocolArguments = (commandLine: string[]): void => {
-    const rawCallback = commandLine.find((arg) => arg.includes('ola://auth/callback'))
-    const callbackUrl = rawCallback
-      ?.slice(rawCallback.indexOf('ola://auth/callback'))
-      .replace(/^['"]|['"]$/g, '')
+    console.log('[RemoteAuth] protocol arguments:', JSON.stringify(commandLine))
+    const rawCallback = commandLine.find((arg) => {
+      const normalized = arg.replace(/^['"]|['"]$/g, '')
+      return normalized.toLowerCase().includes('ola://auth/callback')
+    })
+    const rawValue = rawCallback?.replace(/^['"]|['"]$/g, '')
+    const callbackStart = rawValue?.toLowerCase().indexOf('ola://auth/callback') ?? -1
+    const callbackUrl = callbackStart >= 0 ? rawValue?.slice(callbackStart) : undefined
     if (callbackUrl) {
       console.log('[RemoteAuth] OAuth callback received')
       void handleRemoteOAuthCallback(callbackUrl).catch((error) => {
@@ -1399,7 +1406,10 @@ if (gotSingleInstanceLock) {
     } else {
       // In dev mode Electron itself is the protocol executable. Without the
       // app path, Windows treats ola://auth/callback as the Electron app path.
-      app.setAsDefaultProtocolClient('ola', process.execPath, [app.getAppPath()])
+      // Keep the callback after Electron's argument separator. Without it,
+      // Windows can launch the app but drop ola://... from process.argv in
+      // Electron-Vite development mode.
+      app.setAsDefaultProtocolClient('ola', process.execPath, [app.getAppPath(), '--'])
     }
     handleProtocolArguments(process.argv)
     recordStartupStep('app_when_ready', 'start')
@@ -1526,6 +1536,7 @@ if (gotSingleInstanceLock) {
     registerMcpHandlers(mcpManager)
     registerCronHandlers()
     registerScreenshotHandlers()
+    registerDesktopFlowHandlers()
     registerInputHandlers()
     await registerInputDraftHandlers()
     registerHooksHandlers()
@@ -1559,6 +1570,8 @@ if (gotSingleInstanceLock) {
     registerGitHandlers()
     registerMigrationHandlers()
     registerSyncHandlers()
+    registerWikiHandlers()
+    registerProviderHandlers()
 
     // Clipboard/image payloads can be large; renderer callers use MessagePack where possible.
     registerBinaryInvokeHandler<ClipboardWriteImageArgs>(

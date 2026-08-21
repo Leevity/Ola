@@ -5,6 +5,7 @@ import { agentBridge } from '../ipc/agent-bridge'
 import { agentStream } from '../ipc/agent-stream-receiver'
 import { useAgentStore } from '../../stores/agent-store'
 import { useChatStore } from '../../stores/chat-store'
+import { useRuntimeProjectionStore } from '../../stores/runtime-projection-store'
 import {
   addRuntimeMessage,
   appendRuntimeContentBlock,
@@ -34,6 +35,9 @@ function finishRun(runId: string, sessionId: string, status: 'completed' | null)
   attachedRuns.delete(runId)
   if (sessionSidecarRunIds.get(sessionId) === runId) sessionSidecarRunIds.delete(sessionId)
   useChatStore.getState().setStreamingMessageId(sessionId, null)
+  useRuntimeProjectionStore
+    .getState()
+    .finish(sessionId, status === 'completed' ? 'completed' : 'failed')
   useAgentStore.getState().setSessionStatus(sessionId, status)
 }
 
@@ -128,6 +132,7 @@ async function attachRun(run: {
     })
   }
   sessionSidecarRunIds.set(run.sessionId, run.runId)
+  useRuntimeProjectionStore.getState().begin(run.sessionId, run.runId, run.assistantMessageId)
   useChatStore.getState().setStreamingMessageId(run.sessionId, run.assistantMessageId)
   useAgentStore.getState().setSessionStatus(run.sessionId, 'running')
 

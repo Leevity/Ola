@@ -1,0 +1,22 @@
+[Unit]
+Description=Ola Mesh Linux Node
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ola-node
+Group=ola-node
+EnvironmentFile=/etc/ola-node/mesh.env
+ExecStart=/usr/local/bin/ola-node --api ${OLA_API_URL} --device-id ${OLA_DEVICE_ID} --state /var/lib/ola-node/identity.json --watch
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/ola-node
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

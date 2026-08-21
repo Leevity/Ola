@@ -24,10 +24,100 @@ internal static class DbSchemaMigrator
         CreateSshAndProjectTables(connection);
         CreateUsageTables(connection);
         CreateSyncTables(connection);
+        CreateCapabilityTables(connection);
         ApplyAdditiveMigrations(connection);
         BackfillUsageActivity(connection);
         var elapsedMs = (long)Math.Round(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
         WorkerLog.Info($"db schema initialize done elapsedMs={elapsedMs}");
+    }
+
+    private static void CreateCapabilityTables(SqliteConnection connection)
+    {
+        Execute(connection, """
+            CREATE TABLE IF NOT EXISTS wiki_documents (
+              project_root TEXT PRIMARY KEY,
+              document_json TEXT NOT NULL,
+              generated_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS wiki_nodes (
+              project_root TEXT NOT NULL,
+              node_path TEXT NOT NULL,
+              node_json TEXT NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (project_root, node_path)
+            );
+
+            CREATE TABLE IF NOT EXISTS wiki_file_snapshots (
+              project_root TEXT NOT NULL,
+              file_path TEXT NOT NULL,
+              content_hash TEXT,
+              size_bytes INTEGER NOT NULL DEFAULT 0,
+              modified_at INTEGER NOT NULL DEFAULT 0,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (project_root, file_path)
+            );
+
+            CREATE TABLE IF NOT EXISTS wiki_generation_runs (
+              id TEXT PRIMARY KEY,
+              project_root TEXT NOT NULL,
+              state TEXT NOT NULL,
+              error_message TEXT,
+              started_at INTEGER NOT NULL,
+              finished_at INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_wiki_generation_runs_project
+              ON wiki_generation_runs(project_root, started_at DESC);
+
+            CREATE TABLE IF NOT EXISTS desktop_flows (
+              id TEXT PRIMARY KEY,
+              name TEXT NOT NULL,
+              flow_json TEXT NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS desktop_flow_steps (
+              flow_id TEXT NOT NULL,
+              step_id TEXT NOT NULL,
+              sort_order INTEGER NOT NULL,
+              step_json TEXT NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (flow_id, step_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS desktop_flow_runs (
+              id TEXT PRIMARY KEY,
+              flow_id TEXT NOT NULL,
+              state TEXT NOT NULL,
+              error_message TEXT,
+              started_at INTEGER NOT NULL,
+              finished_at INTEGER
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_desktop_flows_updated
+              ON desktop_flows(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS provider_health (
+              provider_id TEXT PRIMARY KEY,
+              payload_json TEXT NOT NULL,
+              updated_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS provider_request_metrics (
+              id TEXT PRIMARY KEY,
+              provider_id TEXT NOT NULL,
+              status_code INTEGER,
+              latency_ms INTEGER,
+              success INTEGER NOT NULL DEFAULT 0,
+              created_at INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_provider_request_metrics_provider
+              ON provider_request_metrics(provider_id, created_at DESC);
+            """);
     }
 
     private static void CreateCoreTables(SqliteConnection connection)

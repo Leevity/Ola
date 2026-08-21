@@ -1302,6 +1302,7 @@ interface ChatStore {
   loadFromDb: () => Promise<void>
   loadRecentSessionMessages: (sessionId: string, force?: boolean, limit?: number) => Promise<void>
   loadOlderSessionMessages: (sessionId: string, limit?: number) => Promise<number>
+  loadNewerSessionMessages: (sessionId: string, limit?: number) => Promise<number>
   loadMessageWindowAround: (
     sessionId: string,
     anchor: { messageId?: string | null; sortOrder?: number | null },
@@ -3066,6 +3067,50 @@ export const useChatStore = create<ChatStore>()(
         return olderMessages.length
       } catch (err) {
         console.error('[ChatStore] Failed to load older session messages:', err)
+        return 0
+      }
+    },
+
+    loadNewerSessionMessages: async (sessionId, limit = RECENT_SESSION_MESSAGE_PAGE_SIZE) => {
+      const session = get().sessions.find((s) => s.id === sessionId)
+      if (!session) return 0
+      if (!session.messagesLoaded) {
+        await get().loadRecentSessionMessages(sessionId)
+      }
+
+      const latest = get().sessions.find((s) => s.id === sessionId)
+      if (!latest) return 0
+      const newerCount = Math.max(0, latest.messageCount - latest.loadedRangeEnd)
+      if (newerCount === 0) return 0
+
+      try {
+        const nextCount = Math.min(limit, newerCount)
+        const msgRows = await dbListMessagesPage({
+          sessionId,
+          limit: nextCount,
+          offset: latest.loadedRangeEnd
+        })
+        const newerMessages = msgRows.map(rowToMessage)
+        if (newerMessages.length === 0) return 0
+
+        set((state) => {
+          const target = state.sessions.find((candidate) => candidate.id === sessionId)
+          if (!target) return
+          const existingIds = new Set(target.messages.map((message) => message.id))
+          const appended = newerMessages.filter((message) => !existingIds.has(message.id))
+          if (appended.length === 0) return
+          target.messages = [...target.messages, ...appended]
+          target.messagesLoaded = true
+          target.loadedRangeEnd = Math.min(
+            target.messageCount,
+            target.loadedRangeEnd + appended.length
+          )
+          target.lastKnownMessageCount = target.messageCount
+          trimSessionMessageWindow(target, getMessageWindowPreserveMode(target, 'tail'))
+        })
+        return newerMessages.length
+      } catch (err) {
+        console.error('[ChatStore] Failed to load newer session messages:', err)
         return 0
       }
     },

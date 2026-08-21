@@ -1,4 +1,12 @@
 ﻿{
+  "wiki": {
+    "title": "项目 Wiki",
+    "subtitle": "构建增量本地项目地图"
+  },
+  "desktopAutomation": {
+    "title": "桌面自动化",
+    "subtitle": "录制并重放经过审批的桌面流程"
+  },
   "hooks": {
     "title": "自动化 Hook",
     "subtitle": "审查、信任并检查本地生命周期脚本",
@@ -68,6 +76,7 @@
       "foundation": "基础",
       "system": "系统",
       "ai": "AI 能力",
+      "capabilities": "Ola 能力",
       "extensions": "扩展与集成",
       "about": "关于"
     }

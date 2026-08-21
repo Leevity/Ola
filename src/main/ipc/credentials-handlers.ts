@@ -47,6 +47,7 @@ import {
   findSiteProfileById,
   SHARED_BUILTIN_SITE_TEMPLATES
 } from '../../shared/site-profiles-shared'
+import { listCredentialAudit, recordCredentialAudit } from '../credentials/credential-audit'
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -143,11 +144,25 @@ export function registerCredentialsHandlers(): void {
           builtinTemplateId,
           notes
         })
+        recordCredentialAudit({
+          action: 'store',
+          credentialId: ref.id,
+          domain: ref.domain,
+          actor: 'renderer',
+          success: true
+        })
         return {
           success: true,
           ref
         }
       } catch (error) {
+        recordCredentialAudit({
+          action: 'store',
+          domain: typeof args?.domain === 'string' ? args.domain : undefined,
+          actor: 'renderer',
+          success: false,
+          error: getErrorMessage(error)
+        })
         return { success: false, error: getErrorMessage(error) }
       }
     }
@@ -169,6 +184,13 @@ export function registerCredentialsHandlers(): void {
     async (args) => {
       if (!args?.id) return { success: false, error: 'id is required' }
       const ok = deleteCredential(args.id)
+      recordCredentialAudit({
+        action: 'delete',
+        credentialId: args.id,
+        actor: 'renderer',
+        success: ok,
+        error: ok ? undefined : 'not found'
+      })
       return ok ? { success: true } : { success: false, error: 'not found' }
     }
   )
@@ -243,6 +265,13 @@ export function registerCredentialsHandlers(): void {
           password: args.password,
           notes: args.notes
         })
+        recordCredentialAudit({
+          action: 'update',
+          credentialId: args.id,
+          actor: 'renderer',
+          success: Boolean(updated),
+          error: updated ? undefined : 'credential not found'
+        })
         if (!updated) return { error: 'credential not found' }
         return { ref: updated }
       } catch (error) {
@@ -282,7 +311,17 @@ export function registerCredentialsHandlers(): void {
 
         const wc = webContents.fromId(args.webContentsId)
         const password = getPlaintextPassword(args.credentialId)
-        if (!wc || !password) return { status: 'no_password' }
+        if (!wc || !password) {
+          recordCredentialAudit({
+            action: 'inject',
+            credentialId: args.credentialId,
+            domain: credentialRef.domain,
+            actor: 'renderer',
+            success: false,
+            error: 'password unavailable'
+          })
+          return { status: 'no_password' }
+        }
         touchCredential(args.credentialId)
         // Recheck the full URL within the guest so a navigation between the
         // Main-process authorization check and script execution cannot receive a secret.
@@ -304,12 +343,33 @@ export function registerCredentialsHandlers(): void {
         if (result === 'navigation_changed') {
           return { status: 'error', error: 'browser navigated before credential injection' }
         }
+        recordCredentialAudit({
+          action: 'inject',
+          credentialId: args.credentialId,
+          domain: credentialRef.domain,
+          actor: 'renderer',
+          success: true
+        })
         return { status: 'filled' }
       } catch (error) {
+        recordCredentialAudit({
+          action: 'inject',
+          credentialId: args?.credentialId,
+          actor: 'renderer',
+          success: false,
+          error: getErrorMessage(error)
+        })
         return { status: 'error', error: getErrorMessage(error) }
       }
     }
   )
+
+  registerTrustedCredentialsMessagePackHandler<
+    { limit?: number } | undefined,
+    { entries: ReturnType<typeof listCredentialAudit> }
+  >('credentials:audit:list', async (args) => ({
+    entries: listCredentialAudit(args?.limit)
+  }))
 }
 
 // Helper used by other modules (e.g. a future LoginOrchestrator) to inject

@@ -16,6 +16,12 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
+import {
+  classifyProviderFailure,
+  recordProviderRequestFailed,
+  recordProviderRequestStarted,
+  recordProviderRequestSucceeded
+} from '../provider/provider-health-registry'
 
 const MAX_RESPONSE_BODY_CHARS = 10_000_000
 
@@ -27,7 +33,7 @@ const RETRY_MAX_DELAY_MS = 30_000
 const RETRY_MAX_RETRY_AFTER_MS = 60_000
 
 function isRetryableStatus(status: number): boolean {
-  return status === 429 || status >= 500
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500
 }
 
 function parseRetryAfterMs(value: string | string[] | undefined): number | undefined {
@@ -52,6 +58,20 @@ function computeBackoffMs(attempt: number, retryAfterMs: number | undefined): nu
   // +/-25% jitter
   const jitter = (Math.random() * 0.5 - 0.25) * exp
   return Math.max(100, Math.floor(exp + jitter))
+}
+
+function sanitizeUrlForLog(value: string): string {
+  try {
+    const parsed = new URL(value)
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (/^(?:api[_-]?key|authorization|access[_-]?token|token|secret|password)$/i.test(key)) {
+        parsed.searchParams.set(key, '[redacted]')
+      }
+    }
+    return parsed.toString()
+  } catch {
+    return '[invalid-url]'
+  }
 }
 
 function isTrustedApiIpcSender(event: IpcMainInvokeEvent): boolean {
@@ -424,7 +444,9 @@ async function handleApiRequest(
   }
 
   try {
-    console.log(`[API Proxy] request ${method} ${url}`)
+    console.log(`[API Proxy] request ${method} ${sanitizeUrlForLog(url)}`)
+    const requestStartedAt = Date.now()
+    recordProviderRequestStarted(providerId, providerBuiltinId)
     let result: AttemptOutcome = {}
     for (let attempt = 0; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
       result = useSystemProxy
@@ -437,7 +459,12 @@ async function handleApiRequest(
           })
         : await runDirectAttempt()
       const status = result.statusCode ?? 0
-      if (status > 0 && isRetryableStatus(status) && attempt < MAX_RETRY_ATTEMPTS) {
+      const retryableNetworkFailure =
+        status === 0 && classifyProviderFailure(result).retryable && Boolean(result.error)
+      if (
+        ((status > 0 && isRetryableStatus(status)) || retryableNetworkFailure) &&
+        attempt < MAX_RETRY_ATTEMPTS
+      ) {
         const retryAfterMs = parseRetryAfterMs(result.headers?.['retry-after'])
         const delay = computeBackoffMs(attempt, retryAfterMs)
         console.warn(
@@ -462,10 +489,20 @@ async function handleApiRequest(
       }
     }
 
+    if (result.statusCode && result.statusCode >= 200 && result.statusCode < 400) {
+      recordProviderRequestSucceeded(providerId, providerBuiltinId, Date.now() - requestStartedAt)
+    } else {
+      recordProviderRequestFailed(providerId, providerBuiltinId, classifyProviderFailure(result))
+    }
     return { statusCode: result.statusCode, body: result.body, error: result.error }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     console.error(`[API Proxy] request fatal error: ${errMsg}`)
+    recordProviderRequestFailed(
+      providerId,
+      providerBuiltinId,
+      classifyProviderFailure({ error: errMsg })
+    )
     return { statusCode: 0, error: errMsg }
   }
 }

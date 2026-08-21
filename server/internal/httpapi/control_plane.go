@@ -69,6 +69,12 @@ type controlPlane struct {
 	models       map[string][]modelConfigRecord
 	statePath    string
 	persistence  controlPlanePersistence
+	// MeshNodes is exported so it is included in the existing control-plane JSON
+	// snapshot. Device credentials never appear here; only public Node metadata
+	// and capability manifests are persisted. MeshEvents intentionally stays
+	// process-local so task payloads are never written to the state snapshot.
+	MeshNodes  map[string]meshNodeRecord    `json:"meshNodes"`
+	MeshEvents map[string][]meshEventRecord `json:"-"`
 }
 
 func (p *controlPlane) providerFor(accountID, teamID string) (modelConfigRecord, bool) {
@@ -106,7 +112,7 @@ type controlPlanePersistence interface {
 }
 
 func newControlPlane(source any) *controlPlane {
-	plane := &controlPlane{teams: map[string]teamRecord{}, members: map[string][]teamMemberRecord{}, applications: map[string]teamApplicationRecord{}, models: map[string][]modelConfigRecord{}, statePath: os.Getenv("OLA_CONTROL_PLANE_STATE_PATH")}
+	plane := &controlPlane{teams: map[string]teamRecord{}, members: map[string][]teamMemberRecord{}, applications: map[string]teamApplicationRecord{}, models: map[string][]modelConfigRecord{}, MeshNodes: map[string]meshNodeRecord{}, MeshEvents: map[string][]meshEventRecord{}, statePath: os.Getenv("OLA_CONTROL_PLANE_STATE_PATH")}
 	plane.persistence, _ = source.(controlPlanePersistence)
 	if plane.persistence != nil {
 		if bytes, err := plane.persistence.LoadControlPlaneState(); err == nil {
@@ -116,6 +122,12 @@ func newControlPlane(source any) *controlPlane {
 		if bytes, err := os.ReadFile(plane.statePath); err == nil {
 			_ = json.Unmarshal(bytes, plane)
 		}
+	}
+	if plane.MeshNodes == nil {
+		plane.MeshNodes = map[string]meshNodeRecord{}
+	}
+	if plane.MeshEvents == nil {
+		plane.MeshEvents = map[string][]meshEventRecord{}
 	}
 	return plane
 }

@@ -309,7 +309,7 @@ export function scheduleJob(record: CronJobRecord): boolean {
       () => {
         void onJobFired(record)
       },
-      { scheduled: true, timezone: record.schedule_tz || 'UTC' }
+      { timezone: record.schedule_tz || 'UTC' }
     )
     scheduledHandles.set(record.id, { stop: () => task.stop() })
     return true

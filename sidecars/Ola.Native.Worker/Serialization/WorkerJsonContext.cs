@@ -211,4 +211,6 @@
 [JsonSerializable(typeof(DbSyncMutationResult))]
 [JsonSerializable(typeof(QqWakeupEligibilityResult))]
 [JsonSerializable(typeof(QqWakeupMutationResult))]
+[JsonSerializable(typeof(WikiDocumentRow))]
+[JsonSerializable(typeof(CapabilityMutationResult))]
 internal sealed partial class WorkerJsonContext : JsonSerializerContext;

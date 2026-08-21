@@ -1,8 +1,9 @@
 import { app, safeStorage, shell } from 'electron'
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { join } from 'path'
-import { createHash, randomBytes, randomUUID } from 'crypto'
+import { createHash, createPrivateKey, randomBytes, randomUUID, sign } from 'crypto'
 import { setRemoteControlAllowed } from './authorization-state'
+import { desktopMeshCapabilities, desktopMeshPlatform, loadDesktopMeshIdentity } from './mesh-node'
 
 type RemoteAuthState = {
   apiBaseUrl: string
@@ -22,6 +23,12 @@ export type RemoteAccountOperation =
   | 'device-list'
   | 'session-list'
   | 'device-heartbeat'
+  | 'mesh-node-register'
+  | 'mesh-node-list'
+  | 'mesh-node-heartbeat'
+  | 'mesh-capability-ticket'
+  | 'mesh-event-publish'
+  | 'mesh-event-list'
   | 'model-config'
   | 'device-signaling-token'
   | 'pairing-create'
@@ -45,6 +52,31 @@ let pendingOAuthState: {
 
 function vaultPath(): string {
   return join(app.getPath('userData'), 'remote-auth.bin')
+}
+
+function pendingOAuthPath(): string {
+  return join(app.getPath('userData'), 'remote-oauth-pending.bin')
+}
+
+async function loadPendingOAuthState(): Promise<typeof pendingOAuthState> {
+  if (pendingOAuthState) return pendingOAuthState
+  if (!safeStorage.isEncryptionAvailable()) return null
+  try {
+    const encrypted = await readFile(pendingOAuthPath())
+    pendingOAuthState = JSON.parse(safeStorage.decryptString(encrypted))
+    return pendingOAuthState
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
+    return null
+  }
+}
+
+async function savePendingOAuthState(state: typeof pendingOAuthState): Promise<void> {
+  pendingOAuthState = state
+  if (!safeStorage.isEncryptionAvailable()) return
+  await mkdir(app.getPath('userData'), { recursive: true })
+  const encrypted = safeStorage.encryptString(JSON.stringify(state))
+  await writeFile(pendingOAuthPath(), encrypted, { mode: 0o600 })
 }
 
 function validateBaseUrl(value: string): string {
@@ -145,6 +177,12 @@ const REMOTE_ACCOUNT_OPERATIONS = new Set<RemoteAccountOperation>([
   'device-list',
   'session-list',
   'device-heartbeat',
+  'mesh-node-register',
+  'mesh-node-list',
+  'mesh-node-heartbeat',
+  'mesh-capability-ticket',
+  'mesh-event-publish',
+  'mesh-event-list',
   'model-config',
   'device-signaling-token',
   'pairing-create',
@@ -190,6 +228,21 @@ function validateAccountRequest(request: RemoteAccountRequest): Record<string, u
     'device-list': [],
     'session-list': [],
     'device-heartbeat': ['deviceId'],
+    'mesh-node-register': ['deviceId'],
+    'mesh-node-list': [],
+    'mesh-node-heartbeat': ['nodeId'],
+    'mesh-capability-ticket': ['subjectNodeId', 'targetNodeId', 'sessionId', 'capabilities'],
+    'mesh-event-publish': [
+      'ticket',
+      'eventId',
+      'subjectNodeId',
+      'targetNodeId',
+      'sessionId',
+      'sequence',
+      'type',
+      'payload'
+    ],
+    'mesh-event-list': ['targetNodeId', 'after'],
     'model-config': [],
     'device-signaling-token': ['deviceId'],
     'pairing-create': ['deviceId'],
@@ -211,7 +264,7 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     const state = randomUUID()
     const verifier = randomBytes(32).toString('base64url')
     const challenge = createHash('sha256').update(verifier).digest('base64url')
-    pendingOAuthState = { apiBaseUrl, state, verifier, createdAt: Date.now() }
+    await savePendingOAuthState({ apiBaseUrl, state, verifier, createdAt: Date.now() })
     const authorizeUrl = new URL(`${oauthWebBaseUrl(apiBaseUrl)}/oauth/authorize`)
     authorizeUrl.searchParams.set('client_id', 'ola-desktop')
     authorizeUrl.searchParams.set('redirect_uri', 'ola://auth/callback')
@@ -227,25 +280,26 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     const callback = new URL(callbackUrl)
     const code = callback.searchParams.get('code')
     const state = callback.searchParams.get('state')
-    if (!code || !state || !pendingOAuthState || pendingOAuthState.state !== state) {
+    const pending = await loadPendingOAuthState()
+    if (!code || !state || !pending || pending.state !== state) {
       throw new Error('Invalid or expired Ola authorization callback')
     }
-    if (Date.now() - pendingOAuthState.createdAt > 5 * 60 * 1000) {
-      pendingOAuthState = null
+    if (Date.now() - pending.createdAt > 5 * 60 * 1000) {
+      await savePendingOAuthState(null)
       throw new Error('Ola authorization callback expired')
     }
     const result = await apiRequest<{ access_token: string; account: Record<string, unknown> }>(
-      pendingOAuthState.apiBaseUrl,
+      pending.apiBaseUrl,
       '/api/oauth/token',
       {
         grant_type: 'authorization_code',
         client_id: 'ola-desktop',
         code,
         redirect_uri: 'ola://auth/callback',
-        code_verifier: pendingOAuthState.verifier
+        code_verifier: pending.verifier
       }
     )
-    pendingOAuthState = null
+    await savePendingOAuthState(null)
     await saveState({
       apiBaseUrl,
       token: result.access_token,
@@ -309,6 +363,109 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     state.device = result.device
     await saveState(state)
     return result
+  }
+  if (request.operation === 'mesh-node-register') {
+    const deviceID = requiredString(payload, 'deviceId')
+    if (!state.device || state.device.id !== deviceID)
+      throw new Error('Device registration is required')
+    const identity = await loadDesktopMeshIdentity()
+    const registration = {
+      deviceId: deviceID,
+      platform: desktopMeshPlatform(),
+      runtime: 'ola-desktop',
+      runtimeVersion: app.getVersion(),
+      publicKey: identity.publicKey,
+      capabilities: desktopMeshCapabilities()
+    }
+    const digest = createHash('sha256').update(JSON.stringify(registration)).digest()
+    const proof = sign(
+      null,
+      digest,
+      createPrivateKey({
+        key: Buffer.from(identity.privateKey, 'base64url'),
+        format: 'der',
+        type: 'pkcs8'
+      })
+    ).toString('base64url')
+    return apiRequest(
+      apiBaseUrl,
+      '/api/mesh/v1/nodes/register',
+      { ...registration, proof },
+      state.token
+    )
+  }
+  if (request.operation === 'mesh-node-list') {
+    return apiRequest(apiBaseUrl, '/api/mesh/v1/nodes', undefined, state.token)
+  }
+  if (request.operation === 'mesh-node-heartbeat') {
+    const nodeID = requiredString(payload, 'nodeId')
+    return apiRequest(apiBaseUrl, `/api/mesh/v1/nodes/${nodeID}/heartbeat`, {}, state.token)
+  }
+  if (request.operation === 'mesh-capability-ticket') {
+    const subjectNodeID = requiredString(payload, 'subjectNodeId')
+    const targetNodeID = requiredString(payload, 'targetNodeId')
+    const sessionID = requiredString(payload, 'sessionId')
+    const capabilities = payload.capabilities
+    if (
+      !Array.isArray(capabilities) ||
+      capabilities.length === 0 ||
+      capabilities.length > 16 ||
+      capabilities.some((value) => typeof value !== 'string' || !value.trim())
+    ) {
+      throw new Error('capabilities are required')
+    }
+    return apiRequest(
+      apiBaseUrl,
+      '/api/mesh/v1/capability-tickets',
+      {
+        subjectNodeId: subjectNodeID,
+        targetNodeId: targetNodeID,
+        sessionId: sessionID,
+        capabilities
+      },
+      state.token
+    )
+  }
+  if (request.operation === 'mesh-event-publish') {
+    const ticket = requiredString(payload, 'ticket')
+    const eventID = requiredString(payload, 'eventId')
+    const subjectNodeID = requiredString(payload, 'subjectNodeId')
+    const targetNodeID = requiredString(payload, 'targetNodeId')
+    const sessionID = requiredString(payload, 'sessionId')
+    const type = requiredString(payload, 'type')
+    const sequence = payload.sequence
+    if (!Number.isInteger(sequence) || Number(sequence) <= 0 || Number(sequence) > 1_000_000) {
+      throw new Error('sequence is required')
+    }
+    if (!payload.payload || typeof payload.payload !== 'object' || Array.isArray(payload.payload)) {
+      throw new Error('event payload must be an object')
+    }
+    return apiRequest(
+      apiBaseUrl,
+      '/api/mesh/v1/events',
+      {
+        ticket,
+        eventId: eventID,
+        subjectNodeId: subjectNodeID,
+        targetNodeId: targetNodeID,
+        sessionId: sessionID,
+        sequence,
+        type,
+        payload: payload.payload
+      },
+      state.token
+    )
+  }
+  if (request.operation === 'mesh-event-list') {
+    const targetNodeID = requiredString(payload, 'targetNodeId')
+    const after = payload.after == null ? 0 : payload.after
+    if (!Number.isInteger(after) || Number(after) < 0) throw new Error('invalid event cursor')
+    return apiRequest(
+      apiBaseUrl,
+      `/api/mesh/v1/events?targetNodeId=${encodeURIComponent(targetNodeID)}&after=${Number(after)}`,
+      undefined,
+      state.token
+    )
   }
   if (request.operation === 'device-list')
     return apiRequest(apiBaseUrl, '/api/devices', undefined, state.token)

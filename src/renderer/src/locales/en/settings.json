@@ -1,4 +1,12 @@
 ﻿{
+  "wiki": {
+    "title": "Project Wiki",
+    "subtitle": "Build an incremental local project map"
+  },
+  "desktopAutomation": {
+    "title": "Desktop Automation",
+    "subtitle": "Record and replay approved desktop flows"
+  },
   "hooks": {
     "title": "Automation hooks",
     "subtitle": "Review, trust, and inspect local lifecycle scripts",
@@ -68,6 +76,7 @@
       "foundation": "Foundation",
       "system": "System",
       "ai": "AI Capabilities",
+      "capabilities": "Ola Capabilities",
       "extensions": "Extensions & Integrations",
       "about": "About"
     }
