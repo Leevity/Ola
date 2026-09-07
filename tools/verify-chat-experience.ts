@@ -105,6 +105,22 @@ const subAgentCard = await readFile(
   path.join(root, 'src/renderer/src/components/chat/SubAgentCard.tsx'),
   'utf8'
 )
+const assistantMessage = await readFile(
+  path.join(root, 'src/renderer/src/components/chat/AssistantMessage.tsx'),
+  'utf8'
+)
+const executionTraceCard = await readFile(
+  path.join(root, 'src/renderer/src/components/chat/ExecutionTraceCard.tsx'),
+  'utf8'
+)
+const finalOutcomeCard = await readFile(
+  path.join(root, 'src/renderer/src/components/chat/FinalOutcomeCard.tsx'),
+  'utf8'
+)
+const presentationRegistry = await readFile(
+  path.join(root, 'src/renderer/src/components/chat/tool-presentation-registry.ts'),
+  'utf8'
+)
 assert(messageList.includes('defaultRangeExtractor'), 'initial tail range optimization is missing')
 assert(
   messageList.includes('DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL'),
@@ -173,6 +189,23 @@ assert(subAgentCard.includes('{formatElapsed(elapsed)}'), 'sub-agent elapsed dur
 assert(
   subAgentCard.includes('data-testid="sub-agent-cancel-button"'),
   'sub-agent cancellation control is missing'
+)
+assert(
+  assistantMessage.includes('<ExecutionTraceCard') &&
+    assistantMessage.includes('<FinalOutcomeCard outcome={runOutcome.outcome}'),
+  'result-first two-layer outcome rendering is missing'
+)
+assert(
+  executionTraceCard.includes('aria-expanded={expanded}') &&
+    executionTraceCard.includes('useState(false)'),
+  'completed execution trace must be keyboard-accessible and collapsed by default'
+)
+assert(finalOutcomeCard.includes('React.useId()'), 'final outcome heading ids must be unique')
+assert(
+  presentationRegistry.includes('class ToolPresentationRegistry') &&
+    presentationRegistry.includes("adapter('project-intelligence'") &&
+    presentationRegistry.includes("adapter('mcp-extension'"),
+  'tool presentation registry adapters are incomplete'
 )
 
 console.log('chat-experience verification passed')

@@ -61,13 +61,13 @@ export function PermissionPanel(): React.JSX.Element {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-6">
+    <div className="flex w-full flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t('permission.title')}</h1>
+        <h2 className="text-lg font-semibold">{t('permission.title')}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t('permission.subtitle')}</p>
       </div>
 
-      <section className="rounded-2xl border bg-card p-4 shadow-sm">
+      <section className="rounded-xl border border-border/60 bg-muted/10 p-4">
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h2 className="font-medium">{t('permission.master.title')}</h2>
@@ -82,12 +82,12 @@ export function PermissionPanel(): React.JSX.Element {
         </div>
       </section>
 
-      <div className="rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+      <div className="rounded-xl border border-border/60 bg-muted/10 p-4 text-sm text-muted-foreground">
         <p>{t('permission.precedence.description')}</p>
         <p className="mt-2">{t('permission.wildcardHelp')}</p>
       </div>
 
-      <section className="rounded-2xl border bg-card p-4 shadow-sm">
+      <section className="rounded-xl border border-border/60 bg-muted/10 p-4">
         <div className="flex items-center gap-2">
           <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
           <h2 className="font-medium">{t('permission.tools.title')}</h2>
@@ -189,7 +189,7 @@ function RuleListSection(props: {
   }
 
   return (
-    <section className="rounded-2xl border bg-card p-4 shadow-sm">
+    <section className="rounded-xl border border-border/60 bg-muted/10 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {props.icon}

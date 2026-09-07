@@ -1,6 +1,11 @@
 ﻿{
   "sidebar": {
     "ola": "Ola",
+    "taskProfileSwitcher": "Switch work mode",
+    "taskProfile": {
+      "work": { "title": "Work", "desc": "Daily work, research and office tasks" },
+      "code": { "title": "Code", "desc": "Projects, code, terminal and Git" }
+    },
     "conversations": "Conversations",
     "newConversation": "New conversation (Ctrl+N)",
     "exportAll": "Export all conversations",
@@ -106,8 +111,8 @@
     "sshProject": "SSH project",
     "localLabel": "Local",
     "searchLabel": "Search",
-    "pluginsLabel": "Plugins",
-    "automationLabel": "Automation",
+    "pluginsLabel": "Capabilities",
+    "automationLabel": "Tasks & automation",
     "chats": "Chats",
     "noChats": "No chats yet",
     "smartRename": "Smart Rename",
@@ -418,8 +423,7 @@
     "switchMode": "Switch Mode",
     "switchToChat": "Switch to Chat Mode",
     "switchToClarify": "Switch to Clarify Mode",
-    "switchToCowork": "Switch to Cowork Mode",
-    "switchToCode": "Switch to Code Mode",
+    "switchToExecute": "Switch to Execute Mode",
     "switchToAcp": "Switch to ACP Mode",
     "currentSession": "Current Session",
     "exportCurrentChat": "Export Current Chat",
@@ -697,20 +701,12 @@
           "Want the agent to challenge assumptions before it starts making changes"
         ]
       },
-      "cowork": {
-        "summary": "The agent works as a collaborative partner: it explains its approach, follows a Plan-Act-Observe loop, and handles both coding and non-coding tasks like research, DevOps, or project setup. The right panel opens automatically for step tracking.",
+      "execute": {
+        "summary": "The agent performs hands-on work across code, research, documents, DevOps, and connected applications. Current actions stay visible; completed actions collapse into an auditable call chain.",
         "solves": [
-          "Multi-step workflows mixing research, planning, file changes, and terminal commands — the agent explains each step",
-          "Tasks beyond pure coding: project setup, documentation, DevOps, analysis, or anything requiring coordination",
-          "Situations where you want visibility into the agent's thought process and intermediate results"
-        ]
-      },
-      "code": {
-        "summary": "The agent acts as a focused pair programmer. It reads before editing, matches your codebase style, makes surgical changes, and keeps explanations minimal — letting the code speak for itself.",
-        "solves": [
-          "Precise implementation: writing features, fixing bugs, refactoring, or completing modules with engineering discipline",
-          "When you want clean code output with minimal narration — terse confirmation instead of verbose walk-throughs",
-          "Changes that demand strict attention to existing conventions, types, imports, and API contracts"
+          "Multi-step workflows mixing research, file changes, terminal commands, and external tools",
+          "Precise implementation, debugging, project setup, documentation, DevOps, and analysis",
+          "Work that needs explicit approval, visible progress, verification, and a structured final result"
         ]
       },
       "acp": {
@@ -724,6 +720,11 @@
     }
   },
   "navRail": {
+    "primaryNavigation": "Primary navigation",
+    "newTask": "New task",
+    "search": "Search",
+    "projects": "Projects",
+    "capabilities": "Capabilities",
     "conversations": "Conversations",
     "tasks": "Tasks",
     "resources": "Resources",
@@ -1304,6 +1305,7 @@
     "openSshWindow": "Pop out SSH",
     "enterFullscreen": "Enter fullscreen",
     "exitFullscreen": "Exit fullscreen",
+    "closeWorkspace": "Close remote control window",
     "newSession": "New remote session",
     "addDevice": "Add device",
     "searchDevices": "Search name, address, or user",

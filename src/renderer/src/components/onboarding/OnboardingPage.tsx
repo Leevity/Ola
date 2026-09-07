@@ -64,12 +64,13 @@ import {
 } from '@renderer/lib/agent/memory-files'
 import { cn } from '@renderer/lib/utils'
 import { useSettingsStore, type OnboardingLanguage } from '@renderer/stores/settings-store'
+import type { TaskProfile } from '@renderer/lib/task-profile'
 import {
   DEFAULT_BUILTIN_SOUL_TEMPLATE_ID,
   type BuiltinSoulTemplateWithContent
 } from '../../../../shared/builtin-souls'
 
-type OnboardingStep = 'intro' | 'language' | 'nickname' | 'interests' | 'soul'
+type OnboardingStep = 'intro' | 'profile' | 'language' | 'nickname' | 'interests' | 'soul'
 
 interface InterestOption {
   id: string
@@ -77,7 +78,7 @@ interface InterestOption {
   soulId?: string
 }
 
-const STEPS: OnboardingStep[] = ['intro', 'language', 'nickname', 'interests', 'soul']
+const STEPS: OnboardingStep[] = ['intro', 'profile', 'language', 'nickname', 'interests', 'soul']
 const PROFILE_BLOCK_START = '<!-- OLA_ONBOARDING_PROFILE_START -->'
 const PROFILE_BLOCK_END = '<!-- OLA_ONBOARDING_PROFILE_END -->'
 
@@ -245,6 +246,7 @@ export function OnboardingPage(): React.JSX.Element {
   const persistedName = useSettingsStore((s) => s.userName)
   const persistedInterests = useSettingsStore((s) => s.onboardingInterests)
   const persistedSoulId = useSettingsStore((s) => s.defaultSoulTemplateId)
+  const persistedTaskProfile = useSettingsStore((s) => s.defaultTaskProfile)
   const [step, setStep] = useState<OnboardingStep>('intro')
   const [language, setLanguage] = useState<OnboardingLanguage>(
     persistedLanguage ?? detectSystemLanguage()
@@ -254,6 +256,7 @@ export function OnboardingPage(): React.JSX.Element {
   const [selectedSoulId, setSelectedSoulId] = useState(
     persistedSoulId || DEFAULT_BUILTIN_SOUL_TEMPLATE_ID
   )
+  const [taskProfile, setTaskProfile] = useState<TaskProfile>(persistedTaskProfile)
   const [soulTemplates, setSoulTemplates] = useState<BuiltinSoulTemplateWithContent[]>([])
   const [loadingSouls, setLoadingSouls] = useState(false)
   const [finishing, setFinishing] = useState(false)
@@ -392,6 +395,7 @@ export function OnboardingPage(): React.JSX.Element {
         language,
         userName: sanitizeNickname(nickname),
         onboardingInterests: interestIds,
+        defaultTaskProfile: taskProfile,
         defaultSoulTemplateId: selectedSoul.id,
         onboardingCompleted: true,
         onboardingCompletedAt: Date.now()
@@ -403,7 +407,7 @@ export function OnboardingPage(): React.JSX.Element {
     } finally {
       setFinishing(false)
     }
-  }, [interestIds, language, nickname, selectedSoul, t, updateSettings, writeUserProfile])
+  }, [interestIds, language, nickname, selectedSoul, t, taskProfile, updateSettings, writeUserProfile])
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -458,6 +462,52 @@ export function OnboardingPage(): React.JSX.Element {
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              ) : null}
+
+              {step === 'profile' ? (
+                <div className="max-w-2xl space-y-7">
+                  <OnboardingMark />
+                  <div className="space-y-3">
+                    <h1 className="text-3xl font-semibold">{t('onboarding.profile.title')}</h1>
+                    <p className="text-sm leading-6 text-muted-foreground">
+                      {t('onboarding.profile.subtitle')}
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {(['work', 'code'] as const).map((value) => {
+                      const selected = taskProfile === value
+                      const Icon = value === 'work' ? Briefcase : Code2
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={selected}
+                          onClick={() => setTaskProfile(value)}
+                          className={cn(
+                            'rounded-xl border p-5 text-left transition-colors',
+                            selected
+                              ? 'border-foreground bg-foreground text-background'
+                              : 'bg-background hover:bg-muted'
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <Icon className="size-5" />
+                            <span className="text-base font-semibold">
+                              {t(`onboarding.profile.${value}.title`)}
+                            </span>
+                            {selected ? <Check className="ml-auto size-4" /> : null}
+                          </div>
+                          <p className={cn('mt-3 text-sm leading-6', selected ? 'text-background/75' : 'text-muted-foreground')}>
+                            {t(`onboarding.profile.${value}.desc`)}
+                          </p>
+                          <p className={cn('mt-4 text-xs leading-5', selected ? 'text-background/65' : 'text-muted-foreground')}>
+                            {t(`onboarding.profile.${value}.examples`)}
+                          </p>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               ) : null}

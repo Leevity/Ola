@@ -1,11 +1,20 @@
 ﻿{
+  "workspaceHome": {
+    "projectNavigation": "Project navigation",
+    "overview": "Overview",
+    "wiki": "Wiki",
+    "codegraph": "CodeGraph & index",
+    "wikiTitle": "Project Wiki",
+    "wikiDescription": "Generate and export a human-readable guide from the active project.",
+    "codegraphTitle": "CodeGraph and index status",
+    "codegraphDescription": "Inspect indexed files, symbols, relations, health blockers, and advanced diagnostics."
+  },
   "input": {
     "sendFailedDraftRetained": "Send failed. Your draft was kept.",
     "draftRestored": "Your unsent draft was restored.",
     "placeholder": "Type a message...",
     "placeholderClarify": "Describe your idea and I will keep probing until the requirements are clear...",
-    "placeholderCowork": "Ask the assistant to help with your project...",
-    "placeholderCode": "Describe what you want to build, like fixing bugs, writing scripts, or using /commit to commit the repository...",
+    "placeholderExecute": "Describe what you want Ola to build, research, operate, or verify...",
     "placeholderAcp": "Describe the goal, context, constraints, and acceptance criteria. I will design and delegate first instead of coding directly...",
     "placeholderPlanReview": "Enter revision feedback for this plan, or click the card above to implement it...",
     "placeholderPendingGoal": "Describe the goal to pursue...",
@@ -147,8 +156,7 @@
     "clearConfirmDescWithQueue": "This will remove all messages in this conversation and clear {{count}} queued messages in the current session. This action cannot be undone.",
     "recommendationDefaultChat": "Predict the most natural next thing I would type in this chat.",
     "recommendationDefaultClarify": "Predict the next sharp question I would ask to fully pin down the request.",
-    "recommendationDefaultCowork": "Predict the next collaborative action I would naturally type.",
-    "recommendationDefaultCode": "Predict the next concrete code change request I would naturally type.",
+    "recommendationDefaultExecute": "Predict the next concrete execution request I would naturally type.",
     "recommendationDefaultAcp": "Predict the next ACP scoping or design question I would naturally type.",
     "recommendationInitWorkspace": "No AGENTS.md found in the current working folder. Predict the natural next step, likely /init to initialize the project context.",
     "startAcp": "Start an ACP session",
@@ -193,13 +201,9 @@
         "title": "This is Clarify mode",
         "description": "Use it to understand the goal, boundaries, constraints, and acceptance criteria before execution. It is better for asking and narrowing things down first."
       },
-      "modeCowork": {
-        "title": "This is Cowork mode",
-        "description": "Use it for general project collaboration: researching, organizing plans, coordinating tools, handling files, and advancing multi-step work."
-      },
-      "modeCode": {
-        "title": "This is Code mode",
-        "description": "Use it for direct implementation tasks such as editing files, writing code, running checks, and handling engineering details."
+      "modeExecute": {
+        "title": "This is Execute mode",
+        "description": "Use it for hands-on work across code, research, documents, DevOps, files, and connected applications. Tool actions remain visible and auditable."
       },
       "modeAcp": {
         "title": "This is ACP mode",
@@ -1091,6 +1095,36 @@
     "showDetails": "Show details",
     "hideDetails": "Hide details"
   },
+  "runOutcome": {
+    "phase": {
+      "preparing": "Preparing context",
+      "thinking": "Analyzing",
+      "executing": "Executing tools",
+      "waiting_user": "Waiting for your input",
+      "summarizing": "Preparing final outcome"
+    },
+    "traceTitle": "Execution call chain",
+    "traceSummary": "{{steps}} steps · {{files}} files changed · {{duration}}",
+    "traceDetailHint": "Model, token, timing, approval, tool input, and output details are kept here for audit.",
+    "failedSteps": "{{count}} failed",
+    "completedItems": "Completed",
+    "artifacts": "Artifacts",
+    "verification": "Verification",
+    "warnings": "Warnings and unfinished items",
+    "nextSteps": "Next steps",
+    "systemSummary": "The model summary was unavailable. This conclusion was generated deterministically from the execution record.",
+    "status": {
+      "completed": "Completed",
+      "partial": "Partially completed",
+      "failed": "Failed",
+      "canceled": "Canceled"
+    }
+  },
+  "executeSwitch": {
+    "title": "Switch to Execute mode?",
+    "description": "This request appears to modify files, run commands, or perform another side effect. Execute mode makes those actions explicit and auditable.",
+    "confirm": "Switch and continue"
+  },
   "toolGroup": {
     "readFiles": "Read {{count}} files",
     "searchedPatterns": "Searched {{count}} patterns",
@@ -1248,6 +1282,11 @@
     "aiCommitTooltip": "Generate commit message from staged diff (intent & impact, not a file list)",
     "aiCommitNeedStaged": "Stage changes first, then generate a message",
     "aiCommitEmptyStaged": "Nothing staged — cannot generate a message",
-    "aiCommitFailed": "Generation failed. Check API / model settings and try again"
+    "aiCommitFailed": "Generation failed. Check API / model settings and try again",
+    "taskProfile": {
+      "ariaLabel": "Task type",
+      "work": { "label": "Work", "desc": "Daily work" },
+      "code": { "label": "Code", "desc": "Projects and programming" }
+    }
   }
 }

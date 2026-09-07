@@ -5,10 +5,13 @@ import { useTranslation } from 'react-i18next'
 import {
   ArrowDownAZ,
   BookOpen,
+  BriefcaseBusiness,
   CalendarDays,
+  CheckCircle2,
   ChevronDown,
   ChevronRight,
   CloudSync,
+  Code2,
   Copy,
   Download,
   Eraser,
@@ -81,6 +84,7 @@ import {
 } from '@renderer/stores/chat-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import type { TaskProfile } from '@renderer/lib/task-profile'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore } from '@renderer/stores/team-store'
 import { useRemoteAccountStore } from '@renderer/stores/remote-account-store'
@@ -421,6 +425,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const soulsPageOpen = useUIStore((state) => state.soulsPageOpen)
   const syncPageOpen = useUIStore((state) => state.syncPageOpen)
   const remotePageOpen = useUIStore((state) => state.remotePageOpen)
+  const remoteDialogOpen = useUIStore((state) => state.remoteDialogOpen)
   const resourcesPageOpen = useUIStore((state) => state.resourcesPageOpen)
   const drawPageOpen = useUIStore((state) => state.drawPageOpen)
   const translatePageOpen = useUIStore((state) => state.translatePageOpen)
@@ -446,6 +451,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const sessions = useMemo(() => sessionsRaw.map(mapSession), [sessionsRaw])
   const activeProjectId = useChatStore((state) => state.activeProjectId)
   const activeSessionId = useChatStore((state) => state.activeSessionId)
+  const updateSessionTaskProfile = useChatStore((state) => state.updateSessionTaskProfile)
   const streamingSessionIdsSig = useChatStore((state) =>
     Object.keys(state.streamingMessages).sort().join('\u0000')
   )
@@ -482,6 +488,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
     return [...ids].sort().join('\u0000')
   })
   const language = useSettingsStore((state) => state.language)
+  const defaultTaskProfile = useSettingsStore((state) => state.defaultTaskProfile)
   const relativeTimeLocale = useMemo(() => resolveIntlLocale(language), [language])
   const projectNameCollator = useMemo(
     () => new Intl.Collator(relativeTimeLocale, { numeric: true, sensitivity: 'base' }),
@@ -515,6 +522,8 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const [autoRenamingSessionId, setAutoRenamingSessionId] = useState<string | null>(null)
   const [folderPickerTarget, setFolderPickerTarget] = useState<FolderPickerTarget | null>(null)
   const [featureMenuOpen, setFeatureMenuOpen] = useState(false)
+  const [taskProfileMenuOpen, setTaskProfileMenuOpen] = useState(false)
+  const taskProfileMenuRef = useRef<HTMLDivElement>(null)
   const [projectsSectionCollapsed, setProjectsSectionCollapsed] = useState(false)
   const [projectSortMode, setProjectSortMode] = useState<ProjectSortMode>(readProjectSortMode)
   const [isFolderDragOver, setIsFolderDragOver] = useState(false)
@@ -673,7 +682,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
       const uiStore = useUIStore.getState()
       setActiveProjectHome(projectId)
       if (uiStore.mode === 'chat') {
-        uiStore.setMode('cowork')
+        uiStore.setMode('execute')
       }
       uiStore.navigateToProject(projectId)
     },
@@ -685,7 +694,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
       const uiStore = useUIStore.getState()
       setActiveProjectHome(projectId)
       if (uiStore.mode === 'chat') {
-        uiStore.setMode('cowork')
+        uiStore.setMode('execute')
       }
       uiStore.navigateToHome()
     },
@@ -695,6 +704,21 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const handleCreateChatSession = useCallback(() => {
     openChatHome()
   }, [openChatHome])
+
+  const handleTaskProfileChange = useCallback(
+    (profile: TaskProfile) => {
+      setTaskProfileMenuOpen(false)
+      updateSettings({ defaultTaskProfile: profile })
+      const activeSession = activeSessionId
+        ? useChatStore.getState().sessions.find((session) => session.id === activeSessionId)
+        : null
+      if (activeSession && activeSession.messageCount === 0 && !activeSession.taskProfileLocked) {
+        updateSessionTaskProfile(activeSession.id, profile)
+      }
+      openChatHome()
+    },
+    [activeSessionId, openChatHome, updateSessionTaskProfile, updateSettings]
+  )
 
   const navigateProjectView = useCallback(
     (projectId: string, view: 'project' | 'archive' | 'channels' | 'git' = 'project') => {
@@ -1060,25 +1084,18 @@ export function WorkspaceSidebar(): React.JSX.Element {
       onClick: openCommandPalette
     },
     {
-      key: 'remote',
-      label: t('navRail.remote', { defaultValue: 'Remote' }),
-      icon: <Server className="size-4 shrink-0" />,
-      active: false,
-      onClick: () => void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
-    },
-    {
-      key: 'plugins',
-      label: t('sidebar.pluginsLabel'),
-      icon: <Wand2 className="size-4 shrink-0" />,
-      active: settingsPageOpen && useUIStore.getState().settingsTab === 'plugin',
-      onClick: () => useUIStore.getState().openSettingsPage('plugin')
-    },
-    {
       key: 'automation',
       label: t('sidebar.automationLabel'),
       icon: <CalendarDays className="size-4 shrink-0" />,
       active: tasksPageOpen,
       onClick: () => useUIStore.getState().openTasksPage()
+    },
+    {
+      key: 'remote',
+      label: t('navRail.remote', { defaultValue: '远控' }),
+      icon: <Server className="size-4 shrink-0" />,
+      active: remotePageOpen || remoteDialogOpen,
+      onClick: () => useUIStore.getState().openRemoteDialog('ssh')
     }
   ]
 
@@ -1367,6 +1384,79 @@ export function WorkspaceSidebar(): React.JSX.Element {
           </div>
         </div>
 
+        <div className="relative shrink-0 px-2 pb-1.5" ref={taskProfileMenuRef}>
+          <button
+            type="button"
+            aria-expanded={taskProfileMenuOpen}
+            aria-haspopup="menu"
+            aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: '切换工作方式' })}
+            onClick={() => setTaskProfileMenuOpen((open) => !open)}
+            className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60"
+          >
+                {defaultTaskProfile === 'work' ? (
+                  <BriefcaseBusiness className="size-4 shrink-0" />
+                ) : (
+                  <Code2 className="size-4 shrink-0" />
+                )}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">
+                    {t(`sidebar.taskProfile.${defaultTaskProfile}.title`, {
+                      defaultValue: defaultTaskProfile === 'work' ? '工作' : '编程'
+                    })}
+                  </span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {t(`sidebar.taskProfile.${defaultTaskProfile}.desc`, {
+                      defaultValue:
+                        defaultTaskProfile === 'work'
+                          ? '日常工作、研究和办公'
+                          : '项目、代码、终端和 Git'
+                    })}
+                  </span>
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+          </button>
+          {taskProfileMenuOpen && (
+            <div
+              role="menu"
+              aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: '切换工作方式' })}
+              className="absolute left-2 right-2 top-full z-50 mt-1 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
+            >
+              {(['work', 'code'] as const).map((profile) => (
+                <button
+                  key={profile}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={defaultTaskProfile === profile}
+                  className="flex w-full items-start gap-3 rounded-lg px-2 py-3 text-left transition-colors hover:bg-muted/70"
+                  onClick={() => handleTaskProfileChange(profile)}
+                >
+                  {profile === 'work' ? (
+                    <BriefcaseBusiness className="mt-0.5 size-4 shrink-0" />
+                  ) : (
+                    <Code2 className="mt-0.5 size-4 shrink-0" />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      {t(`sidebar.taskProfile.${profile}.title`, {
+                        defaultValue: profile === 'work' ? '工作' : '编程'
+                      })}
+                      {defaultTaskProfile === profile && <CheckCircle2 className="ml-auto size-4" />}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {t(`sidebar.taskProfile.${profile}.desc`, {
+                        defaultValue:
+                          profile === 'work'
+                            ? '日常工作、研究和办公'
+                            : '项目、代码、终端和 Git'
+                      })}
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="space-y-1 px-2 py-1.5">
             {navItems.slice(0, 3).map(renderNavItem)}
@@ -1441,6 +1531,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 >
                   <CloudSync className="size-4" />
                   <span>{t('navRail.sync')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openRemoteDialog('ssh')}
+                  className={cn(remoteDialogOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <Server className="size-4" />
+                  <span>{t('navRail.remote', { defaultValue: '远控' })}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

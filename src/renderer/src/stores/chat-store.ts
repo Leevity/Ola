@@ -44,6 +44,13 @@ import { useBackgroundSessionStore } from './background-session-store'
 import { useSettingsStore } from './settings-store'
 import { useInputDraftStore } from './input-draft-store'
 import {
+  inferTaskProfile,
+  normalizeTaskProfile,
+  profileConfigFor,
+  type TaskProfile,
+  type TaskProfileConfig
+} from '../lib/task-profile'
+import {
   invalidateVisibleSessionCache,
   isSessionForeground
 } from '../lib/agent/session-runtime-router'
@@ -61,7 +68,14 @@ import {
   type ActiveCompactArtifacts
 } from '../lib/agent/context-compression'
 
-export type SessionMode = 'chat' | 'clarify' | 'cowork' | 'code' | 'acp'
+export type SessionMode = 'chat' | 'clarify' | 'execute' | 'acp'
+export type LegacySessionMode = 'cowork' | 'code'
+
+export function normalizeSessionMode(mode: unknown): SessionMode {
+  if (mode === 'cowork' || mode === 'code' || mode === 'execute') return 'execute'
+  if (mode === 'clarify' || mode === 'acp') return mode
+  return 'chat'
+}
 export type SessionModelSelectionMode = 'inherit' | 'auto' | 'manual'
 
 export interface SessionPromptSnapshot {
@@ -97,6 +111,9 @@ export interface Session {
   title: string
   icon?: string
   mode: SessionMode
+  taskProfile: TaskProfile
+  taskProfileLocked: boolean
+  profileConfigSnapshot?: TaskProfileConfig
   messages: UnifiedMessage[]
   messageCount: number
   messagesLoaded: boolean
@@ -135,6 +152,9 @@ export function createRestorableSessionSnapshot(session: Session): Session {
     title: session.title,
     icon: session.icon,
     mode: session.mode,
+    taskProfile: session.taskProfile,
+    taskProfileLocked: session.taskProfileLocked,
+    profileConfigSnapshot: session.profileConfigSnapshot,
     messages: session.messages,
     messageCount: session.messageCount,
     messagesLoaded: session.messagesLoaded,
@@ -170,6 +190,8 @@ export interface CreateSessionOptions {
   planId?: string | null
   workingFolder?: string | null
   sshConnectionId?: string | null
+  taskProfile?: TaskProfile
+  profileConfigSnapshot?: TaskProfileConfig
 }
 
 // --- DB persistence helpers (queued fire-and-forget) ---
@@ -385,6 +407,8 @@ function dbCreateSession(s: Session): void {
     title: s.title,
     icon: s.icon,
     mode: s.mode,
+    taskProfile: s.taskProfile,
+    taskProfileLocked: s.taskProfileLocked,
     createdAt: s.createdAt,
     updatedAt: s.updatedAt,
     projectId: s.projectId,
@@ -1357,6 +1381,8 @@ interface ChatStore {
   updateSessionTitle: (id: string, title: string) => void
   updateSessionIcon: (id: string, icon: string) => void
   updateSessionMode: (id: string, mode: SessionMode) => void
+  updateSessionTaskProfile: (id: string, taskProfile: TaskProfile) => boolean
+  lockSessionTaskProfile: (id: string) => void
   setWorkingFolder: (sessionId: string, folder: string) => void
   setSshConnectionId: (sessionId: string, connectionId: string | null) => void
   setSessionModelManual: (sessionId: string, providerId: string, modelId: string) => void
@@ -1468,6 +1494,8 @@ interface SessionRow {
   title: string
   icon: string | null
   mode: string
+  task_profile?: string | null
+  task_profile_locked?: number | null
   created_at: number
   updated_at: number
   project_id?: string | null
@@ -1559,7 +1587,16 @@ function rowToSession(row: SessionRow, messages: UnifiedMessage[] = []): Session
     id: row.id,
     title: row.title,
     icon: row.icon ?? undefined,
-    mode: row.mode as SessionMode,
+    mode: normalizeSessionMode(row.mode),
+    taskProfile: normalizeTaskProfile(
+      row.task_profile ?? inferTaskProfile(row.mode, row.project_id, row.working_folder)
+    ),
+    taskProfileLocked: row.task_profile_locked === 1,
+    profileConfigSnapshot: profileConfigFor(
+      normalizeTaskProfile(
+        row.task_profile ?? inferTaskProfile(row.mode, row.project_id, row.working_folder)
+      )
+    ),
     messages,
     messageCount,
     messagesLoaded: messages.length > 0 || messageCount === 0,
@@ -1596,6 +1633,9 @@ function mergeSessionSummary(
   session.title = next.title
   session.icon = next.icon
   session.mode = next.mode
+  session.taskProfile = next.taskProfile
+  session.taskProfileLocked = next.taskProfileLocked
+  session.profileConfigSnapshot = next.profileConfigSnapshot
   session.createdAt = next.createdAt
   session.updatedAt = next.updatedAt
   session.projectId = next.projectId
@@ -3538,6 +3578,10 @@ export const useChatStore = create<ChatStore>()(
           null)
 
       const targetProject = get().projects.find((project) => project.id === targetProjectId)
+      const taskProfile =
+        options?.taskProfile ??
+        inferTaskProfile(mode, targetProjectId, targetProject?.workingFolder ?? options?.workingFolder)
+      const profileConfig = options?.profileConfigSnapshot ?? profileConfigFor(taskProfile)
 
       if (targetProject) {
         targetProjectId = targetProject.id
@@ -3566,7 +3610,10 @@ export const useChatStore = create<ChatStore>()(
       const newSession: Session = {
         id,
         title: 'New Conversation',
-        mode,
+        mode: normalizeSessionMode(mode),
+        taskProfile,
+        taskProfileLocked: false,
+        profileConfigSnapshot: profileConfig,
         messages: [],
         messageCount: 0,
         messagesLoaded: true,
@@ -3761,22 +3808,53 @@ export const useChatStore = create<ChatStore>()(
     },
 
     updateSessionMode: (id, mode) => {
+      const normalizedMode = normalizeSessionMode(mode)
       const now = Date.now()
       set((state) => {
         const session = state.sessions.find((s) => s.id === id)
         if (session) {
           const shouldClearPromptSnapshot =
-            session.mode !== mode ||
-            (session.mode === 'chat') !== (mode === 'chat') ||
-            (session.mode === 'acp') !== (mode === 'acp')
-          session.mode = mode
+            session.mode !== normalizedMode ||
+            (session.mode === 'chat') !== (normalizedMode === 'chat') ||
+            (session.mode === 'acp') !== (normalizedMode === 'acp')
+          session.mode = normalizedMode
           if (shouldClearPromptSnapshot) {
             delete session.promptSnapshot
           }
           session.updatedAt = now
         }
       })
-      dbUpdateSession(id, { mode, updatedAt: now })
+      dbUpdateSession(id, { mode: normalizedMode, updatedAt: now })
+    },
+
+    updateSessionTaskProfile: (id, taskProfile) => {
+      const session = get().sessions.find((item) => item.id === id)
+      if (!session || session.taskProfileLocked || session.messages.length > 0) return false
+      const normalized = normalizeTaskProfile(taskProfile)
+      const now = Date.now()
+      set((state) => {
+        const target = state.sessions.find((item) => item.id === id)
+        if (!target) return
+        target.taskProfile = normalized
+        target.profileConfigSnapshot = profileConfigFor(normalized)
+        target.updatedAt = now
+      })
+      dbUpdateSession(id, {
+        taskProfile: normalized,
+        taskProfileLocked: false,
+        updatedAt: now
+      })
+      return true
+    },
+
+    lockSessionTaskProfile: (id) => {
+      const session = get().sessions.find((item) => item.id === id)
+      if (!session || session.taskProfileLocked) return
+      set((state) => {
+        const target = state.sessions.find((item) => item.id === id)
+        if (target) target.taskProfileLocked = true
+      })
+      dbUpdateSession(id, { taskProfileLocked: true, updatedAt: Date.now() })
     },
 
     setWorkingFolder: (sessionId, folder) => {
@@ -3955,6 +4033,7 @@ export const useChatStore = create<ChatStore>()(
 
       const normalizedSession: Session = {
         ...session,
+        mode: normalizeSessionMode(session.mode),
         promptSnapshot: undefined,
         projectId: targetProjectId ?? undefined,
         workingFolder: session.workingFolder ?? project?.workingFolder,
@@ -4286,6 +4365,9 @@ export const useChatStore = create<ChatStore>()(
         title: `${source.title} (copy)`,
         icon: source.icon,
         mode: source.mode,
+        taskProfile: source.taskProfile,
+        taskProfileLocked: source.taskProfileLocked,
+        profileConfigSnapshot: source.profileConfigSnapshot,
         messages: clonedMessages,
         messageCount: clonedMessages.length,
         messagesLoaded: true,
@@ -4337,6 +4419,9 @@ export const useChatStore = create<ChatStore>()(
         title: source.title,
         icon: source.icon,
         mode: source.mode,
+        taskProfile: source.taskProfile,
+        taskProfileLocked: source.taskProfileLocked,
+        profileConfigSnapshot: source.profileConfigSnapshot,
         messages: clonedMessages,
         messageCount: clonedMessages.length,
         messagesLoaded: true,

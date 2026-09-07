@@ -1,133 +1,114 @@
-import {
-  CalendarDays,
-  CloudSync,
-  FolderOpen,
-  Image,
-  MessageSquare,
-  Server,
-  Settings,
-  Sparkles,
-  Wand2
-} from 'lucide-react'
+import { CalendarDays, FolderOpen, Pencil, Search, Settings, Wand2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { useUIStore, type NavItem } from '@renderer/stores/ui-store'
+import { useChatStore } from '@renderer/stores/chat-store'
+import { useUIStore } from '@renderer/stores/ui-store'
 import { cn } from '@renderer/lib/utils'
-import { ipcClient } from '@renderer/lib/ipc/ipc-client'
-import { IPC } from '@renderer/lib/ipc/channels'
 import packageJson from '../../../../../package.json'
 
-const navItems: { value: NavItem; icon: React.ReactNode; labelKey: string }[] = [
-  { value: 'chat', icon: <MessageSquare className="size-5" />, labelKey: 'navRail.conversations' },
-  { value: 'tasks', icon: <CalendarDays className="size-5" />, labelKey: 'navRail.tasks' },
-  { value: 'resources', icon: <FolderOpen className="size-5" />, labelKey: 'navRail.resources' },
-  { value: 'remote', icon: <Server className="size-5" />, labelKey: 'navRail.remote' },
-  { value: 'skills', icon: <Wand2 className="size-5" />, labelKey: 'navRail.skills' },
-  { value: 'souls', icon: <Sparkles className="size-5" />, labelKey: 'navRail.souls' },
-  { value: 'sync', icon: <CloudSync className="size-5" />, labelKey: 'navRail.sync' },
-  { value: 'draw', icon: <Image className="size-5" />, labelKey: 'navRail.draw' }
-]
+type PrimaryNavigationAction = 'new-task' | 'search' | 'projects' | 'tasks' | 'capabilities'
+
+const capabilityTabs = new Set([
+  'plugin',
+  'extension',
+  'mcp',
+  'websearch',
+  'skillsmarket',
+  'channel',
+  'wiki'
+])
 
 export function NavRail(): React.JSX.Element {
   const { t } = useTranslation('layout')
-  const activeNavItem = useUIStore((s) => s.activeNavItem)
-  const setActiveNavItem = useUIStore((s) => s.setActiveNavItem)
-  const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen)
-  const skillsPageOpen = useUIStore((s) => s.skillsPageOpen)
-  const soulsPageOpen = useUIStore((s) => s.soulsPageOpen)
-  const syncPageOpen = useUIStore((s) => s.syncPageOpen)
-  const remotePageOpen = useUIStore((s) => s.remotePageOpen)
-  const resourcesPageOpen = useUIStore((s) => s.resourcesPageOpen)
-  const drawPageOpen = useUIStore((s) => s.drawPageOpen)
-  const translatePageOpen = useUIStore((s) => s.translatePageOpen)
-  const tasksPageOpen = useUIStore((s) => s.tasksPageOpen)
+  const activeSurface = useUIStore((state) => state.activeSurface)
+  const chatView = useUIStore((state) => state.chatView)
+  const settingsTab = useUIStore((state) => state.settingsTab)
+  const activeProjectId = useChatStore((state) => state.activeProjectId)
 
-  const handleNavClick = (item: NavItem): void => {
-    if (item === 'tasks') {
-      useUIStore.getState().openTasksPage()
-      return
+  const navItems: Array<{
+    value: PrimaryNavigationAction
+    icon: React.ReactNode
+    label: string
+    active: boolean
+  }> = [
+    {
+      value: 'new-task',
+      icon: <Pencil className="size-5" aria-hidden="true" />,
+      label: t('navRail.newTask', { defaultValue: 'New task' }),
+      active: activeSurface === 'workspace' && chatView === 'home'
+    },
+    {
+      value: 'search',
+      icon: <Search className="size-5" aria-hidden="true" />,
+      label: t('navRail.search', { defaultValue: 'Search' }),
+      active: false
+    },
+    {
+      value: 'projects',
+      icon: <FolderOpen className="size-5" aria-hidden="true" />,
+      label: t('navRail.projects', { defaultValue: 'Projects' }),
+      active:
+        activeSurface === 'workspace' &&
+        (chatView === 'project' ||
+          chatView === 'archive' ||
+          chatView === 'channels' ||
+          chatView === 'git')
+    },
+    {
+      value: 'tasks',
+      icon: <CalendarDays className="size-5" aria-hidden="true" />,
+      label: t('navRail.tasks'),
+      active: activeSurface === 'tasks'
+    },
+    {
+      value: 'capabilities',
+      icon: <Wand2 className="size-5" aria-hidden="true" />,
+      label: t('navRail.capabilities', { defaultValue: 'Capabilities' }),
+      active: activeSurface === 'settings' && capabilityTabs.has(settingsTab)
     }
-    if (item === 'skills') {
-      useUIStore.getState().openSkillsPage()
-      return
-    }
-    if (item === 'souls') {
-      useUIStore.getState().openSoulsPage()
-      return
-    }
-    if (item === 'sync') {
-      useUIStore.getState().openSyncPage()
-      return
-    }
-    if (item === 'resources') {
-      useUIStore.getState().openResourcesPage()
-      return
-    }
-    if (item === 'remote') {
-      void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
-      return
-    }
-    if (item === 'draw') {
-      useUIStore.getState().openDrawPage()
-      return
-    }
-    if (item === 'translate') {
-      useUIStore.getState().openTranslatePage()
-      return
-    }
-    // Close skills/settings pages when navigating to chat
+  ]
+
+  const handleNavClick = (item: PrimaryNavigationAction): void => {
     const ui = useUIStore.getState()
-    if (ui.settingsPageOpen) ui.closeSettingsPage()
-    if (ui.skillsPageOpen) ui.closeSkillsPage()
-    if (ui.soulsPageOpen) ui.closeSoulsPage()
-    if (ui.syncPageOpen) ui.closeSyncPage()
-    if (ui.remotePageOpen) ui.closeRemotePage()
-    if (ui.resourcesPageOpen) ui.closeResourcesPage()
-    if (ui.drawPageOpen) ui.closeDrawPage()
-    if (ui.translatePageOpen) ui.closeTranslatePage()
-    if (ui.tasksPageOpen) ui.closeTasksPage()
-    if (activeNavItem === item && leftSidebarOpen) {
-      ui.toggleLeftSidebar()
-    } else {
-      setActiveNavItem(item)
-      // Open sidebar if it's closed
-      if (!leftSidebarOpen) {
-        useUIStore.getState().setLeftSidebarOpen(true)
-      }
+    if (item === 'new-task') {
+      ui.navigateToHome()
+      ui.setLeftSidebarOpen(true)
+      return
     }
+    if (item === 'search') {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))
+      return
+    }
+    if (item === 'projects') {
+      if (activeProjectId) ui.navigateToProject(activeProjectId)
+      else ui.navigateToHome()
+      ui.setLeftSidebarOpen(true)
+      return
+    }
+    if (item === 'tasks') {
+      ui.openTasksPage()
+      return
+    }
+    ui.openSettingsPage('plugin')
   }
 
   return (
-    <div className="flex h-full w-12 shrink-0 flex-col items-center border-r bg-muted/30 py-2">
-      {/* Top nav items */}
+    <nav
+      className="flex h-full w-12 shrink-0 flex-col items-center border-r bg-muted/30 py-2"
+      aria-label={t('navRail.primaryNavigation', { defaultValue: 'Primary navigation' })}
+    >
       <div className="flex flex-col items-center gap-1">
         {navItems.map((item) => (
           <Tooltip key={item.value}>
             <TooltipTrigger asChild>
               <button
+                type="button"
                 onClick={() => handleNavClick(item.value)}
+                aria-label={item.label}
+                aria-current={item.active ? 'page' : undefined}
                 className={cn(
-                  'flex size-9 items-center justify-center rounded-lg transition-all duration-200',
-                  (item.value === 'tasks' && tasksPageOpen) ||
-                    (item.value === 'resources' && resourcesPageOpen) ||
-                    (item.value === 'remote' && remotePageOpen) ||
-                    (item.value === 'skills' && skillsPageOpen) ||
-                    (item.value === 'souls' && soulsPageOpen) ||
-                    (item.value === 'sync' && syncPageOpen) ||
-                    (item.value === 'draw' && drawPageOpen) ||
-                    (item.value === 'translate' && translatePageOpen) ||
-                    (![
-                      'tasks',
-                      'resources',
-                      'remote',
-                      'skills',
-                      'souls',
-                      'sync',
-                      'draw',
-                      'translate'
-                    ].includes(item.value) &&
-                      activeNavItem === item.value &&
-                      leftSidebarOpen)
+                  'flex size-9 items-center justify-center rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  item.active
                     ? 'bg-primary/10 text-primary shadow-sm'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
@@ -135,31 +116,37 @@ export function NavRail(): React.JSX.Element {
                 {item.icon}
               </button>
             </TooltipTrigger>
-            <TooltipContent side="right">{t(item.labelKey)}</TooltipContent>
+            <TooltipContent side="right">{item.label}</TooltipContent>
           </Tooltip>
         ))}
       </div>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* Bottom: Settings + Version */}
       <div className="flex flex-col items-center gap-1">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
+              type="button"
               onClick={() => useUIStore.getState().openSettingsPage()}
-              className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-all duration-200 hover:bg-muted hover:text-foreground"
+              aria-label={t('navRail.settings')}
+              aria-current={activeSurface === 'settings' ? 'page' : undefined}
+              className={cn(
+                'flex size-9 items-center justify-center rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                activeSurface === 'settings'
+                  ? 'bg-primary/10 text-primary shadow-sm'
+                  : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+              )}
             >
-              <Settings className="size-5" />
+              <Settings className="size-5" aria-hidden="true" />
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">{t('navRail.settings')}</TooltipContent>
         </Tooltip>
-        <span className="text-[9px] text-muted-foreground/40 select-none">
+        <span className="select-none text-[9px] text-muted-foreground/40">
           v{packageJson.version}
         </span>
       </div>
-    </div>
+    </nav>
   )
 }

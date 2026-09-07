@@ -881,6 +881,8 @@ internal static class DbSchemaMigrator
         EnsureColumn(connection, "sessions", "provider_id", "TEXT");
         EnsureColumn(connection, "sessions", "model_id", "TEXT");
         EnsureColumn(connection, "sessions", "model_selection_mode", "TEXT NOT NULL DEFAULT 'inherit'");
+        EnsureColumn(connection, "sessions", "task_profile", "TEXT");
+        EnsureColumn(connection, "sessions", "task_profile_locked", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "sessions", "pinned", "INTEGER DEFAULT 0");
         EnsureColumn(connection, "sessions", "message_count", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "sessions", "ssh_connection_id", "TEXT");

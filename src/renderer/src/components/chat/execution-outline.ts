@@ -1,5 +1,6 @@
 import type { ContentBlock, ToolResultContent } from '@renderer/lib/api/types'
 import type { ToolCallState } from '@renderer/lib/agent/types'
+import { toolPresentationRegistry } from './tool-presentation-registry'
 
 export type ToolExecutionCategory =
   | 'context'
@@ -84,6 +85,8 @@ function normalizedToolName(name: string): string {
 export function classifyTool(name: string): ToolExecutionCategory {
   const normalized = normalizedToolName(name)
   if (INTERNAL_TOOLS.has(normalized)) return 'internal'
+  const presented = toolPresentationRegistry.resolve(normalized, {})
+  if (presented.category !== 'unknown') return presented.category
   if (CONTEXT_TOOLS.has(normalized)) return 'context'
   if (COMMAND_TOOLS.has(normalized)) return 'command'
   if (FILE_CHANGE_TOOLS.has(normalized)) return 'file-change'

@@ -23,6 +23,7 @@ import {
   hasCompleteAgentRunJournal,
   resolveAgentRunAttachSequence
 } from '../../../../shared/agent-runtime-recovery'
+import type { FinalOutcomeStatus } from '../api/types'
 
 const attachedRuns = new Map<string, () => void>()
 
@@ -30,15 +31,22 @@ function toToolCallState(toolCall: ToolCallStateWire, sessionId: string): ToolCa
   return { ...(toolCall as unknown as ToolCallState), sessionId }
 }
 
-function finishRun(runId: string, sessionId: string, status: 'completed' | null): void {
+function finishRun(runId: string, sessionId: string, status: FinalOutcomeStatus): void {
   attachedRuns.get(runId)?.()
   attachedRuns.delete(runId)
   if (sessionSidecarRunIds.get(sessionId) === runId) sessionSidecarRunIds.delete(sessionId)
   useChatStore.getState().setStreamingMessageId(sessionId, null)
-  useRuntimeProjectionStore
-    .getState()
-    .finish(sessionId, status === 'completed' ? 'completed' : 'failed')
+  useRuntimeProjectionStore.getState().finish(sessionId, status)
   useAgentStore.getState().setSessionStatus(sessionId, status)
+}
+
+function terminalStatusForReason(
+  reason: Extract<AgentStreamEvent, { type: 'loop_end' }>['reason']
+): FinalOutcomeStatus {
+  if (reason === 'aborted') return 'canceled'
+  if (reason === 'max_iterations') return 'partial'
+  if (reason === 'error') return 'failed'
+  return 'completed'
 }
 
 function applyEvent(
@@ -49,6 +57,7 @@ function applyEvent(
 ): void {
   switch (event.type) {
     case 'thinking_delta':
+      useRuntimeProjectionStore.getState().setPhase(sessionId, 'thinking')
       appendRuntimeThinkingDelta(sessionId, messageId, event.thinking)
       break
     case 'thinking_encrypted':
@@ -59,6 +68,7 @@ function applyEvent(
       appendRuntimeTextDelta(sessionId, messageId, event.text)
       break
     case 'tool_use_generated':
+      useRuntimeProjectionStore.getState().setPhase(sessionId, 'executing')
       appendRuntimeToolUse(sessionId, messageId, {
         type: 'tool_use',
         id: event.toolUseBlock.id,
@@ -73,7 +83,11 @@ function applyEvent(
       updateRuntimeToolUseInput(sessionId, messageId, event.toolCallId, event.partialInput)
       break
     case 'tool_call_start':
+      useRuntimeProjectionStore.getState().setPhase(sessionId, 'executing')
+      useAgentStore.getState().addToolCall(toToolCallState(event.toolCall, sessionId), sessionId)
+      break
     case 'tool_call_approval_needed':
+      useRuntimeProjectionStore.getState().setPhase(sessionId, 'waiting_user')
       useAgentStore.getState().addToolCall(toToolCallState(event.toolCall, sessionId), sessionId)
       break
     case 'tool_call_update':
@@ -96,10 +110,10 @@ function applyEvent(
         ...(event.errorType ? { errorType: event.errorType } : {}),
         ...(event.details ? { details: event.details } : {})
       })
-      finishRun(runId, sessionId, null)
+      finishRun(runId, sessionId, 'failed')
       break
     case 'loop_end':
-      finishRun(runId, sessionId, 'completed')
+      finishRun(runId, sessionId, terminalStatusForReason(event.reason))
       break
   }
 }
@@ -150,7 +164,7 @@ async function attachRun(run: {
     })
   )
   if (!response.attached) {
-    finishRun(run.runId, run.sessionId, null)
+    finishRun(run.runId, run.sessionId, 'failed')
     return
   }
   agentStream.ingest(response.frames)

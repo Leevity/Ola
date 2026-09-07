@@ -61,4 +61,14 @@ export interface ToolHandler {
   definition: ToolDefinition
   execute: (input: Record<string, unknown>, ctx: ToolContext) => Promise<ToolResultContent>
   requiresApproval?: (input: Record<string, unknown>, ctx: ToolContext) => boolean
+  capability?: ToolCapabilityMeta
+}
+
+export interface ToolCapabilityMeta {
+  readOnly: boolean
+  riskLevel: 'low' | 'medium' | 'high'
+  requiresApproval: boolean
+  source: 'core' | 'plugin' | 'extension' | 'mcp' | 'channel'
+  owner: string
+  projectScoped: boolean
 }

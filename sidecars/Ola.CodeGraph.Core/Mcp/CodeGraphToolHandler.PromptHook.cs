@@ -52,6 +52,11 @@ internal static partial class CodeGraphToolHandler
             return Noop("noop-refused");
         }
 
+        if (IsMissingRoot(cwd))
+        {
+            return Noop("noop-missing-root");
+        }
+
         // Keywords fire on their own; a token or prose word is only a CANDIDATE
         // verified against the graph below, so a tech brand ("JavaScript") that
         // merely looks like code doesn't inject spurious context.

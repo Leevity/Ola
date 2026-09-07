@@ -69,7 +69,16 @@ let registered = false
 
 export function registerCodeGraphTool(): void {
   if (registered) return
-  toolRegistry.register(handler)
+  toolRegistry.register(handler, {
+    namespace: 'plugin',
+    owner: 'core',
+    capability: {
+      readOnly: true,
+      riskLevel: 'low',
+      requiresApproval: false,
+      projectScoped: true
+    }
+  })
   registered = true
 }
 

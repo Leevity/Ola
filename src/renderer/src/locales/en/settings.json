@@ -1,7 +1,13 @@
 ﻿{
   "wiki": {
     "title": "Project Wiki",
-    "subtitle": "Build an incremental local project map"
+    "subtitle": "Build an incremental local project map",
+    "description": "Build a local, incremental map of project files and symbols. Sensitive directories are excluded.",
+    "projectFolder": "Project folder",
+    "chooseProjectFolder": "Choose project folder",
+    "generate": "Generate Wiki",
+    "rescan": "Re-scan",
+    "export": "Export Markdown"
   },
   "desktopAutomation": {
     "title": "Desktop Automation",
@@ -71,13 +77,19 @@
   "page": {
     "title": "Settings",
     "subtitle": "Preferences & Model Settings",
+    "searchPlaceholder": "Search settings",
+    "searchLabel": "Search settings",
+    "globalScope": "Global",
+    "saving": "Saving…",
+    "saved": "Saved",
     "poweredBy": "Powered by Ola",
     "groups": {
-      "foundation": "Foundation",
-      "system": "System",
-      "ai": "AI Capabilities",
-      "capabilities": "Ola Capabilities",
-      "extensions": "Extensions & Integrations",
+      "general": "General",
+      "aiAndModels": "AI & Models",
+      "executionSecurity": "Execution & Security",
+      "integrations": "Capabilities & Integrations",
+      "personalization": "Personalization",
+      "dataUsage": "Data & Usage",
       "about": "About"
     }
   },
@@ -147,14 +159,15 @@
     "system": "Follow System",
     "themePreset": {
       "title": "Interface Palette",
-      "desc": "The main UI, SSH host library, and SFTP follow this palette; SSH terminals can use a matched terminal palette from the same set.",
-      "terminalTitle": "SSH Terminal Palette",
-      "terminalDesc": "Choose the matched palette for the connection titlebar, terminal background, and status panel.",
+      "desc": "The main UI, SSH, RDP, VNC, and SFTP remote workspaces use this palette.",
+      "terminalTitle": "Remote Workspace Palette",
+      "terminalDesc": "Unify the connection titlebar, terminal background, remote viewer frame, file area, and status panels.",
       "terminalPreview": "$ ssh user@host",
       "terminalConnectedPreview": "connected · 22/tcp",
       "matchApp": "Follow interface palette",
       "matched": "Following",
       "globalHint": "Interface",
+      "remoteHint": "Remote",
       "current": "Active",
       "presets": {
         "mulberry": {
@@ -647,15 +660,13 @@
     "promptRecommendationModes": {
       "chat": "Chat Mode",
       "clarify": "Clarify Mode",
-      "cowork": "Cowork Mode",
-      "code": "Code Mode",
+      "execute": "Execute Mode",
       "acp": "ACP Mode"
     },
     "promptRecommendationModesDesc": {
       "chat": "For general conversation and next-question suggestions",
       "clarify": "For requirement clarification and follow-up suggestions",
-      "cowork": "For collaborative execution and task breakdown suggestions",
-      "code": "For implementation, modification, and debugging suggestions",
+      "execute": "For implementation, research, operations, debugging, and task breakdown suggestions",
       "acp": "For goal clarification, architecture design, and delegation suggestions in ACP control flows"
     },
     "selectRecommendationModel": "Select recommendation model",
@@ -721,6 +732,18 @@
       "modelMissing": "Select a compatible enabled model"
     }
   },
+  "capabilityCenter": {
+    "title": "Capability Center",
+    "description": "Manage installed capabilities, custom extensions, MCP servers, skills, channels, scopes, permissions, and health from one place.",
+    "installed": "Installed capabilities",
+    "extensions": "Extensions",
+    "mcp": "MCP servers",
+    "skills": "Skills",
+    "channels": "Channels",
+    "enabledCount": "{{enabled}} of {{total}} enabled",
+    "healthyCount": "{{healthy}} of {{total}} healthy",
+    "installedCount": "{{total}} installed"
+  },
   "plugin": {
     "title": "Plugins",
     "subtitle": "Configure optional Tool plugins and their access rules",
@@ -742,7 +765,7 @@
     "toolStatusDesc": "The image Tool is only exposed when the plugin is enabled and the model is valid.",
     "toolStatusDescBrowser": "Browser tools are only exposed when the browser plugin is enabled. Domain rules apply to manual browsing and Agent navigation.",
     "toolStatusDescDesktop": "Desktop-control tools are only exposed when the plugin is enabled. Every call still requires approval. If the active model also enables Computer Use, OpenAI Computer Use will proxy these capabilities first.",
-    "toolStatusDescCodeGraph": "CodeGraph tools are exposed only when the plugin is enabled. The isolated analysis Worker starts lazily on the first request.",
+    "toolStatusDescCodeGraph": "The Project Intelligence plugin exposes the Wiki and CodeGraph panels. CodeGraph tools are available to the Agent and the isolated analysis Worker starts lazily on the first request.",
     "toolArgs": "Available args: prompt, count",
     "toolArgsMap": {
       "ImageGenerate": "Available args: prompt, count, reference_images, size, quality",
@@ -835,11 +858,19 @@
         "promptDesc": "Product Design starts by confirming the brief, uses visual targets before builds, generates three directions when no target exists, and requires design QA before prototype handoff."
       },
       "codegraph": {
-        "title": "CodeGraph Analysis",
-        "description": "Index the active codebase and expose structural code navigation to the Agent.",
-        "promptTitle": "Analysis scope",
-        "promptDesc": "Disabled by default. When enabled, the isolated analysis Worker starts on demand and stores its index locally."
+        "title": "Project Intelligence",
+        "description": "Unify the human-readable Project Wiki with CodeGraph structural code analysis.",
+        "promptTitle": "Project analysis scope",
+        "promptDesc": "Disabled by default. When enabled, you can generate a local Wiki and build the CodeGraph index on demand."
       }
+    },
+    "projectIntelligence": {
+      "title": "Project Intelligence",
+      "description": "Use a lightweight project map for people and a deep code graph for structural analysis.",
+      "activeProject": "Active project: {{path}}",
+      "noProject": "Select a project with a working folder to use both capabilities.",
+      "wikiTitle": "Project Wiki",
+      "codeGraphTitle": "CodeGraph"
     },
     "toolStatusDescProductDesign": "Product Design is a workflow plugin. It exposes no new low-level Tool; it coordinates enabled image, browser, search, file, shell, MCP, and deployment tools through the product-design skill.",
     "codegraph": {
@@ -1006,20 +1037,16 @@
         "title": "Clarify Mode",
         "desc": "Requirement clarification: before starting a task, the agent asks questions and confirms your intent — ideal for complex or ambiguous requests."
       },
-      "cowork": {
-        "title": "Cowork Mode",
-        "desc": "Collaborative coding — the agent operates on your project files, runs commands, and invokes tools for hands-on development tasks."
-      },
-      "code": {
-        "title": "Code Mode",
-        "desc": "Pure code generation and modification, focused on precise coding needs."
+      "execute": {
+        "title": "Execute Mode",
+        "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
       },
       "acp": {
         "title": "ACP Mode",
         "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
       }
     },
-    "summary": "Five modes cover the full workflow from everyday Q&A to multi-agent collaboration. All data stays local."
+    "summary": "Four modes cover the full workflow from everyday Q&A to multi-agent collaboration. All data stays local."
   },
   "dialog": {
     "title": "Quick Settings",
@@ -1732,6 +1759,34 @@
     "copyConversation": "Copy conversation",
     "allowTool": "Allow tool execution",
     "denyTool": "Deny tool execution"
+  },
+  "workModes": {
+    "title": "Work modes",
+    "subtitle": "Choose how new conversations prioritize Work and Code tasks.",
+    "work": "Work",
+    "code": "Code",
+    "sharedLabel": "Shared",
+    "autoSummarize": "Generate a structured result",
+    "autoSummarizeDesc": "After tool work, summarize what changed, what was verified and what remains.",
+    "preferBrowser": "Prioritize browser actions",
+    "preferBrowserDesc": "Place browser and desktop research capabilities near the top of the tool picker.",
+    "preferWebSearch": "Prioritize web research",
+    "preferWebSearchDesc": "Prefer search and source gathering for research-oriented tasks.",
+    "autoIndex": "Keep project intelligence ready",
+    "autoIndexDesc": "Prefer CodeGraph and Wiki indexing when a project is selected.",
+    "allowShell": "Show shell capabilities",
+    "allowShellDesc": "Expose terminal and command tools as preferred Code capabilities; approvals still apply.",
+    "defaultsHint": "New conversations use this profile configuration.",
+    "mainModel": "Main model",
+    "fastModel": "Fast model",
+    "inheritModel": "Inherit global model",
+    "inheritFastModel": "Inherit global fast model",
+    "shared": {
+      "securityTitle": "Security stays global",
+      "securityDesc": "Permissions, approvals, credentials, MCP, Extensions and desktop automation are shared by both profiles.",
+      "defaultTitle": "Default profile",
+      "defaultDesc": "New conversations start with this profile. You can override it before sending."
+    }
   },
   "credentials": {
     "title": "Credentials",

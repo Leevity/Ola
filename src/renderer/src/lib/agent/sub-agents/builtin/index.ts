@@ -4,8 +4,10 @@ import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import type { ProviderConfig } from '../../../api/types'
 import { refreshSubAgentRegistry } from '../catalog'
+import type { TaskProfile } from '../../../task-profile'
 
 const TASK_TOOL_REGISTRY_NAME = 'Task'
+let registeredTaskProfile: TaskProfile | null = null
 
 function getProviderConfig(): ProviderConfig {
   const s = useSettingsStore.getState()
@@ -36,18 +38,25 @@ function getProviderConfig(): ProviderConfig {
  *
  * This is async because it reads files via IPC from the main process.
  */
-export async function refreshSubAgentTools(): Promise<void> {
+export async function refreshSubAgentTools(taskProfile: TaskProfile = 'work'): Promise<void> {
   const refreshStatus = await refreshSubAgentRegistry()
   if (refreshStatus === 'failed' && toolRegistry.has(TASK_TOOL_REGISTRY_NAME)) {
     return
   }
-  if (refreshStatus === 'unchanged' && toolRegistry.has(TASK_TOOL_REGISTRY_NAME)) return
+  if (
+    refreshStatus === 'unchanged' &&
+    toolRegistry.has(TASK_TOOL_REGISTRY_NAME) &&
+    registeredTaskProfile === taskProfile
+  ) {
+    return
+  }
 
   // Register one unified Task tool that dispatches by subagent_type
   // (works even if no agents were loaded — will produce an empty enum)
-  toolRegistry.register(createTaskTool(getProviderConfig))
+  toolRegistry.register(createTaskTool(getProviderConfig, taskProfile))
+  registeredTaskProfile = taskProfile
 }
 
-export async function registerSubAgents(): Promise<void> {
-  await refreshSubAgentTools()
+export async function registerSubAgents(taskProfile: TaskProfile = 'work'): Promise<void> {
+  await refreshSubAgentTools(taskProfile)
 }

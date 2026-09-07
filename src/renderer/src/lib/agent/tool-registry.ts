@@ -1,5 +1,5 @@
 import type { ToolDefinition, ToolResultContent } from '../api/types'
-import type { ToolHandler, ToolContext } from '../tools/tool-types'
+import type { ToolHandler, ToolContext, ToolCapabilityMeta } from '../tools/tool-types'
 import { encodeToolError } from '../tools/tool-result-format'
 
 function stableStringify(value: unknown): string {
@@ -26,18 +26,20 @@ function compareToolDefinitions(a: ToolDefinition, b: ToolDefinition): number {
  * Tool Registry - manages tool handlers with a pluggable registration pattern.
  * New tools are added by calling register() without modifying core code.
  */
-export type ToolNamespace = 'core' | 'extension' | 'mcp' | 'channel'
+export type ToolNamespace = 'core' | 'plugin' | 'extension' | 'mcp' | 'channel'
 
 export interface ToolRegistrationOptions {
   namespace: ToolNamespace
   owner: string
   version?: string
   capabilityHash?: string
+  capability?: Partial<ToolCapabilityMeta>
 }
 
 export interface ToolRegistrationMetadata extends ToolRegistrationOptions {
   name: string
   capabilityHash: string
+  capability: ToolCapabilityMeta
 }
 
 export interface ToolRegistrationConflict {
@@ -60,12 +62,37 @@ function normalizeRegistration(
   handler: ToolHandler,
   options?: ToolRegistrationOptions
 ): ToolRegistrationMetadata {
+  const source =
+    options?.namespace === 'mcp'
+      ? 'mcp'
+      : options?.namespace === 'plugin'
+        ? 'plugin'
+        : options?.namespace === 'extension'
+          ? 'extension'
+          : options?.namespace === 'channel'
+            ? 'channel'
+            : 'core'
+  const defaultReadOnly =
+    /^(Read|Grep|Glob|LS|WebSearch|WebFetch|Memory(?:List|Read|Search)?)$/i.test(
+      handler.definition.name
+    )
+  const capability: ToolCapabilityMeta = {
+    readOnly: defaultReadOnly,
+    riskLevel: handler.requiresApproval ? 'medium' : 'low',
+    requiresApproval: Boolean(handler.requiresApproval),
+    source,
+    owner: options?.owner ?? 'core',
+    projectScoped: false,
+    ...handler.capability,
+    ...options?.capability
+  }
   return {
     name: handler.definition.name,
     namespace: options?.namespace ?? 'core',
     owner: options?.owner ?? 'core',
     ...(options?.version ? { version: options.version } : {}),
-    capabilityHash: options?.capabilityHash ?? capabilityHash(handler.definition)
+    capabilityHash: options?.capabilityHash ?? capabilityHash(handler.definition),
+    capability
   }
 }
 

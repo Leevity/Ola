@@ -4,6 +4,8 @@ import type { ToolHandler } from '../../tools/tool-types'
 import { subAgentRegistry } from './registry'
 import type { SubAgentDefinition } from './types'
 import { getEffectiveSubAgentDisallowedTools } from './resolve-tools'
+import { rankAgents } from './profile'
+import type { TaskProfile } from '../../task-profile'
 
 export interface SubAgentMeta {
   iterations: number
@@ -65,12 +67,23 @@ function formatAgentToolScope(agent: SubAgentDefinition): string {
   return tools.filter((tool) => !denied.includes(tool)).join(', ')
 }
 
-function buildTaskDescription(agents: SubAgentDefinition[]): string {
+function buildTaskDescription(agents: SubAgentDefinition[], taskProfile: TaskProfile): string {
   const agentLines = agents
     .map((a) => `- ${a.name}: ${a.description} (Tools: ${formatAgentToolScope(a)})`)
     .join('\n')
 
+  const recommended = agents.filter(
+    (agent) =>
+      agent.profileMeta.profiles.includes('both') ||
+      agent.profileMeta.profiles.includes(taskProfile)
+  )
+
   return `Launch a new agent to handle complex, multi-step tasks autonomously.
+
+Current task profile: ${taskProfile}
+
+Recommended agent types for this profile:
+${recommended.map((a) => `- ${a.name}: ${a.description}`).join('\n') || '- custom: General purpose'}
 
 The Task tool launches specialized agents (sub-agents) that autonomously handle complex tasks. Each agent type has its own focused system prompt and tool allowlist.
 
@@ -117,14 +130,17 @@ assistant: (launches a Task with subagent_type="custom", description="investigat
 </example>`
 }
 
-export function createTaskTool(_providerGetter: () => ProviderConfig): ToolHandler {
-  const agents = subAgentRegistry.getAll()
+export function createTaskTool(
+  _providerGetter: () => ProviderConfig,
+  taskProfile: TaskProfile = 'work'
+): ToolHandler {
+  const agents = rankAgents(subAgentRegistry.getAll(), taskProfile, true)
   const subTypeEnum = [...agents.map((a) => a.name), CUSTOM_SUBAGENT_TYPE]
 
   return {
     definition: {
       name: TASK_TOOL_NAME,
-      description: buildTaskDescription(agents),
+      description: buildTaskDescription(agents, taskProfile),
       inputSchema: {
         type: 'object',
         oneOf: [

@@ -90,6 +90,7 @@ internal static partial class UserAgentCatalog
         try
         {
             EnsureBuiltinAgents(parameters);
+            var bundledDir = UserContentPaths.GetBundledDirectory(parameters, DirectoryName);
             var result = new JsonArray();
             foreach (var file in UserContentPaths.EnumerateMarkdownFiles(GetUserAgentsDirectory()))
             {
@@ -101,14 +102,15 @@ internal static partial class UserAgentCatalog
                         continue;
                     }
 
+                    var source = GetManagedSource(file.FullName, bundledDir, out var editable);
                     result.Add((JsonNode?)new JsonObject
                     {
                         ["id"] = file.FullName,
                         ["name"] = agent["name"]?.DeepClone(),
                         ["description"] = agent["description"]?.DeepClone(),
                         ["path"] = file.FullName,
-                        ["source"] = "user",
-                        ["editable"] = true
+                        ["source"] = source,
+                        ["editable"] = editable
                     });
                 }
                 catch
@@ -155,14 +157,16 @@ internal static partial class UserAgentCatalog
                 return UserContentPaths.JsonNode(UserContentPaths.Error($"Agent file is invalid: {targetPath}"));
             }
 
+            var bundledDir = UserContentPaths.GetBundledDirectory(parameters, DirectoryName);
+            var source = GetManagedSource(targetPath, bundledDir, out var editable);
             return UserContentPaths.JsonNode(new JsonObject
             {
                 ["id"] = targetPath,
                 ["name"] = agent["name"]?.DeepClone(),
                 ["description"] = agent["description"]?.DeepClone(),
                 ["path"] = targetPath,
-                ["source"] = "user",
-                ["editable"] = true,
+                ["source"] = source,
+                ["editable"] = editable,
                 ["content"] = content
             });
         }
@@ -266,6 +270,14 @@ internal static partial class UserAgentCatalog
         AddOptionalBool(result, "background", GetFrontmatterBool(frontmatter, "background"));
         AddOptionalString(result, "model", GetFrontmatterString(frontmatter, "model"));
         AddOptionalDouble(result, "temperature", GetFrontmatterDouble(frontmatter, "temperature"));
+        AddOptionalStringList(result, "profiles", GetFrontmatterStringList(frontmatter, "profiles"));
+        AddOptionalString(result, "category", GetFrontmatterString(frontmatter, "category"));
+        AddOptionalStringList(result, "tags", GetFrontmatterStringList(frontmatter, "tags"));
+        AddOptionalBool(result, "recommended", GetFrontmatterBool(frontmatter, "recommended"));
+        AddOptionalBool(result, "requiresProject", GetFrontmatterBool(frontmatter, "requiresProject"));
+        AddOptionalString(result, "riskLevel", GetFrontmatterString(frontmatter, "riskLevel"));
+        AddOptionalBool(result, "supportsBackground", GetFrontmatterBool(frontmatter, "supportsBackground"));
+        AddOptionalBool(result, "runtimeOnly", GetFrontmatterBool(frontmatter, "runtimeOnly"));
         return result;
     }
 
@@ -353,6 +365,31 @@ internal static partial class UserAgentCatalog
         if (value.HasValue)
         {
             result[name] = value.Value;
+        }
+    }
+
+    private static string GetManagedSource(string userPath, string bundledDir, out bool editable)
+    {
+        var bundledPath = Path.Combine(bundledDir, Path.GetFileName(userPath));
+        if (!File.Exists(bundledPath))
+        {
+            editable = true;
+            return "user";
+        }
+
+        var sameContent = string.Equals(
+            UserContentPaths.ReadText(userPath),
+            UserContentPaths.ReadText(bundledPath),
+            StringComparison.Ordinal);
+        editable = !sameContent;
+        return sameContent ? "bundled" : "overridden";
+    }
+
+    private static void AddOptionalStringList(JsonObject result, string name, string[]? values)
+    {
+        if (values is { Length: > 0 })
+        {
+            result[name] = ToJsonArray(values);
         }
     }
 

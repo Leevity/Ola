@@ -19,15 +19,20 @@ type Status = {
   edgeCount: number
   stale: boolean
   error?: string | null
+  errorKind?: string | null
 }
 type Stats = {
   success: boolean
   filesByLanguage: Array<{ key: string; count: number }>
+  error?: string | null
+  errorKind?: string | null
 }
 type SearchResult = { success: boolean; text: string; isError: boolean }
 type FilesTree = {
   success: boolean
   files: Array<{ path: string; language: string; nodeCount: number; size: number }>
+  error?: string | null
+  errorKind?: string | null
 }
 type Analytics = {
   success: boolean
@@ -35,6 +40,8 @@ type Analytics = {
   circularTotal: number
   deadCode: Array<{ id: string; name: string; kind: string; filePath: string; startLine: number }>
   deadCodeTotal: number
+  error?: string | null
+  errorKind?: string | null
 }
 type ProjectList = {
   success: boolean
@@ -49,6 +56,7 @@ type ProjectList = {
     lastIndexedAt?: number | null
   }>
   error?: string | null
+  errorKind?: string | null
 }
 type WorkerStatus = {
   running: boolean
@@ -68,6 +76,21 @@ function formatBytes(value: number): string {
     unitIndex += 1
   }
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[unitIndex]}`
+}
+
+function getCodeGraphResponseError(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null
+  const response = result as {
+    success?: unknown
+    error?: unknown
+    errorKind?: unknown
+  }
+  if (response.success !== false) return null
+  if (typeof response.error === 'string' && response.error.trim()) return response.error
+  if (typeof response.errorKind === 'string' && response.errorKind.trim()) {
+    return `CodeGraph request failed (${response.errorKind})`
+  }
+  return 'CodeGraph request failed.'
 }
 
 type Subgraph = {
@@ -121,6 +144,10 @@ export function CodeGraphDashboard(): React.JSX.Element {
       setProjects(nextProjects.success ? nextProjects.projects : [])
       setFiles(nextFiles.success ? nextFiles.files : [])
       setAnalytics(nextAnalytics.success ? nextAnalytics : null)
+      const responseError = [nextStatus, nextStats, nextProjects, nextFiles, nextAnalytics]
+        .map(getCodeGraphResponseError)
+        .find((message): message is string => Boolean(message))
+      if (responseError) setRefreshError(responseError)
       setWorkerStatus({ ...nextWorkerStatus, running: true })
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : String(error))
@@ -145,12 +172,17 @@ export function CodeGraphDashboard(): React.JSX.Element {
     if (!projectPath) return
     setBusy(true)
     try {
-      await agentBridge.requestCodeGraph(
-        'codegraph/index',
-        { workingFolder: projectPath },
-        30 * 60_000
-      )
+      const result = await agentBridge.requestCodeGraph<{
+        success: boolean
+        filesIndexed?: number
+        error?: string | null
+        errorKind?: string | null
+      }>('codegraph/index', { workingFolder: projectPath }, 30 * 60_000)
+      const responseError = getCodeGraphResponseError(result)
+      if (responseError) throw new Error(responseError)
       await refresh()
+    } catch (error) {
+      setRefreshError(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(false)
     }
@@ -160,7 +192,13 @@ export function CodeGraphDashboard(): React.JSX.Element {
     setSyncingProject(workingFolder)
     setRefreshError(null)
     try {
-      await agentBridge.requestCodeGraph('codegraph/sync', { workingFolder }, 5 * 60_000)
+      const result = await agentBridge.requestCodeGraph<{
+        success: boolean
+        error?: string | null
+        errorKind?: string | null
+      }>('codegraph/sync', { workingFolder }, 5 * 60_000)
+      const responseError = getCodeGraphResponseError(result)
+      if (responseError) throw new Error(responseError)
       await refresh()
     } catch (error) {
       setRefreshError(error instanceof Error ? error.message : t('plugin.codegraph.syncFailed'))
@@ -242,26 +280,42 @@ export function CodeGraphDashboard(): React.JSX.Element {
                 : t('plugin.codegraph.workerMissing')}
           </p>
           {workerStatus?.workerReady ? (
-            <div className="mt-1 space-y-1 text-xs text-muted-foreground">
-              <p>
-                {workerStatus.grammarStatus?.missing.length === 0
-                  ? t('plugin.codegraph.grammarReady', {
-                      available: workerStatus.grammarStatus.available,
-                      expected: workerStatus.grammarStatus.expected
-                    })
-                  : t('plugin.codegraph.grammarMissing', {
-                      missing: workerStatus.grammarStatus?.missing.length ?? 0,
-                      expected: workerStatus.grammarStatus?.expected ?? 0
-                    })}
-              </p>
-              {typeof workerStatus.generation === 'number' ? (
+            <details className="mt-2 rounded-md border border-border/50 bg-muted/15 px-2.5 py-2 text-xs text-muted-foreground">
+              <summary className="cursor-pointer font-medium text-foreground/75">
+                {t('plugin.codegraph.advancedDiagnostics', {
+                  defaultValue: 'Advanced diagnostics'
+                })}
+              </summary>
+              <div className="mt-2 space-y-1">
                 <p>
-                  {t('plugin.codegraph.workerGeneration', { generation: workerStatus.generation })}
+                  {workerStatus.grammarStatus?.missing.length === 0
+                    ? t('plugin.codegraph.grammarReady', {
+                        available: workerStatus.grammarStatus.available,
+                        expected: workerStatus.grammarStatus.expected
+                      })
+                    : t('plugin.codegraph.grammarMissing', {
+                        missing: workerStatus.grammarStatus?.missing.length ?? 0,
+                        expected: workerStatus.grammarStatus?.expected ?? 0
+                      })}
                 </p>
-              ) : null}
-            </div>
+                {typeof workerStatus.generation === 'number' ? (
+                  <p>
+                    {t('plugin.codegraph.workerGeneration', {
+                      generation: workerStatus.generation
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            </details>
           ) : null}
           {refreshError ? <p className="mt-1 text-xs text-destructive">{refreshError}</p> : null}
+          {status?.indexed && !status.indexing && status.fileCount === 0 && !refreshError ? (
+            <p className="mt-1 text-xs text-amber-600">
+              {t('plugin.codegraph.noSourceFiles', {
+                defaultValue: 'Index completed, but no indexable source files were found.'
+              })}
+            </p>
+          ) : null}
           {indexProgress ? (
             <p className="mt-1 text-xs text-muted-foreground">
               {indexProgress.phase || t('plugin.codegraph.indexing')} ·{' '}

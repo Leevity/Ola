@@ -2,9 +2,14 @@ import { create } from 'zustand'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { refreshDynamicToolCatalog } from '@renderer/lib/tools/dynamic-tool-catalog'
+import {
+  inferAgentProfileMeta,
+  inferCommandProfileMeta,
+  type AgentProfileMeta
+} from '@renderer/lib/agent/sub-agents/profile'
 
 export type ResourceKind = 'agents' | 'commands'
-export type ResourceSource = 'user' | 'bundled'
+export type ResourceSource = 'user' | 'bundled' | 'overridden'
 
 export interface ManagedResourceItem {
   id: string
@@ -15,6 +20,7 @@ export interface ManagedResourceItem {
   source: ResourceSource
   editable: boolean
   effective?: boolean
+  profileMeta: AgentProfileMeta
 }
 
 export interface ManagedResourceDetail extends ManagedResourceItem {
@@ -70,9 +76,18 @@ function normalizeList(kind: ResourceKind, result: unknown): ManagedResourceItem
         name: String(item.name ?? ''),
         description: String(item.description ?? item.summary ?? ''),
         path: String(item.path ?? ''),
-        source: item.source === 'bundled' ? 'bundled' : 'user',
+        source:
+          item.source === 'bundled'
+            ? 'bundled'
+            : item.source === 'overridden'
+              ? 'overridden'
+              : 'user',
         editable: Boolean(item.editable),
-        effective: typeof item.effective === 'boolean' ? item.effective : undefined
+        effective: typeof item.effective === 'boolean' ? item.effective : undefined,
+        profileMeta:
+          kind === 'agents'
+            ? inferAgentProfileMeta(String(item.name ?? ''), ['Read', 'Glob', 'Grep', 'LS', 'Bash'])
+            : inferCommandProfileMeta(String(item.name ?? ''))
       })
     )
     .filter((item) => item.id && item.name && item.path)
@@ -223,6 +238,7 @@ export const useResourcesStore = create<ResourcesStore>((set, get) => ({
           source: result?.source === 'bundled' ? 'bundled' : item.source,
           editable: typeof result?.editable === 'boolean' ? result.editable : item.editable,
           effective: typeof result?.effective === 'boolean' ? result.effective : item.effective,
+          profileMeta: item.profileMeta,
           content: String(result?.content ?? '')
         }
       })

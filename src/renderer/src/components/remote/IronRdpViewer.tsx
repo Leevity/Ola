@@ -384,7 +384,7 @@ export function IronRdpViewer({
 
   return (
     <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden bg-black">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/70">
+      <div className="flex items-center justify-between border-b border-[color:var(--border)] bg-[color:var(--remote-panel)] px-4 py-2 text-xs text-[color:var(--muted-foreground)]">
         <span>{remoteSession.viewerDestination}</span>
         <span className="flex items-center gap-3">
           <select

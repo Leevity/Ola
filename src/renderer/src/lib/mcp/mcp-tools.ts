@@ -84,7 +84,13 @@ export function registerMcpTools(
 
       toolRegistry.register(handler, {
         namespace: 'mcp',
-        owner: `mcp:${server.id}`
+        owner: `mcp:${server.id}`,
+        capability: {
+          readOnly: false,
+          riskLevel: 'medium',
+          requiresApproval: true,
+          projectScoped: Boolean(server.projectId)
+        }
       })
       newNames.push(name)
     }
@@ -128,7 +134,13 @@ export function registerMcpResources(
 
       toolRegistry.register(handler, {
         namespace: 'mcp',
-        owner: `mcp:${server.id}`
+        owner: `mcp:${server.id}`,
+        capability: {
+          readOnly: true,
+          riskLevel: 'low',
+          requiresApproval: false,
+          projectScoped: Boolean(server.projectId)
+        }
       })
       _registeredMcpNames.push(name)
     }

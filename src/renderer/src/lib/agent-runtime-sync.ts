@@ -6,13 +6,14 @@ import { IPC } from '@renderer/lib/ipc/channels'
 import type { TaskItem } from '@renderer/stores/task-store'
 import type { ActiveTeam } from '@renderer/stores/team-store'
 import type { TeamRuntimeSnapshot } from '../../../shared/team-runtime-types'
+import type { RunLifecycleStatus } from '@renderer/lib/api/types'
 
 export type AgentRuntimeSyncEvent =
   | { kind: 'set_running'; running: boolean }
   | {
       kind: 'set_session_status'
       sessionId: string
-      status: 'running' | 'retrying' | 'completed' | null
+      status: RunLifecycleStatus | 'running' | 'retrying' | null
     }
   | { kind: 'add_tool_call'; toolCall: ToolCallState; sessionId?: string | null }
   | {

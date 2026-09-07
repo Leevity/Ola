@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import {
   MessageSquare,
   CircleHelp,
-  Briefcase,
   Code2,
   ShieldCheck,
   Plus,
@@ -17,7 +16,8 @@ import {
   Trash2,
   Pin,
   Cpu,
-  Sparkles
+  Sparkles,
+  BriefcaseBusiness
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -87,6 +87,7 @@ export function CommandPalette(): React.JSX.Element {
   const deleteSession = useChatStore((s) => s.deleteSession)
   const togglePinSession = useChatStore((s) => s.togglePinSession)
   const updateSessionMode = useChatStore((s) => s.updateSessionMode)
+  const updateSessionTaskProfile = useChatStore((s) => s.updateSessionTaskProfile)
   const mode = useUIStore((s) => s.mode)
   const chatView = useUIStore((s) => s.chatView)
   const setMode = useUIStore((s) => s.setMode)
@@ -240,22 +241,48 @@ export function CommandPalette(): React.JSX.Element {
 
         <CommandSeparator />
 
+        <CommandGroup heading={t('commandPalette.switchProfile', { defaultValue: 'Work / Code' })}>
+          {(['work', 'code'] as const)
+            .filter((profile) => profile !== activeSession?.taskProfile)
+            .map((profile) => (
+              <CommandItem
+                key={profile}
+                disabled={Boolean(activeSession?.taskProfileLocked || activeSession?.messageCount)}
+                onSelect={() =>
+                  runAndClose(() => {
+                    if (!activeSessionId) return
+                    updateSessionTaskProfile(activeSessionId, profile)
+                  })
+                }
+              >
+                {profile === 'work' ? (
+                  <BriefcaseBusiness className="size-4" />
+                ) : (
+                  <Code2 className="size-4" />
+                )}
+                <span className="capitalize">{profile}</span>
+              </CommandItem>
+            ))}
+        </CommandGroup>
+
+        <CommandSeparator />
+
         <CommandGroup heading={t('commandPalette.switchMode')}>
           {(
             [
+              {
+                value: 'chat' as AppMode,
+                label: t('commandPalette.switchToChat'),
+                icon: <MessageSquare className="size-4" />
+              },
               {
                 value: 'clarify' as AppMode,
                 label: t('commandPalette.switchToClarify'),
                 icon: <CircleHelp className="size-4" />
               },
               {
-                value: 'cowork' as AppMode,
-                label: t('commandPalette.switchToCowork'),
-                icon: <Briefcase className="size-4" />
-              },
-              {
-                value: 'code' as AppMode,
-                label: t('commandPalette.switchToCode'),
+                value: 'execute' as AppMode,
+                label: t('commandPalette.switchToExecute'),
                 icon: <Code2 className="size-4" />
               },
               {
@@ -395,8 +422,6 @@ export function CommandPalette(): React.JSX.Element {
                   <MessageSquare className="size-4" />
                 ) : s.mode === 'clarify' ? (
                   <CircleHelp className="size-4" />
-                ) : s.mode === 'cowork' ? (
-                  <Briefcase className="size-4" />
                 ) : s.mode === 'acp' ? (
                   <ShieldCheck className="size-4" />
                 ) : (

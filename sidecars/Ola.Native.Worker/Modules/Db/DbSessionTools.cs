@@ -88,6 +88,8 @@ internal static class DbSessionTools
             AddPatchValue(patch, sets, values, "providerId", "provider_id");
             AddPatchValue(patch, sets, values, "modelId", "model_id");
             AddPatchValue(patch, sets, values, "modelSelectionMode", "model_selection_mode");
+            AddPatchValue(patch, sets, values, "taskProfile", "task_profile");
+            AddPatchBoolValue(patch, sets, values, "taskProfileLocked", "task_profile_locked");
 
             if (sets.Count == 0)
             {
@@ -274,7 +276,8 @@ internal static class DbSessionTools
     private const string SessionSelectSql = """
         SELECT id, title, icon, mode, created_at, updated_at, project_id, working_folder,
                ssh_connection_id, plan_id, pinned, plugin_id, external_chat_id, provider_id,
-               model_id, model_selection_mode, COALESCE(message_count, 0) AS message_count
+               model_id, model_selection_mode, task_profile, task_profile_locked,
+               COALESCE(message_count, 0) AS message_count
           FROM sessions
         """;
 
@@ -309,7 +312,9 @@ internal static class DbSessionTools
             ProviderId = GetNullableString(reader, 13),
             ModelId = GetNullableString(reader, 14),
             ModelSelectionMode = GetNullableString(reader, 15),
-            MessageCount = reader.IsDBNull(16) ? 0 : reader.GetInt32(16)
+            TaskProfile = GetNullableString(reader, 16),
+            TaskProfileLocked = reader.IsDBNull(17) ? 0 : reader.GetInt32(17),
+            MessageCount = reader.IsDBNull(18) ? 0 : reader.GetInt32(18)
         };
     }
 
@@ -351,7 +356,9 @@ internal static class DbSessionTools
             ProviderId = providerId,
             ModelId = modelId,
             ModelSelectionMode = NormalizeOptional(JsonHelpers.GetString(parameters, "modelSelectionMode")) ??
-                (providerId is not null && modelId is not null ? "manual" : "inherit")
+                (providerId is not null && modelId is not null ? "manual" : "inherit"),
+            TaskProfile = NormalizeOptional(JsonHelpers.GetString(parameters, "taskProfile")),
+            TaskProfileLocked = JsonHelpers.GetBool(parameters, "taskProfileLocked", false) ? 1 : 0
         };
     }
 
@@ -397,11 +404,11 @@ internal static class DbSessionTools
             INSERT INTO sessions (
               id, title, icon, mode, created_at, updated_at, message_count, project_id,
               working_folder, ssh_connection_id, plan_id, pinned, plugin_id, provider_id, model_id,
-              model_selection_mode
+              model_selection_mode, task_profile, task_profile_locked
             ) VALUES (
               $id, $title, $icon, $mode, $createdAt, $updatedAt, 0, $projectId,
               $workingFolder, $sshConnectionId, $planId, $pinned, $pluginId, $providerId, $modelId,
-              $modelSelectionMode
+              $modelSelectionMode, $taskProfile, $taskProfileLocked
             )
             """,
             new DbSql.SqlParam("$id", input.Id),
@@ -418,7 +425,9 @@ internal static class DbSessionTools
             new DbSql.SqlParam("$pluginId", input.PluginId),
             new DbSql.SqlParam("$providerId", input.ProviderId),
             new DbSql.SqlParam("$modelId", input.ModelId),
-            new DbSql.SqlParam("$modelSelectionMode", input.ModelSelectionMode));
+            new DbSql.SqlParam("$modelSelectionMode", input.ModelSelectionMode),
+            new DbSql.SqlParam("$taskProfile", input.TaskProfile),
+            new DbSql.SqlParam("$taskProfileLocked", input.TaskProfileLocked));
     }
 
     private static void AddPatchValue(
@@ -532,5 +541,7 @@ internal static class DbSessionTools
         public string? ProviderId { get; set; }
         public string? ModelId { get; set; }
         public string ModelSelectionMode { get; set; } = "inherit";
+        public string? TaskProfile { get; set; }
+        public int TaskProfileLocked { get; set; }
     }
 }

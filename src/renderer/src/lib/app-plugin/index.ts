@@ -28,7 +28,11 @@ let codeGraphWasEnabled = false
 
 export function registerImagePluginTools(): void {
   if (imageToolRegistered) return
-  toolRegistry.register(imageGenerateTool)
+  toolRegistry.register(imageGenerateTool, {
+    namespace: 'plugin',
+    owner: 'core',
+    capability: { riskLevel: 'medium', projectScoped: true }
+  })
   imageToolRegistered = true
 }
 
@@ -40,11 +44,23 @@ export function unregisterImagePluginTools(): void {
 
 export function registerDesktopControlTools(): void {
   if (desktopControlToolsRegistered) return
-  toolRegistry.register(desktopScreenshotTool)
-  toolRegistry.register(desktopClickTool)
-  toolRegistry.register(desktopTypeTool)
-  toolRegistry.register(desktopScrollTool)
-  toolRegistry.register(desktopWaitTool)
+  for (const handler of [
+    desktopScreenshotTool,
+    desktopClickTool,
+    desktopTypeTool,
+    desktopScrollTool,
+    desktopWaitTool
+  ]) {
+    toolRegistry.register(handler, {
+      namespace: 'plugin',
+      owner: 'core',
+      capability: {
+        readOnly: handler === desktopScreenshotTool,
+        riskLevel: handler === desktopScreenshotTool ? 'medium' : 'high',
+        projectScoped: false
+      }
+    })
+  }
   desktopControlToolsRegistered = true
 }
 
@@ -59,7 +75,12 @@ export function unregisterDesktopControlTools(): void {
 }
 
 export function isAppPluginToolsRegistered(): boolean {
-  return imageToolRegistered || desktopControlToolsRegistered || isBrowserToolRegistered()
+  return (
+    imageToolRegistered ||
+    desktopControlToolsRegistered ||
+    isBrowserToolRegistered() ||
+    codeGraphWasEnabled
+  )
 }
 
 export function updateAppPluginToolRegistration(): void {

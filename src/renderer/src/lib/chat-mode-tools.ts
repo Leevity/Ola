@@ -7,8 +7,13 @@ import { buildMemoryContext } from './agent/dynamic-context'
 import type { LayeredMemorySnapshot, SessionMemoryScope } from './agent/memory-files'
 import type { PromptEnvironmentContext } from './agent/system-prompt'
 import { normalizeLanguageCode, resolveLanguageName } from './i18n-language'
+import type { TaskProfile } from './task-profile'
 
 const CHAT_MODE_CORE_TOOL_NAMES = new Set([
+  'Read',
+  'Grep',
+  'Glob',
+  'LS',
   'WebSearch',
   'WebFetch',
   'visualize_show_widget',
@@ -22,6 +27,7 @@ const CHAT_MODE_PLUGIN_TOOL_NAMES = new Set([
 ])
 
 type ChatModePromptOptions = {
+  taskProfile?: TaskProfile
   language?: string
   userRules?: string
   workingFolder?: string
@@ -87,6 +93,40 @@ export function filterChatModeToolDefinitions(toolDefs: ToolDefinition[]): ToolD
   return toolDefs.filter((tool) => isChatModeToolName(tool.name))
 }
 
+const TASK_PROFILE_TOOL_GROUPS: Record<'work' | 'code', string[]> = {
+  work: ['WebSearch', 'WebFetch', 'Browser', 'BrowserOpen', 'Document', 'Spreadsheet', 'Channel'],
+  code: [
+    'Read',
+    'Grep',
+    'Glob',
+    'LS',
+    'CodeGraph',
+    'Wiki',
+    'Shell',
+    'Bash',
+    'PowerShell',
+    'Git',
+    'Test',
+    'Build',
+    'Diff'
+  ]
+}
+
+export function sortToolDefinitionsForTaskProfile(
+  toolDefs: ToolDefinition[],
+  profile: 'work' | 'code' = 'work'
+): ToolDefinition[] {
+  const preferred = TASK_PROFILE_TOOL_GROUPS[profile]
+  const rank = (name: string): number => {
+    const index = preferred.findIndex((token) => name === token || name.includes(token))
+    return index === -1 ? preferred.length : index
+  }
+  return toolDefs
+    .map((definition, index) => ({ definition, index }))
+    .sort((left, right) => rank(left.definition.name) - rank(right.definition.name) || left.index - right.index)
+    .map(({ definition }) => definition)
+}
+
 export function buildToolDefinitionCacheKey(
   toolDefs: readonly Pick<ToolDefinition, 'name' | 'description' | 'inputSchema'>[]
 ): string {
@@ -110,6 +150,7 @@ export function haveSameToolDefinitions(
 }
 
 export function buildSystemPromptContextCacheKey(options: {
+  taskProfile?: TaskProfile
   language?: string
   userRules?: string
   environmentContext?: PromptCacheEnvironmentContext
@@ -117,6 +158,7 @@ export function buildSystemPromptContextCacheKey(options: {
   memorySnapshot?: unknown
 }): string {
   return stableSerializePromptCacheValue({
+    taskProfile: options.taskProfile ?? 'work',
     language: normalizeLanguageCode(options.language),
     userRules: normalizeUserRules(options.userRules),
     memorySnapshot: options.memorySnapshot ?? null,
@@ -143,6 +185,7 @@ export function buildSystemPromptContextCacheKey(options: {
 
 export function buildChatModePromptContextCacheKey(options: ChatModePromptOptions): string {
   return stableSerializePromptCacheValue({
+    taskProfile: options.taskProfile ?? 'work',
     language: normalizeLanguageCode(options.language),
     userRules: normalizeUserRules(options.userRules),
     workingFolder: options.workingFolder?.trim() || null,
@@ -190,11 +233,29 @@ export function buildChatModeSystemPrompt(options: ChatModePromptOptions): strin
     'Use markdown formatting when it improves readability. Use fenced code blocks with language identifiers for code.',
     '',
     '## Chat Mode',
-    '- Chat mode is conversation-first, but it has the same tool access as other agent modes when tools are provided.',
-    '- Answer directly when tools are unnecessary; use file, shell, skill, MCP, and other tools when they help satisfy the user request.',
-    '- For actions that modify files, run commands, contact external services, or otherwise have side effects, keep the user informed and respect the app approval flow.',
+    '- Chat mode is conversation-first and only exposes read-only tools such as project reading, search, web lookup, and memory.',
+    '- Answer directly when tools are unnecessary; use the provided read-only tools when they improve accuracy.',
+    '- Never claim to modify files, run commands, contact external services, or perform another side effect in Chat mode. Ask the user to switch to Execute mode for those actions.',
     '- Treat loaded memory and project protocol as context with higher priority than ordinary conversation history, while still following this system prompt first.'
   ]
+
+  if (options.taskProfile === 'code') {
+    parts.push(
+      '',
+      '## Task Profile: Code',
+      '- Prefer project structure, source files, CodeGraph, Wiki, diffs, tests, builds and Git context when relevant.',
+      '- Keep Chat mode read-only. For edits, shell commands, tests, builds or Git changes, clearly ask to enter Execute mode.',
+      '- Report changed files, commands, verification and remaining risks in the final answer.'
+    )
+  } else {
+    parts.push(
+      '',
+      '## Task Profile: Work',
+      '- Prefer research, documents, browser, communication, automation and useful work artifacts when relevant.',
+      '- Keep Chat mode read-only. For file changes, shell commands or external side effects, clearly ask to enter Execute mode.',
+      '- Report conclusions, artifacts, sources and next steps in the final answer.'
+    )
+  }
 
   const environmentContext = options.environmentContext
   if (environmentContext) {

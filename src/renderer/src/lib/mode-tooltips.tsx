@@ -23,20 +23,12 @@ export const modeTooltipConfigs: Record<SelectableMode, ModeTooltipConfig> = {
       'modeTooltip.clarify.solves.2'
     ]
   },
-  cowork: {
-    summaryKey: 'modeTooltip.cowork.summary',
+  execute: {
+    summaryKey: 'modeTooltip.execute.summary',
     solvesKeys: [
-      'modeTooltip.cowork.solves.0',
-      'modeTooltip.cowork.solves.1',
-      'modeTooltip.cowork.solves.2'
-    ]
-  },
-  code: {
-    summaryKey: 'modeTooltip.code.summary',
-    solvesKeys: [
-      'modeTooltip.code.solves.0',
-      'modeTooltip.code.solves.1',
-      'modeTooltip.code.solves.2'
+      'modeTooltip.execute.solves.0',
+      'modeTooltip.execute.solves.1',
+      'modeTooltip.execute.solves.2'
     ]
   },
   acp: {

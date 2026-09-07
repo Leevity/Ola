@@ -7,10 +7,10 @@ import {
   Plus,
   MessageSquare,
   CircleHelp,
+  BriefcaseBusiness,
   Trash2,
   Eraser,
   Search,
-  Briefcase,
   Code2,
   ShieldCheck,
   Download,
@@ -90,17 +90,21 @@ import { openDetachedSessionWindow, openSessionOrFocusDetached } from '@renderer
 import { cn } from '@renderer/lib/utils'
 import { WorkingFolderSelectorDialog } from '@renderer/components/chat/WorkingFolderSelectorDialog'
 import type { UnifiedMessage } from '@renderer/lib/api/types'
+import type { TaskProfile } from '@renderer/lib/task-profile'
 import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { clampLeftSidebarWidth, LEFT_SIDEBAR_DEFAULT_WIDTH } from './right-panel-defs'
 
 const modeIcons: Record<SessionMode, React.ReactNode> = {
   chat: <MessageSquare className="size-4" />,
   clarify: <CircleHelp className="size-4" />,
-  cowork: <Briefcase className="size-4" />,
-  code: <Code2 className="size-4" />,
+  execute: <Code2 className="size-4" />,
   acp: <ShieldCheck className="size-4" />
 }
-const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'cowork', 'code', 'acp']
+const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'execute', 'acp']
+const taskProfileIcons: Record<TaskProfile, React.ReactNode> = {
+  work: <BriefcaseBusiness className="size-4" />,
+  code: <Code2 className="size-4" />
+}
 
 interface SessionListItem {
   id: string
@@ -111,6 +115,8 @@ interface SessionListItem {
   updatedAt: number
   pinned?: boolean
   messageCount: number
+  taskProfile: TaskProfile
+  taskProfileLocked: boolean
   pluginId?: string
   projectId?: string
 }
@@ -207,6 +213,8 @@ export function SessionListPanel(): React.JSX.Element {
       title: session.title,
       icon: session.icon,
       mode: session.mode,
+      taskProfile: session.taskProfile,
+      taskProfileLocked: session.taskProfileLocked,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       pinned: session.pinned,
@@ -235,6 +243,7 @@ export function SessionListPanel(): React.JSX.Element {
   const clearSessionMessages = useChatStore((s) => s.clearSessionMessages)
   const duplicateSession = useChatStore((s) => s.duplicateSession)
   const updateSessionMode = useChatStore((s) => s.updateSessionMode)
+  const updateSessionTaskProfile = useChatStore((s) => s.updateSessionTaskProfile)
   const togglePinSession = useChatStore((s) => s.togglePinSession)
   const mode = useUIStore((s) => s.mode)
   const runtimeLeftSidebarWidth = useUIStore((s) => s.leftSidebarWidth)
@@ -1255,25 +1264,57 @@ export function SessionListPanel(): React.JSX.Element {
         )}
         <ContextMenuSub>
           <ContextMenuSubTrigger>
-            {modeIcons[session.mode]}
-            {t('sidebar.switchMode')}
+            {taskProfileIcons[session.taskProfile]}
+            {t('sidebar.switchProfile', { defaultValue: 'Work / Code' })}
           </ContextMenuSubTrigger>
           <ContextMenuSubContent>
-            {sessionModeOptions
-              .filter((mode) => !session.projectId || mode !== 'chat')
-              .map((m) => (
-                <ContextMenuItem
-                  key={m}
-                  disabled={session.mode === m}
-                  onClick={() => {
-                    updateSessionMode(session.id, m)
-                    toast.success(t('sidebar_toast.switchedMode', { mode: m }))
-                  }}
-                >
-                  {modeIcons[m]}
-                  <span className="capitalize">{t(`sidebar.mode.${m}`)}</span>
-                </ContextMenuItem>
-              ))}
+            {(['work', 'code'] as const).map((profile) => (
+              <ContextMenuItem
+                key={profile}
+                disabled={
+                  session.taskProfile === profile ||
+                  session.taskProfileLocked ||
+                  session.messageCount > 0
+                }
+                onClick={() => {
+                  if (updateSessionTaskProfile(session.id, profile)) {
+                    toast.success(
+                      t('sidebar_toast.switchedProfile', {
+                        defaultValue: `Switched to ${profile}`,
+                        profile
+                      })
+                    )
+                  }
+                }}
+              >
+                {taskProfileIcons[profile]}
+                <span className="capitalize">{profile}</span>
+              </ContextMenuItem>
+            ))}
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <ShieldCheck className="size-4" />
+                {t('sidebar.advancedRuntime', { defaultValue: 'Advanced runtime' })}
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent>
+                {sessionModeOptions
+                  .filter((mode) => !session.projectId || mode !== 'chat')
+                  .map((m) => (
+                    <ContextMenuItem
+                      key={m}
+                      disabled={session.mode === m}
+                      onClick={() => {
+                        updateSessionMode(session.id, m)
+                        toast.success(t('sidebar_toast.switchedMode', { mode: m }))
+                      }}
+                    >
+                      {modeIcons[m]}
+                      <span className="capitalize">{t(`sidebar.mode.${m}`)}</span>
+                    </ContextMenuItem>
+                  ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
           </ContextMenuSubContent>
         </ContextMenuSub>
         <ContextMenuSeparator />

@@ -1,0 +1,1 @@
+Analyze the selected project. Confirm the working directory, inspect the project structure and index health, explain the architecture and main flows, and identify concrete risks and missing verification.

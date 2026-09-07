@@ -504,6 +504,11 @@ internal static partial class CodeGraphToolHandler
             return IndexFail(indexId, $"Refused to index a sensitive path: {root}", CodeGraphErrorKind.PathRefusal);
         }
 
+        if (IsMissingRoot(root))
+        {
+            return IndexFail(indexId, MissingRootMessage(root), CodeGraphErrorKind.InvalidArgs);
+        }
+
         EngineHandle handle;
         try
         {
@@ -575,6 +580,11 @@ internal static partial class CodeGraphToolHandler
         if (IsRefusedRoot(root))
         {
             return new CodeGraphSyncResponse(false, 0, 0, 0, 0, 0, 0, $"Refused to sync a sensitive path: {root}", CodeGraphErrorKind.PathRefusal);
+        }
+
+        if (IsMissingRoot(root))
+        {
+            return new CodeGraphSyncResponse(false, 0, 0, 0, 0, 0, 0, MissingRootMessage(root), CodeGraphErrorKind.InvalidArgs);
         }
 
         if (!CodeGraphEngine.IsInitialized(root))
@@ -758,6 +768,11 @@ internal static partial class CodeGraphToolHandler
         if (IsRefusedRoot(root))
         {
             return PathRefusalTool(root);
+        }
+
+        if (IsMissingRoot(root))
+        {
+            return InvalidArgsTool(MissingRootMessage(root));
         }
 
         if (!CodeGraphEngine.IsInitialized(root))
@@ -1008,6 +1023,21 @@ internal static partial class CodeGraphToolHandler
 
         return string.IsNullOrWhiteSpace(wf) ? null : wf.Trim();
     }
+
+    private static bool IsMissingRoot(string path)
+    {
+        try
+        {
+            return !Directory.Exists(Path.GetFullPath(path));
+        }
+        catch
+        {
+            return true;
+        }
+    }
+
+    private static string MissingRootMessage(string path) =>
+        $"Project directory does not exist or is not a directory: {path}";
 
     // Symbol -> candidate defs, narrowed by an optional file substring then an optional
     // exact start line. Filters are only applied when they leave at least one match.

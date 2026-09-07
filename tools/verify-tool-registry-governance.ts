@@ -21,7 +21,15 @@ assert.deepEqual(registry.getRegistration('Read'), {
   name: 'Read',
   namespace: 'core',
   owner: 'core',
-  capabilityHash: registry.getRegistration('Read')?.capabilityHash
+  capabilityHash: registry.getRegistration('Read')?.capabilityHash,
+  capability: {
+    readOnly: true,
+    riskLevel: 'low',
+    requiresApproval: false,
+    source: 'core',
+    owner: 'core',
+    projectScoped: false
+  }
 })
 assert.match(registry.getRegistration('Read')?.capabilityHash ?? '', /^fnv1a:[0-9a-f]{8}$/)
 
@@ -38,6 +46,18 @@ assert.equal(registry.get('Read'), core)
 assert.equal(registry.getConflicts().length, 1)
 assert.equal(registry.getConflicts()[0]?.existing.owner, 'core')
 assert.equal(registry.getConflicts()[0]?.rejected.owner, 'extension:unsafe')
+
+const pluginTool = handler('codegraph_explore', 'Explore the project graph')
+assert.equal(
+  registry.register(pluginTool, {
+    namespace: 'plugin',
+    owner: 'core',
+    capability: { readOnly: true, projectScoped: true }
+  }),
+  true
+)
+assert.equal(registry.getRegistration('codegraph_explore')?.capability.source, 'plugin')
+assert.equal(registry.getRegistration('codegraph_explore')?.capability.projectScoped, true)
 
 const mcpFirst = handler('mcp__server__status', 'First status')
 const mcpRefresh = handler('mcp__server__status', 'Refreshed status')

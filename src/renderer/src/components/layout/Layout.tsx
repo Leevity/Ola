@@ -9,8 +9,7 @@ import { TitleBar } from './TitleBar'
 import { WorkspaceSidebar } from './WorkspaceSidebar'
 import { RightPanel } from './RightPanel'
 import { SubAgentExecutionDetail } from './SubAgentExecutionDetail'
-import { ChatHomePage } from '@renderer/components/chat/ChatHomePage'
-import { ProjectHomePage } from '@renderer/components/chat/ProjectHomePage'
+import { WorkspaceHome } from '@renderer/components/chat/WorkspaceHome'
 import { ProjectArchivePage } from '@renderer/components/chat/ProjectArchivePage'
 import { GitPage } from '@renderer/components/chat/GitPage'
 import { KeyboardShortcutsDialog } from '@renderer/components/settings/KeyboardShortcutsDialog'
@@ -104,6 +103,7 @@ interface LayoutProps {
 export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.JSX.Element {
   const { t } = useTranslation('layout')
   const mode = useUIStore((s) => s.mode)
+  const remoteDialogOpen = useUIStore((s) => s.remoteDialogOpen)
   const setMode = useUIStore((s) => s.setMode)
   const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen)
   const leftSidebarWidth = useUIStore((s) => s.leftSidebarWidth)
@@ -161,7 +161,56 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth
   )
+  const [remoteDialogMaximized, setRemoteDialogMaximized] = useState(false)
+  const [remoteDialogPosition, setRemoteDialogPosition] = useState({ x: 0, y: 0 })
+  const remoteDialogDragRef = useRef<
+    { startX: number; startY: number; originX: number; originY: number } | undefined
+  >(undefined)
   const autoCollapsedSidebarForCrowdingRef = useRef(false)
+
+  const startRemoteDialogDrag = useCallback(
+    (event: React.PointerEvent<HTMLElement>): void => {
+      if (remoteDialogMaximized || event.button !== 0) return
+      event.preventDefault()
+      remoteDialogDragRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        originX: remoteDialogPosition.x,
+        originY: remoteDialogPosition.y
+      }
+    },
+    [remoteDialogMaximized, remoteDialogPosition]
+  )
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent): void => {
+      const drag = remoteDialogDragRef.current
+      if (!drag) return
+      setRemoteDialogPosition({
+        x: drag.originX + event.clientX - drag.startX,
+        y: drag.originY + event.clientY - drag.startY
+      })
+    }
+    const stopRemoteDialogDrag = (): void => {
+      remoteDialogDragRef.current = undefined
+    }
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopRemoteDialogDrag)
+    window.addEventListener('pointercancel', stopRemoteDialogDrag)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopRemoteDialogDrag)
+      window.removeEventListener('pointercancel', stopRemoteDialogDrag)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!remoteDialogOpen) {
+      setRemoteDialogMaximized(false)
+      setRemoteDialogPosition({ x: 0, y: 0 })
+      remoteDialogDragRef.current = undefined
+    }
+  }, [remoteDialogOpen])
 
   const runningSubAgentNamesSig = useAgentStore((s) => s.runningSubAgentNamesSig)
   const runningSubAgentCount = runningSubAgentNamesSig
@@ -270,11 +319,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   // Sync UI mode only when session info changes, so manual top-bar toggles are respected
   useEffect(() => {
     if (!activeSessionMode) return
-    const normalizedSessionMode: AppMode = activeSessionProjectId
-      ? activeSessionMode === 'chat'
-        ? 'cowork'
-        : activeSessionMode
-      : 'chat'
+    const normalizedSessionMode: AppMode = activeSessionMode
     const currentMode = useUIStore.getState().mode
     if (currentMode !== normalizedSessionMode) {
       queueMicrotask(() => {
@@ -284,29 +329,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
       })
     }
   }, [activeSessionId, activeSessionMode, activeSessionProjectId])
-
-  useEffect(() => {
-    if (chatView !== 'session' || !activeSessionId || !activeSessionMode) return
-
-    if (activeSessionProjectId && activeSessionMode === 'chat') {
-      updateSessionMode(activeSessionId, 'cowork')
-      return
-    }
-
-    if (!activeSessionProjectId && activeSessionMode !== 'chat') {
-      updateSessionMode(activeSessionId, 'chat')
-    }
-  }, [activeSessionId, activeSessionMode, activeSessionProjectId, chatView, updateSessionMode])
-
-  useEffect(() => {
-    if (chatView === 'session') return
-
-    const nextMode = chatView !== 'home' && mode === 'chat' ? 'cowork' : null
-
-    if (nextMode && mode !== nextMode) {
-      setMode(nextMode)
-    }
-  }, [chatView, mode, setMode])
 
   useEffect(() => {
     if (chatView !== 'session' || activeSessionId) return
@@ -328,18 +350,20 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     }
   }, [activeSessionId])
 
-  const settingsPageOpen = useUIStore((s) => s.settingsPageOpen)
-  const accountAuthPageOpen = useUIStore((s) => s.accountAuthPageOpen)
+  const activeSurface = useUIStore((s) => s.activeSurface)
+  const settingsPageOpen = activeSurface === 'settings'
+  const accountAuthPageOpen = activeSurface === 'account'
   const conversationGuideOpen = useUIStore((s) => s.conversationGuideOpen)
   const setConversationGuideOpen = useUIStore((s) => s.setConversationGuideOpen)
-  const skillsPageOpen = useUIStore((s) => s.skillsPageOpen)
-  const soulsPageOpen = useUIStore((s) => s.soulsPageOpen)
-  const syncPageOpen = useUIStore((s) => s.syncPageOpen)
-  const remotePageOpen = useUIStore((s) => s.remotePageOpen)
-  const resourcesPageOpen = useUIStore((s) => s.resourcesPageOpen)
-  const drawPageOpen = useUIStore((s) => s.drawPageOpen)
-  const translatePageOpen = useUIStore((s) => s.translatePageOpen)
-  const tasksPageOpen = useUIStore((s) => s.tasksPageOpen)
+  const skillsPageOpen = activeSurface === 'capabilities'
+  const soulsPageOpen = activeSurface === 'personalization'
+  const syncPageOpen = activeSurface === 'data'
+  const remotePageOpen = activeSurface === 'remote'
+  const closeRemoteDialog = useUIStore((s) => s.closeRemoteDialog)
+  const resourcesPageOpen = activeSurface === 'resources'
+  const drawPageOpen = activeSurface === 'draw'
+  const translatePageOpen = activeSurface === 'translate'
+  const tasksPageOpen = activeSurface === 'tasks'
   const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar)
   const contentHeader = useMemo(() => {
     if (tasksPageOpen) {
@@ -444,7 +468,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
       // Ctrl+1/2/3/4: Switch mode
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && ['1', '2', '3', '4'].includes(e.key)) {
         e.preventDefault()
-        const modeMap = { '1': 'clarify', '2': 'cowork', '3': 'code', '4': 'acp' } as const
+        const modeMap = { '1': 'chat', '2': 'clarify', '3': 'execute', '4': 'acp' } as const
         handleModeChange(modeMap[e.key as '1' | '2' | '3' | '4'])
       }
       // Ctrl+N: New independent chat session
@@ -812,19 +836,12 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
                   <TranslatePage />
                 </Suspense>
               </PageTransition>
-            ) : chatView === 'home' ? (
+            ) : chatView === 'home' || chatView === 'project' ? (
               <PageTransition
-                key="chat-home"
+                key="workspace-home"
                 className="flex flex-1 min-w-0 flex-col overflow-hidden"
               >
-                <ChatHomePage />
-              </PageTransition>
-            ) : chatView === 'project' ? (
-              <PageTransition
-                key="project-home"
-                className="flex flex-1 min-w-0 flex-col overflow-hidden"
-              >
-                <ProjectHomePage />
+                <WorkspaceHome />
               </PageTransition>
             ) : chatView === 'archive' || chatView === 'channels' ? (
               <PageTransition
@@ -924,6 +941,45 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   return (
     <TooltipProvider delayDuration={0}>
       {mainContent}
+
+      <Dialog
+        open={remoteDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) closeRemoteDialog()
+        }}
+      >
+        <DialogContent
+          showCloseButton={false}
+          className={`overflow-hidden border-0 bg-transparent p-0 shadow-2xl sm:max-w-none ${
+            remoteDialogMaximized
+              ? 'left-0 top-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none'
+              : 'h-[min(900px,calc(100vh-4rem))] w-[min(1400px,calc(100vw-2rem))] max-w-none'
+          }`}
+          style={
+            remoteDialogMaximized
+              ? undefined
+              : {
+                  transform: `translate(calc(-50% + ${remoteDialogPosition.x}px), calc(-50% + ${remoteDialogPosition.y}px))`
+                }
+          }
+        >
+          <DialogHeader className="sr-only">
+            <DialogTitle>{t('navRail.remote', { defaultValue: 'Remote control' })}</DialogTitle>
+          </DialogHeader>
+          <Suspense fallback={<LazyPageFallback />}>
+            <RemotePage
+              standalone
+              maximized={remoteDialogMaximized}
+              onRequestClose={closeRemoteDialog}
+              onToggleMaximize={() => {
+                setRemoteDialogMaximized((value) => !value)
+                setRemoteDialogPosition({ x: 0, y: 0 })
+              }}
+              onWindowDragStart={startRemoteDialogDrag}
+            />
+          </Suspense>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={subAgentExecutionDetailOpen}

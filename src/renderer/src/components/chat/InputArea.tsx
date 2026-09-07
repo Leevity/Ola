@@ -454,16 +454,14 @@ function ActiveExtensionsBadge({
 const placeholderKeys: Record<AppMode, string> = {
   chat: 'input.placeholder',
   clarify: 'input.placeholderClarify',
-  cowork: 'input.placeholderCowork',
-  code: 'input.placeholderCode',
+  execute: 'input.placeholderExecute',
   acp: 'input.placeholderAcp'
 }
 
 const defaultRecommendationKeys: Record<AppMode, string> = {
   chat: 'input.recommendationDefaultChat',
   clarify: 'input.recommendationDefaultClarify',
-  cowork: 'input.recommendationDefaultCowork',
-  code: 'input.recommendationDefaultCode',
+  execute: 'input.recommendationDefaultExecute',
   acp: 'input.recommendationDefaultAcp'
 }
 
@@ -1914,8 +1912,7 @@ export function InputArea({
     : permissionPolicy.enabled
       ? 'whitelist'
       : 'default'
-  const showPermissionModeControl =
-    mode === 'chat' || (projectScoped && (mode === 'cowork' || mode === 'code'))
+  const showPermissionModeControl = mode === 'chat' || (projectScoped && mode === 'execute')
   const handlePermissionModeChange = React.useCallback(
     (nextMode: 'default' | 'whitelist' | 'full-access'): void => {
       if (nextMode === 'full-access') {

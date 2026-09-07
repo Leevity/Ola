@@ -1,11 +1,20 @@
 ﻿{
+  "workspaceHome": {
+    "projectNavigation": "项目导航",
+    "overview": "项目概览",
+    "wiki": "Wiki",
+    "codegraph": "CodeGraph 与索引",
+    "wikiTitle": "项目 Wiki",
+    "wikiDescription": "基于当前项目生成、重新扫描并导出面向人的项目说明。",
+    "codegraphTitle": "CodeGraph 与索引状态",
+    "codegraphDescription": "查看已索引文件、符号、关系、阻塞原因与高级诊断。"
+  },
   "input": {
     "sendFailedDraftRetained": "发送失败，草稿已保留。",
     "draftRestored": "已恢复未发送的草稿。",
     "placeholder": "输入消息...",
     "placeholderClarify": "描述你的想法，我会先不断追问把需求问透...",
-    "placeholderCowork": "让助手帮你处理项目...",
-    "placeholderCode": "描述你想构建的内容，例如修复 Bug、写脚本，或使用 /commit 提交仓库...",
+    "placeholderExecute": "描述你希望 Ola 构建、研究、操作或验证的任务...",
     "placeholderAcp": "描述目标、背景、约束和验收标准；我会先做设计与分派，不会直接写代码...",
     "placeholderPlanReview": "输入计划审阅反馈，或点击上方卡片以实施...",
     "placeholderPendingGoal": "描述要追求的目标...",
@@ -147,8 +156,7 @@
     "clearConfirmDescWithQueue": "这将删除此对话中的所有消息，并清空当前会话的 {{count}} 条待发送消息。此操作不可撤销。",
     "recommendationDefaultChat": "预测我在这个聊天里下一步最自然会输入什么。",
     "recommendationDefaultClarify": "预测我会继续追问的下一个尖锐问题，直到把需求完全问透。",
-    "recommendationDefaultCowork": "预测我接下来最自然会输入的协作动作。",
-    "recommendationDefaultCode": "预测我接下来最自然会输入的代码修改请求。",
+    "recommendationDefaultExecute": "预测我接下来最自然会输入的具体执行请求。",
     "recommendationDefaultAcp": "预测我接下来最自然会输入的 ACP 目标澄清或设计问题。",
     "recommendationInitWorkspace": "当前工作目录还没有 AGENTS.md。预测自然下一步，大概率是先执行 /init 初始化项目上下文。",
     "startAcp": "开始 ACP 会话",
@@ -193,13 +201,9 @@
         "title": "这是“澄清”模式",
         "description": "适合先把需求、边界、约束和验收标准问清楚，再决定如何执行。它更偏向追问、确认和收敛问题。"
       },
-      "modeCowork": {
-        "title": "这是“协作”模式",
-        "description": "适合通用项目协作：帮你查信息、整理方案、联动工具、处理文件和推进多步骤任务。"
-      },
-      "modeCode": {
-        "title": "这是“编程”模式",
-        "description": "适合直接落代码、修改文件、运行检查并处理工程实现细节。代码类任务优先用这个模式。"
+      "modeExecute": {
+        "title": "这是“执行”模式",
+        "description": "适合编码、研究、文档、DevOps、文件和跨应用操作；所有工具动作都会保留可见、可审计的记录。"
       },
       "modeAcp": {
         "title": "这是“ACP”模式",
@@ -1091,6 +1095,36 @@
     "showDetails": "显示详情",
     "hideDetails": "收起详情"
   },
+  "runOutcome": {
+    "phase": {
+      "preparing": "正在准备上下文",
+      "thinking": "正在分析",
+      "executing": "正在执行工具",
+      "waiting_user": "正在等待你的操作",
+      "summarizing": "正在整理最终结论"
+    },
+    "traceTitle": "执行调用链",
+    "traceSummary": "{{steps}} 个步骤 · 修改 {{files}} 个文件 · {{duration}}",
+    "traceDetailHint": "模型、Token、耗时、审批、工具输入和输出详情统一保留在这里，便于审计。",
+    "failedSteps": "{{count}} 项失败",
+    "completedItems": "实际完成",
+    "artifacts": "产物",
+    "verification": "验证",
+    "warnings": "风险与未完成项",
+    "nextSteps": "下一步",
+    "systemSummary": "模型总结不可用，本结论由系统根据真实执行记录确定性生成。",
+    "status": {
+      "completed": "已完成",
+      "partial": "部分完成",
+      "failed": "失败",
+      "canceled": "已取消"
+    }
+  },
+  "executeSwitch": {
+    "title": "切换到执行模式？",
+    "description": "这个请求可能会修改文件、运行命令或产生其他副作用。执行模式会明确展示并审计这些操作。",
+    "confirm": "切换并继续"
+  },
   "toolGroup": {
     "readFiles": "读取了 {{count}} 个文件",
     "searchedPatterns": "搜索了 {{count}} 个模式",
@@ -1248,6 +1282,11 @@
     "aiCommitTooltip": "根据暂存区 diff 生成提交说明（概括意图与影响，避免流水账）",
     "aiCommitNeedStaged": "请先将变更暂存后再生成说明",
     "aiCommitEmptyStaged": "暂存区为空，无法生成说明",
-    "aiCommitFailed": "生成失败，请检查 API / 模型配置后重试"
+    "aiCommitFailed": "生成失败，请检查 API / 模型配置后重试",
+    "taskProfile": {
+      "ariaLabel": "任务类型",
+      "work": { "label": "Work", "desc": "日常工作" },
+      "code": { "label": "Code", "desc": "项目与编程" }
+    }
   }
 }

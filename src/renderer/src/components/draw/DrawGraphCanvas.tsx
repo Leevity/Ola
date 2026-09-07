@@ -161,7 +161,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
 
   const openCanvasAssistant = async (): Promise<void> => {
     const chat = useChatStore.getState()
-    const sessionId = chat.createSession('cowork', chat.activeProjectId)
+    const sessionId = chat.createSession('execute', chat.activeProjectId)
     chat.updateSessionTitle(sessionId, t('drawPage.graph.assistantTitle'))
     await useInputDraftStore.getState().setDraft(getSessionInputDraftKey(sessionId), {
       text: t('drawPage.graph.assistantDraft', { projectId: project.id }),

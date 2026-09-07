@@ -1,5 +1,9 @@
 import type { ToolCallState } from '@renderer/lib/agent/types'
-import type { SubAgentState, BackgroundProcessState } from '@renderer/stores/agent-store'
+import type {
+  SubAgentState,
+  BackgroundProcessState,
+  SessionExecutionStatus
+} from '@renderer/stores/agent-store'
 
 const EMPTY_SUBAGENT_MAP: Record<string, SubAgentState> = {}
 const EMPTY_SUBAGENT_HISTORY: SubAgentState[] = []
@@ -44,7 +48,7 @@ export interface SessionScopedAgentStateSource {
   sessionToolCallsCache: Record<string, SessionToolCallCache | undefined>
   sessionSubAgentLiveCache: Record<string, SessionSubAgentLiveState | undefined>
   sessionSubAgentSummaries: Record<string, SubAgentState[] | undefined>
-  runningSessions: Record<string, 'running' | 'retrying' | 'completed'>
+  runningSessions: Record<string, SessionExecutionStatus>
   runningSubAgentSessionIdsSig: string
   backgroundProcesses: Record<string, BackgroundProcessState>
 }

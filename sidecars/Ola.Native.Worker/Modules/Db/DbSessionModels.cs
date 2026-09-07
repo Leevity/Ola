@@ -29,6 +29,12 @@ internal sealed class SessionRow
     [JsonPropertyName("mode")]
     public string Mode { get; set; } = "chat";
 
+    [JsonPropertyName("task_profile")]
+    public string? TaskProfile { get; set; }
+
+    [JsonPropertyName("task_profile_locked")]
+    public int TaskProfileLocked { get; set; }
+
     [JsonPropertyName("created_at")]
     public long CreatedAt { get; set; }
 

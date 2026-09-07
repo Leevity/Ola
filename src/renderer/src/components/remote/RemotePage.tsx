@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useTheme } from 'next-themes'
 import {
   Cable,
   CheckCircle2,
@@ -39,6 +40,12 @@ import { useRemoteSignalingStore } from '@renderer/stores/remote-signaling-store
 import { useRemotePeerStore } from '@renderer/stores/remote-peer-store'
 import { useRemoteCaptureStore } from '@renderer/stores/remote-capture-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
+import {
+  createRemoteWorkspaceStyle,
+  getSshChromePalette,
+  resolveAppThemeMode
+} from '@renderer/lib/theme-presets'
+import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { SshPage } from '@renderer/components/ssh/SshPage'
 import { IronRdpViewer } from './IronRdpViewer'
@@ -94,10 +101,33 @@ function formatLastConnected(value: number | null, neverLabel: string): string {
 }
 
 export function RemotePage({
-  standalone = false
-}: { standalone?: boolean } = {}): React.JSX.Element {
+  standalone = false,
+  maximized = false,
+  onRequestClose,
+  onToggleMaximize,
+  onWindowDragStart
+}: {
+  standalone?: boolean
+  maximized?: boolean
+  onRequestClose?: () => void
+  onToggleMaximize?: () => void
+  onWindowDragStart?: (event: React.PointerEvent<HTMLElement>) => void
+} = {}): React.JSX.Element {
   const { t } = useTranslation('layout')
+  const { resolvedTheme } = useTheme()
   const isMac = /Mac/.test(navigator.userAgent)
+  const theme = useSettingsStore((state) => state.theme)
+  const sshTerminalThemePreset = useSettingsStore((state) => state.sshTerminalThemePreset)
+  const closeRemotePage = useUIStore((state) => state.closeRemotePage)
+  const resolvedThemeMode = resolveAppThemeMode(theme === 'system' ? resolvedTheme : theme)
+  const remotePalette = useMemo(
+    () => getSshChromePalette(sshTerminalThemePreset, resolvedThemeMode),
+    [resolvedThemeMode, sshTerminalThemePreset]
+  )
+  const remoteWorkspaceStyle = useMemo(
+    () => createRemoteWorkspaceStyle(remotePalette),
+    [remotePalette]
+  )
   const section = useUIStore((state) => state.remoteWorkspaceSection)
   const setSection = useUIStore((state) => state.setRemoteWorkspaceSection)
   const workspaceRef = useRef<HTMLDivElement | null>(null)
@@ -112,6 +142,7 @@ export function RemotePage({
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>(() => [
     { id: 'workspace-initial', kind: section, title: '' }
   ])
+  const handleRequestClose = onRequestClose ?? closeRemotePage
   const [activeSurface, setActiveSurface] = useState<string>('workspace:workspace-initial')
   const sshTabs = useSshStore((state) => state.openTabs)
   const sshActiveTabId = useSshStore((state) => state.activeTabId)
@@ -375,9 +406,14 @@ export function RemotePage({
   }
 
   return (
-    <div ref={workspaceRef} className="flex h-full min-h-0 flex-col bg-background">
+    <div
+      ref={workspaceRef}
+      className="remote-workspace flex h-full min-h-0 flex-col overflow-hidden"
+      style={remoteWorkspaceStyle}
+    >
       <header
-        className={`${standalone ? 'titlebar-drag' : ''} relative flex h-12 shrink-0 items-end border-b pr-4 ${fullscreen ? 'hidden' : ''} ${
+        onPointerDown={onWindowDragStart}
+        className={`${standalone ? 'titlebar-drag cursor-move' : ''} relative flex h-12 shrink-0 items-end border-b pr-4 ${fullscreen ? 'hidden' : ''} ${
           standalone && isMac ? 'pl-[78px]' : 'pl-3'
         }`}
       >
@@ -509,7 +545,10 @@ export function RemotePage({
             )
           })}
         </div>
-        <div className="titlebar-no-drag relative mb-1 ml-1 flex items-center gap-1">
+        <div
+          className="titlebar-no-drag relative mb-1 ml-1 flex items-center gap-1"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
           <button
             type="button"
             onClick={() => setLauncherOpen((open) => !open)}
@@ -525,6 +564,25 @@ export function RemotePage({
           >
             <Maximize2 className="size-4" />
           </button>
+          {standalone && onToggleMaximize ? (
+            <button
+              type="button"
+              onClick={onToggleMaximize}
+              className="titlebar-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              title={
+                maximized
+                  ? t('remote.restoreWorkspace', { defaultValue: 'Restore window' })
+                  : t('remote.maximizeWorkspace', { defaultValue: 'Maximize window' })
+              }
+              aria-label={
+                maximized
+                  ? t('remote.restoreWorkspace', { defaultValue: 'Restore window' })
+                  : t('remote.maximizeWorkspace', { defaultValue: 'Maximize window' })
+              }
+            >
+              {maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+            </button>
+          ) : null}
           {launcherOpen ? (
             <div className="absolute right-0 top-10 z-50 w-72 overflow-hidden rounded-xl border bg-popover p-2 text-popover-foreground shadow-2xl">
               {(
@@ -549,6 +607,15 @@ export function RemotePage({
               ))}
             </div>
           ) : null}
+          <button
+            type="button"
+            onClick={handleRequestClose}
+            className="titlebar-no-drag inline-flex size-8 items-center justify-center rounded-md text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--accent)] hover:text-[color:var(--foreground)]"
+            title={t('remote.closeWorkspace', { defaultValue: 'Close remote control' })}
+            aria-label={t('remote.closeWorkspace', { defaultValue: 'Close remote control' })}
+          >
+            <X className="size-4" />
+          </button>
         </div>
       </header>
 
@@ -889,7 +956,7 @@ function DirectSessionWorkspace({
 }): React.JSX.Element {
   const { t } = useTranslation('layout')
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col bg-zinc-950">
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-[color:var(--remote-canvas)]">
       <div className="hidden">
         {sessions.map((session) => {
           const connection = connections.find((item) => item.id === session.connectionId)
@@ -974,8 +1041,8 @@ function ActiveViewer({
     []
   )
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-950">
-      <div className="flex items-center justify-between border-b border-white/10 bg-zinc-950 px-4 py-2 text-white">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[color:var(--remote-canvas)]">
+      <div className="flex items-center justify-between border-b border-[color:var(--border)] bg-[color:var(--remote-panel)] px-4 py-2 text-[color:var(--foreground)]">
         <div className="flex min-w-0 items-center gap-3">
           <span
             className={`size-2 rounded-full ${
@@ -989,7 +1056,7 @@ function ActiveViewer({
           <span className="truncate text-sm font-medium">
             {connection?.name ?? session.viewerDestination}
           </span>
-          <span className="hidden font-mono text-xs text-zinc-400 md:inline">
+          <span className="hidden font-mono text-xs text-[color:var(--muted-foreground)] md:inline">
             {session.viewerDestination}
           </span>
         </div>

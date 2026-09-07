@@ -181,6 +181,61 @@ export interface MessageRequestModelMeta {
   modelIcon?: string | null
 }
 
+export type RunLifecycleStatus =
+  | 'preparing'
+  | 'thinking'
+  | 'executing'
+  | 'waiting_user'
+  | 'summarizing'
+  | 'completed'
+  | 'partial'
+  | 'failed'
+  | 'canceled'
+
+export type FinalOutcomeStatus = Extract<
+  RunLifecycleStatus,
+  'completed' | 'partial' | 'failed' | 'canceled'
+>
+
+export interface FinalOutcomeArtifact {
+  label: string
+  path?: string
+  kind?: 'file' | 'directory' | 'url' | 'image' | 'video' | 'download' | 'other'
+}
+
+export interface FinalOutcomeVerification {
+  label: string
+  status: 'passed' | 'failed' | 'not_run'
+  detail?: string
+}
+
+/** User-facing, structured conclusion for a tool-backed conversation turn. */
+export interface FinalOutcome {
+  taskProfile?: 'work' | 'code'
+  status: FinalOutcomeStatus
+  title: string
+  summary: string
+  completedItems: string[]
+  artifacts: FinalOutcomeArtifact[]
+  verification: FinalOutcomeVerification[]
+  warnings: string[]
+  nextSteps: string[]
+  source: 'model' | 'deterministic'
+  attemptCount: number
+}
+
+export interface RunOutcomeMeta {
+  runId?: string
+  lifecycle: FinalOutcomeStatus
+  loopEndReason?: 'completed' | 'max_iterations' | 'aborted' | 'error'
+  startedAt: number
+  completedAt: number
+  durationMs: number
+  toolCallCount: number
+  failedToolCallCount: number
+  outcome: FinalOutcome
+}
+
 export interface MessageMeta {
   compactBoundary?: CompactBoundaryMeta
   compactSummary?: CompactSummaryMeta
@@ -190,6 +245,8 @@ export interface MessageMeta {
   compressionStatus?: CompressionStatusMeta
   /** Provider/model that produced this specific message, when it differs from the parent session. */
   requestModel?: MessageRequestModelMeta
+  /** Structured terminal state and result for a tool-backed conversation turn. */
+  runOutcome?: RunOutcomeMeta
 }
 
 export interface UnifiedMessage {

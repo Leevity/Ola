@@ -155,9 +155,9 @@ export async function runPetChat(args: PetChatArgs): Promise<string> {
   const workingFolder = args.workingFolder?.trim() || undefined
   const tools = workingFolder ? PET_AGENT_TOOLS : []
 
-  // The pet IS the main agent: same system prompt as a normal cowork session.
+  // The pet IS the main agent: same system prompt as a normal execute session.
   const systemPrompt = buildSystemPrompt({
-    mode: 'cowork',
+    mode: 'execute',
     workingFolder,
     toolDefs: tools,
     language: useSettingsStore.getState().language

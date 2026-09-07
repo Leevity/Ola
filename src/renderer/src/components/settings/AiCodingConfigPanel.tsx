@@ -77,9 +77,8 @@ export function AiCodingConfigPanel(): React.JSX.Element {
 
   React.useEffect(() => {
     void load()
-    // Loading is intentionally limited to panel mount; saves update local state directly.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    // Reload when the selected configuration changes; saves update local state directly.
+  }, [load])
 
   const selectedProvider = providers.find((provider) => provider.id === draft.providerId)
   const compatibleProviders = providers.filter(
