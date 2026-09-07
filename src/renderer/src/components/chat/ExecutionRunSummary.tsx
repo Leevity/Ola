@@ -3,6 +3,7 @@ import { Check, ChevronDown, ChevronRight, CircleAlert, Loader2, X } from 'lucid
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
 import type { ToolExecutionRun } from './execution-outline'
+import { CollapsibleHeightPanel } from './CollapsibleHeightPanel'
 
 interface ExecutionRunSummaryProps {
   run: ToolExecutionRun
@@ -139,11 +140,15 @@ export function ExecutionRunSummary({
           <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
         )}
       </button>
-      {expanded ? (
-        <div className="ml-3 mt-1.5 border-l border-border/50 pl-4">{children}</div>
-      ) : collapsedContent ? (
-        <div className="mt-1.5">{collapsedContent}</div>
-      ) : null}
+      <CollapsibleHeightPanel
+        open={expanded}
+        collapseMotion="scroll-up"
+        className="ml-3 overflow-hidden border-l border-border/50 pl-4"
+        contentClassName="mt-1.5"
+      >
+        {children}
+      </CollapsibleHeightPanel>
+      {!expanded && collapsedContent ? <div className="mt-1.5">{collapsedContent}</div> : null}
     </section>
   )
 }

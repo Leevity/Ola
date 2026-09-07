@@ -1,6 +1,8 @@
 import {
   canChaseTail,
+  resolveViewportMode,
   restorePrependScrollOffset,
+  shouldRequestOlderLoad,
   VIEWPORT,
   type ViewportMode
 } from '../src/renderer/src/components/chat/message-list-viewport'
@@ -32,4 +34,44 @@ expect(
   'prepending history must preserve the visible offset'
 )
 expect(VIEWPORT.streamingBottomThreshold > VIEWPORT.staticBottomThreshold, 'stream threshold')
+expect(
+  resolveViewportMode({
+    previous: 'following',
+    atBottom: false,
+    isProgrammatic: false,
+    userIntent: true
+  }) === 'browsing',
+  'a deliberate browse action must leave following mode'
+)
+expect(
+  resolveViewportMode({
+    previous: 'browsing',
+    atBottom: true,
+    isProgrammatic: false,
+    userIntent: true
+  }) === 'following',
+  'returning to the physical bottom must restore following mode'
+)
+expect(
+  !shouldRequestOlderLoad({
+    intent: 'fill',
+    hasOlder: true,
+    loading: false,
+    mode: 'following',
+    messageCount: 4,
+    fillPages: VIEWPORT.maxFillPages
+  }),
+  'fill loading must be bounded'
+)
+expect(
+  shouldRequestOlderLoad({
+    intent: 'visibility',
+    hasOlder: true,
+    loading: false,
+    mode: 'browsing',
+    messageCount: 0,
+    fillPages: 0
+  }),
+  'an empty resident window must be allowed to restore visibility'
+)
 console.log('message-list viewport verification passed')

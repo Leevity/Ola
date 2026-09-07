@@ -89,6 +89,14 @@ const collapsiblePanel = await readFile(
   path.join(root, 'src/renderer/src/components/chat/CollapsibleHeightPanel.tsx'),
   'utf8'
 )
+const viewportController = await readFile(
+  path.join(root, 'src/renderer/src/components/chat/use-message-list-viewport.ts'),
+  'utf8'
+)
+const viewportPrimitives = await readFile(
+  path.join(root, 'src/renderer/src/components/chat/message-list-viewport.ts'),
+  'utf8'
+)
 const planReviewCard = await readFile(
   path.join(root, 'src/renderer/src/components/chat/PlanReviewCard.tsx'),
   'utf8'
@@ -142,8 +150,32 @@ assert(
   'dynamic height observer is missing'
 )
 assert(
-  collapsiblePanel.includes("height: reduceMotion ? 'auto' : contentHeight"),
+  collapsiblePanel.includes("height: canAnimate ? contentHeight : 'auto'"),
   'dynamic content height is not connected to the transition'
+)
+assert(
+  collapsiblePanel.includes("EXECUTION_RESIZE_EVENT = 'ola:execution-resize'") &&
+    collapsiblePanel.includes('notifyExecutionResize') &&
+    collapsiblePanel.includes("collapseMotion?: 'clip' | 'scroll-up'"),
+  'execution collapse must notify the virtual transcript and support scroll-up motion'
+)
+assert(
+  viewportController.includes('MessageWindowPhase') &&
+    viewportController.includes("'positioning'") &&
+    viewportController.includes('requestOlderLoad'),
+  'message viewport controller is missing lifecycle and history-load policy'
+)
+assert(
+  viewportPrimitives.includes('getMessageAnchorCorrection') &&
+    viewportPrimitives.includes('historyCorrectFrames') &&
+    viewportPrimitives.includes('maxFillPages'),
+  'message viewport anchor and fill safeguards are missing'
+)
+assert(
+  messageList.includes('getMessageAnchorCorrection(nextRef, anchor)') &&
+    messageList.includes('EXECUTION_RESIZE_EVENT') &&
+    messageList.includes('rowVirtualizer.measure()'),
+  'message list must correct anchors and remeasure after execution collapse'
 )
 assert(
   planReviewCard.includes('navigator.clipboard.writeText'),
@@ -151,6 +183,11 @@ assert(
 )
 assert(planReviewCard.includes('URL.createObjectURL'), 'plan markdown download action is missing')
 assert(planReviewCard.includes('openFilePreview'), 'plan source preview action is missing')
+assert(
+  planReviewCard.includes('<ModelSwitcher sessionId={planExecutionSessionId} />') &&
+    planReviewCard.includes('hasStreamingExecutionMessage'),
+  'plan execution must expose a session-scoped model choice and use the plan run state'
+)
 assert(
   inputArea.includes('data-file-suggestion-index'),
   'file suggestion selection marker is missing'

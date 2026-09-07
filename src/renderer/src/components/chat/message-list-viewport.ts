@@ -5,6 +5,7 @@
  */
 export type ViewportMode = 'positioning' | 'following' | 'browsing'
 export type OlderLoadIntent = 'history' | 'fill' | 'visibility'
+export type MessageWindowPhase = 'loading' | 'positioning' | 'ready' | 'error'
 
 export interface HistoryScrollAnchor {
   messageId: string
@@ -15,7 +16,9 @@ export const VIEWPORT = {
   scrollEpsilon: 2,
   autoScrollMinDelta: 24,
   streamingBottomThreshold: 80,
-  staticBottomThreshold: 24
+  staticBottomThreshold: 24,
+  historyCorrectFrames: 8,
+  maxFillPages: 2
 } as const
 
 export function getDistanceToBottom(scroller: HTMLElement): number {
@@ -37,6 +40,32 @@ export function canChaseTail(input: {
   return input.mode === 'following' && input.streaming && !input.userIntent
 }
 
+export function resolveViewportMode(input: {
+  previous: ViewportMode
+  atBottom: boolean
+  isProgrammatic: boolean
+  userIntent: boolean
+}): ViewportMode {
+  if (input.isProgrammatic) return input.previous
+  if (input.atBottom) return 'following'
+  if (input.userIntent || input.previous === 'following') return 'browsing'
+  return input.previous
+}
+
+export function shouldRequestOlderLoad(input: {
+  intent: OlderLoadIntent
+  hasOlder: boolean
+  loading: boolean
+  mode: ViewportMode
+  messageCount: number
+  fillPages: number
+}): boolean {
+  if (input.loading || !input.hasOlder) return false
+  if (input.intent === 'history') return true
+  if (input.intent === 'visibility') return input.messageCount === 0
+  return input.mode === 'following' && input.fillPages < VIEWPORT.maxFillPages
+}
+
 export function readVisibleMessageAnchor(scroller: HTMLElement): HistoryScrollAnchor | null {
   const scrollerRect = scroller.getBoundingClientRect()
   const visible = Array.from(scroller.querySelectorAll<HTMLElement>('[data-message-id]')).find(
@@ -48,6 +77,22 @@ export function readVisibleMessageAnchor(scroller: HTMLElement): HistoryScrollAn
   const messageId = visible?.dataset.messageId
   if (!visible || !messageId) return null
   return { messageId, offset: visible.getBoundingClientRect().top - scrollerRect.top }
+}
+
+/**
+ * Return the correction needed to put a previously visible message back at the same viewport
+ * offset. Unlike scroll-height compensation this remains correct when virtual rows mount late
+ * or when a card inside a prepended message changes height.
+ */
+export function getMessageAnchorCorrection(
+  scroller: HTMLElement,
+  anchor: HistoryScrollAnchor
+): number | null {
+  const element = scroller.querySelector<HTMLElement>(
+    `[data-message-id="${CSS.escape(anchor.messageId)}"]`
+  )
+  if (!element) return null
+  return element.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.offset
 }
 
 export function restorePrependScrollOffset(input: {

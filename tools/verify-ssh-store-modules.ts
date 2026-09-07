@@ -18,7 +18,7 @@ const transferListSource = readFileSync(
 )
 assert.match(storeSource, /export type \* from ['"]\.\.\/\.\.\/\.\.\/shared\/ssh-contract['"]/)
 assert.doesNotMatch(storeSource, /export interface SshConnection \{/)
-assert.match(storeSource, /extends SshConnectionsSlice/)
+assert.match(storeSource, /extends\s+SshConnectionsSlice/)
 assert.match(storeSource, /SshSessionsSlice/)
 assert.match(storeSource, /SshSftpSlice/)
 assert.match(storeSource, /SshTransfersSlice/)

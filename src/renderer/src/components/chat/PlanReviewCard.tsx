@@ -26,6 +26,7 @@ import {
 } from '@renderer/lib/tools/tool-result-format'
 import { sendImplementPlan, sendImplementPlanInNewSession } from '@renderer/hooks/use-chat-actions'
 import { cn } from '@renderer/lib/utils'
+import { ModelSwitcher } from './ModelSwitcher'
 import {
   MARKDOWN_REHYPE_PLUGINS,
   MARKDOWN_REMARK_PLUGINS
@@ -146,9 +147,6 @@ export function PlanReviewCard({
   const parsedPayload = React.useMemo(() => parsePlanReviewPayload(output), [output])
   const outputText = React.useMemo(() => outputAsText(output), [output])
   const activeSessionId = useChatStore((s) => s.activeSessionId)
-  const hasStreamingMessage = useChatStore((s) =>
-    activeSessionId ? Boolean(s.streamingMessages[activeSessionId]) : false
-  )
   const fallbackPlan = usePlanStore((s) =>
     parsedPayload?.planId
       ? undefined
@@ -163,7 +161,15 @@ export function PlanReviewCard({
   const executionSession = useChatStore((s) =>
     payload?.planId ? s.getLatestSessionByPlanId(payload.planId) : undefined
   )
-  const isRunning = useAgentStore((s) => s.isSessionActive(activeSessionId)) || hasStreamingMessage
+  const planExecutionSessionId =
+    executionSession?.id ?? plan?.sessionId ?? sessionId ?? activeSessionId
+  const hasStreamingExecutionMessage = useChatStore((s) =>
+    planExecutionSessionId ? Boolean(s.streamingMessages[planExecutionSessionId]) : false
+  )
+  const isRunning =
+    useAgentStore((s) =>
+      planExecutionSessionId ? s.isSessionActive(planExecutionSessionId) : false
+    ) || hasStreamingExecutionMessage
 
   const isProcessing = !payload && (status === 'running' || status === 'streaming' || isLive)
   const isError = status === 'error' || isStructuredToolErrorText(outputText)
@@ -296,6 +302,10 @@ export function PlanReviewCard({
         ) : null}
         {displayStatus === 'awaiting_review' && (
           <>
+            <div className="flex h-8 items-center gap-2 rounded-md border border-border/60 bg-muted/15 px-2 text-xs text-muted-foreground">
+              <span>{t('planReview.executionModel', { defaultValue: 'Execution model' })}</span>
+              <ModelSwitcher sessionId={planExecutionSessionId} />
+            </div>
             <Button
               size="sm"
               className="h-8 gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700"

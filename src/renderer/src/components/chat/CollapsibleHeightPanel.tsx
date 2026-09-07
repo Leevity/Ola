@@ -7,6 +7,23 @@ interface CollapsibleHeightPanelProps {
   className?: string
   contentClassName?: string
   duration?: number
+  /** Disable animation without changing the disclosure's semantic state. */
+  enabled?: boolean
+  /**
+   * `scroll-up` gives completed execution detail a clear exit direction. It is deliberately
+   * opt-in: ordinary disclosure content should continue to use the quieter clip motion.
+   */
+  collapseMotion?: 'clip' | 'scroll-up'
+}
+
+/**
+ * Virtual transcript rows cannot infer a CSS height transition. Every execution disclosure
+ * therefore emits one bubbling event when its measured height or animation settles.
+ */
+export const EXECUTION_RESIZE_EVENT = 'ola:execution-resize'
+
+export function notifyExecutionResize(node: EventTarget | null): void {
+  node?.dispatchEvent(new CustomEvent(EXECUTION_RESIZE_EVENT, { bubbles: true }))
 }
 
 /**
@@ -19,11 +36,16 @@ export function CollapsibleHeightPanel({
   children,
   className,
   contentClassName,
-  duration = 0.2
+  duration = 0.2,
+  enabled = true,
+  collapseMotion = 'clip'
 }: CollapsibleHeightPanelProps): React.JSX.Element {
   const reduceMotion = useReducedMotion()
   const contentRef = React.useRef<HTMLDivElement>(null)
+  const panelRef = React.useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = React.useState(0)
+
+  const canAnimate = enabled && !reduceMotion
 
   React.useLayoutEffect(() => {
     if (!open || !contentRef.current) return
@@ -33,6 +55,7 @@ export function CollapsibleHeightPanel({
         const next = content.getBoundingClientRect().height
         return Math.abs(previous - next) > 0.5 ? next : previous
       })
+      notifyExecutionResize(panelRef.current)
     }
     measure()
     if (typeof ResizeObserver === 'undefined') return
@@ -45,18 +68,51 @@ export function CollapsibleHeightPanel({
     <AnimatePresence initial={false}>
       {open ? (
         <motion.div
-          initial={reduceMotion ? false : { height: 0, opacity: 0 }}
-          animate={{ height: reduceMotion ? 'auto' : contentHeight, opacity: 1 }}
-          exit={reduceMotion ? undefined : { height: 0, opacity: 0 }}
-          transition={{ duration: reduceMotion ? 0 : duration, ease: 'easeOut' }}
+          ref={panelRef}
+          initial={canAnimate ? { height: 0, opacity: 0 } : false}
+          animate={{ height: canAnimate ? contentHeight : 'auto', opacity: 1 }}
+          exit={
+            canAnimate
+              ? {
+                  height: 0,
+                  opacity: collapseMotion === 'scroll-up' ? 0.65 : 0
+                }
+              : undefined
+          }
+          transition={{ duration: canAnimate ? duration : 0, ease: 'easeOut' }}
           className={className}
           style={{ overflow: 'hidden' }}
+          onAnimationComplete={() => notifyExecutionResize(panelRef.current)}
         >
-          <div ref={contentRef} className={contentClassName}>
+          <motion.div
+            ref={contentRef}
+            className={contentClassName}
+            initial={false}
+            animate={{ y: 0, opacity: 1 }}
+            exit={
+              canAnimate && collapseMotion === 'scroll-up' ? { y: '-18%', opacity: 0 } : undefined
+            }
+            transition={{ duration: canAnimate ? duration : 0, ease: 'easeOut' }}
+          >
             {children}
-          </div>
+          </motion.div>
         </motion.div>
       ) : null}
     </AnimatePresence>
+  )
+}
+
+/** Keep a live thinking block mounted until its scroll-up exit animation has completed. */
+export function ScrollUpExitItem({ children }: { children: React.ReactNode }): React.JSX.Element {
+  const reduceMotion = useReducedMotion()
+  return (
+    <motion.div
+      initial={false}
+      animate={{ y: 0, opacity: 1 }}
+      exit={reduceMotion ? undefined : { y: '-18%', opacity: 0 }}
+      transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+    >
+      {children}
+    </motion.div>
   )
 }
