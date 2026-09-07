@@ -1,5 +1,10 @@
 import type { SshStore } from '../ssh-store'
-import type { SftpTransferProgress, SftpTransferTask } from '../../../../shared/ssh-contract'
+import type {
+  SftpTransferProgress,
+  SftpTransferRequest,
+  SftpTransferTask,
+  SshUploadTask
+} from '../../../../shared/ssh-contract'
 
 export function enrichTransferProgress(
   previous: SftpTransferTask | undefined,
@@ -42,3 +47,15 @@ export const selectSshTransfers = (
   uploadTasks: state.uploadTasks,
   transferTasks: state.transferTasks
 })
+export interface SshTransfersSlice {
+  uploadTasks: Record<string, SshUploadTask>
+  transferTasks: Record<string, SftpTransferTask>
+  startUpload: (args: { connectionId: string; remoteDir: string; localPath: string; kind?: 'file' | 'folder' }) => Promise<string | null>
+  cancelUpload: (taskId: string) => Promise<void>
+  clearUploadTask: (taskId: string) => void
+  startTransfer: (args: SftpTransferRequest) => Promise<string | null>
+  retryTransfer: (taskId: string) => Promise<string | null>
+  pauseTransfer: (taskId: string) => Promise<void>
+  cancelTransfer: (taskId: string) => Promise<void>
+  clearTransferTask: (taskId: string) => void
+}

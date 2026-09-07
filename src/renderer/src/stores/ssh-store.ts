@@ -25,6 +25,12 @@ import type {
   SshWorkspaceSection
 } from '../../../shared/ssh-contract'
 import { enrichTransferProgress } from './ssh/transfers'
+import type { SshConnectionsSlice } from './ssh/connections'
+import type { SshSessionsSlice } from './ssh/sessions'
+import type { SshSftpSlice } from './ssh/sftp'
+import type { SshTransfersSlice } from './ssh/transfers'
+import type { SshExplorerSlice } from './ssh/explorer'
+import type { SshUiSlice } from './ssh/ui'
 
 export type * from '../../../shared/ssh-contract'
 
@@ -395,7 +401,17 @@ function areStringSetsEqual(left: Set<string> | undefined, right: Set<string>): 
 
 // ── Store ──
 
-export interface SshStore {
+/**
+ * Public Store API composed from focused domain contracts. Existing consumers keep
+ * importing useSshStore and its action names, while new work belongs to a slice.
+ */
+export interface SshStore
+  extends SshConnectionsSlice,
+    SshSessionsSlice,
+    SshSftpSlice,
+    SshTransfersSlice,
+    SshExplorerSlice,
+    SshUiSlice {
   groups: SshGroup[]
   connections: SshConnection[]
   sessions: Record<string, SshSession>
