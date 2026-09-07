@@ -122,7 +122,11 @@ export const ThinkingBlock = memo(function ThinkingBlock({
         )}
       </button>
 
-      <CollapsibleHeightPanel open={expanded} className="mt-2 overflow-hidden">
+      <CollapsibleHeightPanel
+        open={expanded}
+        collapseMotion="scroll-up"
+        className="mt-2 overflow-hidden"
+      >
         <div className="max-w-full px-0.5 pb-1 text-sm leading-7 text-muted-foreground/75">
           {hasThinkingContent ? (
             <div ref={contentRef} className="max-h-80 overflow-y-auto">

@@ -40,10 +40,14 @@ import {
 } from './chat-scroll-policy'
 import {
   getDistanceToBottom,
+  getMessageAnchorCorrection,
   measureRenderedTurnHeight,
   readVisibleMessageAnchor,
-  restorePrependScrollOffset
+  restorePrependScrollOffset,
+  VIEWPORT
 } from './message-list-viewport'
+import { EXECUTION_RESIZE_EVENT } from './CollapsibleHeightPanel'
+import { useMessageListViewport } from './use-message-list-viewport'
 import { DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL } from '../../../../shared/messagepack/binary-ipc'
 
 const modeHints = {
@@ -1255,6 +1259,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   const pendingInitialScrollSessionIdRef = React.useRef<string | null>(null)
   const autoScrollModeRef = React.useRef<AutoScrollMode>('off')
   const scheduledScrollFrameRef = React.useRef<number | null>(null)
+  const scheduledExecutionResizeFrameRef = React.useRef<number | null>(null)
   const scheduledAssistantRailSyncRef = React.useRef<number | null>(null)
   const highlightedMessageTimerRef = React.useRef<number | null>(null)
   const lastScrollOffsetRef = React.useRef(0)
@@ -1569,6 +1574,13 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     Boolean(activeSessionId) &&
     messages.length === 0 &&
     (!activeSessionLoaded || activeSessionMessageCount > 0 || loadedRangeStart > 0)
+  const viewport = useMessageListViewport({
+    sessionId: activeSessionId,
+    scrollerRef: listRef,
+    messageCount: rows.length,
+    initialLoading: isAwaitingInitialMessages,
+    isStreaming: isSessionOutputting
+  })
 
   const lastMessageRowIndex = rows.length - 1
   const conversationSortOrderByMessageId = React.useMemo(
@@ -1773,6 +1785,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         })
       })
 
+      rowVirtualizer.measure()
       const nextRef = listRef.current
       if (nextRef) {
         const scrollDelta = nextRef.scrollHeight - previousScrollHeight
@@ -1783,10 +1796,18 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
             previousScrollHeight,
             nextScrollHeight: nextRef.scrollHeight
           })
-          // Keep the anchor read before loading in scope for diagnostics and future
-          // message-window restoration. The height compensation is the safe fallback
-          // when a virtualized row has not mounted yet.
-          void anchor
+        }
+        // Height compensation makes the first paint stable; the identity anchor keeps the
+        // visible row stable while the virtualizer mounts and measures prepended content.
+        if (anchor) {
+          for (let attempt = 0; attempt < VIEWPORT.historyCorrectFrames; attempt += 1) {
+            await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
+            const correction = getMessageAnchorCorrection(nextRef, anchor)
+            if (correction === null || Math.abs(correction) <= 1) break
+            markProgrammaticScroll()
+            nextRef.scrollTop = Math.max(0, nextRef.scrollTop + correction)
+            rowVirtualizer.measure()
+          }
         }
       }
       syncBottomState()
@@ -1801,6 +1822,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     loadedRangeStart,
     markProgrammaticScroll,
     requestAssistantRailSync,
+    rowVirtualizer,
     syncBottomState
   ])
 
@@ -1886,7 +1908,35 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     requestScrollToBottom
   ])
 
+  React.useEffect(() => {
+    const scroller = listRef.current
+    if (!scroller) return
+
+    const remeasure = (): void => {
+      if (scheduledExecutionResizeFrameRef.current !== null) return
+      scheduledExecutionResizeFrameRef.current = window.requestAnimationFrame(() => {
+        scheduledExecutionResizeFrameRef.current = null
+        rowVirtualizer.measure()
+        syncTurnSpacer()
+        if (canAutoScroll()) requestScrollToBottom({ maxFrames: 2 })
+      })
+    }
+
+    scroller.addEventListener(EXECUTION_RESIZE_EVENT, remeasure)
+    return () => {
+      scroller.removeEventListener(EXECUTION_RESIZE_EVENT, remeasure)
+      if (scheduledExecutionResizeFrameRef.current !== null) {
+        window.cancelAnimationFrame(scheduledExecutionResizeFrameRef.current)
+        scheduledExecutionResizeFrameRef.current = null
+      }
+    }
+  }, [canAutoScroll, requestScrollToBottom, rowVirtualizer, syncTurnSpacer])
+
   const handleListScroll = React.useCallback(() => {
+    viewport.syncScrollMode({
+      isProgrammatic: window.performance.now() < programmaticScrollUntilRef.current,
+      userIntent: true
+    })
     syncBottomState()
     requestAssistantRailSync()
     const ref = listRef.current
@@ -1896,7 +1946,9 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       loadedRangeStart > 0 &&
       ref.scrollTop <= OLDER_MESSAGE_LOAD_SCROLL_THRESHOLD
     ) {
-      void loadOlderMessages()
+      if (viewport.requestOlderLoad('history', { hasOlder: true, loading: false })) {
+        void loadOlderMessages()
+      }
     }
     if (
       ref &&
@@ -1915,7 +1967,8 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     loadedRangeEnd,
     loadedRangeStart,
     requestAssistantRailSync,
-    syncBottomState
+    syncBottomState,
+    viewport
   ])
 
   React.useEffect(() => {
@@ -1986,15 +2039,36 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
 
   React.useEffect(() => {
     if (!activeSessionId || isAwaitingInitialMessages || isLoadingOlderMessages) return
-    if (loadedRangeStart <= 0 || renderableMessages.length >= MIN_RENDERABLE_HISTORY_ROWS) return
-    void loadOlderMessages()
+    if (rows.length !== 0) return
+    if (
+      viewport.requestOlderLoad('visibility', { hasOlder: loadedRangeStart > 0, loading: false })
+    ) {
+      void loadOlderMessages()
+    }
   }, [
     activeSessionId,
     isAwaitingInitialMessages,
     isLoadingOlderMessages,
     loadOlderMessages,
     loadedRangeStart,
-    renderableMessages.length
+    rows.length,
+    viewport
+  ])
+
+  React.useEffect(() => {
+    if (!activeSessionId || isAwaitingInitialMessages || isLoadingOlderMessages) return
+    if (loadedRangeStart <= 0 || renderableMessages.length >= MIN_RENDERABLE_HISTORY_ROWS) return
+    if (viewport.requestOlderLoad('fill', { hasOlder: loadedRangeStart > 0, loading: false })) {
+      void loadOlderMessages()
+    }
+  }, [
+    activeSessionId,
+    isAwaitingInitialMessages,
+    isLoadingOlderMessages,
+    loadOlderMessages,
+    loadedRangeStart,
+    renderableMessages.length,
+    viewport
   ])
 
   React.useEffect(() => {
@@ -2183,6 +2257,8 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         ref={listRef}
         className="absolute inset-0 overflow-y-auto pl-7 md:pl-9"
         data-message-content
+        data-viewport-phase={viewport.phase}
+        data-viewport-mode={viewport.mode}
         style={{ overflowAnchor: 'none' }}
         onScroll={handleListScroll}
       >
@@ -2206,7 +2282,13 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
                     <button
                       type="button"
                       className="rounded-full border border-border/70 bg-background/92 px-3 py-1.5 text-xs text-muted-foreground shadow-sm backdrop-blur-sm transition-colors hover:text-foreground disabled:cursor-wait disabled:opacity-70"
-                      onClick={() => void loadOlderMessages()}
+                      onClick={() => {
+                        if (
+                          viewport.requestOlderLoad('history', { hasOlder: true, loading: false })
+                        ) {
+                          void loadOlderMessages()
+                        }
+                      }}
                       disabled={isLoadingOlderMessages}
                     >
                       {isLoadingOlderMessages

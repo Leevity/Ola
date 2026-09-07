@@ -153,6 +153,7 @@ export function ToolCallGroup({
       <CollapsibleHeightPanel
         open={contentVisible}
         duration={collapsible ? 0.2 : 0}
+        collapseMotion={collapsible ? 'scroll-up' : 'clip'}
         className={
           collapsible
             ? 'ml-3 mt-1.5 overflow-hidden border-l border-border/50 pl-5 dark:border-white/[0.08]'
