@@ -82,14 +82,12 @@
   "mode": {
     "chat": "Chat",
     "clarify": "Clarify",
-    "cowork": "Cowork",
-    "code": "Code",
+    "execute": "Execute",
     "acp": "ACP",
     "descriptions": {
       "chat": "Quick conversation, no project tools",
       "clarify": "Turn ambiguity into a reviewable plan",
-      "cowork": "Plan, act, and verify alongside you",
-      "code": "Focused hands-on implementation",
+      "execute": "Use tools to build, research, operate, and verify",
       "acp": "Architect and delegate to sub-agents"
     }
   },
@@ -113,6 +111,20 @@
           "title": "Personal identity and memory",
           "desc": "Choose a SOUL.md persona and profile so every new request starts from the right collaboration style."
         }
+      }
+    },
+    "profile": {
+      "title": "How will you use Ola most often?",
+      "subtitle": "Choose a starting preference. You can change it before sending each new conversation.",
+      "work": {
+        "title": "Work",
+        "desc": "Research, documents, browser tasks, communication, automation and everyday workflows.",
+        "examples": "Examples: summarize a meeting, prepare a report, organize research"
+      },
+      "code": {
+        "title": "Code",
+        "desc": "Projects, source code, terminals, Git, tests, builds, Wiki and CodeGraph.",
+        "examples": "Examples: analyze a project, find a bug, add tests and verify"
       }
     },
     "language": {

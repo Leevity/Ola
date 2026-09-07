@@ -48,8 +48,12 @@ import type {
   UnifiedMessage,
   ProviderConfig,
   ContentBlock,
-  ToolUseBlock
+  ToolUseBlock,
+  RunOutcomeMeta
 } from '@renderer/lib/api/types'
+import type { LoopEndReason, ToolCallState } from '@renderer/lib/agent/types'
+import { generateFinalOutcome } from '@renderer/lib/agent/final-outcome'
+import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
 import { hasPendingSessionMessagesForSession } from '@renderer/hooks/use-chat-actions'
 import { recordUsageEvent } from '@renderer/lib/usage-analytics'
 import { emitSessionRuntimeSync } from '@renderer/lib/session-runtime-sync'
@@ -167,7 +171,7 @@ function buildPluginSessionSummaryRow(args: {
     id: args.id,
     title: args.title,
     icon: args.icon ?? null,
-    mode: args.mode || 'cowork',
+    mode: args.mode === 'cowork' || args.mode === 'code' ? 'execute' : args.mode || 'execute',
     created_at: args.createdAt ?? now,
     updated_at: args.updatedAt ?? now,
     project_id: args.projectId ?? null,
@@ -561,7 +565,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
             ? resolvedTitle
             : dbSession.title || resolvedTitle,
           icon: dbSession.icon ?? null,
-          mode: dbSession.mode || 'cowork',
+          mode: dbSession.mode || 'execute',
           createdAt: dbSession.created_at ?? Date.now(),
           updatedAt: dbSession.updated_at ?? Date.now(),
           projectId: dbSession.project_id ?? channelProjectId ?? null,
@@ -590,7 +594,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     const sessionRow = buildPluginSessionSummaryRow({
       id: sessionId,
       title: resolvedTitle,
-      mode: 'cowork',
+      mode: 'execute',
       createdAt: now,
       updatedAt: now,
       projectId: channelProjectId ?? null,
@@ -708,7 +712,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
   const cachedPromptSnapshot = session.promptSnapshot
   const canReusePromptSnapshot =
     !!cachedPromptSnapshot &&
-    cachedPromptSnapshot.mode === 'cowork' &&
+    cachedPromptSnapshot.mode === 'execute' &&
     cachedPromptSnapshot.planMode === false &&
     cachedPromptSnapshot.workingFolder === session.workingFolder &&
     cachedPromptSnapshot.projectId === session.projectId &&
@@ -723,7 +727,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
 
   if (!canReusePromptSnapshot) {
     systemPrompt = buildSystemPrompt({
-      mode: 'cowork',
+      mode: 'execute',
       workingFolder: session.workingFolder,
       sessionId,
       userRules: userPrompt,
@@ -735,7 +739,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     })
 
     useChatStore.getState().setSessionPromptSnapshot(sessionId, {
-      mode: 'cowork',
+      mode: 'execute',
       planMode: false,
       systemPrompt,
       toolDefs: allToolDefs,
@@ -786,6 +790,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
   useAgentStore.getState().setRunning(true)
   useAgentStore.getState().setSessionStatus(sessionId, 'running')
   beginPluginRuntimeTurn(sessionId, userMsg, assistantMsg, assistantMsgId)
+  useRuntimeProjectionStore.getState().begin(sessionId, null, assistantMsgId)
 
   // ── Build agent loop config ──
   const ac = new AbortController()
@@ -804,6 +809,9 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
 
   let fullText = ''
   let lastError: string | null = null
+  let loopEndReason: LoopEndReason | null = null
+  const loopStartedAt = Date.now()
+  const runToolCalls = new Map<string, ToolCallState>()
   let pendingText = ''
   let pendingPluginDelta = ''
   let pluginStreamUpdateInFlight: Promise<unknown> | null = null
@@ -998,6 +1006,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
 
       switch (event.type) {
         case 'thinking_delta':
+          useRuntimeProjectionStore.getState().setPhase(sessionId, 'thinking')
           hasThinkingDelta = true
           thinkingDone = false
           appendPluginRuntimeThinkingDelta(sessionId, assistantMsgId, event.thinking)
@@ -1087,6 +1096,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
         }
 
         case 'tool_use_generated': {
+          useRuntimeProjectionStore.getState().setPhase(sessionId, 'executing')
           await flushChannelTextBeforeTool(event.toolUseBlock.name)
           liveToolNames.set(event.toolUseBlock.id, event.toolUseBlock.name)
           console.log(`[PluginAutoReply] Tool call: ${event.toolUseBlock.name}`)
@@ -1142,10 +1152,19 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
             },
             sessionId
           )
+          runToolCalls.set(event.toolUseBlock.id, {
+            id: event.toolUseBlock.id,
+            name: event.toolUseBlock.name,
+            input: liveCardInput,
+            status: 'running',
+            requiresApproval: false,
+            startedAt: Date.now()
+          })
           break
         }
 
         case 'tool_call_start':
+          useRuntimeProjectionStore.getState().setPhase(sessionId, 'executing')
           await flushChannelTextBeforeTool(event.toolCall.name)
           useAgentStore.getState().addToolCall(
             {
@@ -1154,6 +1173,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
             },
             sessionId
           )
+          runToolCalls.set(event.toolCall.id, event.toolCall)
           break
 
         case 'tool_call_update':
@@ -1194,6 +1214,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
             },
             sessionId
           )
+          runToolCalls.set(event.toolCall.id, event.toolCall)
           if (event.toolCall.status === 'completed' || event.toolCall.status === 'error') {
             liveToolNames.delete(event.toolCall.id)
           }
@@ -1263,7 +1284,12 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
           }
           break
 
+        case 'loop_end':
+          loopEndReason = event.reason
+          break
+
         case 'error':
+          loopEndReason = 'error'
           lastError = event.error instanceof Error ? event.error.message : String(event.error)
           console.error('[PluginAutoReply] Agent error:', event.error)
           appendPluginRuntimeTextDelta(sessionId, assistantMsgId, `\n\n> **Error:** ${lastError}`)
@@ -1274,6 +1300,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
       }
     }
   } catch (err) {
+    loopEndReason = ac.signal.aborted ? 'aborted' : 'error'
     lastError = err instanceof Error ? err.message : String(err)
     console.error('[PluginAutoReply] Agent loop exception:', err)
     appendPluginRuntimeTextDelta(sessionId, assistantMsgId, `\n\n> **Error:** ${lastError}`)
@@ -1294,6 +1321,43 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     completePluginRuntimeThinking(sessionId, assistantMsgId)
   }
 
+  const resolvedLoopEndReason: LoopEndReason =
+    loopEndReason ?? (ac.signal.aborted ? 'aborted' : lastError ? 'error' : 'completed')
+  if (runToolCalls.size > 0) {
+    useRuntimeProjectionStore.getState().setPhase(sessionId, 'summarizing')
+    useAgentStore.getState().setSessionStatus(sessionId, 'summarizing')
+    const fastProvider = useProviderStore.getState().getFastProviderConfig()
+    const outcome = await generateFinalOutcome({
+      goal: effectiveContent,
+      loopEndReason: resolvedLoopEndReason,
+      toolCalls: [...runToolCalls.values()],
+      durationMs: Date.now() - loopStartedAt,
+      error: lastError,
+      providers: [agentProviderConfig, ...(fastProvider ? [fastProvider] : [])],
+      signal: ac.signal
+    })
+    const currentMessage = useChatStore
+      .getState()
+      .getSessionMessages(sessionId)
+      .find((message) => message.id === assistantMsgId)
+    const runOutcome: RunOutcomeMeta = {
+      runId: assistantMsgId,
+      lifecycle: outcome.status,
+      loopEndReason: resolvedLoopEndReason,
+      startedAt: loopStartedAt,
+      completedAt: Date.now(),
+      durationMs: Date.now() - loopStartedAt,
+      toolCallCount: runToolCalls.size,
+      failedToolCallCount: [...runToolCalls.values()].filter(
+        (toolCall) => toolCall.status === 'error'
+      ).length,
+      outcome
+    }
+    updatePluginRuntimeMessage(sessionId, assistantMsgId, {
+      meta: { ...currentMessage?.meta, runOutcome }
+    })
+  }
+
   const fallbackMessage = lastError
     ? `Model run failed: ${lastError}`
     : 'Model did not return a text reply, please check your current model configuration'
@@ -1301,7 +1365,16 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     appendPluginRuntimeTextDelta(sessionId, assistantMsgId, fallbackMessage)
   }
   setPluginRuntimeStreamingMessage(sessionId, null)
-  useAgentStore.getState().setSessionStatus(sessionId, 'completed')
+  const terminalStatus =
+    resolvedLoopEndReason === 'aborted'
+      ? 'canceled'
+      : resolvedLoopEndReason === 'max_iterations'
+        ? 'partial'
+        : resolvedLoopEndReason === 'error' || lastError
+          ? 'failed'
+          : 'completed'
+  useAgentStore.getState().setSessionStatus(sessionId, terminalStatus)
+  useRuntimeProjectionStore.getState().finish(sessionId, terminalStatus)
   const hasOtherRunning = Object.values(useAgentStore.getState().runningSessions).some(
     (status) => status === 'running' || status === 'retrying'
   )

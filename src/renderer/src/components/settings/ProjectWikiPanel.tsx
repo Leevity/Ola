@@ -1,22 +1,67 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { BookOpen, Download, FolderOpen, RefreshCw } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { useChatStore } from '@renderer/stores/chat-store'
 import type { ProjectWikiDocument } from '../../../../shared/project-wiki'
 
-export function ProjectWikiPanel(): React.JSX.Element {
+interface ProjectWikiPanelProps {
+  projectRoot?: string | null
+  embedded?: boolean
+}
+
+export function ProjectWikiPanel({
+  projectRoot: controlledProjectRoot,
+  embedded = false
+}: ProjectWikiPanelProps = {}): React.JSX.Element {
+  const { t } = useTranslation('settings')
+  const activeProjectId = useChatStore((state) => state.activeProjectId)
+  const activeProjectRoot = useChatStore(
+    (state) => state.projects.find((project) => project.id === activeProjectId)?.workingFolder
+  )
   const [projectRoot, setProjectRoot] = useState('')
   const [document, setDocument] = useState<ProjectWikiDocument | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    void (async () => {
-      const result = (await ipcClient.invoke('fs:default-chat-working-folder')) as { path?: string }
-      if (result.path) setProjectRoot(result.path)
-    })()
-  }, [])
+    let cancelled = false
+
+    async function resolveAndLoad(): Promise<void> {
+      let nextProjectRoot = controlledProjectRoot
+      if (nextProjectRoot === undefined) {
+        nextProjectRoot = activeProjectRoot
+        if (!nextProjectRoot) {
+          const result = (await ipcClient.invoke('fs:default-chat-working-folder')) as {
+            path?: string
+          }
+          nextProjectRoot = result.path
+        }
+      }
+
+      if (cancelled) return
+      setProjectRoot(nextProjectRoot ?? '')
+      setDocument(null)
+      setError(null)
+      if (!nextProjectRoot) return
+
+      try {
+        const stored = (await ipcClient.invoke('wiki:get', {
+          projectRoot: nextProjectRoot
+        })) as ProjectWikiDocument | null
+        if (!cancelled) setDocument(stored)
+      } catch (cause) {
+        if (!cancelled) setError(cause instanceof Error ? cause.message : String(cause))
+      }
+    }
+
+    void resolveAndLoad()
+    return () => {
+      cancelled = true
+    }
+  }, [activeProjectRoot, controlledProjectRoot])
 
   async function chooseFolder(): Promise<void> {
     const result = (await ipcClient.invoke('fs:select-folder', { defaultPath: projectRoot })) as {
@@ -43,50 +88,73 @@ export function ProjectWikiPanel(): React.JSX.Element {
   }
 
   async function exportMarkdown(): Promise<void> {
-    const picked = (await ipcClient.invoke('fs:select-save-file', {
-      defaultPath: 'project-wiki.md',
-      filters: [{ name: 'Markdown', extensions: ['md'] }]
-    })) as { path?: string }
-    if (!picked.path) return
-    await ipcClient.invoke('wiki:export', { projectRoot, destination: picked.path })
+    try {
+      const picked = (await ipcClient.invoke('fs:select-save-file', {
+        defaultPath: 'project-wiki.md',
+        filters: [{ name: 'Markdown', extensions: ['md'] }]
+      })) as { path?: string }
+      if (!picked.path) return
+      await ipcClient.invoke('wiki:export', { projectRoot, destination: picked.path })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-5">
-      <header>
+    <div className={`${embedded ? 'w-full' : 'mx-auto w-full max-w-3xl'} space-y-5`}>
+      <header className={embedded ? 'rounded-xl border bg-muted/10 p-4' : undefined}>
         <div className="flex items-center gap-2">
           <BookOpen className="size-5 text-primary" />
-          <h2 className="text-xl font-semibold">Project Wiki</h2>
+          <h2 className="text-xl font-semibold">
+            {t('wiki.title', { defaultValue: 'Project Wiki' })}
+          </h2>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Build a local, incremental map of project files and symbols. Sensitive directories are
-          excluded.
+          {t('wiki.description', {
+            defaultValue:
+              'Build a local, incremental map of project files and symbols. Sensitive directories are excluded.'
+          })}
         </p>
       </header>
-      <div className="flex gap-2">
-        <Input
-          value={projectRoot}
-          onChange={(event) => setProjectRoot(event.target.value)}
-          placeholder="Project folder"
-        />
-        <Button variant="outline" onClick={() => void chooseFolder()} title="Choose project folder">
-          <FolderOpen className="size-4" />
-        </Button>
-      </div>
+      {controlledProjectRoot === undefined ? (
+        <div className="flex gap-2">
+          <Input
+            value={projectRoot}
+            onChange={(event) => setProjectRoot(event.target.value)}
+            placeholder={t('wiki.projectFolder', { defaultValue: 'Project folder' })}
+          />
+          <Button
+            variant="outline"
+            onClick={() => void chooseFolder()}
+            title={t('wiki.chooseProjectFolder', { defaultValue: 'Choose project folder' })}
+          >
+            <FolderOpen className="size-4" />
+          </Button>
+        </div>
+      ) : null}
       <div className="flex flex-wrap gap-2">
-        <Button disabled={busy || !projectRoot.trim()} onClick={() => void generate(false)}>
+        <Button
+          disabled={busy || !projectRoot.trim()}
+          onClick={() => void generate(false)}
+          title={t('wiki.generate', { defaultValue: 'Generate Wiki' })}
+        >
           <RefreshCw className={`mr-2 size-4 ${busy ? 'animate-spin' : ''}`} />
-          Generate Wiki
+          {t('wiki.generate', { defaultValue: 'Generate Wiki' })}
         </Button>
         <Button
           variant="secondary"
           disabled={busy || !projectRoot.trim()}
           onClick={() => void generate(true)}
         >
-          Re-scan
+          {t('wiki.rescan', { defaultValue: 'Re-scan' })}
         </Button>
-        <Button variant="outline" disabled={!document} onClick={() => void exportMarkdown()}>
-          <Download className="mr-2 size-4" /> Export Markdown
+        <Button
+          variant="outline"
+          disabled={!document}
+          onClick={() => void exportMarkdown()}
+        >
+          <Download className="mr-2 size-4" />
+          {t('wiki.export', { defaultValue: 'Export Markdown' })}
         </Button>
       </div>
       {error ? (

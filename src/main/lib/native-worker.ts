@@ -24,7 +24,10 @@ const REQUIRED_NATIVE_WORKER_METHODS = [
   'souls/builtin-list',
   'sync/files-capture',
   'sync/files-apply',
-  'sync/files-delete'
+  'sync/files-delete',
+  'db/wiki-get',
+  'db/wiki-save',
+  'db/wiki-delete'
 ]
 
 type PendingRequest = {

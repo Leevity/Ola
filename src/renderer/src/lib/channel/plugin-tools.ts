@@ -496,7 +496,19 @@ export function registerPluginTools(): void {
   if (_registered) return
   _registered = true
   for (const tool of ALL_PLUGIN_TOOLS) {
-    toolRegistry.register(tool, { namespace: 'channel', owner: 'channel:plugin-tools' })
+    const readOnly = /^(?:Plugin(?:Get|List|Summarize)|FeishuList|FeishuBitable(?:List|Get))/.test(
+      tool.definition.name
+    )
+    toolRegistry.register(tool, {
+      namespace: 'channel',
+      owner: 'channel:plugin-tools',
+      capability: {
+        readOnly,
+        riskLevel: readOnly ? 'low' : 'high',
+        requiresApproval: !readOnly,
+        projectScoped: true
+      }
+    })
   }
 }
 

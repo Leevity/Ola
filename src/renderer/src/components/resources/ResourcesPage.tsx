@@ -1,5 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Brain, Command, Eye, Loader2, Pencil, Plus, Save, Search } from 'lucide-react'
+import {
+  ArrowLeft,
+  Brain,
+  Command,
+  Eye,
+  FileText,
+  Loader2,
+  Pencil,
+  Plus,
+  Save,
+  Search
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { cn } from '@renderer/lib/utils'
@@ -20,23 +31,128 @@ import {
   DialogTitle
 } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
+import { useSettingsStore } from '@renderer/stores/settings-store'
+import { profileMatches } from '@renderer/lib/agent/sub-agents/profile'
+import type { TaskProfile } from '@renderer/lib/task-profile'
 
 type ResourceKindOption = {
   value: ResourceKind
   icon: React.ReactNode
 }
 
+type ProfileFilter = 'recommended' | 'work' | 'code' | 'all'
+type ResourceTranslator = (key: string, options?: Record<string, unknown>) => string
+
+const workspaceTemplates = [
+  { id: 'AGENTS.md', scope: 'project' },
+  { id: 'SOUL.md', scope: 'global-project' },
+  { id: 'USER.md', scope: 'global-project' },
+  { id: 'MEMORY.md', scope: 'global-project' }
+] as const
+
 const resourceKindOptions: ResourceKindOption[] = [
   { value: 'agents', icon: <Brain className="size-4" /> },
   { value: 'commands', icon: <Command className="size-4" /> }
 ]
 
-function SourceBadge({ source }: { source: ManagedResourceItem['source'] }): React.JSX.Element {
+function SourceBadge({
+  source,
+  t
+}: {
+  source: ManagedResourceItem['source']
+  t: (key: string, options?: Record<string, unknown>) => string
+}): React.JSX.Element {
   return (
     <Badge variant={source === 'bundled' ? 'outline' : 'secondary'}>
-      {source === 'bundled' ? 'Built-in' : 'User'}
+      {source === 'bundled'
+        ? t('resourcesPage.source.bundled', { defaultValue: 'Built-in' })
+        : source === 'overridden'
+          ? t('resourcesPage.source.overridden', { defaultValue: 'Overridden' })
+          : t('resourcesPage.source.user', { defaultValue: 'Custom' })}
     </Badge>
   )
+}
+
+function ProfileBadge({
+  item,
+  t
+}: {
+  item: ManagedResourceItem
+  t: (key: string, options?: Record<string, unknown>) => string
+}): React.JSX.Element {
+  const label = item.profileMeta.profiles.includes('both')
+    ? t('resourcesPage.profile.both', { defaultValue: 'Work + Code' })
+    : item.profileMeta.profiles.includes('code')
+      ? t('resourcesPage.profile.code', { defaultValue: 'Code' })
+      : t('resourcesPage.profile.work', { defaultValue: 'Work' })
+  return <Badge variant="outline">{label}</Badge>
+}
+
+function TemplatePanel({
+  t
+}: {
+  t: ResourceTranslator
+}): React.JSX.Element {
+  return (
+    <div className="min-w-0 flex-1 overflow-y-auto p-6">
+      <div className="mx-auto max-w-4xl">
+        <h2 className="text-base font-semibold">
+          {t('resourcesPage.templates.title', { defaultValue: 'Workspace templates' })}
+        </h2>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {t('resourcesPage.templates.subtitle', {
+            defaultValue:
+              'These files define the Agent working boundaries, personality, user preferences, and long-term context.'
+          })}
+        </p>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2">
+          {workspaceTemplates.map((template) => (
+            <div key={template.id} className="rounded-xl border bg-background p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <FileText className="size-4" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold">{template.id}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {t(`resourcesPage.templates.items.${template.id}.description`, {
+                      defaultValue: 'A long-lived workspace configuration file.'
+                    })}
+                  </p>
+                  <Badge className="mt-3" variant="outline">
+                    {t(`resourcesPage.templates.scope.${template.scope}`, {
+                      defaultValue: template.scope === 'project' ? 'Project' : 'Global / project'
+                    })}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 rounded-xl border border-dashed p-4 text-xs text-muted-foreground">
+          <strong className="font-medium text-foreground">
+            {t('resourcesPage.templates.mappingTitle', { defaultValue: 'Capability boundaries' })}
+          </strong>
+          <p className="mt-1">
+            {t('resourcesPage.templates.mapping', {
+              defaultValue:
+                'An Agent is an execution role, a Command is a shortcut workflow, a Skill is a specialized capability, and a template is long-lived workspace configuration.'
+            })}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function getResourceName(t: ResourceTranslator, item: ManagedResourceItem): string {
+  return t(`resourcesPage.items.${item.kind}.${item.name}.name`, { defaultValue: item.name })
+}
+
+function getResourceDescription(t: ResourceTranslator, item: ManagedResourceItem): string {
+  return t(`resourcesPage.items.${item.kind}.${item.name}.description`, {
+    defaultValue: item.description || t('resourcesPage.noDescription', { defaultValue: 'No summary available' })
+  })
 }
 
 export function ResourcesPage(): React.JSX.Element {
@@ -63,25 +179,39 @@ export function ResourcesPage(): React.JSX.Element {
   const saveSelected = useResourcesStore((s) => s.saveSelected)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [newCommandName, setNewCommandName] = useState('')
+  const defaultTaskProfile = useSettingsStore((state) => state.defaultTaskProfile)
+  const [profileFilter, setProfileFilter] = useState<ProfileFilter>('recommended')
+  const [showTemplates, setShowTemplates] = useState(false)
 
   const currentItems = activeKind === 'agents' ? agents : commands
   const currentSelectedId = selectedIds[activeKind]
 
   const filteredItems = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
-    if (!query) return currentItems
+    const profileItems = currentItems.filter((item) => {
+      if (profileFilter === 'all') return true
+      if (profileFilter === 'recommended') {
+        return (
+          item.profileMeta.recommended &&
+          profileMatches(item.profileMeta, defaultTaskProfile as TaskProfile)
+        )
+      }
+      return profileMatches(item.profileMeta, profileFilter)
+    })
+    if (!query) return profileItems
 
-    return currentItems.filter((item) => {
-      const haystack = `${item.name}\n${item.description}\n${item.path}`.toLowerCase()
+    return profileItems.filter((item) => {
+      const haystack = `${getResourceName(t, item)}\n${getResourceDescription(t, item)}\n${item.name}\n${item.description}\n${item.path}`.toLowerCase()
       return haystack.includes(query)
     })
-  }, [currentItems, searchQuery])
+  }, [currentItems, defaultTaskProfile, profileFilter, searchQuery, t])
 
   useEffect(() => {
     void loadAll()
   }, [loadAll])
 
   useEffect(() => {
+    if (showTemplates) return
     if (currentItems.length === 0) {
       void selectResource(null, activeKind)
       return
@@ -99,7 +229,7 @@ export function ResourcesPage(): React.JSX.Element {
     ) {
       void selectResource(currentSelectedId, activeKind)
     }
-  }, [activeKind, currentItems, currentSelectedId, selectedResource, selectResource])
+  }, [activeKind, currentItems, currentSelectedId, selectedResource, selectResource, showTemplates])
 
   const handleSave = async (): Promise<void> => {
     const result = await saveSelected()
@@ -136,11 +266,11 @@ export function ResourcesPage(): React.JSX.Element {
         </button>
         <div>
           <h1 className="text-sm font-semibold">
-            {t('resourcesPage.title', { defaultValue: 'Resources' })}
+            {t('resourcesPage.title', { defaultValue: 'Agents and Commands' })}
           </h1>
           <p className="text-xs text-muted-foreground">
             {t('resourcesPage.subtitle', {
-              defaultValue: 'Unified management of SubAgents and Commands'
+              defaultValue: 'Manage Agents, Commands, and workspace templates by Work / Code profile'
             })}
           </p>
         </div>
@@ -167,6 +297,38 @@ export function ResourcesPage(): React.JSX.Element {
             className="h-8 pl-8 text-xs"
           />
         </div>
+      </div>
+
+      <div className="flex items-center gap-1 border-b px-4 py-2 shrink-0" role="tablist">
+        {(['recommended', 'work', 'code', 'all'] as ProfileFilter[]).map((filter) => (
+          <button
+            key={filter}
+            type="button"
+            role="tab"
+            aria-selected={profileFilter === filter}
+            onClick={() => setProfileFilter(filter)}
+            className={cn(
+              'rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+              profileFilter === filter
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            {filter === 'recommended'
+              ? t('resourcesPage.recommended', { defaultValue: 'Recommended' })
+              : filter === 'work'
+                ? t('resourcesPage.work', { defaultValue: 'Work' })
+                : filter === 'code'
+                  ? t('resourcesPage.code', { defaultValue: 'Code' })
+                  : t('resourcesPage.all', { defaultValue: 'All' })}
+          </button>
+        ))}
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          {t('resourcesPage.currentProfile', {
+            profile: defaultTaskProfile === 'code' ? 'Code 编程' : 'Work 工作',
+            defaultValue: `Current profile: ${defaultTaskProfile === 'code' ? 'Code' : 'Work'}`
+          })}
+        </span>
       </div>
 
       <Dialog
@@ -232,7 +394,10 @@ export function ResourcesPage(): React.JSX.Element {
             return (
               <button
                 key={option.value}
-                onClick={() => setActiveKind(option.value)}
+                onClick={() => {
+                  setShowTemplates(false)
+                  setActiveKind(option.value)
+                }}
                 className={cn(
                   'flex flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left transition-colors',
                   activeKind === option.value
@@ -252,8 +417,28 @@ export function ResourcesPage(): React.JSX.Element {
               </button>
             )
           })}
+          <button
+            type="button"
+            onClick={() => setShowTemplates(true)}
+            className={cn(
+              'flex flex-col items-start gap-1 rounded-lg px-3 py-2.5 text-left transition-colors',
+              showTemplates
+                ? 'bg-primary/10 text-primary'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <FileText className="size-4" />
+              {t('resourcesPage.kind.templates', { defaultValue: 'Templates' })}
+            </span>
+            <span className="text-[11px] opacity-70">{workspaceTemplates.length}</span>
+          </button>
         </div>
 
+        {showTemplates ? (
+          <TemplatePanel t={t} />
+        ) : (
+          <>
         <div className="flex w-80 shrink-0 flex-col border-r bg-muted/20 overflow-hidden">
           <div className="border-b px-3 py-2 text-xs text-muted-foreground">
             {t('resourcesPage.listTitle', { defaultValue: 'Resource list' })}
@@ -292,14 +477,14 @@ export function ResourcesPage(): React.JSX.Element {
                     >
                       <div className="flex items-start gap-2">
                         <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-medium">{item.name}</div>
+                          <div className="truncate text-sm font-medium">{getResourceName(t, item)}</div>
                           <div className="mt-1 line-clamp-2 text-[11px] text-muted-foreground">
-                            {item.description ||
-                              t('resourcesPage.noDescription', { defaultValue: 'No summary' })}
+                            {getResourceDescription(t, item)}
                           </div>
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-1">
-                          <SourceBadge source={item.source} />
+                          <ProfileBadge item={item} t={t} />
+                          <SourceBadge source={item.source} t={t} />
                           {item.kind === 'commands' && item.effective ? (
                             <Badge variant="outline">
                               {t('resourcesPage.effective', { defaultValue: 'Active' })}
@@ -321,8 +506,11 @@ export function ResourcesPage(): React.JSX.Element {
               <div className="flex items-start gap-3 border-b px-4 py-3 shrink-0">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <h2 className="truncate text-sm font-semibold">{selectedResource.name}</h2>
-                    <SourceBadge source={selectedResource.source} />
+                    <h2 className="truncate text-sm font-semibold">
+                      {getResourceName(t, selectedResource)}
+                    </h2>
+                    <ProfileBadge item={selectedResource} t={t} />
+                    <SourceBadge source={selectedResource.source} t={t} />
                     {selectedResource.kind === 'commands' && selectedResource.effective ? (
                       <Badge variant="outline">
                         {t('resourcesPage.effective', { defaultValue: 'Active' })}
@@ -330,7 +518,7 @@ export function ResourcesPage(): React.JSX.Element {
                     ) : null}
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedResource.description}
+                    {getResourceDescription(t, selectedResource)}
                   </p>
                   <p className="mt-2 break-all font-mono text-[11px] text-muted-foreground/80">
                     {selectedResource.path}
@@ -412,6 +600,8 @@ export function ResourcesPage(): React.JSX.Element {
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
     </div>
   )

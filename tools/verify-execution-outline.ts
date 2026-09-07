@@ -13,8 +13,10 @@ assert.equal(classifyTool('Bash'), 'command')
 assert.equal(classifyTool('Edit'), 'file-change')
 assert.equal(classifyTool('mcp__github__get_issue'), 'mcp')
 assert.equal(classifyTool('browser_click'), 'browser')
-assert.equal(classifyTool('desktop_screenshot'), 'visual')
+assert.equal(classifyTool('desktop_screenshot'), 'desktop')
 assert.equal(classifyTool('AskUserQuestion'), 'interactive')
+assert.equal(classifyTool('codegraph_explore'), 'mcp')
+assert.equal(classifyTool('wiki_generate'), 'mcp')
 assert.equal(classifyTool('future_tool'), 'unknown')
 
 const splitRuns = buildExecutionOutline([

@@ -425,10 +425,10 @@ export function ExtensionPanel(): React.JSX.Element {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-6 py-6">
+    <div className="flex w-full flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h2 className="text-lg font-semibold">
             {t('extension.title', { defaultValue: 'Extensions' })}
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">

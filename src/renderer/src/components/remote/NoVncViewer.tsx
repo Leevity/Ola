@@ -292,7 +292,7 @@ export function NoVncViewer({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border bg-black shadow-sm">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2 text-xs text-white/70">
+      <div className="flex items-center justify-between border-b border-[color:var(--border)] bg-[color:var(--remote-panel)] px-4 py-2 text-xs text-[color:var(--muted-foreground)]">
         <span>{t('remote.embeddedNoVnc', { defaultValue: 'Embedded noVNC' })}</span>
         <span className="flex items-center gap-3">
           {framebufferSize ? (

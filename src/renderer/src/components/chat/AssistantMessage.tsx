@@ -61,6 +61,8 @@ import { ToolCallCard, WidgetOutputBlock } from './ToolCallCard'
 import { ToolCallGroup } from './ToolCallGroup'
 import { ExecutionRunSummary } from './ExecutionRunSummary'
 import { RunResultCard } from './RunResultCard'
+import { ExecutionTraceCard } from './ExecutionTraceCard'
+import { FinalOutcomeCard } from './FinalOutcomeCard'
 import { buildChatRunPresentation } from './chat-run-view-model'
 import { SessionChangeSummaryCard } from './SessionChangeSummaryCard'
 import {
@@ -1692,6 +1694,7 @@ export function AssistantMessage({
   const fallbackTokens = useMemoizedTokens(plainTextForTokens)
 
   const isLiveMode = renderMode === 'default'
+  const runOutcome = meta?.runOutcome
 
   const isGeneratingImage = useChatStore((s) =>
     isLiveMode && msgId ? !!s.generatingImageMessages[msgId] : false
@@ -2997,11 +3000,33 @@ export function AssistantMessage({
           </div>
         ) : (
           <>
-            {renderContent()}
-            {!isStreaming && completionSummary && (
-              <CompletionSummaryBar summary={completionSummary} />
+            {!isStreaming && isLiveMode && runOutcome ? (
+              <>
+                <ExecutionTraceCard
+                  runOutcome={runOutcome}
+                  filesChanged={runPresentation?.changeSummary.fileCount ?? 0}
+                >
+                  {renderContent()}
+                  {completionSummary ? <CompletionSummaryBar summary={completionSummary} /> : null}
+                  {runPresentation?.changeSummary.fileCount ? (
+                    <SessionChangeSummaryCard
+                      sessionId={sessionId}
+                      messageId={msgId}
+                      toolUseIds={messageToolUseIds}
+                    />
+                  ) : null}
+                </ExecutionTraceCard>
+                <FinalOutcomeCard outcome={runOutcome.outcome} />
+              </>
+            ) : (
+              <>
+                {renderContent()}
+                {!isStreaming && completionSummary ? (
+                  <CompletionSummaryBar summary={completionSummary} />
+                ) : null}
+              </>
             )}
-            {!isStreaming && isLiveMode ? (
+            {!isStreaming && isLiveMode && !runOutcome ? (
               <RunResultCard
                 presentation={runPresentation}
                 onViewProcess={expandExecutionRuns}

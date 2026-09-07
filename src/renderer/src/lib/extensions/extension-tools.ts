@@ -104,7 +104,13 @@ export async function refreshExtensionTools(): Promise<void> {
         toolRegistry.register(handler, {
           namespace: 'extension',
           owner: `extension:${extension.id}`,
-          version: extension.manifest.version
+          version: extension.manifest.version,
+          capability: {
+            readOnly: isReadOnlyTool(tool),
+            riskLevel: isReadOnlyTool(tool) ? 'low' : 'medium',
+            requiresApproval: !isReadOnlyTool(tool),
+            projectScoped: true
+          }
         })
         names.push(handler.definition.name)
       }

@@ -2,19 +2,17 @@
 import {
   ArrowLeft,
   Settings,
-  BrainCircuit,
   BarChart3,
   Info,
   Server,
   Cable,
+  Globe,
   Loader2,
   Github,
   Sparkles,
-  Layers,
   HardDriveDownload,
   HardDriveUpload,
   Trash2,
-  Globe,
   Wand2,
   BookOpen,
   Save,
@@ -23,16 +21,16 @@ import {
   Terminal,
   MessagesSquare,
   MessageSquareQuote,
-  Users,
   Code2,
   Network,
   PawPrint,
   KeyRound,
   ShieldCheck,
-  MousePointer2
+  MousePointer2,
+  Search,
+  BriefcaseBusiness
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { AnimatePresence } from 'motion/react'
 import { useUIStore, type SettingsTab } from '@renderer/stores/ui-store'
 import { PermissionPanel } from './PermissionPanel'
 import { HooksPanel } from './HooksPanel'
@@ -82,14 +80,13 @@ import {
   SelectTrigger,
   SelectValue
 } from '@renderer/components/ui/select'
-import { FadeIn, SlideIn } from '@renderer/components/animate-ui'
 import {
   isProviderAvailableForModelSelection,
   useProviderStore
 } from '@renderer/stores/provider-store'
 import { ModelManagementPanel, ProviderPanel } from './ProviderPanel'
 import { ChannelPanel } from './PluginPanel'
-import { AppPluginPanel } from './AppPluginPanel'
+import { CapabilityCenterPanel } from './CapabilityCenterPanel'
 import { AiCodingConfigPanel } from './AiCodingConfigPanel'
 import { ExtensionPanel } from './ExtensionPanel'
 import { McpPanel } from './McpPanel'
@@ -139,6 +136,7 @@ import {
 } from '@renderer/lib/theme-presets'
 import { WindowControls } from '@renderer/components/layout/WindowControls'
 import { isSettingsFullPanelTab, normalizeSettingsTab } from './settings-nav'
+import { WorkModesPanel } from './WorkModesPanel'
 import {
   DEFAULT_BUILTIN_SOUL_TEMPLATE_ID,
   type BuiltinSoulTemplateWithContent
@@ -410,7 +408,7 @@ const menuGroupDefs: Array<{
   items: { id: SettingsTab; icon: React.ReactNode; labelKey: string; descKey: string }[]
 }> = [
   {
-    labelKey: 'page.groups.foundation',
+    labelKey: 'page.groups.general',
     items: [
       {
         id: 'general',
@@ -419,16 +417,108 @@ const menuGroupDefs: Array<{
         descKey: 'general.subtitle'
       },
       {
+        id: 'workModes',
+        icon: <BriefcaseBusiness className="size-4" />,
+        labelKey: 'workModes.title',
+        descKey: 'workModes.subtitle'
+      }
+    ]
+  },
+  {
+    labelKey: 'page.groups.aiAndModels',
+    items: [
+      {
+        id: 'provider',
+        icon: <Server className="size-4" />,
+        labelKey: 'provider.title',
+        descKey: 'provider.subtitle'
+      }
+    ]
+  },
+  {
+    labelKey: 'page.groups.executionSecurity',
+    items: [
+      {
+        id: 'permission',
+        icon: <ShieldCheck className="size-4" />,
+        labelKey: 'permission.title',
+        descKey: 'permission.subtitle'
+      },
+      {
+        id: 'system',
+        icon: <Terminal className="size-4" />,
+        labelKey: 'system.title',
+        descKey: 'system.subtitle'
+      },
+      {
+        id: 'desktopAutomation',
+        icon: <MousePointer2 className="size-4" />,
+        labelKey: 'desktopAutomation.title',
+        descKey: 'desktopAutomation.subtitle'
+      },
+      {
+        id: 'aiCoding',
+        icon: <Code2 className="size-4" />,
+        labelKey: 'aiCoding.title',
+        descKey: 'aiCoding.subtitle'
+      },
+      {
+        id: 'hooks',
+        icon: <RefreshCw className="size-4" />,
+        labelKey: 'hooks.title',
+        descKey: 'hooks.subtitle'
+      },
+      {
+        id: 'credentials',
+        icon: <KeyRound className="size-4" />,
+        labelKey: 'credentials.title',
+        descKey: 'credentials.subtitle'
+      }
+    ]
+  },
+  {
+    labelKey: 'page.groups.integrations',
+    items: [
+      {
+        id: 'plugin',
+        icon: <Puzzle className="size-4" />,
+        labelKey: 'plugin.title',
+        descKey: 'plugin.subtitle'
+      },
+      {
+        id: 'mcp',
+        icon: <Cable className="size-4" />,
+        labelKey: 'mcp.title',
+        descKey: 'mcp.subtitle'
+      },
+      {
+        id: 'skillsmarket',
+        icon: <Wand2 className="size-4" />,
+        labelKey: 'skillsmarket.title',
+        descKey: 'skillsmarket.subtitle'
+      },
+      {
+        id: 'channel',
+        icon: <MessagesSquare className="size-4" />,
+        labelKey: 'channel.title',
+        descKey: 'channel.subtitle'
+      },
+      {
+        id: 'websearch',
+        icon: <Globe className="size-4" />,
+        labelKey: 'websearch.title',
+        descKey: 'websearch.subtitle'
+      }
+    ]
+  },
+  {
+    labelKey: 'page.groups.personalization',
+    items: [
+      {
         id: 'memory',
         icon: <BookOpen className="size-4" />,
         labelKey: 'memory.title',
         descKey: 'memory.subtitle'
-      },
-      {
-        id: 'analytics',
-        icon: <BarChart3 className="size-4" />,
-        labelKey: 'analytics.title',
-        descKey: 'analytics.subtitle'
       },
       {
         id: 'pet',
@@ -439,100 +529,13 @@ const menuGroupDefs: Array<{
     ]
   },
   {
-    labelKey: 'page.groups.system',
+    labelKey: 'page.groups.dataUsage',
     items: [
       {
-        id: 'system',
-        icon: <Terminal className="size-4" />,
-        labelKey: 'system.title',
-        descKey: 'system.subtitle'
-      },
-      {
-        id: 'permission',
-        icon: <ShieldCheck className="size-4" />,
-        labelKey: 'permission.title',
-        descKey: 'permission.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.ai',
-    items: [
-      {
-        id: 'provider',
-        icon: <Server className="size-4" />,
-        labelKey: 'provider.title',
-        descKey: 'provider.subtitle'
-      },
-      {
-        id: 'modelManagement',
-        icon: <Layers className="size-4" />,
-        labelKey: 'provider.modelManagement',
-        descKey: 'provider.modelManagementDesc'
-      },
-      {
-        id: 'model',
-        icon: <BrainCircuit className="size-4" />,
-        labelKey: 'model.title',
-        descKey: 'model.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.capabilities',
-    items: [
-      {
-        id: 'wiki',
-        icon: <BookOpen className="size-4" />,
-        labelKey: 'wiki.title',
-        descKey: 'wiki.subtitle'
-      },
-      {
-        id: 'desktopAutomation',
-        icon: <MousePointer2 className="size-4" />,
-        labelKey: 'desktopAutomation.title',
-        descKey: 'desktopAutomation.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.extensions',
-    items: [
-      {
-        id: 'plugin',
-        icon: <Puzzle className="size-4" />,
-        labelKey: 'plugin.title',
-        descKey: 'plugin.subtitle'
-      },
-      {
-        id: 'extension',
-        icon: <Sparkles className="size-4" />,
-        labelKey: 'extension.title',
-        descKey: 'extension.subtitle'
-      },
-      {
-        id: 'mcp',
-        icon: <Cable className="size-4" />,
-        labelKey: 'mcp.title',
-        descKey: 'mcp.subtitle'
-      },
-      {
-        id: 'websearch',
-        icon: <Globe className="size-4" />,
-        labelKey: 'websearch.title',
-        descKey: 'websearch.subtitle'
-      },
-      {
-        id: 'skillsmarket',
-        icon: <Wand2 className="size-4" />,
-        labelKey: 'skillsmarket.title',
-        descKey: 'skillsmarket.subtitle'
-      },
-      {
-        id: 'credentials',
-        icon: <KeyRound className="size-4" />,
-        labelKey: 'credentials.title',
-        descKey: 'credentials.subtitle'
+        id: 'analytics',
+        icon: <BarChart3 className="size-4" />,
+        labelKey: 'analytics.title',
+        descKey: 'analytics.subtitle'
       }
     ]
   },
@@ -826,6 +829,8 @@ function GeneralPanel(): React.JSX.Element {
         <h2 className="text-lg font-semibold">{t('general.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('general.subtitle')}</p>
       </div>
+
+      <ProfilePanel />
 
       <section className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
         <div className="flex flex-col gap-1 text-sm">
@@ -2702,7 +2707,6 @@ function AnalyticsPanel(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      <ProfilePanel />
       <div className="flex items-end justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold">{t('analytics.title')}</h2>
@@ -3053,14 +3057,9 @@ function ModelPanel(): React.JSX.Element {
       descKey: 'model.promptRecommendationModesDesc.clarify'
     },
     {
-      mode: 'cowork',
-      labelKey: 'model.promptRecommendationModes.cowork',
-      descKey: 'model.promptRecommendationModesDesc.cowork'
-    },
-    {
-      mode: 'code',
-      labelKey: 'model.promptRecommendationModes.code',
-      descKey: 'model.promptRecommendationModesDesc.code'
+      mode: 'execute',
+      labelKey: 'model.promptRecommendationModes.execute',
+      descKey: 'model.promptRecommendationModesDesc.execute'
     },
     {
       mode: 'acp',
@@ -3728,14 +3727,9 @@ function AboutPanel(): React.JSX.Element {
       desc: t('about.featureCards.clarify.desc')
     },
     {
-      icon: Users,
-      title: t('about.featureCards.cowork.title'),
-      desc: t('about.featureCards.cowork.desc')
-    },
-    {
       icon: Code2,
-      title: t('about.featureCards.code.title'),
-      desc: t('about.featureCards.code.desc')
+      title: t('about.featureCards.execute.title'),
+      desc: t('about.featureCards.execute.desc')
     },
     {
       icon: Network,
@@ -3835,20 +3829,70 @@ function AboutPanel(): React.JSX.Element {
   )
 }
 
+function AiModelsPanel(): React.JSX.Element {
+  const { t } = useTranslation('settings')
+  const settingsTab = useUIStore((state) => state.settingsTab)
+  const setSettingsTab = useUIStore((state) => state.setSettingsTab)
+  const activeTab =
+    settingsTab === 'modelManagement' || settingsTab === 'model' ? settingsTab : 'provider'
+  const tabs: Array<{ id: 'provider' | 'modelManagement' | 'model'; label: string }> = [
+    { id: 'provider', label: t('provider.title') },
+    { id: 'modelManagement', label: t('provider.modelManagement') },
+    { id: 'model', label: t('model.title') }
+  ]
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-5">
+      <div
+        className="inline-flex w-fit shrink-0 rounded-lg border border-border/70 bg-muted/20 p-1"
+        role="tablist"
+        aria-label={t('page.groups.aiAndModels')}
+      >
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            onClick={() => setSettingsTab(tab.id)}
+            className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
+              activeTab === tab.id
+                ? 'bg-background font-medium text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+        {activeTab === 'provider' ? (
+          <ProviderPanel />
+        ) : activeTab === 'modelManagement' ? (
+          <ModelManagementPanel />
+        ) : (
+          <ModelPanel />
+        )}
+      </div>
+    </div>
+  )
+}
+
 const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
   general: GeneralPanel,
+  workModes: WorkModesPanel,
   system: SystemPanel,
   permission: PermissionPanel,
   hooks: HooksPanel,
   memory: MemoryPanel,
   analytics: AnalyticsPanel,
-  provider: ProviderPanel,
-  modelManagement: ModelManagementPanel,
-  plugin: AppPluginPanel,
+  provider: AiModelsPanel,
+  modelManagement: AiModelsPanel,
+  plugin: CapabilityCenterPanel,
   extension: ExtensionPanel,
   channel: ChannelPanel,
   mcp: McpPanel,
-  model: ModelPanel,
+  model: AiModelsPanel,
   aiCoding: AiCodingConfigPanel,
   websearch: WebSearchPanel,
   skillsmarket: SkillsMarketPanel,
@@ -3865,9 +3909,36 @@ export function SettingsPage(): React.JSX.Element {
   const setSettingsTab = useUIStore((s) => s.setSettingsTab)
   const closeSettingsPage = useUIStore((s) => s.closeSettingsPage)
   const isMac = useMemo(() => /Mac/.test(navigator.userAgent), [])
+  const [settingsSearch, setSettingsSearch] = useState('')
+  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved'>('saved')
+
+  useEffect(() => {
+    let savedTimer: ReturnType<typeof setTimeout> | null = null
+    const unsubscribe = useSettingsStore.subscribe(() => {
+      setSaveStatus('saving')
+      if (savedTimer) clearTimeout(savedTimer)
+      savedTimer = setTimeout(() => setSaveStatus('saved'), 500)
+    })
+    return () => {
+      unsubscribe()
+      if (savedTimer) clearTimeout(savedTimer)
+    }
+  }, [])
 
   const effectiveSettingsTab = normalizeSettingsTab(settingsTab)
   const ActivePanel = panelMap[effectiveSettingsTab]
+  const visibleMenuGroups = useMemo(() => {
+    const query = settingsSearch.trim().toLocaleLowerCase()
+    if (!query) return menuGroupDefs
+    return menuGroupDefs
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) =>
+          `${t(item.labelKey)} ${t(item.descKey)}`.toLocaleLowerCase().includes(query)
+        )
+      }))
+      .filter((group) => group.items.length > 0)
+  }, [settingsSearch, t])
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-muted/10">
@@ -3881,6 +3952,7 @@ export function SettingsPage(): React.JSX.Element {
           className="titlebar-no-drag size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
           onClick={closeSettingsPage}
           title={t('page.back', { defaultValue: 'Back' })}
+          aria-label={t('page.back', { defaultValue: 'Back' })}
         >
           <ArrowLeft className="size-4" />
         </Button>
@@ -3889,6 +3961,14 @@ export function SettingsPage(): React.JSX.Element {
           <div className="hidden truncate text-[11px] text-muted-foreground sm:block">
             {t('page.subtitle')}
           </div>
+        </div>
+        <div
+          className="titlebar-no-drag hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex"
+          aria-live="polite"
+        >
+          <span>{t('page.globalScope')}</span>
+          <span aria-hidden="true">·</span>
+          <span>{t(`page.${saveStatus}`)}</span>
         </div>
         {!isMac ? (
           <div className="absolute right-0 top-0 z-10">
@@ -3899,8 +3979,20 @@ export function SettingsPage(): React.JSX.Element {
 
       <div className="flex min-h-0 flex-1">
         <div className="flex w-[236px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
+          <div className="px-3 pt-3">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={settingsSearch}
+                onChange={(event) => setSettingsSearch(event.target.value)}
+                placeholder={t('page.searchPlaceholder')}
+                aria-label={t('page.searchLabel')}
+                className="h-8 bg-background/55 pl-8 text-xs"
+              />
+            </div>
+          </div>
           <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 pb-2 pt-4">
-            {menuGroupDefs.map((group) => (
+            {visibleMenuGroups.map((group) => (
               <div key={group.labelKey} className="space-y-0.5">
                 <p className="mb-1 px-3 text-[11px] font-medium text-muted-foreground/70">
                   {t(group.labelKey)}
@@ -3911,6 +4003,7 @@ export function SettingsPage(): React.JSX.Element {
                     <button
                       key={item.id}
                       onClick={() => setSettingsTab(item.id)}
+                      aria-current={active ? 'page' : undefined}
                       className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors duration-150 ${
                         active
                           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
@@ -3941,34 +4034,17 @@ export function SettingsPage(): React.JSX.Element {
 
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-5">
           {/* Content */}
-          <AnimatePresence mode="wait">
-            {isSettingsFullPanelTab(effectiveSettingsTab) ? (
-              <div className="flex-1 min-h-0 min-w-0 overflow-hidden" key="full-panel">
-                <SlideIn
-                  key={effectiveSettingsTab}
-                  direction="right"
-                  duration={0.25}
-                  className="h-full min-h-0"
-                >
-                  <ActivePanel />
-                </SlideIn>
+          {isSettingsFullPanelTab(effectiveSettingsTab) ? (
+            <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
+              <ActivePanel />
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto">
+              <div className="w-full px-6 pb-16 pt-10">
+                <ActivePanel />
               </div>
-            ) : (
-              <div className="flex-1 overflow-y-auto" key="scroll-panel">
-                <div
-                  className={
-                    effectiveSettingsTab === 'analytics' || effectiveSettingsTab === 'about'
-                      ? 'w-full px-6 pb-16 pt-10'
-                      : 'mx-auto max-w-2xl px-8 pb-16 pt-10'
-                  }
-                >
-                  <FadeIn key={effectiveSettingsTab} duration={0.25} className="w-full">
-                    <ActivePanel />
-                  </FadeIn>
-                </div>
-              </div>
-            )}
-          </AnimatePresence>
+            </div>
+          )}
         </div>
       </div>
     </div>

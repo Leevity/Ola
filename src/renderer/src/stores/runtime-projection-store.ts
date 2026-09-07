@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import type { RunLifecycleStatus } from '../lib/api/types'
 
-export type RuntimeProjectionStatus = 'idle' | 'running' | 'completed' | 'failed'
+export type RuntimeProjectionStatus = 'idle' | RunLifecycleStatus
 
 export interface RuntimeSessionProjection {
   sessionId: string
@@ -14,15 +15,16 @@ export interface RuntimeSessionProjection {
 
 export type RuntimeProjectionPatch = Partial<
   Pick<RuntimeSessionProjection, 'assistantMessageId' | 'thinkingMessageId'>
-> & { toolUse?: boolean }
+> & { toolUse?: boolean; status?: RunLifecycleStatus }
 
 interface RuntimeProjectionStore {
   projections: Record<string, RuntimeSessionProjection>
   begin: (sessionId: string, runId: string | null, assistantMessageId: string) => void
+  setPhase: (sessionId: string, status: RunLifecycleStatus) => void
   touch: (sessionId: string, patch?: RuntimeProjectionPatch) => void
   finish: (
     sessionId: string,
-    status: Extract<RuntimeProjectionStatus, 'completed' | 'failed'>
+    status: Extract<RuntimeProjectionStatus, 'completed' | 'partial' | 'failed' | 'canceled'>
   ) => void
   clear: (sessionId: string) => void
 }
@@ -49,11 +51,21 @@ export const useRuntimeProjectionStore = create<RuntimeProjectionStore>((set) =>
           ...createProjection(sessionId),
           runId,
           assistantMessageId,
-          status: 'running',
+          status: 'preparing',
           lastEventAt: Date.now()
         }
       }
     })),
+  setPhase: (sessionId, status) =>
+    set((state) => {
+      const current = state.projections[sessionId] ?? createProjection(sessionId)
+      return {
+        projections: {
+          ...state.projections,
+          [sessionId]: { ...current, status, lastEventAt: Date.now() }
+        }
+      }
+    }),
   touch: (sessionId, patch) =>
     set((state) => {
       const current = state.projections[sessionId] ?? createProjection(sessionId)
@@ -65,7 +77,8 @@ export const useRuntimeProjectionStore = create<RuntimeProjectionStore>((set) =>
             ...current,
             ...projectionPatch,
             toolUseCount: current.toolUseCount + (toolUse ? 1 : 0),
-            status: current.status === 'idle' ? 'running' : current.status,
+            status:
+              projectionPatch.status ?? (current.status === 'idle' ? 'thinking' : current.status),
             lastEventAt: Date.now()
           }
         }

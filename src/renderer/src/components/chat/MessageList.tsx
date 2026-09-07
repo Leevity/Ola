@@ -1210,7 +1210,12 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   const runtimeProjection = useRuntimeProjectionStore((state) =>
     activeSessionId ? state.projections[activeSessionId] : undefined
   )
-  const hasProjectedRuntime = runtimeProjection?.status === 'running'
+  const hasProjectedRuntime =
+    runtimeProjection?.status === 'preparing' ||
+    runtimeProjection?.status === 'thinking' ||
+    runtimeProjection?.status === 'executing' ||
+    runtimeProjection?.status === 'waiting_user' ||
+    runtimeProjection?.status === 'summarizing'
   const isSessionOutputting = hasStreamingMessage || hasActiveToolCallOutput || hasProjectedRuntime
   const canSessionTriggerStreamingAutoScroll =
     (isMainChatSession || isDetachedSessionView) && isSessionOutputting
@@ -2173,6 +2178,16 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
 
   const messageListContent = (
     <div ref={containerRef} className="relative flex-1" data-message-list>
+      {hasProjectedRuntime && runtimeProjection ? (
+        <div
+          className="pointer-events-none absolute right-4 top-2 z-20 rounded-full border border-border/60 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-foreground/75 shadow-sm backdrop-blur"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {t(`runOutcome.phase.${runtimeProjection.status}`)}
+        </div>
+      ) : null}
       <div
         ref={listRef}
         className="absolute inset-0 overflow-y-auto pl-7 md:pl-9"

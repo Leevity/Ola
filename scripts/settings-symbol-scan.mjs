@@ -12,12 +12,12 @@ const ids = [...(union?.[1]?.matchAll(/'([^']+)'/g) ?? [])].map((match) => match
 const panelMap = settingsPage.match(/const panelMap:[\s\S]*?\n}\n/)?.[0] ?? ''
 const missingPanels = ids.filter((id) => !panelMap.includes(`\n  ${id}:`))
 const menuIds = [...settingsPage.matchAll(/\bid:\s*'([^']+)'/g)].map((match) => match[1])
-const hiddenTabs = new Set(['hooks', 'aiCoding', 'channel'])
-const missingRoutes = ids.filter((id) => !menuIds.includes(id) && !hiddenTabs.has(id))
+const redirectedTabs = new Set(['wiki', 'extension'])
+const missingRoutes = ids.filter((id) => !menuIds.includes(id) && !redirectedTabs.has(id))
 
 console.log(
   JSON.stringify(
-    { ids, menuIds, hiddenTabs: [...hiddenTabs], missingPanels, missingRoutes },
+    { ids, menuIds, redirectedTabs: [...redirectedTabs], missingPanels, missingRoutes },
     null,
     2
   )

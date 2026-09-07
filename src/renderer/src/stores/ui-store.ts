@@ -19,8 +19,28 @@ import {
   replaceSettingsRoute
 } from '@renderer/lib/settings-route'
 
-export type AppMode = 'chat' | 'clarify' | 'cowork' | 'code' | 'acp'
+export type AppMode = 'chat' | 'clarify' | 'execute' | 'acp'
+export type LegacyAppMode = 'cowork' | 'code'
+
+export function normalizeAppMode(mode: unknown): AppMode {
+  if (mode === 'cowork' || mode === 'code' || mode === 'execute') return 'execute'
+  if (mode === 'clarify' || mode === 'acp') return mode
+  return 'chat'
+}
 export type RemoteWorkspaceSection = 'ssh' | 'direct' | 'managed' | 'mobile'
+
+export type ActiveSurface =
+  | 'workspace'
+  | 'settings'
+  | 'account'
+  | 'tasks'
+  | 'capabilities'
+  | 'personalization'
+  | 'data'
+  | 'remote'
+  | 'resources'
+  | 'draw'
+  | 'translate'
 
 export type NavItem =
   | 'chat'
@@ -210,6 +230,7 @@ export interface BrowserPanelSessionState {
 
 export type SettingsTab =
   | 'general'
+  | 'workModes'
   | 'system'
   | 'permission'
   | 'hooks'
@@ -372,6 +393,8 @@ interface UIStore {
   setRuntimeStatusPanelTriggerHovered: (hovering: boolean) => void
   settingsOpen: boolean
   setSettingsOpen: (open: boolean) => void
+  activeSurface: ActiveSurface
+  setActiveSurface: (surface: ActiveSurface) => void
   settingsPageOpen: boolean
   settingsTab: SettingsTab
   openSettingsPage: (tab?: SettingsTab) => void
@@ -390,10 +413,13 @@ interface UIStore {
   openSyncPage: () => void
   closeSyncPage: () => void
   remotePageOpen: boolean
+  remoteDialogOpen: boolean
   remoteWorkspaceSection: RemoteWorkspaceSection
   openRemotePage: (section?: RemoteWorkspaceSection) => void
+  openRemoteDialog: (section?: RemoteWorkspaceSection) => void
   setRemoteWorkspaceSection: (section: RemoteWorkspaceSection) => void
   closeRemotePage: () => void
+  closeRemoteDialog: () => void
   resourcesPageOpen: boolean
   openResourcesPage: () => void
   closeResourcesPage: () => void
@@ -687,17 +713,36 @@ function updateBrowserStateForSession(
 }
 
 const CHAT_SURFACE_NAV_RESET = {
+  activeSurface: 'workspace' as const,
   settingsPageOpen: false,
   skillsPageOpen: false,
   soulsPageOpen: false,
   syncPageOpen: false,
   remotePageOpen: false,
+  remoteDialogOpen: false,
   resourcesPageOpen: false,
   translatePageOpen: false,
   drawPageOpen: false,
   tasksPageOpen: false,
   pendingInsertText: null
 } as const
+
+function activeSurfacePatch(activeSurface: ActiveSurface): Partial<UIStore> {
+  return {
+    activeSurface,
+    settingsPageOpen: activeSurface === 'settings',
+    accountAuthPageOpen: activeSurface === 'account',
+    tasksPageOpen: activeSurface === 'tasks',
+    skillsPageOpen: activeSurface === 'capabilities',
+    soulsPageOpen: activeSurface === 'personalization',
+    syncPageOpen: activeSurface === 'data',
+    remotePageOpen: activeSurface === 'remote',
+    remoteDialogOpen: false,
+    resourcesPageOpen: activeSurface === 'resources',
+    drawPageOpen: activeSurface === 'draw',
+    translatePageOpen: activeSurface === 'translate'
+  }
+}
 
 function replaceChatRouteFromCurrentState(chatView: ChatView): void {
   const chatStore = useChatStore.getState()
@@ -940,8 +985,8 @@ function activatePreviewTab(
 export const useUIStore = create<UIStore>()(
   persist(
     (set, get) => ({
-      mode: 'cowork',
-      setMode: (mode) => set({ mode }),
+      mode: 'execute',
+      setMode: (mode) => set({ mode: normalizeAppMode(mode) }),
       activeNavItem: 'chat',
       setActiveNavItem: (item) =>
         set({ activeNavItem: item, leftSidebarOpen: true, ...closeRightSidePanels() }),
@@ -1281,28 +1326,22 @@ export const useUIStore = create<UIStore>()(
         set({ runtimeStatusPanelTriggerHovered: hovering }),
       settingsOpen: false,
       setSettingsOpen: (open) => set({ settingsOpen: open }),
+      activeSurface: 'workspace',
+      setActiveSurface: (activeSurface) => set(activeSurfacePatch(activeSurface)),
       settingsPageOpen: false,
       settingsTab: DEFAULT_SETTINGS_TAB,
       openSettingsPage: (tab) => {
         const nextTab = tab ?? DEFAULT_SETTINGS_TAB
         set({
-          settingsPageOpen: true,
+          ...activeSurfacePatch('settings'),
           settingsOpen: false,
           settingsTab: nextTab,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
           ...closeRightSidePanels()
         })
         replaceSettingsRoute(nextTab)
       },
       closeSettingsPage: () => {
-        set({ settingsPageOpen: false })
+        if (get().activeSurface === 'settings') set(activeSurfacePatch('workspace'))
         if (parseSettingsRoute(window.location.hash)) {
           replaceChatRouteFromCurrentState(get().chatView)
         }
@@ -1310,19 +1349,12 @@ export const useUIStore = create<UIStore>()(
       accountAuthPageOpen: false,
       openAccountAuthPage: () =>
         set({
-          accountAuthPageOpen: true,
-          settingsPageOpen: false,
-          remotePageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('account'),
           ...closeRightSidePanels()
         }),
-      closeAccountAuthPage: () => set({ accountAuthPageOpen: false }),
+      closeAccountAuthPage: () => {
+        if (get().activeSurface === 'account') set(activeSurfacePatch('workspace'))
+      },
       setSettingsTab: (tab) => {
         set({ settingsTab: tab })
         if (get().settingsPageOpen || parseSettingsRoute(window.location.hash)) {
@@ -1333,133 +1365,95 @@ export const useUIStore = create<UIStore>()(
       openSkillsPage: () =>
         set({
           activeNavItem: 'skills',
-          skillsPageOpen: true,
-          settingsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('capabilities'),
           ...closeRightSidePanels()
         }),
-      closeSkillsPage: () => set({ skillsPageOpen: false }),
+      closeSkillsPage: () => {
+        if (get().activeSurface === 'capabilities') set(activeSurfacePatch('workspace'))
+      },
       soulsPageOpen: false,
       openSoulsPage: () =>
         set({
           activeNavItem: 'souls',
-          soulsPageOpen: true,
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('personalization'),
           ...closeRightSidePanels()
         }),
-      closeSoulsPage: () => set({ soulsPageOpen: false }),
+      closeSoulsPage: () => {
+        if (get().activeSurface === 'personalization') set(activeSurfacePatch('workspace'))
+      },
       syncPageOpen: false,
       openSyncPage: () =>
         set({
           activeNavItem: 'sync',
-          syncPageOpen: true,
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('data'),
           ...closeRightSidePanels()
         }),
-      closeSyncPage: () => set({ syncPageOpen: false }),
+      closeSyncPage: () => {
+        if (get().activeSurface === 'data') set(activeSurfacePatch('workspace'))
+      },
       remotePageOpen: false,
+      remoteDialogOpen: false,
       remoteWorkspaceSection: 'ssh',
       openRemotePage: (section) =>
         set({
           activeNavItem: 'remote',
-          remotePageOpen: true,
+          ...activeSurfacePatch('remote'),
           ...(section ? { remoteWorkspaceSection: section } : {}),
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...closeRightSidePanels()
+        }),
+      openRemoteDialog: (section) =>
+        set({
+          activeNavItem: 'remote',
+          ...activeSurfacePatch('workspace'),
+          remoteDialogOpen: true,
+          ...(section ? { remoteWorkspaceSection: section } : {}),
           ...closeRightSidePanels()
         }),
       setRemoteWorkspaceSection: (remoteWorkspaceSection) => set({ remoteWorkspaceSection }),
-      closeRemotePage: () => set({ remotePageOpen: false }),
+      closeRemotePage: () => {
+        if (get().activeSurface === 'remote') set(activeSurfacePatch('workspace'))
+      },
+      closeRemoteDialog: () => set({ remoteDialogOpen: false }),
       resourcesPageOpen: false,
       openResourcesPage: () =>
         set({
           activeNavItem: 'resources',
-          resourcesPageOpen: true,
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('resources'),
           ...closeRightSidePanels()
         }),
-      closeResourcesPage: () => set({ resourcesPageOpen: false }),
+      closeResourcesPage: () => {
+        if (get().activeSurface === 'resources') set(activeSurfacePatch('workspace'))
+      },
       translatePageOpen: false,
       openTranslatePage: () =>
         set({
           activeNavItem: 'translate',
-          translatePageOpen: true,
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          drawPageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('translate'),
           ...closeRightSidePanels()
         }),
-      closeTranslatePage: () => set({ translatePageOpen: false }),
+      closeTranslatePage: () => {
+        if (get().activeSurface === 'translate') set(activeSurfacePatch('workspace'))
+      },
       drawPageOpen: false,
       openDrawPage: () =>
         set({
           activeNavItem: 'draw',
-          drawPageOpen: true,
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          tasksPageOpen: false,
+          ...activeSurfacePatch('draw'),
           ...closeRightSidePanels()
         }),
-      closeDrawPage: () => set({ drawPageOpen: false }),
+      closeDrawPage: () => {
+        if (get().activeSurface === 'draw') set(activeSurfacePatch('workspace'))
+      },
       tasksPageOpen: false,
       openTasksPage: () =>
         set({
           activeNavItem: 'tasks',
-          tasksPageOpen: true,
-          settingsPageOpen: false,
-          skillsPageOpen: false,
-          soulsPageOpen: false,
-          syncPageOpen: false,
-          remotePageOpen: false,
-          resourcesPageOpen: false,
-          translatePageOpen: false,
-          drawPageOpen: false,
+          ...activeSurfacePatch('tasks'),
           ...closeRightSidePanels()
         }),
-      closeTasksPage: () => set({ tasksPageOpen: false }),
+      closeTasksPage: () => {
+        if (get().activeSurface === 'tasks') set(activeSurfacePatch('workspace'))
+      },
       shortcutsOpen: false,
       setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
       changelogDialogOpen: false,
@@ -2026,16 +2020,9 @@ export const useUIStore = create<UIStore>()(
         const settingsRoute = parseSettingsRoute(window.location.hash)
         if (settingsRoute) {
           set({
-            settingsPageOpen: true,
+            ...activeSurfacePatch('settings'),
             settingsOpen: false,
             settingsTab: settingsRoute.tab,
-            skillsPageOpen: false,
-            soulsPageOpen: false,
-            syncPageOpen: false,
-            resourcesPageOpen: false,
-            translatePageOpen: false,
-            drawPageOpen: false,
-            tasksPageOpen: false,
             ...closeRightSidePanels()
           })
           if (window.location.hash !== settingsRoute.canonicalHash) {

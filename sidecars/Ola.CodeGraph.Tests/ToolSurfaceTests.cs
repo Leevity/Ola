@@ -70,6 +70,16 @@ public sealed class ToolSurfaceTests
         Assert.True(noRoot.Success);
         Assert.Equal(CodeGraphErrorKind.NotIndexed, noRoot.ErrorKind);
 
+        // A stale project path must not be treated as a valid empty project. The
+        // dashboard and agent need an actionable path error instead of misleading
+        // zero-file/zero-symbol results.
+        var missingRoot = Path.Combine(Path.GetTempPath(), "codegraph-missing-" + Guid.NewGuid().ToString("N"));
+        var missing = CodeGraphToolHandler.Search(Args(("workingFolder", missingRoot), ("query", "greet")));
+        Assert.True(missing.Success);
+        Assert.False(missing.IsError);
+        Assert.Equal(CodeGraphErrorKind.InvalidArgs, missing.ErrorKind);
+        Assert.Contains("does not exist", missing.Text, StringComparison.OrdinalIgnoreCase);
+
         // path_refusal -> HARD (isError), on a sensitive root (the user's home dir).
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         if (!string.IsNullOrEmpty(home))

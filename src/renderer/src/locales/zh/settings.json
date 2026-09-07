@@ -1,7 +1,13 @@
 ﻿{
   "wiki": {
     "title": "项目 Wiki",
-    "subtitle": "构建增量本地项目地图"
+    "subtitle": "构建增量本地项目地图",
+    "description": "构建本地增量项目地图，展示文件和符号；敏感目录会被排除。",
+    "projectFolder": "项目目录",
+    "chooseProjectFolder": "选择项目目录",
+    "generate": "生成 Wiki",
+    "rescan": "重新扫描",
+    "export": "导出 Markdown"
   },
   "desktopAutomation": {
     "title": "桌面自动化",
@@ -71,13 +77,19 @@
   "page": {
     "title": "设置",
     "subtitle": "偏好与模型设置",
+    "searchPlaceholder": "搜索设置",
+    "searchLabel": "搜索设置",
+    "globalScope": "全局",
+    "saving": "正在保存…",
+    "saved": "已保存",
     "poweredBy": "Powered by Ola",
     "groups": {
-      "foundation": "基础",
-      "system": "系统",
-      "ai": "AI 能力",
-      "capabilities": "Ola 能力",
-      "extensions": "扩展与集成",
+      "general": "通用",
+      "aiAndModels": "AI 与模型",
+      "executionSecurity": "执行与安全",
+      "integrations": "能力与集成",
+      "personalization": "个性化",
+      "dataUsage": "数据与使用",
       "about": "关于"
     }
   },
@@ -147,14 +159,15 @@
     "system": "跟随系统",
     "themePreset": {
       "title": "界面配色",
-      "desc": "主界面、SSH 主机库和 SFTP 会跟随该配色；SSH 终端可选择同系列终端配色。",
-      "terminalTitle": "SSH 终端配色",
-      "terminalDesc": "为连接态标题栏、终端背景和状态面板选择配套配色。",
+      "desc": "主界面、SSH、RDP、VNC 和 SFTP 远控工作台会使用该配色。",
+      "terminalTitle": "远控工作台配色",
+      "terminalDesc": "统一连接标题栏、终端背景、远程画面外框、文件区和状态面板的配色。",
       "terminalPreview": "$ ssh user@host",
       "terminalConnectedPreview": "已连接 · 22/tcp",
       "matchApp": "跟随界面配色",
       "matched": "已跟随",
       "globalHint": "界面",
+      "remoteHint": "远控",
       "current": "使用中",
       "presets": {
         "mulberry": {
@@ -647,15 +660,13 @@
     "promptRecommendationModes": {
       "chat": "Chat 模式",
       "clarify": "Clarify 模式",
-      "cowork": "Cowork 模式",
-      "code": "Code 模式",
+      "execute": "Execute 模式",
       "acp": "ACP 模式"
     },
     "promptRecommendationModesDesc": {
       "chat": "用于通用对话与下一问推荐",
       "clarify": "用于需求澄清与追问建议",
-      "cowork": "用于协作执行与任务拆解建议",
-      "code": "用于实现、修改与排查类提问建议",
+      "execute": "用于实现、研究、运维、调试与任务拆解建议",
       "acp": "用于 ACP 主控场景下的目标澄清、架构设计与任务分派建议"
     },
     "selectRecommendationModel": "选择推荐模型",
@@ -721,6 +732,18 @@
       "modelMissing": "请选择兼容且已启用的模型"
     }
   },
+  "capabilityCenter": {
+    "title": "能力中心",
+    "description": "在一个入口统一管理已安装能力、自定义 Extension、MCP、Skills、消息渠道、作用域、权限与健康状态。",
+    "installed": "已安装能力",
+    "extensions": "Extension",
+    "mcp": "MCP Server",
+    "skills": "Skills",
+    "channels": "消息渠道",
+    "enabledCount": "已启用 {{enabled}} / {{total}}",
+    "healthyCount": "健康 {{healthy}} / {{total}}",
+    "installedCount": "已安装 {{total}} 项"
+  },
   "plugin": {
     "title": "插件",
     "subtitle": "配置可选 Tool 插件及其访问规则",
@@ -742,7 +765,7 @@
     "toolStatusDesc": "只有在插件启用且模型有效时，图片 Tool 才会暴露给 Agent。",
     "toolStatusDescBrowser": "浏览器工具仅在浏览器插件启用后才会暴露给 Agent。手动浏览和 Agent 导航都会遵守域名规则。",
     "toolStatusDescDesktop": "桌面控制工具仅在插件启用后才会暴露给 Agent，但每次调用仍需审批；若模型同时启用 Computer Use，则会优先通过 Computer Use 代理这些能力。",
-    "toolStatusDescCodeGraph": "仅在插件启用后向 Agent 暴露 CodeGraph 工具；独立分析 Worker 会在首次请求时按需启动。",
+    "toolStatusDescCodeGraph": "启用项目智能插件后，Wiki 和 CodeGraph 面板都可用；CodeGraph 工具会向 Agent 暴露，分析 Worker 会在首次请求时按需启动。",
     "toolArgs": "可用参数：prompt、count",
     "toolArgsMap": {
       "ImageGenerate": "可用参数：prompt、count、reference_images、size、quality",
@@ -835,11 +858,19 @@
         "promptDesc": "Product Design 会先确认 brief；构建前必须有视觉目标；没有目标时先生成三个方向；原型交付前必须通过设计 QA。"
       },
       "codegraph": {
-        "title": "CodeGraph 代码分析",
-        "description": "为当前代码库建立索引，并向 Agent 提供结构化代码导航能力。",
-        "promptTitle": "分析范围",
-        "promptDesc": "默认关闭。启用后独立分析 Worker 按需启动，索引仅保存在本机。"
+        "title": "项目智能",
+        "description": "统一查看项目 Wiki 文件地图和 CodeGraph 结构化代码关系。",
+        "promptTitle": "项目分析范围",
+        "promptDesc": "默认关闭。启用后可生成人类可读的 Wiki，并按需建立本机 CodeGraph 索引。"
       }
+    },
+    "projectIntelligence": {
+      "title": "项目智能",
+      "description": "用轻量项目地图帮助人阅读，用深度代码图帮助结构分析。",
+      "activeProject": "当前项目：{{path}}",
+      "noProject": "请选择带有工作目录的项目，以同时使用这两个能力。",
+      "wikiTitle": "Project Wiki",
+      "codeGraphTitle": "CodeGraph"
     },
     "toolStatusDescProductDesign": "Product Design 是工作流插件，不新增底层 Tool；它通过 product-design skill 编排已启用的图片、浏览器、搜索、文件、终端、MCP 和部署工具。",
     "codegraph": {
@@ -1006,20 +1037,16 @@
         "title": "Clarify 模式",
         "desc": "需求澄清模式：在开始任务前，Agent 会先提问并确认你的意图，适合复杂或模糊的需求。"
       },
-      "cowork": {
-        "title": "Cowork 模式",
-        "desc": "协作编程模式，Agent 可直接操作你的项目文件、运行命令、调用工具，适合需要动手的开发任务。"
-      },
-      "code": {
-        "title": "Code 模式",
-        "desc": "纯代码模式，聚焦代码生成与修改，适合精确的编码需求。"
+      "execute": {
+        "title": "Execute 模式",
+        "desc": "统一完成编码、研究、文档、DevOps 与跨应用操作，并保留可审计的工具调用和验证记录。"
       },
       "acp": {
         "title": "ACP 模式",
         "desc": "多 Agent 协作模式（Agent Collaboration Protocol）：自动拆解目标、分配子任务给专业 Agent 团队，适合大型工程或跨领域项目。"
       }
     },
-    "summary": "五种模式覆盖从日常问答到多 Agent 协作的完整工作流，所有数据始终留在本地。"
+    "summary": "四种模式覆盖从日常问答到多 Agent 协作的完整工作流，所有数据始终留在本地。"
   },
   "dialog": {
     "title": "快速设置",
@@ -1732,6 +1759,34 @@
     "copyConversation": "复制对话",
     "allowTool": "允许工具执行",
     "denyTool": "拒绝工具执行"
+  },
+  "workModes": {
+    "title": "工作方式",
+    "subtitle": "选择新对话优先处理日常工作还是代码项目。",
+    "work": "Work",
+    "code": "Code",
+    "sharedLabel": "通用",
+    "autoSummarize": "生成结构化结果",
+    "autoSummarizeDesc": "工具执行后总结完成内容、验证结果和剩余事项。",
+    "preferBrowser": "优先浏览器操作",
+    "preferBrowserDesc": "将浏览器和桌面研究能力放到能力选择器前面。",
+    "preferWebSearch": "优先网络研究",
+    "preferWebSearchDesc": "研究类任务优先搜索并收集来源。",
+    "autoIndex": "保持项目智能可用",
+    "autoIndexDesc": "选择项目后优先使用 CodeGraph 和 Wiki 索引。",
+    "allowShell": "显示 Shell 能力",
+    "allowShellDesc": "将终端和命令工具作为 Code 优先能力，审批规则仍然生效。",
+    "defaultsHint": "新对话会使用当前画像配置。",
+    "mainModel": "主模型",
+    "fastModel": "快速模型",
+    "inheritModel": "继承全局模型",
+    "inheritFastModel": "继承全局快速模型",
+    "shared": {
+      "securityTitle": "安全策略保持全局统一",
+      "securityDesc": "权限、审批、凭据、MCP、Extension 和桌面自动化由两种画像共同使用。",
+      "defaultTitle": "默认画像",
+      "defaultDesc": "新对话从该画像开始，发送第一条消息前仍可以临时覆盖。"
+    }
   },
   "credentials": {
     "title": "凭据管理",

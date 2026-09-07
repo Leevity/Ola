@@ -9,7 +9,7 @@ import {
   Trash2,
   Eraser,
   Search,
-  Briefcase,
+  BriefcaseBusiness,
   Code2,
   ShieldCheck,
   Download,
@@ -20,7 +20,8 @@ import {
   Pencil,
   Settings,
   Loader2,
-  CheckCircle2
+  CheckCircle2,
+  ChevronDown
 } from 'lucide-react'
 import { DynamicIcon } from 'lucide-react/dynamic'
 import {
@@ -47,6 +48,12 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger
 } from '@renderer/components/ui/context-menu'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@renderer/components/ui/dropdown-menu'
 import { Input } from '@renderer/components/ui/input'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -67,8 +74,10 @@ import {
   type SessionMode,
   type Session
 } from '@renderer/stores/chat-store'
+import type { TaskProfile } from '@renderer/lib/task-profile'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore } from '@renderer/stores/team-store'
 import { abortSession } from '@renderer/hooks/use-chat-actions'
@@ -82,17 +91,22 @@ import packageJson from '../../../../../package.json'
 const modeIcons: Record<SessionMode, React.ReactNode> = {
   chat: <MessageSquare className="size-4" />,
   clarify: <CircleHelp className="size-4" />,
-  cowork: <Briefcase className="size-4" />,
-  code: <Code2 className="size-4" />,
+  execute: <Code2 className="size-4" />,
   acp: <ShieldCheck className="size-4" />
 }
-const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'cowork', 'code', 'acp']
+const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'execute', 'acp']
+const profileIcons: Record<TaskProfile, React.ReactNode> = {
+  work: <BriefcaseBusiness className="size-4" />,
+  code: <Code2 className="size-4" />
+}
 
 interface SessionListItem {
   id: string
   title: string
   icon?: string
   mode: SessionMode
+  taskProfile: TaskProfile
+  taskProfileLocked: boolean
   createdAt: number
   updatedAt: number
   pinned?: boolean
@@ -117,6 +131,7 @@ function areSessionListsEqualForSidebar(a: Session[], b: Session[]): boolean {
       x.title !== y.title ||
       x.icon !== y.icon ||
       x.mode !== y.mode ||
+      x.taskProfile !== y.taskProfile ||
       x.createdAt !== y.createdAt ||
       x.updatedAt !== y.updatedAt ||
       !!x.pinned !== !!y.pinned ||
@@ -149,6 +164,8 @@ export function AppSidebar(): React.JSX.Element {
         title: session.title,
         icon: session.icon,
         mode: session.mode,
+        taskProfile: session.taskProfile,
+        taskProfileLocked: session.taskProfileLocked,
         createdAt: session.createdAt,
         updatedAt: session.updatedAt,
         pinned: session.pinned,
@@ -168,6 +185,7 @@ export function AppSidebar(): React.JSX.Element {
   const clearSessionMessages = useChatStore((s) => s.clearSessionMessages)
   const duplicateSession = useChatStore((s) => s.duplicateSession)
   const updateSessionMode = useChatStore((s) => s.updateSessionMode)
+  const updateSessionTaskProfile = useChatStore((s) => s.updateSessionTaskProfile)
   const togglePinSession = useChatStore((s) => s.togglePinSession)
   const mode = useUIStore((s) => s.mode)
   const runningSessions = useAgentStore((s) => s.runningSessions)
@@ -289,6 +307,20 @@ export function AppSidebar(): React.JSX.Element {
     uiStore.navigateToHome()
   }
 
+  const defaultTaskProfile = useSettingsStore((state) => state.defaultTaskProfile)
+  const updateSettings = useSettingsStore((state) => state.updateSettings)
+
+  const handleTaskProfileChange = (profile: TaskProfile): void => {
+    updateSettings({ defaultTaskProfile: profile })
+    const activeSession = activeSessionId ? getSessionSnapshot(activeSessionId) : null
+    if (activeSession && activeSession.messageCount === 0 && !activeSession.taskProfileLocked) {
+      updateSessionTaskProfile(activeSession.id, profile)
+    }
+    setActiveProject(null)
+    useUIStore.getState().setMode('chat')
+    useUIStore.getState().navigateToHome()
+  }
+
   const handleExport = async (sessionId: string): Promise<void> => {
     const session = getSessionSnapshot(sessionId)
     if (!session) return
@@ -407,6 +439,60 @@ export function AppSidebar(): React.JSX.Element {
               Ola
             </span>
           </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: '切换工作方式' })}
+                className="mt-3 flex w-full items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+              >
+                {profileIcons[defaultTaskProfile]}
+                <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                  <span className="block truncate text-sm font-semibold">
+                    {t(`sidebar.taskProfile.${defaultTaskProfile}.title`, {
+                      defaultValue: defaultTaskProfile === 'work' ? '工作' : '编程'
+                    })}
+                  </span>
+                  <span className="block truncate text-[10px] text-muted-foreground">
+                    {t(`sidebar.taskProfile.${defaultTaskProfile}.desc`, {
+                      defaultValue:
+                        defaultTaskProfile === 'work'
+                          ? '日常工作、研究和办公'
+                          : '项目、代码、终端和 Git'
+                    })}
+                  </span>
+                </span>
+                <ChevronDown className="size-4 shrink-0 text-muted-foreground group-data-[collapsible=icon]:hidden" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="bottom" className="w-64">
+              {(['work', 'code'] as const).map((profile) => (
+                <DropdownMenuItem
+                  key={profile}
+                  className="items-start gap-3 py-3"
+                  onSelect={() => handleTaskProfileChange(profile)}
+                >
+                  {profileIcons[profile]}
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-2 text-sm font-medium">
+                      {t(`sidebar.taskProfile.${profile}.title`, {
+                        defaultValue: profile === 'work' ? '工作' : '编程'
+                      })}
+                      {defaultTaskProfile === profile && <CheckCircle2 className="ml-auto size-4" />}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">
+                      {t(`sidebar.taskProfile.${profile}.desc`, {
+                        defaultValue:
+                          profile === 'work'
+                            ? '日常工作、研究和办公'
+                            : '项目、代码、终端和 Git'
+                      })}
+                    </span>
+                  </span>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarHeader>
 
         <SidebarContent>
@@ -531,7 +617,7 @@ export function AppSidebar(): React.JSX.Element {
                                     className="size-4 shrink-0"
                                   />
                                 ) : (
-                                  modeIcons[session.mode]
+                                  profileIcons[session.taskProfile]
                                 )}
                                 {editingId === session.id ? (
                                   <input
@@ -739,10 +825,40 @@ export function AppSidebar(): React.JSX.Element {
                             </ContextMenuItem>
                             <ContextMenuSub>
                               <ContextMenuSubTrigger>
-                                {modeIcons[session.mode]}
-                                {t('sidebar.switchMode')}
+                                {profileIcons[session.taskProfile]}
+                                {t('sidebar.switchProfile', { defaultValue: 'Work / Code' })}
                               </ContextMenuSubTrigger>
                               <ContextMenuSubContent>
+                                {(['work', 'code'] as const).map((profile) => (
+                                  <ContextMenuItem
+                                    key={profile}
+                                    disabled={
+                                      session.taskProfile === profile ||
+                                      session.taskProfileLocked ||
+                                      session.messageCount > 0
+                                    }
+                                    onClick={() => {
+                                      if (updateSessionTaskProfile(session.id, profile)) {
+                                        toast.success(
+                                          t('sidebar_toast.switchedProfile', {
+                                            defaultValue: `Switched to ${profile}`,
+                                            profile
+                                          })
+                                        )
+                                      }
+                                    }}
+                                  >
+                                    {profileIcons[profile]}
+                                    <span className="capitalize">{profile}</span>
+                                  </ContextMenuItem>
+                                ))}
+                                <ContextMenuSeparator />
+                                <ContextMenuSub>
+                                  <ContextMenuSubTrigger>
+                                    <ShieldCheck className="size-4" />
+                                    {t('sidebar.advancedRuntime', { defaultValue: 'Advanced runtime' })}
+                                  </ContextMenuSubTrigger>
+                                  <ContextMenuSubContent>
                                 {sessionModeOptions
                                   .filter((mode) => !session.projectId || mode !== 'chat')
                                   .map((m) => (
@@ -758,6 +874,8 @@ export function AppSidebar(): React.JSX.Element {
                                       <span className="capitalize">{t(`sidebar.mode.${m}`)}</span>
                                     </ContextMenuItem>
                                   ))}
+                                  </ContextMenuSubContent>
+                                </ContextMenuSub>
                               </ContextMenuSubContent>
                             </ContextMenuSub>
                             <ContextMenuSeparator />

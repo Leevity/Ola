@@ -37,7 +37,7 @@ import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { parseBrowserDomainList } from '@renderer/lib/app-plugin/browser-access'
-import { CodeGraphDashboard } from './CodeGraphDashboard'
+import { ProjectIntelligenceDashboard } from './ProjectIntelligenceDashboard'
 import { refreshDynamicToolCatalog } from '@renderer/lib/tools/dynamic-tool-catalog'
 import {
   APP_PLUGIN_DESCRIPTORS,
@@ -444,57 +444,45 @@ export function AppPluginPanel(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-full min-h-0 gap-6">
-      <div className="flex w-72 shrink-0 flex-col rounded-xl border bg-muted/20 p-3">
-        <div className="px-2 pb-3">
-          <h2 className="text-lg font-semibold">{t('plugin.title')}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{t('plugin.subtitle')}</p>
-        </div>
-        <div className="space-y-2">
-          {visibleDescriptors.map((descriptor) => {
-            const plugin =
-              projectPlugins.find((item) => item.id === descriptor.id) ??
-              createFallbackPlugin(descriptor.id)
-            const selected = descriptor.id === selectedPluginId
-            return (
-              <button
-                key={descriptor.id}
-                onClick={() => setSelectedPluginId(descriptor.id)}
-                className={`flex w-full items-start gap-3 rounded-lg border px-3 py-3 text-left transition-colors ${
-                  selected
-                    ? 'border-primary/30 bg-primary/5'
-                    : 'border-transparent bg-background hover:border-border'
-                }`}
-              >
-                <span className="mt-0.5 rounded-md border bg-background p-2 text-muted-foreground">
-                  {getPluginIcon(descriptor.id)}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="flex items-center justify-between gap-2">
-                    <span className="text-sm font-medium">
-                      {t(`plugin.items.${descriptor.id}.title`)}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-[10px] ${
-                        plugin?.enabled
-                          ? 'bg-emerald-500/10 text-emerald-600'
-                          : 'bg-muted text-muted-foreground'
-                      }`}
-                    >
-                      {plugin?.enabled ? t('plugin.enabled') : t('plugin.disabled')}
-                    </span>
-                  </span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {t(`plugin.items.${descriptor.id}.description`)}
-                  </span>
-                </span>
-              </button>
-            )
-          })}
-        </div>
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <div>
+        <h2 className="text-lg font-semibold">{t('plugin.title')}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t('plugin.subtitle')}</p>
+      </div>
+      <div
+        className="flex min-h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60"
+        role="tablist"
+        aria-label={t('plugin.title')}
+      >
+        {visibleDescriptors.map((descriptor) => {
+          const plugin =
+            projectPlugins.find((item) => item.id === descriptor.id) ??
+            createFallbackPlugin(descriptor.id)
+          const selected = descriptor.id === selectedPluginId
+          return (
+            <button
+              key={descriptor.id}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setSelectedPluginId(descriptor.id)}
+              className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-left text-sm transition-colors ${
+                selected
+                  ? 'border-primary font-medium text-foreground'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <span className="text-muted-foreground">{getPluginIcon(descriptor.id)}</span>
+              <span className="whitespace-nowrap">{t(`plugin.items.${descriptor.id}.title`)}</span>
+              <span className="text-[10px] text-muted-foreground">
+                {plugin?.enabled ? t('plugin.enabled') : t('plugin.disabled')}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl border bg-background p-6">
+      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-background p-6">
         {selectedPlugin && selectedDescriptor ? (
           <div className="space-y-6">
             <div className="space-y-1">
@@ -946,7 +934,7 @@ export function AppPluginPanel(): React.JSX.Element {
             ) : null}
 
             {selectedPlugin.id === CODEGRAPH_PLUGIN_ID && selectedPlugin.enabled ? (
-              <CodeGraphDashboard />
+              <ProjectIntelligenceDashboard />
             ) : null}
 
             <Separator />

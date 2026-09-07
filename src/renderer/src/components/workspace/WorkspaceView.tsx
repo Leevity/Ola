@@ -111,8 +111,8 @@ export function WorkspaceView(): React.JSX.Element {
   }
 
   const goToChat = (): void => {
-    setMode('cowork')
-    if (activeSessionId) updateSessionMode(activeSessionId, 'cowork')
+    setMode('execute')
+    if (activeSessionId) updateSessionMode(activeSessionId, 'execute')
   }
 
   const toggleTerminal = (): void => {

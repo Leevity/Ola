@@ -10,6 +10,7 @@ import type {
 } from '../../api/types'
 import type { ToolCallState } from '../types'
 import type { ToolContext } from '../../tools/tool-types'
+import type { AgentProfileMeta } from './profile'
 
 // --- SubAgent Definition (static, registered at startup) ---
 
@@ -44,6 +45,7 @@ export interface SubAgentDefinition {
   }
   /** Optional custom function to format SubAgent output before returning to parent */
   formatOutput?: (result: SubAgentResult) => string
+  profileMeta: AgentProfileMeta
 }
 
 // --- SubAgent Runtime Config ---

@@ -26,8 +26,8 @@ export interface AgentManageItem {
   name: string
   description: string
   path: string
-  source: 'user'
-  editable: true
+  source: 'user' | 'bundled' | 'overridden'
+  editable: boolean
 }
 
 type AgentManageReadResult =

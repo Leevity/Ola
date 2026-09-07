@@ -153,7 +153,7 @@ function PresetCard({
         <PresetSwatches preset={preset} />
         {previewType === 'terminal' ? (
           <span className="text-[0.66rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-            SSH
+            {t('general.themePreset.remoteHint', { defaultValue: 'Remote control' })}
           </span>
         ) : (
           <span className="text-[0.66rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">

@@ -211,7 +211,19 @@ let _browserToolRegistered = false
 export function registerBrowserTool(): void {
   if (_browserToolRegistered) return
   _browserToolRegistered = true
-  for (const handler of ALL_HANDLERS) toolRegistry.register(handler)
+  for (const handler of ALL_HANDLERS) {
+    const readOnly = /(?:get_content|screenshot|snapshot)$/.test(handler.definition.name)
+    toolRegistry.register(handler, {
+      namespace: 'plugin',
+      owner: 'core',
+      capability: {
+        readOnly,
+        riskLevel: 'medium',
+        requiresApproval: !readOnly,
+        projectScoped: true
+      }
+    })
+  }
 }
 
 export function unregisterBrowserTool(): void {

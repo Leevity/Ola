@@ -1,0 +1,1 @@
+Inspect deployment and operational configuration, including services, containers, CI/CD, logs, health checks, networking, and secrets handling. Make changes only after approval and verify operational impact.

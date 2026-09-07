@@ -54,6 +54,14 @@ const TEXT_EXTENSIONS = new Set([
   '.toml'
 ])
 
+export interface SharedIndexedFile {
+  path: string
+  language?: string
+  nodeCount?: number
+  size: number
+  indexedAt?: number | null
+}
+
 const SENSITIVE_FILE_PATTERNS = [
   /^\.env(?:\.|$)/i,
   /(?:^|[-_.])(secret|secrets|credential|credentials|token|password|private|key)(?:[-_.]|$)/i,
@@ -155,17 +163,68 @@ function walk(root: string, current: string, nodes: ProjectWikiNode[]): void {
   }
 }
 
-function isWikiCacheFresh(document: ProjectWikiDocument): boolean {
+function collectProjectMetadata(root: string, current: string, nodes: ProjectWikiNode[]): void {
+  if (nodes.length >= MAX_FILES) return
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    if (IGNORED_NAMES.has(entry.name)) continue
+    if (entry.isFile() && isSensitiveFile(entry.name)) continue
+
+    const absolutePath = join(current, entry.name)
+    const relativePath = relative(root, absolutePath).replaceAll('\\', '/')
+    if (entry.isDirectory()) {
+      nodes.push({
+        path: relativePath,
+        kind: 'directory',
+        size: 0,
+        modifiedAt: statSync(absolutePath).mtimeMs
+      })
+      collectProjectMetadata(root, absolutePath, nodes)
+      continue
+    }
+    if (!entry.isFile()) continue
+
+    const stats = statSync(absolutePath)
+    nodes.push({
+      path: relativePath,
+      kind: 'file',
+      size: stats.size,
+      modifiedAt: stats.mtimeMs
+    })
+  }
+}
+
+function isWikiCacheFresh(
+  document: ProjectWikiDocument,
+  sharedFiles?: SharedIndexedFile[]
+): boolean {
+  if (sharedFiles) {
+    if (document.fileCount !== sharedFiles.length) return false
+    const cachedByPath = new Map(
+      document.nodes.filter((node) => node.kind === 'file').map((node) => [node.path, node])
+    )
+    return sharedFiles.every((file) => {
+      const cached = cachedByPath.get(file.path)
+      return Boolean(
+        cached &&
+          cached.kind === 'file' &&
+          cached.size === file.size &&
+          (!file.indexedAt || Math.abs(cached.modifiedAt - file.indexedAt) <= 1)
+      )
+    })
+  }
   try {
-    for (const node of document.nodes) {
-      const absolutePath = resolve(document.projectRoot, node.path)
-      const root = resolve(document.projectRoot)
-      if (absolutePath !== root && !absolutePath.startsWith(`${root}${sep}`)) return false
-      if (!existsSync(absolutePath)) return false
-      const stats = statSync(absolutePath)
+    const root = resolve(document.projectRoot)
+    const currentNodes: ProjectWikiNode[] = []
+    collectProjectMetadata(root, root, currentNodes)
+    if (currentNodes.length !== document.nodes.length) return false
+
+    const cachedByPath = new Map(document.nodes.map((node) => [node.path, node]))
+    for (const current of currentNodes) {
+      const cached = cachedByPath.get(current.path)
+      if (!cached || cached.kind !== current.kind) return false
       if (
-        Math.abs(stats.mtimeMs - node.modifiedAt) > 1 ||
-        (node.kind === 'file' && stats.size !== node.size)
+        Math.abs(current.modifiedAt - cached.modifiedAt) > 1 ||
+        (current.kind === 'file' && current.size !== cached.size)
       ) {
         return false
       }
@@ -176,7 +235,38 @@ function isWikiCacheFresh(document: ProjectWikiDocument): boolean {
   }
 }
 
-export function generateProjectWiki(request: ProjectWikiGenerateRequest): ProjectWikiDocument {
+function nodesFromSharedIndex(files: SharedIndexedFile[]): ProjectWikiNode[] {
+  const nodes = new Map<string, ProjectWikiNode>()
+  for (const file of files) {
+    const path = file.path.replaceAll('\\', '/').replace(/^\/+/, '')
+    if (!path || isSensitiveFile(parse(path).base)) continue
+    const parts = path.split('/')
+    for (let index = 1; index < parts.length; index += 1) {
+      const directory = parts.slice(0, index).join('/')
+      if (!nodes.has(directory)) {
+        nodes.set(directory, {
+          path: directory,
+          kind: 'directory',
+          size: 0,
+          modifiedAt: 0
+        })
+      }
+    }
+    nodes.set(path, {
+      path,
+      kind: 'file',
+      size: file.size,
+      modifiedAt: file.indexedAt ?? 0,
+      language: file.language
+    })
+  }
+  return Array.from(nodes.values()).sort((left, right) => left.path.localeCompare(right.path))
+}
+
+export function generateProjectWiki(
+  request: ProjectWikiGenerateRequest,
+  sharedFiles?: SharedIndexedFile[]
+): ProjectWikiDocument {
   const projectRoot = validateProjectRoot(request.projectRoot)
   if (!existsSync(projectRoot) || !statSync(projectRoot).isDirectory()) {
     throw new Error('Project root must be an existing directory.')
@@ -185,14 +275,19 @@ export function generateProjectWiki(request: ProjectWikiGenerateRequest): Projec
   if (!request.force && existsSync(target)) {
     try {
       const cached = JSON.parse(readFileSync(target, 'utf8')) as ProjectWikiDocument
-      if (cached.projectRoot === projectRoot && isWikiCacheFresh(cached)) return cached
+      if (cached.projectRoot === projectRoot && isWikiCacheFresh(cached, sharedFiles)) return cached
     } catch {
       // Regenerate an invalid cache.
     }
   }
-  const nodes: ProjectWikiNode[] = []
-  walk(projectRoot, projectRoot, nodes)
-  nodes.sort((left, right) => left.path.localeCompare(right.path))
+  const nodes: ProjectWikiNode[] = sharedFiles
+    ? nodesFromSharedIndex(sharedFiles)
+    : (() => {
+        const scanned: ProjectWikiNode[] = []
+        walk(projectRoot, projectRoot, scanned)
+        scanned.sort((left, right) => left.path.localeCompare(right.path))
+        return scanned
+      })()
   const document: ProjectWikiDocument = {
     id: randomUUID(),
     projectRoot,

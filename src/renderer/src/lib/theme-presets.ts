@@ -1,4 +1,5 @@
 import type { ITheme } from '@xterm/xterm'
+import type { CSSProperties } from 'react'
 
 export type AppThemeMode = 'light' | 'dark'
 export type AppThemePreset = 'mulberry' | 'studio' | 'graphite' | 'ocean' | 'forest' | 'dawn'
@@ -1665,6 +1666,43 @@ export function getTerminalTheme(preset: AppThemePreset, mode: AppThemeMode): IT
 
 export function getSshChromePalette(preset: AppThemePreset, mode: AppThemeMode): SshChromePalette {
   return getThemePresetDefinition(preset).ssh[mode]
+}
+
+export function createRemoteWorkspaceStyle(palette: SshChromePalette): CSSProperties {
+  return ({
+    background: palette.canvas,
+    color: palette.text,
+    '--background': palette.canvas,
+    '--foreground': palette.text,
+    '--card': palette.surface,
+    '--card-foreground': palette.text,
+    '--popover': palette.surfaceStrong,
+    '--popover-foreground': palette.text,
+    '--primary': palette.accent,
+    '--primary-foreground': palette.accentContrast,
+    '--secondary': palette.accentSoft,
+    '--secondary-foreground': palette.text,
+    '--muted': palette.canvasSubtle,
+    '--muted-foreground': palette.muted,
+    '--accent': palette.accentSoft,
+    '--accent-foreground': palette.text,
+    '--border': palette.libraryBorder,
+    '--input': palette.libraryBorder,
+    '--ring': palette.accent,
+    '--sidebar': palette.panel,
+    '--sidebar-foreground': palette.terminalText,
+    '--sidebar-accent': palette.terminalPill,
+    '--sidebar-accent-foreground': palette.terminalText,
+    '--sidebar-border': palette.panelBorder,
+    '--remote-canvas': palette.canvas,
+    '--remote-surface': palette.surface,
+    '--remote-panel': palette.panel,
+    '--remote-border': palette.libraryBorder,
+    '--remote-accent': palette.accent,
+    '--remote-success': palette.success,
+    '--remote-warning': palette.warning,
+    '--remote-danger': palette.danger
+  } as CSSProperties)
 }
 
 export function applyThemePresetCssVars(

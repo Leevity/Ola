@@ -81,7 +81,8 @@ import type {
   ToolResultContent,
   SelectedFileReadItemMeta,
   SelectedFileReadsMeta,
-  SelectedFileReference
+  SelectedFileReference,
+  RunOutcomeMeta
 } from '@renderer/lib/api/types'
 import {
   setLastDebugInfo,
@@ -107,7 +108,8 @@ import {
   type SystemCommandSnapshot
 } from '@renderer/lib/commands/system-command'
 import { parseSelectFileText } from '@renderer/lib/select-file-tags'
-import { type AgentEvent, type ToolCallState } from '@renderer/lib/agent/types'
+import { type AgentEvent, type LoopEndReason, type ToolCallState } from '@renderer/lib/agent/types'
+import { generateFinalOutcome } from '@renderer/lib/agent/final-outcome'
 import { recordUsageEvent } from '@renderer/lib/usage-analytics'
 import {
   getCompactSummaryDisplayText,
@@ -175,6 +177,7 @@ import {
   runMemoryAutomationForSession
 } from '@renderer/lib/agent/memory-automation'
 import { IMAGE_GENERATE_TOOL_NAME } from '@renderer/lib/app-plugin/types'
+import { updateAppPluginToolRegistration } from '@renderer/lib/app-plugin'
 import {
   isDesktopControlToolName,
   resolveDesktopControlMode
@@ -188,6 +191,8 @@ import {
   buildChatModePromptContextCacheKey,
   buildChatModeSystemPrompt,
   buildSystemPromptContextCacheKey,
+  filterChatModeToolDefinitions,
+  sortToolDefinitionsForTaskProfile,
   hasChatModePluginTools,
   haveSameToolDefinitions
 } from '@renderer/lib/chat-mode-tools'
@@ -228,6 +233,21 @@ const pendingGoalContinuationSessions = new Set<string>()
 const scheduledGoalContinuationSessions = new Set<string>()
 const SIDECAR_CONTEXT_SOURCE_MAX_MESSAGES = 160
 const CONTINUE_TOOL_TAIL_WINDOW_MESSAGES = 120
+
+function requestLikelyRequiresExecute(input: string): boolean {
+  const normalized = input.trim().toLowerCase()
+  if (!normalized) return false
+  if (
+    /\b(how (?:do|can|to)|explain|what is|show me how)\b|(?:怎么|如何|是什么|解释一下)/i.test(
+      normalized
+    )
+  ) {
+    return false
+  }
+  return /\b(create|write|edit|modify|delete|remove|rename|move|copy|run|execute|install|uninstall|build|test|commit|push|pull|merge|deploy|publish|send|post|order|upload|download)\b|(?:帮我|请|直接).*(?:创建|新建|写入|修改|编辑|删除|移除|重命名|移动|复制|运行|执行|安装|卸载|构建|测试|提交|推送|拉取|合并|部署|发布|发送|下单|上传|下载)/i.test(
+    normalized
+  )
+}
 installSessionControlSyncListener((event) => {
   applySessionControlSyncEvent(event)
 })
@@ -395,7 +415,6 @@ function buildUserMessageContent(
 function setStreamingMessageIdWithSync(sessionId: string, messageId: string | null): void {
   if (messageId === null) {
     flushRuntimeForegroundMutations()
-    useRuntimeProjectionStore.getState().finish(sessionId, 'completed')
   }
   useChatStore.getState().setStreamingMessageId(sessionId, messageId)
   emitSessionRuntimeSync({ kind: 'set_streaming_message', sessionId, messageId })
@@ -1576,7 +1595,7 @@ function buildProviderConfigWithRuntimeSettings(
 async function resolveMainRequestProvider(options: {
   sessionId: string
   latestUserInput: string
-  mode?: 'chat' | 'clarify' | 'cowork' | 'code' | 'acp'
+  mode?: 'chat' | 'clarify' | 'execute' | 'acp'
   allowTools?: boolean
   isContinue?: boolean
   requiresVision?: boolean
@@ -1646,15 +1665,20 @@ async function resolveMainRequestProvider(options: {
       latestUserInput: options.latestUserInput,
       sessionId: options.sessionId,
       mode: options.mode,
+      taskProfile: session?.taskProfile,
       allowTools: options.allowTools,
       isContinue: options.isContinue,
       projectId: session?.projectId ?? null,
       signal: options.signal
     })
+    const profileFastProviderId = session?.profileConfigSnapshot?.fastProviderId
+    const profileFastModelId = session?.profileConfigSnapshot?.fastModelId
     const providerConfig =
-      autoSelection.target === 'fast'
-        ? providerStore.getFastProviderConfig()
-        : providerStore.getActiveProviderConfig()
+      autoSelection.target === 'fast' && profileFastProviderId && profileFastModelId
+        ? providerStore.getProviderConfigById(profileFastProviderId, profileFastModelId)
+        : autoSelection.target === 'fast'
+          ? providerStore.getFastProviderConfig()
+          : providerStore.getActiveProviderConfig()
     return {
       providerConfig,
       modelConfig: findProviderModel(providerConfig?.providerId, providerConfig?.model).modelConfig,
@@ -2966,7 +2990,8 @@ function finishStoppingSession(sessionId: string): void {
     })
     .catch(() => {})
   setStreamingMessageIdWithSync(sessionId, null)
-  useAgentStore.getState().setSessionStatus(sessionId, null)
+  useAgentStore.getState().setSessionStatus(sessionId, 'canceled')
+  useRuntimeProjectionStore.getState().finish(sessionId, 'canceled')
 
   clearPendingQuestions()
 
@@ -3827,7 +3852,7 @@ export function useChatActions(): {
           : resolvedCommand
 
         const resolvedSession = useChatStore.getState().sessions.find((s) => s.id === sessionId)
-        const resolvedSessionMode = resolvedSession?.mode ?? uiStore.mode
+        let resolvedSessionMode = resolvedSession?.mode ?? uiStore.mode
         const resolvedChannelMeta = resolvedSession?.pluginId
           ? (useChannelStore
               .getState()
@@ -3851,6 +3876,37 @@ export function useChatActions(): {
           source === 'continue'
             ? latestUserMessageContainsImage(inMemoryMessages)
             : Boolean(images?.length)
+        if (
+          resolvedSessionMode === 'chat' &&
+          source !== 'continue' &&
+          source !== 'team' &&
+          requestLikelyRequiresExecute(latestUserInput)
+        ) {
+          const switchApproved = await confirm({
+            title: i18n.t('executeSwitch.title', {
+              ns: 'chat',
+              defaultValue: 'Switch to Execute mode?'
+            }),
+            description: i18n.t('executeSwitch.description', {
+              ns: 'chat',
+              defaultValue:
+                'This request appears to modify files, run commands, or perform another side effect. Execute mode makes those actions explicit and auditable.'
+            }),
+            confirmLabel: i18n.t('executeSwitch.confirm', {
+              ns: 'chat',
+              defaultValue: 'Switch and continue'
+            })
+          })
+          if (!switchApproved) {
+            clearPreflightIndicator()
+            return
+          }
+          resolvedSessionMode = 'execute'
+          useChatStore.getState().updateSessionMode(sessionId, 'execute')
+          if (useChatStore.getState().activeSessionId === sessionId) {
+            useUIStore.getState().setMode('execute')
+          }
+        }
         const requestedToolsAllowed = shouldAllowToolsForRequest({
           latestUserInput,
           mode: resolvedSessionMode,
@@ -4007,7 +4063,7 @@ export function useChatActions(): {
         baseProviderConfig.sessionId = sessionId
 
         const sessionSnapshot = useChatStore.getState().sessions.find((s) => s.id === sessionId)
-        const sessionMode = sessionSnapshot?.mode ?? uiStore.mode
+        const sessionMode = resolvedSessionMode
         // A quoted message is already rendered in the transcript; skip re-inserting it.
         const preRenderedUserMessageId = options?.preRenderedUserMessageId
         const shouldAppendUserMessage = source !== 'continue' && !preRenderedUserMessageId
@@ -4101,6 +4157,7 @@ export function useChatActions(): {
         // to avoid 3 separate store updates causing 3 MessageList re-renders.
         const userMsgForTurn = shouldAppendUserMessage ? (expectedUserRequestMessage ?? null) : null
         if (userMsgForTurn || assistantMsgForTurn) {
+          if (userMsgForTurn) chatStore.lockSessionTaskProfile(sessionId)
           chatStore.beginUserTurn(sessionId, userMsgForTurn, assistantMsgForTurn, assistantMsgId)
           if (userMsgForTurn) {
             emitSessionRuntimeSync({ kind: 'add_message', sessionId, message: userMsgForTurn })
@@ -4148,7 +4205,8 @@ export function useChatActions(): {
         const abortController = new AbortController()
         sessionAbortControllers.set(sessionId, abortController)
 
-        await ensureRequestToolCatalogFresh()
+        updateAppPluginToolRegistration()
+        await ensureRequestToolCatalogFresh(session?.taskProfile ?? 'work')
 
         const mode = sessionMode
         const activeChannels = useChannelStore.getState().getActiveChannels()
@@ -4186,7 +4244,10 @@ export function useChatActions(): {
           !(providerResolution.modelConfig?.category === 'image' && source !== 'continue')
             ? registeredToolDefs
             : []
-        const chatModeToolDefs = baseChatModeToolDefs
+        const chatModeToolDefs = filterChatModeToolDefinitions(baseChatModeToolDefs).filter(
+          (definition) =>
+            toolRegistry.getRegistration(definition.name)?.capability.readOnly === true
+        )
         const sessionScope: SessionMemoryScope = session?.pluginId ? 'channel' : 'main'
         const sessionWorkingFolder = resolveSessionWorkingFolder(session)
         const memorySnapshot = await loadLayeredMemorySnapshot(ipcClient, {
@@ -4210,6 +4271,7 @@ export function useChatActions(): {
           // Chat mode without enabled chat-mode tools: single API call, no tools
           const cachedPromptSnapshot = session?.promptSnapshot
           const chatPromptContextCacheKey = buildChatModePromptContextCacheKey({
+            taskProfile: session?.taskProfile,
             language: settings.language,
             userRules: settings.systemPrompt || undefined,
             workingFolder: sessionWorkingFolder,
@@ -4231,6 +4293,7 @@ export function useChatActions(): {
           let chatSystemPrompt = cachedPromptSnapshot?.systemPrompt ?? ''
           if (!canReusePromptSnapshot) {
             chatSystemPrompt = buildChatModeSystemPrompt({
+              taskProfile: session?.taskProfile,
               language: settings.language,
               userRules: settings.systemPrompt || undefined,
               workingFolder: sessionWorkingFolder,
@@ -4277,14 +4340,24 @@ export function useChatActions(): {
           preflightIndicatorActive = false
           clearRequestRetryState(sessionId)
           agentStore.setSessionStatus(sessionId, 'running')
+          useRuntimeProjectionStore.getState().begin(sessionId, null, assistantMsgId)
+          let simpleChatStatus: 'completed' | 'failed' | 'canceled' = 'completed'
           try {
-            await runSimpleChat(sessionId, assistantMsgId, chatConfig, abortController.signal, {
-              includeTrailingAssistantPlaceholder: !!existingAssistantMessage,
-              expectedUserMessage: expectedUserRequestMessage
-            })
+            simpleChatStatus = await runSimpleChat(
+              sessionId,
+              assistantMsgId,
+              chatConfig,
+              abortController.signal,
+              {
+                includeTrailingAssistantPlaceholder: !!existingAssistantMessage,
+                expectedUserMessage: expectedUserRequestMessage
+              }
+            )
           } finally {
             clearRequestRetryState(sessionId)
-            agentStore.setSessionStatus(sessionId, 'completed')
+            if (abortController.signal.aborted) simpleChatStatus = 'canceled'
+            agentStore.setSessionStatus(sessionId, simpleChatStatus)
+            useRuntimeProjectionStore.getState().finish(sessionId, simpleChatStatus)
             sessionAbortControllers.delete(sessionId)
             sessionSidecarRunIds.delete(sessionId)
             stopAfterCurrentRequestSessions.delete(sessionId)
@@ -4349,6 +4422,11 @@ export function useChatActions(): {
               (tool) => !isDesktopControlToolName(tool.name)
             )
           }
+
+          promptCandidateToolDefs = sortToolDefinitionsForTaskProfile(
+            promptCandidateToolDefs,
+            session?.taskProfile ?? 'work'
+          )
 
           const requestCandidateToolDefs = isPlanMode
             ? promptCandidateToolDefs.filter((t) => PLAN_MODE_ALLOWED_TOOLS.has(t.name))
@@ -4465,6 +4543,7 @@ export function useChatActions(): {
           const promptContextCacheKey =
             mode === 'chat'
               ? buildChatModePromptContextCacheKey({
+                  taskProfile: session?.taskProfile,
                   language: settings.language,
                   userRules: userPrompt || undefined,
                   workingFolder: sessionWorkingFolder,
@@ -4479,6 +4558,7 @@ export function useChatActions(): {
                   activeMcpTools: promptAllowsToolContext ? activeMcpTools : {}
                 })
               : buildSystemPromptContextCacheKey({
+                  taskProfile: session?.taskProfile,
                   language: settings.language,
                   userRules: userPrompt || undefined,
                   environmentContext,
@@ -4508,6 +4588,7 @@ export function useChatActions(): {
             agentSystemPrompt =
               mode === 'chat'
                 ? buildChatModeSystemPrompt({
+                    taskProfile: session?.taskProfile,
                     language: settings.language,
                     userRules: userPrompt || undefined,
                     workingFolder: sessionWorkingFolder,
@@ -4522,7 +4603,8 @@ export function useChatActions(): {
                     activeMcpTools: promptAllowsToolContext ? activeMcpTools : {}
                   })
                 : buildSystemPrompt({
-                    mode: mode as 'clarify' | 'cowork' | 'code' | 'acp',
+                    taskProfile: session?.taskProfile,
+                    mode: mode as 'clarify' | 'execute' | 'acp',
                     workingFolder: sessionWorkingFolder,
                     sessionId,
                     userRules: userPrompt || undefined,
@@ -4579,6 +4661,7 @@ export function useChatActions(): {
           preflightIndicatorActive = false
           clearRequestRetryState(sessionId)
           agentStore.setSessionStatus(sessionId, 'running')
+          useRuntimeProjectionStore.getState().begin(sessionId, null, assistantMsgId)
           agentStore.resetLiveSessionExecution(sessionId)
 
           // Accumulate usage across all iterations + SubAgent runs
@@ -4616,6 +4699,9 @@ export function useChatActions(): {
           const preRunTaskSnapshot = getTaskProgressSnapshot(sessionId)
           let runUsedTools = false
           let shouldAutoContinueLongRunning = false
+          let loopEndReason: LoopEndReason | null = null
+          let runErrorMessage: string | null = null
+          const runToolCalls = new Map<string, ToolCallState>()
           const liveToolNames = new Map<string, string>()
 
           // Tool input throttling state — defined before try block so finally can safely dispose
@@ -4665,10 +4751,7 @@ export function useChatActions(): {
             const sessionSnapshot = useChatStore.getState().sessions.find((s) => s.id === sessionId)
             const sessionMode = sessionSnapshot?.mode ?? uiStore.mode
             const shouldInjectContext =
-              sessionMode === 'clarify' ||
-              sessionMode === 'cowork' ||
-              sessionMode === 'code' ||
-              sessionMode === 'acp'
+              sessionMode === 'clarify' || sessionMode === 'execute' || sessionMode === 'acp'
 
             if (source !== 'continue' && shouldInjectContext && messagesToSend.length > 0) {
               const { buildRuntimeReminder } = await import('@renderer/lib/agent/dynamic-context')
@@ -5075,6 +5158,7 @@ export function useChatActions(): {
                   break
 
                 case 'thinking_delta':
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'thinking')
                   hasThinkingDelta = true
                   streamDeltaBuffer.pushThinking(event.thinking)
                   break
@@ -5173,6 +5257,7 @@ export function useChatActions(): {
                   break
 
                 case 'tool_use_streaming_start':
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'executing')
                   liveToolNames.set(event.toolCallId, event.toolName)
                   // Preserve stream order: flush any pending thinking/text before inserting tool block.
                   streamDeltaBuffer.flushNow()
@@ -5215,7 +5300,16 @@ export function useChatActions(): {
                 }
 
                 case 'tool_use_generated': {
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'executing')
                   runUsedTools = true
+                  runToolCalls.set(event.toolUseBlock.id, {
+                    id: event.toolUseBlock.id,
+                    name: event.toolUseBlock.name,
+                    input: event.toolUseBlock.input,
+                    status: 'running',
+                    requiresApproval: false,
+                    startedAt: Date.now()
+                  })
                   liveToolNames.set(event.toolUseBlock.id, event.toolUseBlock.name)
                   if (event.toolUseBlock.name === 'Write') {
                     console.log('[WriteTrace] tool_use_generated', {
@@ -5304,7 +5398,9 @@ export function useChatActions(): {
                 }
 
                 case 'tool_call_start':
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'executing')
                   runUsedTools = true
+                  runToolCalls.set(event.toolCall.id, event.toolCall)
                   liveToolNames.set(event.toolCall.id, event.toolCall.name)
                   if (isSessionForeground(sessionId!)) {
                     useAgentStore.getState().addToolCall(
@@ -5322,7 +5418,9 @@ export function useChatActions(): {
                   break
 
                 case 'tool_call_update':
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'executing')
                   runUsedTools = true
+                  runToolCalls.set(event.toolCall.id, event.toolCall)
                   liveToolNames.set(event.toolCall.id, event.toolCall.name)
                   if (isSessionForeground(sessionId!)) {
                     useAgentStore.getState().updateToolCall(
@@ -5344,6 +5442,9 @@ export function useChatActions(): {
                   break
 
                 case 'tool_call_approval_needed': {
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'waiting_user')
+                  runUsedTools = true
+                  runToolCalls.set(event.toolCall.id, event.toolCall)
                   liveToolNames.set(event.toolCall.id, event.toolCall.name)
                   // Skip adding to pendingToolCalls when auto-approve is active —
                   // the callback will return true immediately, so no dialog needed.
@@ -5367,6 +5468,9 @@ export function useChatActions(): {
                 }
 
                 case 'tool_call_result': {
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'executing')
+                  runUsedTools = true
+                  runToolCalls.set(event.toolCall.id, event.toolCall)
                   liveToolNames.set(event.toolCall.id, event.toolCall.name)
                   clearToolInputPending(event.toolCall.id)
                   if (event.toolCall.name === 'Write') {
@@ -5607,6 +5711,7 @@ export function useChatActions(): {
                 }
 
                 case 'loop_end': {
+                  loopEndReason = event.reason
                   streamDeltaBuffer.flushNow()
                   accumulatedUsage.totalDurationMs = Date.now() - loopStartedAt
                   if (requestTimings.length > 0) {
@@ -5770,6 +5875,8 @@ export function useChatActions(): {
                   break
 
                 case 'error': {
+                  loopEndReason = 'error'
+                  runErrorMessage = normalizeContinuationErrorMessage(event.error.message)
                   useLiveCompressionStore.getState().fail(sessionId!)
                   streamDeltaBuffer.flushNow()
                   const errorMessage = normalizeContinuationErrorMessage(event.error.message)
@@ -5802,9 +5909,72 @@ export function useChatActions(): {
                 }
               }
             }
+
+            if (runUsedTools) {
+              const resolvedLoopEndReason: LoopEndReason =
+                loopEndReason ?? (abortController.signal.aborted ? 'aborted' : 'error')
+              const durationMs = Date.now() - loopStartedAt
+              useRuntimeProjectionStore.getState().setPhase(sessionId!, 'summarizing')
+              agentStore.setSessionStatus(sessionId!, 'summarizing')
+
+              const profileFastProviderId = session?.profileConfigSnapshot?.fastProviderId
+              const profileFastModelId = session?.profileConfigSnapshot?.fastModelId
+              const fastProvider =
+                profileFastProviderId && profileFastModelId
+                  ? useProviderStore
+                      .getState()
+                      .getProviderConfigById(profileFastProviderId, profileFastModelId)
+                  : useProviderStore.getState().getFastProviderConfig()
+              const healthyFallback = await resolveHealthyAutoProvider({
+                providerConfig: fastProvider ?? agentProviderConfig,
+                modelConfig: findProviderModel(
+                  (fastProvider ?? agentProviderConfig).providerId,
+                  (fastProvider ?? agentProviderConfig).model
+                ).modelConfig,
+                requiresVision: false
+              }).catch(() => ({ providerConfig: null, modelConfig: null }))
+              const toolCalls = [...runToolCalls.values()]
+              const outcome = await generateFinalOutcome({
+                goal: effectiveResolvedCommand.userText || text,
+                taskProfile: session?.taskProfile,
+                loopEndReason: resolvedLoopEndReason,
+                toolCalls,
+                durationMs,
+                error: runErrorMessage,
+                providers: [
+                  agentProviderConfig,
+                  ...(fastProvider ? [fastProvider] : []),
+                  ...(healthyFallback.providerConfig ? [healthyFallback.providerConfig] : [])
+                ],
+                signal: abortController.signal
+              })
+              flushRuntimeForegroundMutations()
+              const currentMessage = useChatStore
+                .getState()
+                .getSessionMessages(sessionId!)
+                .find((message) => message.id === assistantMsgId)
+              const runOutcome: RunOutcomeMeta = {
+                runId: sessionSidecarRunIds.get(sessionId!) ?? assistantMsgId,
+                lifecycle: outcome.status,
+                loopEndReason: resolvedLoopEndReason,
+                startedAt: loopStartedAt,
+                completedAt: Date.now(),
+                durationMs,
+                toolCallCount: toolCalls.length,
+                failedToolCallCount: toolCalls.filter((toolCall) => toolCall.status === 'error')
+                  .length,
+                outcome
+              }
+              updateRuntimeMessage(sessionId!, assistantMsgId, {
+                meta: { ...currentMessage?.meta, runOutcome }
+              })
+              flushRuntimeForegroundMutations()
+            }
           } catch (err) {
             streamDeltaBuffer?.flushNow()
             console.error('[Agent Loop Exception]', err)
+            loopEndReason = abortController.signal.aborted ? 'aborted' : 'error'
+            runErrorMessage = err instanceof Error ? err.message : String(err)
             if (!abortController.signal.aborted) {
               const errMsg = normalizeContinuationErrorMessage(
                 err instanceof Error ? err.message : String(err)
@@ -5868,7 +6038,22 @@ export function useChatActions(): {
             unsubSubAgent()
             subAgentEventBuffer.dispose()
             clearRequestRetryState(sessionId)
-            agentStore.setSessionStatus(sessionId, 'completed')
+            flushRuntimeForegroundMutations()
+            const persistedOutcome = useChatStore
+              .getState()
+              .getSessionMessages(sessionId)
+              .find((message) => message.id === assistantMsgId)?.meta?.runOutcome?.lifecycle
+            const terminalStatus =
+              persistedOutcome ??
+              (abortController.signal.aborted || loopEndReason === 'aborted'
+                ? 'canceled'
+                : loopEndReason === 'max_iterations'
+                  ? 'partial'
+                  : loopEndReason === 'error' || runErrorMessage
+                    ? 'failed'
+                    : 'completed')
+            agentStore.setSessionStatus(sessionId, terminalStatus)
+            useRuntimeProjectionStore.getState().finish(sessionId, terminalStatus)
             setStreamingMessageIdWithSync(sessionId, null)
             sessionAbortControllers.delete(sessionId)
             sessionSidecarRunIds.delete(sessionId)
@@ -5900,7 +6085,7 @@ export function useChatActions(): {
                 })
               }
 
-              if (!isSessionForeground(sessionId)) {
+              if (!isSessionForeground(sessionId) && terminalStatus === 'completed') {
                 const sessionTitle =
                   useChatStore.getState().sessions.find((session) => session.id === sessionId)
                     ?.title ?? 'Background session'
@@ -6487,9 +6672,9 @@ export async function sendImplementPlan(planId: string): Promise<void> {
   const previousUiMode = chatStore.activeSessionId === latestPlan.sessionId ? uiStore.mode : null
 
   if (shouldSwitchToCodeMode) {
-    chatStore.updateSessionMode(latestPlan.sessionId, 'code')
+    chatStore.updateSessionMode(latestPlan.sessionId, 'execute')
     if (chatStore.activeSessionId === latestPlan.sessionId) {
-      uiStore.setMode('code')
+      uiStore.setMode('execute')
     }
   }
 
@@ -6557,7 +6742,7 @@ export async function sendImplementPlanInNewSession(planId: string): Promise<voi
     : undefined
   const sourceSshConnectionId = sourceSession.sshConnectionId ?? sourceProject?.sshConnectionId
 
-  const newSessionId = chatStore.createSession('code', sourceSession.projectId, { planId })
+  const newSessionId = chatStore.createSession('execute', sourceSession.projectId, { planId })
   chatStore.updateSessionTitle(newSessionId, latestPlan.title)
 
   if (sourceSession.workingFolder) {
@@ -6652,7 +6837,7 @@ async function runSimpleChat(
     includeTrailingAssistantPlaceholder?: boolean
     expectedUserMessage?: UnifiedMessage | null
   }
-): Promise<void> {
+): Promise<'completed' | 'failed' | 'canceled'> {
   const chatStore = useChatStore.getState()
   const chatModelConfig = findProviderModel(config.providerId, config.model).modelConfig
   let requestMessages = ensureRequestContainsExpectedUserMessage(
@@ -6743,6 +6928,7 @@ async function runSimpleChat(
     executionPath: 'sidecar'
   })
 
+  let runFailed = false
   try {
     let stream: AsyncIterable<AgentEvent | StreamEvent>
     if (useSidecar) {
@@ -6964,6 +7150,7 @@ async function runSimpleChat(
           break
         }
         case 'error': {
+          runFailed = true
           streamDeltaBuffer.flushNow()
           const errorMessage = event.error?.message ?? 'Unknown error'
           console.error('[Chat Error]', event.error)
@@ -6987,6 +7174,7 @@ async function runSimpleChat(
       }
     }
   } catch (err) {
+    runFailed = true
     streamDeltaBuffer.flushNow()
     if (!signal.aborted) {
       const errMsg = err instanceof Error ? err.message : String(err)
@@ -7013,6 +7201,7 @@ async function runSimpleChat(
     setGeneratingImageWithSync(assistantMsgId, false)
     setStreamingMessageIdWithSync(sessionId, null)
   }
+  return signal.aborted ? 'canceled' : runFailed ? 'failed' : 'completed'
 }
 
 /**

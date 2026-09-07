@@ -28,6 +28,12 @@ import {
   sanitizePermissionPolicy,
   type PermissionPolicy
 } from '../../../shared/permission-policy'
+import {
+  DEFAULT_CODE_PROFILE,
+  DEFAULT_WORK_PROFILE,
+  type TaskProfile,
+  type TaskProfileConfig
+} from '@renderer/lib/task-profile'
 
 export interface ModelBinding {
   providerId: string
@@ -41,17 +47,18 @@ export interface SessionDefaultModelBinding extends ModelBinding {
 export type PromptRecommendationModelBinding = ModelBinding | 'disabled' | null
 
 export type PromptRecommendationModelBindings = Record<
-  'chat' | 'clarify' | 'cowork' | 'code' | 'acp',
+  'chat' | 'clarify' | 'execute' | 'acp',
   PromptRecommendationModelBinding
 >
 
 export type MainModelSelectionMode = 'auto' | 'manual'
 export type MemoryAutomationWritePolicy = 'auto'
 export type MemoryScopeMode = 'hybrid'
-export type ClarifyPlanModeAutoSwitchTarget = 'off' | 'code' | 'acp'
+export type ClarifyPlanModeAutoSwitchTarget = 'off' | 'execute' | 'acp'
 export type ProjectDefaultDirectoryMode = 'last-used' | 'custom'
 export type FileDiffViewMode = 'split' | 'inline'
 export type LiveOutputAnimationStyle = 'agile' | 'elegant'
+export type DefaultTaskProfile = TaskProfile
 export type OnboardingLanguage = AppLanguage
 export type ShellExecutionEndpoint =
   | 'auto'
@@ -298,6 +305,9 @@ interface SettingsStore {
   onboardingInterests: string[]
   defaultSoulTemplateId: string
   conversationGuideSeen: boolean
+  defaultTaskProfile: DefaultTaskProfile
+  workProfileConfig: TaskProfileConfig
+  codeProfileConfig: TaskProfileConfig
   memoryAutomationEnabled: boolean
   memoryAutomationWritePolicy: MemoryAutomationWritePolicy
   memoryAutomationMainSessionsOnly: boolean
@@ -421,6 +431,9 @@ export const useSettingsStore = create<SettingsStore>()(
       onboardingInterests: [],
       defaultSoulTemplateId: '',
       conversationGuideSeen: false,
+      defaultTaskProfile: 'work',
+      workProfileConfig: { ...DEFAULT_WORK_PROFILE },
+      codeProfileConfig: { ...DEFAULT_CODE_PROFILE },
       memoryAutomationEnabled: true,
       memoryAutomationWritePolicy: 'auto',
       memoryAutomationMainSessionsOnly: true,
@@ -466,8 +479,7 @@ export const useSettingsStore = create<SettingsStore>()(
       promptRecommendationModels: {
         chat: null,
         clarify: null,
-        cowork: null,
-        code: null,
+        execute: null,
         acp: null
       },
       newSessionDefaultModel: null,
@@ -518,7 +530,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'ola-settings',
-      version: 28,
+      version: 29,
       storage: createJSONStorage(() => ipcStorage),
       migrate: (persisted: unknown, version: number) => {
         const state = persisted as Record<string, unknown>
@@ -584,16 +596,21 @@ export const useSettingsStore = create<SettingsStore>()(
           state.promptRecommendationModels = {
             chat: null,
             clarify: null,
-            cowork: null,
-            code: null,
+            execute: null,
             acp: null
           }
-        } else if (
-          (state.promptRecommendationModels as Record<string, unknown>).acp === undefined
-        ) {
-          ;(
-            state.promptRecommendationModels as Record<string, PromptRecommendationModelBinding>
-          ).acp = null
+        } else {
+          const bindings = state.promptRecommendationModels as Record<
+            string,
+            PromptRecommendationModelBinding
+          >
+          bindings.execute = bindings.execute ?? bindings.code ?? bindings.cowork ?? null
+          bindings.acp = bindings.acp ?? null
+          delete bindings.code
+          delete bindings.cowork
+        }
+        if (state.clarifyPlanModeAutoSwitchTarget === 'code') {
+          state.clarifyPlanModeAutoSwitchTarget = 'execute'
         }
         if (state.newSessionDefaultModel === undefined) {
           state.newSessionDefaultModel = null
@@ -749,6 +766,19 @@ export const useSettingsStore = create<SettingsStore>()(
         if (state.conversationGuideSeen === undefined) {
           state.conversationGuideSeen = false
         }
+        state.defaultTaskProfile = state.defaultTaskProfile === 'code' ? 'code' : 'work'
+        state.workProfileConfig = {
+          ...DEFAULT_WORK_PROFILE,
+          ...(state.workProfileConfig && typeof state.workProfileConfig === 'object'
+            ? state.workProfileConfig
+            : {})
+        }
+        state.codeProfileConfig = {
+          ...DEFAULT_CODE_PROFILE,
+          ...(state.codeProfileConfig && typeof state.codeProfileConfig === 'object'
+            ? state.codeProfileConfig
+            : {})
+        }
         if (state.memoryAutomationEnabled === undefined) {
           state.memoryAutomationEnabled = true
         }
@@ -854,6 +884,9 @@ export const useSettingsStore = create<SettingsStore>()(
         onboardingInterests: state.onboardingInterests,
         defaultSoulTemplateId: state.defaultSoulTemplateId,
         conversationGuideSeen: state.conversationGuideSeen,
+        defaultTaskProfile: state.defaultTaskProfile,
+        workProfileConfig: state.workProfileConfig,
+        codeProfileConfig: state.codeProfileConfig,
         memoryAutomationEnabled: state.memoryAutomationEnabled,
         memoryAutomationWritePolicy: 'auto' as const,
         memoryAutomationMainSessionsOnly: state.memoryAutomationMainSessionsOnly,

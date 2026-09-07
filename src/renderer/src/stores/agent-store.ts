@@ -8,7 +8,8 @@ import type {
   UnifiedMessage,
   ContentBlock,
   TokenUsage,
-  MessageRequestModelMeta
+  MessageRequestModelMeta,
+  RunLifecycleStatus
 } from '../lib/api/types'
 import { ipcStorage } from '../lib/ipc/ipc-storage'
 import { ipcClient } from '../lib/ipc/ipc-client'
@@ -1126,7 +1127,7 @@ export interface AgentRunChangeSet {
   updatedAt: number
 }
 
-type SessionExecutionStatus = 'running' | 'retrying' | 'completed'
+export type SessionExecutionStatus = RunLifecycleStatus | 'running' | 'retrying'
 
 function isAgentChangeError(value: unknown): value is { error: string } {
   if (!value || typeof value !== 'object') return false
@@ -1388,7 +1389,7 @@ interface AgentStore {
 
   setRunning: (running: boolean) => void
   setCurrentLoopId: (id: string | null) => void
-  /** Update per-session status. 'completed' auto-clears after ~3 s. null removes entry. */
+  /** Update the canonical per-session lifecycle. Terminal states auto-clear after ~3 s. */
   setSessionStatus: (sessionId: string, status: SessionExecutionStatus | null) => void
   setSessionRequestRetryState: (sessionId: string, state: RequestRetryState | null) => void
   isSessionActive: (sessionId: string | null | undefined) => boolean
@@ -1479,11 +1480,16 @@ export const useAgentStore = create<AgentStore>()(
         if (!isAgentRuntimeSyncSuppressed()) {
           emitAgentRuntimeSync({ kind: 'set_session_status', sessionId, status })
         }
-        // Auto-clear 'completed' after 3 seconds
-        if (status === 'completed') {
+        // Terminal state remains visible briefly for sidebar feedback.
+        if (
+          status === 'completed' ||
+          status === 'partial' ||
+          status === 'failed' ||
+          status === 'canceled'
+        ) {
           setTimeout(() => {
             set((state) => {
-              if (state.runningSessions[sessionId] === 'completed') {
+              if (state.runningSessions[sessionId] === status) {
                 delete state.runningSessions[sessionId]
                 delete state.sessionRequestRetryState[sessionId]
               }

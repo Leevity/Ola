@@ -1,8 +1,9 @@
 import type { AIModelConfig, AIProvider } from '@renderer/lib/api/types'
 import type { Session, SessionModelSelectionMode } from '@renderer/stores/chat-store'
 import type { MainModelSelectionMode } from '@renderer/stores/settings-store'
+import type { TaskProfileConfig } from './task-profile'
 
-export type ResolvedSessionModelSource = 'plugin' | 'session' | 'global'
+export type ResolvedSessionModelSource = 'plugin' | 'session' | 'profile' | 'global'
 
 export interface ResolvedSessionModelSelection {
   mode: SessionModelSelectionMode
@@ -65,7 +66,10 @@ export function resolveSessionModelSelection({
   channelProviderId,
   channelModelId
 }: {
-  session?: Pick<Session, 'pluginId' | 'providerId' | 'modelId' | 'modelSelectionMode'> | null
+  session?: Pick<
+    Session,
+    'pluginId' | 'providerId' | 'modelId' | 'modelSelectionMode' | 'profileConfigSnapshot'
+  > | null
   providers: AIProvider[]
   activeProviderId: string | null
   activeModelId: string
@@ -127,6 +131,26 @@ export function resolveSessionModelSelection({
       provider,
       model,
       isAutoModeActive: true,
+      isSessionBound: false
+    }
+  }
+
+  const profileConfig: TaskProfileConfig | undefined = session?.profileConfigSnapshot
+  if (!session?.pluginId && profileConfig?.mainProviderId && profileConfig.mainModelId) {
+    const { provider, model } = resolveProviderAndModel(
+      providers,
+      profileConfig.mainProviderId,
+      profileConfig.mainModelId
+    )
+    return {
+      mode: 'inherit',
+      effectiveMode: 'manual',
+      source: 'profile',
+      providerId: profileConfig.mainProviderId,
+      modelId: profileConfig.mainModelId,
+      provider,
+      model,
+      isAutoModeActive: false,
       isSessionBound: false
     }
   }

@@ -6,6 +6,7 @@ import { buildLeadCoordinatorPrompt } from './teams/prompts'
 import type { ActiveTeam } from '../../stores/team-store'
 import { resolveLanguageName } from '../i18n-language'
 import { buildParallelToolCallsPrompt } from './parallel-tool-calls-prompt'
+import type { TaskProfile } from '../task-profile'
 
 export type PromptEnvironmentContext = {
   target: 'local' | 'ssh'
@@ -135,7 +136,7 @@ If a working folder exists but no relevant workspace context is available, clari
 
 Start by inspecting enough context to ask useful questions, state what is already known, then either call AskUserQuestion for remaining material ambiguity or proceed directly to EnterPlanMode when the scope is clear.`
 
-export type AgentModePromptMode = 'clarify' | 'cowork' | 'code' | 'acp'
+export type AgentModePromptMode = 'clarify' | 'execute' | 'acp'
 
 function buildModePromptBody(
   mode: AgentModePromptMode,
@@ -156,10 +157,10 @@ function buildModePromptBody(
     ].join('\n')
   }
 
-  if (mode === 'cowork') {
+  if (mode === 'execute') {
     return [
-      `## Mode: Cowork`,
-      `You are a collaborative partner, not just a code generator. Your scope covers coding, research, DevOps, documentation, analysis, project setup, and any other development-adjacent tasks.`,
+      `## Mode: Execute`,
+      `You are a collaborative execution partner. Your scope covers coding, research, DevOps, documentation, analysis, project setup, and cross-application tasks. Adapt engineering discipline and reporting depth to the task.`,
       environmentContext.target === 'ssh'
         ? `You have access to the selected remote filesystem over SSH. When not in Plan Mode, terminal commands and file tools operate against the remote host unless a tool explicitly says otherwise.`
         : `You have access to the user's local filesystem. When not in Plan Mode, you may execute terminal commands with the Bash tool.`,
@@ -173,7 +174,8 @@ function buildModePromptBody(
       `- When running terminal commands via the Bash tool, explain what you're doing and why.`,
       `- Proactively surface risks, trade-offs, or alternative approaches.`,
       `- If a task has multiple parts, decompose it and track progress.`,
-      `- Use the Edit tool for precise changes - never rewrite entire files unless creating new ones.`
+      `- Use the Edit tool for precise changes - never rewrite entire files unless creating new ones.`,
+      `- For code tasks, follow the repository's conventions, complete all imports and error handling, and verify the change proportionally to risk.`
     ].join('\n')
   }
 
@@ -189,23 +191,7 @@ function buildModePromptBody(
     ].join('\n')
   }
 
-  return [
-    `## Mode: Code`,
-    `You are a pair programming partner. Your scope is strictly implementation: writing, modifying, fixing, refactoring, and reviewing code. Stay focused on code - defer non-coding tasks to Cowork mode.`,
-    environmentContext.target === 'ssh'
-      ? `You have access to the selected remote filesystem over SSH. When not in Plan Mode, create or modify files on the remote host.`
-      : `You have access to the filesystem. When not in Plan Mode, you may create or modify files.`,
-    `\n**Engineering discipline:**`,
-    `- Always read a file before editing it. Understand the existing structure and style first.`,
-    `- Match the codebase's conventions: naming, formatting, patterns, and idioms.`,
-    `- Prefer minimal, surgical edits over rewriting. Use Edit, not Write, for existing files.`,
-    `- Ensure every change is complete: add imports, handle errors, respect types.`,
-    `- If a change touches public APIs or contracts, note what callers may need to update.`,
-    `\n**Output style:**`,
-    `- Be terse. Minimize explanation - let the code speak. Only explain non-obvious choices.`,
-    `- Do not narrate what the code does; only comment on why when it's not self-evident.`,
-    `- After making changes, briefly confirm what was done and any follow-up needed.`
-  ].join('\n')
+  return ''
 }
 
 function buildSkillsReminder(): string | null {
@@ -223,7 +209,8 @@ function buildSkillsReminder(): string | null {
 }
 
 export function buildSystemPrompt(options: {
-  mode: 'clarify' | 'cowork' | 'code' | 'acp'
+  taskProfile?: TaskProfile
+  mode: 'clarify' | 'execute' | 'acp'
   workingFolder?: string
   sessionId?: string
   userRules?: string
@@ -290,6 +277,12 @@ export function buildSystemPrompt(options: {
   )
 
   parts.push(`\n${buildModePromptBody(options.mode, environmentContext)}`)
+
+  parts.push(
+    options.taskProfile === 'code'
+      ? '\n## Task Profile: Code\nPrefer project structure, source files, CodeGraph, Wiki, diffs, tests, builds and Git context. Report changed files, commands, verification and remaining risks.'
+      : '\n## Task Profile: Work\nPrefer research, documents, browser, communication, automation and useful work artifacts. Report conclusions, artifacts, sources and next steps.'
+  )
 
   // Communication Style
   parts.push(

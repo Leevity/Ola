@@ -34,6 +34,11 @@ internal static partial class CodeGraphToolHandler
             return new ReadTarget(null, CodeGraphErrorKind.PathRefusal, $"Refused to operate on a sensitive path: {root}");
         }
 
+        if (IsMissingRoot(root))
+        {
+            return new ReadTarget(null, CodeGraphErrorKind.InvalidArgs, MissingRootMessage(root));
+        }
+
         if (!CodeGraphEngine.IsInitialized(root))
         {
             return new ReadTarget(null, CodeGraphErrorKind.NotIndexed, "Project is not indexed; index it first.");

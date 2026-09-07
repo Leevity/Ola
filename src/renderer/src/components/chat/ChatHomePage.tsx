@@ -14,6 +14,8 @@ import {
   type NewSessionProjectOption
 } from './NewSessionProjectSelector'
 import { ChatHomeInsights } from './ChatHomeInsights'
+import { useSettingsStore } from '@renderer/stores/settings-store'
+import type { TaskProfileConfig } from '@renderer/lib/task-profile'
 
 type HomeProjectSnapshot = NewSessionProjectOption
 
@@ -65,7 +67,11 @@ function applySuggestedPrompt(prompt: string): void {
 
 export function ChatHomePage(): React.JSX.Element {
   const { t } = useTranslation('chat')
-  const mode = useUIStore((s) => s.mode)
+  const defaultTaskProfile = useSettingsStore((s) => s.defaultTaskProfile)
+  const workProfileConfig = useSettingsStore((s) => s.workProfileConfig)
+  const codeProfileConfig = useSettingsStore((s) => s.codeProfileConfig)
+  const taskProfile = defaultTaskProfile
+  const profileConfig = taskProfile === 'code' ? codeProfileConfig : workProfileConfig
   const {
     activeProjectId,
     projects,
@@ -116,9 +122,9 @@ export function ChatHomePage(): React.JSX.Element {
     selectableProjects.find((project) => project.id === selectedProjectId) ?? null
   const homeProject = selectedProject ?? activeProject
   const homeWorkingFolder =
-    selectedProject?.workingFolder ?? (mode === 'chat' ? undefined : workingFolder)
+    selectedProject?.workingFolder ?? (taskProfile === 'work' ? undefined : workingFolder)
   const homeSshConnectionId =
-    selectedProject?.sshConnectionId ?? (mode === 'chat' ? null : sshConnectionId)
+    selectedProject?.sshConnectionId ?? (taskProfile === 'work' ? null : sshConnectionId)
   const terminalProjectId = homeProject?.id ?? null
   const terminalDockOpen = useUIStore((s) =>
     terminalProjectId ? Boolean(s.bottomTerminalDockOpenByProjectId[terminalProjectId]) : false
@@ -138,21 +144,15 @@ export function ChatHomePage(): React.JSX.Element {
   }, [selectableProjects, selectedProjectId])
 
   React.useEffect(() => {
-    if (mode === 'chat' || selectedProjectId || selectableProjects.length === 0) return
+    if (taskProfile === 'work' || selectedProjectId || selectableProjects.length === 0) return
     const nextProjectId = activeProjectId ?? selectableProjects[0].id
     setSelectedProjectId(nextProjectId)
     useChatStore.getState().setActiveProjectHome(nextProjectId)
-  }, [activeProjectId, mode, selectableProjects, selectedProjectId])
+  }, [activeProjectId, selectableProjects, selectedProjectId, taskProfile])
 
   const handleSelectHomeProject = React.useCallback((projectId: string | null): void => {
     setSelectedProjectId(projectId)
     useChatStore.getState().setActiveProjectHome(projectId)
-    const uiStore = useUIStore.getState()
-    if (projectId && uiStore.mode === 'chat') {
-      uiStore.setMode('cowork')
-    } else if (!projectId) {
-      uiStore.setMode('chat')
-    }
   }, [])
 
   const handleCreateProjectWithDirectory = React.useCallback(
@@ -168,9 +168,6 @@ export function ChatHomePage(): React.JSX.Element {
       })
       setSelectedProjectId(projectId)
       chatStore.setActiveProjectHome(projectId)
-      if (useUIStore.getState().mode === 'chat') {
-        useUIStore.getState().setMode('cowork')
-      }
       setCreateProjectDialogOpen(false)
     },
     [t]
@@ -183,25 +180,30 @@ export function ChatHomePage(): React.JSX.Element {
       options?: SendMessageOptions
     ): Promise<void> => {
       const chatStore = useChatStore.getState()
-      const chatWorkingFolder = mode === 'chat' ? await ensureDefaultChatWorkingFolder() : undefined
+      const chatWorkingFolder = taskProfile === 'work' ? await ensureDefaultChatWorkingFolder() : undefined
       const projectIdForSession =
         selectedProjectId && chatStore.projects.some((project) => project.id === selectedProjectId)
           ? selectedProjectId
           : null
       const sessionId =
-        mode === 'chat' && !projectIdForSession
-          ? chatStore.createSession(mode, null, {
+        taskProfile === 'work' && !projectIdForSession
+          ? chatStore.createSession('chat', null, {
               preserveProjectless: true,
-              workingFolder: chatWorkingFolder
+              workingFolder: chatWorkingFolder,
+              taskProfile,
+              profileConfigSnapshot: profileConfig as TaskProfileConfig
             })
-          : chatStore.createSession(mode, projectIdForSession ?? activeProject?.id ?? undefined)
+          : chatStore.createSession('chat', projectIdForSession ?? activeProject?.id ?? undefined, {
+              taskProfile,
+              profileConfigSnapshot: profileConfig as TaskProfileConfig
+            })
       useUIStore.getState().navigateToSession(sessionId)
       await sendMessage(text, images, undefined, sessionId, undefined, undefined, {
         ...options,
         clearCompletedTasksOnTurnStart: true
       })
     },
-    [activeProject?.id, mode, selectedProjectId, sendMessage]
+    [activeProject?.id, profileConfig, selectedProjectId, sendMessage, taskProfile]
   )
 
   const updateHomeProjectDirectory = React.useCallback(
@@ -222,7 +224,7 @@ export function ChatHomePage(): React.JSX.Element {
   )
 
   const quickPrompts =
-    mode === 'chat'
+    taskProfile === 'work'
       ? [
           t('messageList.analyzeSituation'),
           t('messageList.summarizeMeeting'),
@@ -241,7 +243,7 @@ export function ChatHomePage(): React.JSX.Element {
           ]
 
   const title =
-    mode === 'chat'
+    taskProfile === 'work'
       ? t('messageList.homeTitleChatQuestion')
       : homeWorkingFolder
         ? t('messageList.homeTitleBuildQuestion', {
@@ -250,11 +252,11 @@ export function ChatHomePage(): React.JSX.Element {
         : t('messageList.startCoding')
 
   const description =
-    mode === 'chat'
+    taskProfile === 'work'
       ? t('messageList.startConversationDesc')
       : homeWorkingFolder
         ? t('messageList.startCodingDesc')
-        : t('input.noWorkingFolder', { mode })
+        : t('input.noWorkingFolder', { mode: 'code' })
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
@@ -269,7 +271,7 @@ export function ChatHomePage(): React.JSX.Element {
                 {description}
               </p>
 
-              {mode !== 'chat' && homeProject ? (
+              {homeProject ? (
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <span className="truncate text-foreground/88">{homeProject.name}</span>
                   {homeWorkingFolder ? (
@@ -289,7 +291,7 @@ export function ChatHomePage(): React.JSX.Element {
             <InputArea
               sessionId={null}
               onSend={handleSend}
-              onSelectFolder={mode !== 'chat' ? () => setFolderDialogOpen(true) : undefined}
+              onSelectFolder={taskProfile === 'code' ? () => setFolderDialogOpen(true) : undefined}
               workingFolder={homeWorkingFolder}
               hideWorkingFolderIndicator
               isStreaming={false}
@@ -299,7 +301,7 @@ export function ChatHomePage(): React.JSX.Element {
             <NewSessionProjectSelector
               projects={selectableProjects}
               selectedProjectId={selectedProjectId}
-              allowNoProject={mode === 'chat'}
+              allowNoProject={taskProfile === 'work'}
               onSelectProject={handleSelectHomeProject}
               onCreateProject={() => setCreateProjectDialogOpen(true)}
             />
@@ -331,7 +333,7 @@ export function ChatHomePage(): React.JSX.Element {
         />
       )}
 
-      {mode !== 'chat' && (
+      {taskProfile === 'code' && (
         <WorkingFolderSelectorDialog
           open={folderDialogOpen}
           onOpenChange={setFolderDialogOpen}

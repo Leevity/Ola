@@ -2,6 +2,7 @@ import { ipcClient } from '../../ipc/ipc-client'
 import { resolveSubAgentMaxTurns } from './limits'
 import { subAgentRegistry } from './registry'
 import type { SubAgentDefinition } from './types'
+import { normalizeAgentProfileMeta, type AgentProfileMeta } from './profile'
 
 /** Shape returned by the agents:list IPC handler */
 export interface AgentInfo {
@@ -18,6 +19,14 @@ export interface AgentInfo {
   model?: string
   temperature?: number
   systemPrompt: string
+  profiles?: Array<'work' | 'code' | 'both'>
+  category?: AgentProfileMeta['category']
+  tags?: string[]
+  recommended?: boolean
+  requiresProject?: boolean
+  riskLevel?: AgentProfileMeta['riskLevel']
+  supportsBackground?: boolean
+  runtimeOnly?: boolean
 }
 
 export type SubAgentRegistryRefreshStatus = 'changed' | 'unchanged' | 'failed'
@@ -26,11 +35,12 @@ let registeredAgentSignature = ''
 
 /** Convert an IPC AgentInfo into a SubAgentDefinition */
 function toDefinition(info: AgentInfo): SubAgentDefinition {
+  const tools = info.tools ?? info.allowedTools ?? ['Read', 'Glob', 'Grep', 'LS', 'Bash']
   return {
     name: info.name,
     description: info.description,
     icon: info.icon,
-    tools: info.tools ?? info.allowedTools ?? ['Read', 'Glob', 'Grep', 'LS', 'Bash'],
+    tools,
     disallowedTools: info.disallowedTools ?? [],
     maxTurns: resolveSubAgentMaxTurns(info.maxTurns ?? info.maxIterations),
     initialPrompt: info.initialPrompt,
@@ -38,6 +48,20 @@ function toDefinition(info: AgentInfo): SubAgentDefinition {
     model: info.model,
     temperature: info.temperature,
     systemPrompt: info.systemPrompt,
+    profileMeta: normalizeAgentProfileMeta(
+      {
+        profiles: info.profiles,
+        category: info.category,
+        tags: info.tags,
+        recommended: info.recommended,
+        requiresProject: info.requiresProject,
+        riskLevel: info.riskLevel,
+        supportsBackground: info.supportsBackground,
+        runtimeOnly: info.runtimeOnly
+      },
+      info.name,
+      tools
+    ),
     inputSchema: {
       type: 'object',
       properties: {
@@ -85,7 +109,15 @@ function buildAgentSignature(agents: AgentInfo[]): string {
       background: agent.background,
       model: agent.model,
       temperature: agent.temperature,
-      systemPrompt: agent.systemPrompt
+      systemPrompt: agent.systemPrompt,
+      profiles: agent.profiles,
+      category: agent.category,
+      tags: agent.tags,
+      recommended: agent.recommended,
+      requiresProject: agent.requiresProject,
+      riskLevel: agent.riskLevel,
+      supportsBackground: agent.supportsBackground,
+      runtimeOnly: agent.runtimeOnly
     }))
   )
 }

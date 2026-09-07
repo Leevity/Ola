@@ -23,6 +23,7 @@ import {
   withAuxiliaryResponsesRequestPolicy
 } from './responses-session-policy'
 import type { ProviderConfig, UnifiedMessage } from './types'
+import type { TaskProfile } from '../task-profile'
 
 const AUTO_MODEL_CLASSIFIER_PROMPT = [
   'You are a strict task router for a desktop AI coding product.',
@@ -393,6 +394,7 @@ function detectToolIntent(options: {
 function classifyByHeuristics(options: {
   latestUserInput: string
   mode?: AppMode
+  taskProfile?: TaskProfile
   isContinue?: boolean
   projectId?: string | null
   allowTools?: boolean
@@ -417,12 +419,12 @@ function classifyByHeuristics(options: {
     /\b(implement|refactor|migrate|architecture|repository|codebase|workspace|terminal|command|shell)\b/,
     /调试|报错|错误|异常|失败|实现|开发|重构|迁移|架构|仓库|代码库|终端|命令|运行|测试|构建|编译/
   ])
+  const codeProjectContext = options.taskProfile === 'code' && Boolean(options.projectId)
   const hasArchitectureSignal = hasPattern(normalized, [
     /\b(architecture|system design|routing|router|scheduler|orchestration|strategy)\b/,
     /架构|系统设计|路由|调度|编排|策略|机制|原理/
   ])
-  const modeIsAgentic =
-    options.mode === 'cowork' || options.mode === 'code' || options.mode === 'acp'
+  const modeIsAgentic = options.mode === 'execute' || options.mode === 'acp'
   const modeIsConservative = modeIsAgentic || options.mode === 'clarify'
   const requiresTools = toolIntent.requiresTools
 
@@ -431,6 +433,7 @@ function classifyByHeuristics(options: {
   addReason(reasons, hasLongContext, 'long_context')
   addReason(reasons, hasMultiStepSignal, 'multi_step_signal')
   addReason(reasons, hasComplexCodeSignal, 'complex_code_signal')
+  addReason(reasons, codeProjectContext, 'code_project_profile')
   addReason(reasons, hasArchitectureSignal, 'architecture_or_routing_signal')
   addReason(reasons, modeIsAgentic, 'agentic_mode')
   addReason(reasons, options.mode === 'clarify', 'clarify_mode')
@@ -444,6 +447,7 @@ function classifyByHeuristics(options: {
     hasArchitectureSignal ||
     hasMultiStepSignal ||
     hasPathLikeText ||
+    codeProjectContext ||
     taskType === 'debug' ||
     taskType === 'implement'
   ) {
@@ -544,6 +548,7 @@ function classifyByHeuristics(options: {
 function buildClassifierInput(options: {
   latestUserInput: string
   mode: AppMode
+  taskProfile?: TaskProfile
   allowTools: boolean
   isContinue?: boolean
   projectId?: string | null
@@ -552,6 +557,7 @@ function buildClassifierInput(options: {
   const signals = options.signals
   return [
     `MODE=${options.mode}`,
+    `TASK_PROFILE=${options.taskProfile ?? 'work'}`,
     `ALLOW_TOOLS=${options.allowTools ? 'true' : 'false'}`,
     `IS_CONTINUE=${options.isContinue ? 'true' : 'false'}`,
     `PROJECT_BOUND=${options.projectId ? 'true' : 'false'}`,
@@ -620,8 +626,7 @@ function resolveLowConfidenceRoute(options: {
     }
   }
 
-  const conservativeMode =
-    options.mode === 'cowork' || options.mode === 'code' || options.mode === 'acp'
+  const conservativeMode = options.mode === 'execute' || options.mode === 'acp'
   const clarifyNeedsMain =
     options.mode === 'clarify' &&
     !(options.signals.complexity === 'simple' && options.signals.risk === 'low')
@@ -720,6 +725,7 @@ export async function selectAutoModel(options: {
   latestUserInput: string
   sessionId?: string
   mode?: AppMode
+  taskProfile?: TaskProfile
   allowTools?: boolean
   isContinue?: boolean
   projectId?: string | null
@@ -784,6 +790,7 @@ export async function selectAutoModel(options: {
   routingSignals = classifyByHeuristics({
     latestUserInput,
     mode,
+    taskProfile: options.taskProfile,
     isContinue: options.isContinue,
     projectId: options.projectId,
     allowTools
