@@ -4,7 +4,8 @@ export const RUNTIME_JOB_ROUTES = {
   list: 'runtime/jobs-list',
   setState: 'runtime/jobs-state',
   cancel: 'runtime/jobs-cancel',
-  events: 'runtime/jobs-events'
+  events: 'runtime/jobs-events',
+  reapStale: 'runtime/jobs-reap-stale'
 } as const
 
 export interface RuntimeJobEventRecord {
@@ -42,4 +43,9 @@ export interface RuntimeJobMutationResult {
   accepted: boolean
   duplicate: boolean
   job?: RuntimeJobRecord | null
+}
+
+export interface RuntimeJobReapResult {
+  reaped: number
+  cutoffAt: number
 }
