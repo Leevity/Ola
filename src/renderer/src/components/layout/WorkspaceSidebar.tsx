@@ -1393,27 +1393,27 @@ export function WorkspaceSidebar(): React.JSX.Element {
             onClick={() => setTaskProfileMenuOpen((open) => !open)}
             className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60"
           >
-                {defaultTaskProfile === 'work' ? (
-                  <BriefcaseBusiness className="size-4 shrink-0" />
-                ) : (
-                  <Code2 className="size-4 shrink-0" />
-                )}
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">
-                    {t(`sidebar.taskProfile.${defaultTaskProfile}.title`, {
-                      defaultValue: defaultTaskProfile === 'work' ? '工作' : '编程'
-                    })}
-                  </span>
-                  <span className="block truncate text-[10px] text-muted-foreground">
-                    {t(`sidebar.taskProfile.${defaultTaskProfile}.desc`, {
-                      defaultValue:
-                        defaultTaskProfile === 'work'
-                          ? '日常工作、研究和办公'
-                          : '项目、代码、终端和 Git'
-                    })}
-                  </span>
-                </span>
-                <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
+            {defaultTaskProfile === 'work' ? (
+              <BriefcaseBusiness className="size-4 shrink-0" />
+            ) : (
+              <Code2 className="size-4 shrink-0" />
+            )}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">
+                {t(`sidebar.taskProfile.${defaultTaskProfile}.title`, {
+                  defaultValue: defaultTaskProfile === 'work' ? '工作' : '编程'
+                })}
+              </span>
+              <span className="block truncate text-[10px] text-muted-foreground">
+                {t(`sidebar.taskProfile.${defaultTaskProfile}.desc`, {
+                  defaultValue:
+                    defaultTaskProfile === 'work'
+                      ? '日常工作、研究和办公'
+                      : '项目、代码、终端和 Git'
+                })}
+              </span>
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-muted-foreground" />
           </button>
           {taskProfileMenuOpen && (
             <div
@@ -1440,14 +1440,14 @@ export function WorkspaceSidebar(): React.JSX.Element {
                       {t(`sidebar.taskProfile.${profile}.title`, {
                         defaultValue: profile === 'work' ? '工作' : '编程'
                       })}
-                      {defaultTaskProfile === profile && <CheckCircle2 className="ml-auto size-4" />}
+                      {defaultTaskProfile === profile && (
+                        <CheckCircle2 className="ml-auto size-4" />
+                      )}
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {t(`sidebar.taskProfile.${profile}.desc`, {
                         defaultValue:
-                          profile === 'work'
-                            ? '日常工作、研究和办公'
-                            : '项目、代码、终端和 Git'
+                          profile === 'work' ? '日常工作、研究和办公' : '项目、代码、终端和 Git'
                       })}
                     </span>
                   </span>

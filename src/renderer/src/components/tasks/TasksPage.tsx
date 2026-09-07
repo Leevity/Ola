@@ -847,7 +847,12 @@ export function TasksPage(): React.JSX.Element {
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setSurface('board')}>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSurface('board')}
+              >
                 {t('tasksPage.boardButton', { defaultValue: 'Board' })}
               </Button>
               <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreateDialog}>

@@ -206,9 +206,9 @@ function isWikiCacheFresh(
       const cached = cachedByPath.get(file.path)
       return Boolean(
         cached &&
-          cached.kind === 'file' &&
-          cached.size === file.size &&
-          (!file.indexedAt || Math.abs(cached.modifiedAt - file.indexedAt) <= 1)
+        cached.kind === 'file' &&
+        cached.size === file.size &&
+        (!file.indexedAt || Math.abs(cached.modifiedAt - file.indexedAt) <= 1)
       )
     })
   }

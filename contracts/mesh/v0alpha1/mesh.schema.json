@@ -67,8 +67,8 @@
         "sessionId": { "type": "string", "maxLength": 128 },
         "type": {
           "enum": [
-              "task.command",
-              "task.started",
+            "task.command",
+            "task.started",
             "task.stdout",
             "task.stderr",
             "task.progress",

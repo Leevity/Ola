@@ -406,7 +406,8 @@ function areStringSetsEqual(left: Set<string> | undefined, right: Set<string>): 
  * importing useSshStore and its action names, while new work belongs to a slice.
  */
 export interface SshStore
-  extends SshConnectionsSlice,
+  extends
+    SshConnectionsSlice,
     SshSessionsSlice,
     SshSftpSlice,
     SshTransfersSlice,

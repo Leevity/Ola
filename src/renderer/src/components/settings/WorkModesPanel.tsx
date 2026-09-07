@@ -102,11 +102,13 @@ export function WorkModesPanel(): React.JSX.Element {
       </div>
 
       <div className="flex gap-1 border-b border-border/60" role="tablist">
-        {([
-          ['work', BriefcaseBusiness, 'workModes.work'],
-          ['code', Code2, 'workModes.code'],
-          ['shared', ShieldCheck, 'workModes.sharedLabel']
-        ] as const).map(([value, Icon, key]) => (
+        {(
+          [
+            ['work', BriefcaseBusiness, 'workModes.work'],
+            ['code', Code2, 'workModes.code'],
+            ['shared', ShieldCheck, 'workModes.sharedLabel']
+          ] as const
+        ).map(([value, Icon, key]) => (
           <button
             key={value}
             type="button"
@@ -146,7 +148,8 @@ export function WorkModesPanel(): React.JSX.Element {
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {t('workModes.shared.defaultDesc', {
-                defaultValue: 'New conversations start with this profile. You can override it before sending.'
+                defaultValue:
+                  'New conversations start with this profile. You can override it before sending.'
               })}
             </p>
             <div className="mt-3 flex gap-2">
@@ -182,7 +185,11 @@ export function WorkModesPanel(): React.JSX.Element {
                 onValueChange={(value) => updateProfileModel(activeTab, 'main', value)}
               >
                 <SelectTrigger id={`${activeTab}-main-model`}>
-                  <SelectValue placeholder={t('workModes.inheritModel', { defaultValue: 'Inherit global model' })} />
+                  <SelectValue
+                    placeholder={t('workModes.inheritModel', {
+                      defaultValue: 'Inherit global model'
+                    })}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="inherit">
@@ -205,7 +212,11 @@ export function WorkModesPanel(): React.JSX.Element {
                 onValueChange={(value) => updateProfileModel(activeTab, 'fast', value)}
               >
                 <SelectTrigger id={`${activeTab}-fast-model`}>
-                  <SelectValue placeholder={t('workModes.inheritFastModel', { defaultValue: 'Inherit global fast model' })} />
+                  <SelectValue
+                    placeholder={t('workModes.inheritFastModel', {
+                      defaultValue: 'Inherit global fast model'
+                    })}
+                  />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="inherit">
@@ -223,7 +234,8 @@ export function WorkModesPanel(): React.JSX.Element {
           <SettingToggle
             label={t('workModes.autoSummarize', { defaultValue: 'Generate a structured result' })}
             description={t('workModes.autoSummarizeDesc', {
-              defaultValue: 'After tool work, summarize what changed, what was verified and what remains.'
+              defaultValue:
+                'After tool work, summarize what changed, what was verified and what remains.'
             })}
             checked={profile.autoSummarize}
             onCheckedChange={(checked) => updateProfile(activeTab, { autoSummarize: checked })}
@@ -231,7 +243,8 @@ export function WorkModesPanel(): React.JSX.Element {
           <SettingToggle
             label={t('workModes.preferBrowser', { defaultValue: 'Prioritize browser actions' })}
             description={t('workModes.preferBrowserDesc', {
-              defaultValue: 'Place browser and desktop research capabilities near the top of the tool picker.'
+              defaultValue:
+                'Place browser and desktop research capabilities near the top of the tool picker.'
             })}
             checked={profile.preferBrowser}
             onCheckedChange={(checked) => updateProfile(activeTab, { preferBrowser: checked })}
@@ -258,7 +271,8 @@ export function WorkModesPanel(): React.JSX.Element {
           <SettingToggle
             label={t('workModes.allowShell', { defaultValue: 'Show shell capabilities' })}
             description={t('workModes.allowShellDesc', {
-              defaultValue: 'Expose terminal and command tools as preferred Code capabilities; approvals still apply.'
+              defaultValue:
+                'Expose terminal and command tools as preferred Code capabilities; approvals still apply.'
             })}
             checked={profile.allowShell}
             onCheckedChange={(checked) => updateProfile(activeTab, { allowShell: checked })}
@@ -285,7 +299,10 @@ export function WorkModesPanel(): React.JSX.Element {
                 options={[
                   ['inspect-only', t('workModes.gitInspect', { defaultValue: 'Inspect only' })],
                   ['ask-before-write', t('workModes.gitAsk', { defaultValue: 'Ask before write' })],
-                  ['allow-with-approval', t('workModes.gitApproval', { defaultValue: 'Allow with approval' })]
+                  [
+                    'allow-with-approval',
+                    t('workModes.gitApproval', { defaultValue: 'Allow with approval' })
+                  ]
                 ]}
               />
               <ProfileSelect
@@ -294,9 +311,18 @@ export function WorkModesPanel(): React.JSX.Element {
                 value={profile.verificationPolicy ?? 'tests-and-build'}
                 onValueChange={(value) => updateProfile(activeTab, { verificationPolicy: value })}
                 options={[
-                  ['none', t('workModes.verifyNone', { defaultValue: 'No automatic verification' })],
-                  ['lint-and-typecheck', t('workModes.verifyStatic', { defaultValue: 'Lint and typecheck' })],
-                  ['tests-and-build', t('workModes.verifyFull', { defaultValue: 'Tests and build' })]
+                  [
+                    'none',
+                    t('workModes.verifyNone', { defaultValue: 'No automatic verification' })
+                  ],
+                  [
+                    'lint-and-typecheck',
+                    t('workModes.verifyStatic', { defaultValue: 'Lint and typecheck' })
+                  ],
+                  [
+                    'tests-and-build',
+                    t('workModes.verifyFull', { defaultValue: 'Tests and build' })
+                  ]
                 ]}
               />
               <ProfileSelect
@@ -306,7 +332,10 @@ export function WorkModesPanel(): React.JSX.Element {
                 onValueChange={(value) => updateProfile(activeTab, { diffStyle: value })}
                 options={[
                   ['inline', t('workModes.diffInline', { defaultValue: 'Inline in conversation' })],
-                  ['side-panel', t('workModes.diffSidePanel', { defaultValue: 'Open in side panel' })]
+                  [
+                    'side-panel',
+                    t('workModes.diffSidePanel', { defaultValue: 'Open in side panel' })
+                  ]
                 ]}
               />
               <ProfileSelect
@@ -317,13 +346,17 @@ export function WorkModesPanel(): React.JSX.Element {
                 options={[
                   ['always-ask', t('workModes.approvalAlways', { defaultValue: 'Always ask' })],
                   ['ask-on-risk', t('workModes.approvalRisk', { defaultValue: 'Ask on risk' })],
-                  ['use-global', t('workModes.approvalGlobal', { defaultValue: 'Use global policy' })]
+                  [
+                    'use-global',
+                    t('workModes.approvalGlobal', { defaultValue: 'Use global policy' })
+                  ]
                 ]}
               />
               <SettingToggle
                 label={t('workModes.useTeams', { defaultValue: 'Prefer Team delegation' })}
                 description={t('workModes.useTeamsDesc', {
-                  defaultValue: 'Suggest sub-agents and Team workflows for larger engineering tasks.'
+                  defaultValue:
+                    'Suggest sub-agents and Team workflows for larger engineering tasks.'
                 })}
                 checked={profile.useTeams ?? false}
                 onCheckedChange={(checked) => updateProfile(activeTab, { useTeams: checked })}

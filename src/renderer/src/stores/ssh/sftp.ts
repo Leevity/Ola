@@ -20,7 +20,9 @@ export interface SshSftpSlice {
   sftpSelections: Record<SftpPaneId, Record<string, SshFileEntry>>
   sftpConflictPolicy: SftpConflictPolicy
   sftpInspectorTab: SftpInspectorTab
-  connectSftpConnection: (connectionId: string) => Promise<{ homeDir?: string | null; error?: string }>
+  connectSftpConnection: (
+    connectionId: string
+  ) => Promise<{ homeDir?: string | null; error?: string }>
   disconnectSftpConnection: (connectionId: string) => Promise<void>
   setSftpPaneConnection: (paneId: SftpPaneId, connectionId: string | null) => void
   setSftpPanePath: (paneId: SftpPaneId, path: string) => void

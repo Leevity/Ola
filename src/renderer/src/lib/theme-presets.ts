@@ -1669,7 +1669,7 @@ export function getSshChromePalette(preset: AppThemePreset, mode: AppThemeMode):
 }
 
 export function createRemoteWorkspaceStyle(palette: SshChromePalette): CSSProperties {
-  return ({
+  return {
     background: palette.canvas,
     color: palette.text,
     '--background': palette.canvas,
@@ -1702,7 +1702,7 @@ export function createRemoteWorkspaceStyle(palette: SshChromePalette): CSSProper
     '--remote-success': palette.success,
     '--remote-warning': palette.warning,
     '--remote-danger': palette.danger
-  } as CSSProperties)
+  } as CSSProperties
 }
 
 export function applyThemePresetCssVars(

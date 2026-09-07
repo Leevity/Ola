@@ -254,9 +254,10 @@ async function runSummaryAttempt(
   }
   let response = ''
   let failed = false
-  const profileGuidance = input.taskProfile === 'code'
-    ? 'For Code, emphasize changed files, commands, tests, builds, Git state and verification.'
-    : 'For Work, emphasize conclusions, documents or other artifacts, sources, completed items and next steps.'
+  const profileGuidance =
+    input.taskProfile === 'code'
+      ? 'For Code, emphasize changed files, commands, tests, builds, Git state and verification.'
+      : 'For Work, emphasize conclusions, documents or other artifacts, sources, completed items and next steps.'
   const systemPrompt = `You summarize completed agent tool runs without using tools. Never invent work, files, verification, commits, URLs, or success. The required status is ${expectedStatus}. ${profileGuidance} Return exactly one JSON object with: status, title, summary, completedItems (string[]), artifacts ({label,path?,kind?}[]), verification ({label,status:passed|failed|not_run,detail?}[]), warnings (string[]), nextSteps (string[]). Keep it concise and use the user's language when evident from the goal.`
   for await (const event of streamSidecarProviderTurn({
     messages: [message],
