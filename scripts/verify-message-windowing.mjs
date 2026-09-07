@@ -284,6 +284,18 @@ async function waitForRequestDebug(client, runId) {
   })
 }
 
+async function stopWorker(child) {
+  if (!child || child.exitCode !== null) return
+  await new Promise((resolve) => {
+    const timeout = setTimeout(resolve, 5_000)
+    child.once('exit', () => {
+      clearTimeout(timeout)
+      resolve()
+    })
+    child.kill()
+  })
+}
+
 async function readRequestDebugBody(client, debugInfo) {
   if (typeof debugInfo.body === 'string') return debugInfo.body
   assert(typeof debugInfo.bodyRef === 'string', 'request_debug omitted body and bodyRef')
@@ -556,9 +568,7 @@ async function main() {
     console.log('message-windowing verification passed')
   } finally {
     client?.close()
-    if (child && child.exitCode === null) {
-      child.kill()
-    }
+    await stopWorker(child)
     await rm(tempDir, { recursive: true, force: true })
   }
 }
