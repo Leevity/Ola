@@ -3,6 +3,12 @@ import { readFileSync } from 'node:fs'
 import { SSH_STORE_EVENT_CHANNELS } from '../src/renderer/src/stores/ssh/events'
 import { selectSshConnections } from '../src/renderer/src/stores/ssh/connections'
 import { selectSshTransfers } from '../src/renderer/src/stores/ssh/transfers'
+import type { SshConnectionsSlice } from '../src/renderer/src/stores/ssh/connections'
+import type { SshExplorerSlice } from '../src/renderer/src/stores/ssh/explorer'
+import type { SshSessionsSlice } from '../src/renderer/src/stores/ssh/sessions'
+import type { SshSftpSlice } from '../src/renderer/src/stores/ssh/sftp'
+import type { SshTransfersSlice } from '../src/renderer/src/stores/ssh/transfers'
+import type { SshUiSlice } from '../src/renderer/src/stores/ssh/ui'
 
 const storeSource = readFileSync('src/renderer/src/stores/ssh-store.ts', 'utf8')
 const hostListSource = readFileSync('src/renderer/src/components/ssh/SshConnectionList.tsx', 'utf8')
@@ -12,6 +18,14 @@ const transferListSource = readFileSync(
 )
 assert.match(storeSource, /export type \* from ['"]\.\.\/\.\.\/\.\.\/shared\/ssh-contract['"]/)
 assert.doesNotMatch(storeSource, /export interface SshConnection \{/)
+assert.match(storeSource, /extends SshConnectionsSlice/)
+assert.match(storeSource, /SshSessionsSlice/)
+assert.match(storeSource, /SshSftpSlice/)
+assert.match(storeSource, /SshTransfersSlice/)
+assert.match(storeSource, /SshExplorerSlice/)
+assert.match(storeSource, /SshUiSlice/)
+type SixSlices = SshConnectionsSlice & SshSessionsSlice & SshSftpSlice & SshTransfersSlice & SshExplorerSlice & SshUiSlice
+void (null as unknown as SixSlices)
 assert.equal(SSH_STORE_EVENT_CHANNELS.status, 'ssh:status')
 
 const connections = [{ id: 'connection-1' }]
