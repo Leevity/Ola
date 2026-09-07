@@ -109,19 +109,28 @@ export function taskRowToItem(row: TaskRow): TaskItem {
 }
 
 function normalizeTaskStatus(status: string): TaskStatus {
-  return status === 'in_progress' || status === 'in_review' || status === 'blocked' || status === 'completed'
+  return status === 'in_progress' ||
+    status === 'in_review' ||
+    status === 'blocked' ||
+    status === 'completed'
     ? status
     : 'pending'
 }
 
-export function readTaskBoardMetadata(metadata: Record<string, unknown> | undefined): TaskBoardMetadata {
+export function readTaskBoardMetadata(
+  metadata: Record<string, unknown> | undefined
+): TaskBoardMetadata {
   const board = metadata?.board
   if (!board || typeof board !== 'object' || Array.isArray(board)) return {}
   const value = board as Record<string, unknown>
   const priority = value.priority
-  const tags = Array.isArray(value.tags) ? value.tags.filter((tag): tag is string => typeof tag === 'string') : []
-  const startAt = typeof value.startAt === 'number' && Number.isFinite(value.startAt) ? value.startAt : undefined
-  const dueAt = typeof value.dueAt === 'number' && Number.isFinite(value.dueAt) ? value.dueAt : undefined
+  const tags = Array.isArray(value.tags)
+    ? value.tags.filter((tag): tag is string => typeof tag === 'string')
+    : []
+  const startAt =
+    typeof value.startAt === 'number' && Number.isFinite(value.startAt) ? value.startAt : undefined
+  const dueAt =
+    typeof value.dueAt === 'number' && Number.isFinite(value.dueAt) ? value.dueAt : undefined
   return {
     ...(priority === 'low' || priority === 'medium' || priority === 'high' || priority === 'urgent'
       ? { priority }

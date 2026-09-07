@@ -3580,7 +3580,11 @@ export const useChatStore = create<ChatStore>()(
       const targetProject = get().projects.find((project) => project.id === targetProjectId)
       const taskProfile =
         options?.taskProfile ??
-        inferTaskProfile(mode, targetProjectId, targetProject?.workingFolder ?? options?.workingFolder)
+        inferTaskProfile(
+          mode,
+          targetProjectId,
+          targetProject?.workingFolder ?? options?.workingFolder
+        )
       const profileConfig = options?.profileConfigSnapshot ?? profileConfigFor(taskProfile)
 
       if (targetProject) {

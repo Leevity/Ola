@@ -9,7 +9,9 @@ import {
 import { loadWikiDocument, saveWikiDocument } from '../db/capability-dao'
 import { getCodeGraphWorker } from '../lib/codegraph-worker'
 
-async function getSharedIndexedFiles(projectRoot: string): Promise<SharedIndexedFile[] | undefined> {
+async function getSharedIndexedFiles(
+  projectRoot: string
+): Promise<SharedIndexedFile[] | undefined> {
   try {
     const worker = getCodeGraphWorker()
     const status = await worker.request<{

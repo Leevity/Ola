@@ -44,13 +44,17 @@ function register<T extends RegistryItem>(kind: RegistryKind, item: T): () => vo
   }
 }
 
-export const registerWorkbenchAction = (action: WorkbenchAction): (() => void) => register('action', action)
+export const registerWorkbenchAction = (action: WorkbenchAction): (() => void) =>
+  register('action', action)
 export const registerWorkbenchPane = (pane: WorkbenchPane): (() => void) => register('pane', pane)
-export const registerWorkbenchDrawer = (drawer: WorkbenchDrawer): (() => void) => register('drawer', drawer)
-export const listWorkbenchActions = (): WorkbenchAction[] => [...items.action.values()] as WorkbenchAction[]
+export const registerWorkbenchDrawer = (drawer: WorkbenchDrawer): (() => void) =>
+  register('drawer', drawer)
+export const listWorkbenchActions = (): WorkbenchAction[] =>
+  [...items.action.values()] as WorkbenchAction[]
 export const getWorkbenchActionsSnapshot = (): WorkbenchAction[] => actionSnapshot
 export const listWorkbenchPanes = (): WorkbenchPane[] => [...items.pane.values()] as WorkbenchPane[]
-export const listWorkbenchDrawers = (): WorkbenchDrawer[] => [...items.drawer.values()] as WorkbenchDrawer[]
+export const listWorkbenchDrawers = (): WorkbenchDrawer[] =>
+  [...items.drawer.values()] as WorkbenchDrawer[]
 export const subscribeWorkbenchRegistry = (listener: () => void): (() => void) => {
   listeners.add(listener)
   return () => listeners.delete(listener)

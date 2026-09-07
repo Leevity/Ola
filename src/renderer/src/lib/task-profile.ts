@@ -74,7 +74,11 @@ export function normalizeTaskProfile(value: unknown): TaskProfile {
   return value === 'code' ? 'code' : 'work'
 }
 
-export function inferTaskProfile(mode: unknown, projectId?: string | null, workingFolder?: string | null): TaskProfile {
+export function inferTaskProfile(
+  mode: unknown,
+  projectId?: string | null,
+  workingFolder?: string | null
+): TaskProfile {
   if (mode === 'code' || mode === 'cowork') return 'code'
   if (mode === 'execute' && (projectId || workingFolder)) return 'code'
   return 'work'

@@ -6,19 +6,29 @@ const root = process.cwd()
 const read = (relativePath: string): Promise<string> =>
   readFile(path.join(root, relativePath), 'utf8')
 
-const [uiStore, chatStore, layout, navRail, workspaceHome, settingsPage, capabilityCenter, workspaceSidebar, remotePage, themePanel] =
-  await Promise.all([
-    read('src/renderer/src/stores/ui-store.ts'),
-    read('src/renderer/src/stores/chat-store.ts'),
-    read('src/renderer/src/components/layout/Layout.tsx'),
-    read('src/renderer/src/components/layout/NavRail.tsx'),
-    read('src/renderer/src/components/chat/WorkspaceHome.tsx'),
-    read('src/renderer/src/components/settings/SettingsPage.tsx'),
-    read('src/renderer/src/components/settings/CapabilityCenterPanel.tsx'),
-    read('src/renderer/src/components/layout/WorkspaceSidebar.tsx'),
-    read('src/renderer/src/components/remote/RemotePage.tsx'),
-    read('src/renderer/src/components/settings/GlobalThemePanel.tsx')
-  ])
+const [
+  uiStore,
+  chatStore,
+  layout,
+  navRail,
+  workspaceHome,
+  settingsPage,
+  capabilityCenter,
+  workspaceSidebar,
+  remotePage,
+  themePanel
+] = await Promise.all([
+  read('src/renderer/src/stores/ui-store.ts'),
+  read('src/renderer/src/stores/chat-store.ts'),
+  read('src/renderer/src/components/layout/Layout.tsx'),
+  read('src/renderer/src/components/layout/NavRail.tsx'),
+  read('src/renderer/src/components/chat/WorkspaceHome.tsx'),
+  read('src/renderer/src/components/settings/SettingsPage.tsx'),
+  read('src/renderer/src/components/settings/CapabilityCenterPanel.tsx'),
+  read('src/renderer/src/components/layout/WorkspaceSidebar.tsx'),
+  read('src/renderer/src/components/remote/RemotePage.tsx'),
+  read('src/renderer/src/components/settings/GlobalThemePanel.tsx')
+])
 
 assert(
   uiStore.includes("export type AppMode = 'chat' | 'clarify' | 'execute' | 'acp'") &&
@@ -30,7 +40,7 @@ assert(
   'remote dialog state is missing'
 )
 assert(
-  workspaceSidebar.includes('openRemoteDialog(\'ssh\')') &&
+  workspaceSidebar.includes("openRemoteDialog('ssh')") &&
     layout.includes('open={remoteDialogOpen}') &&
     layout.includes('<RemotePage') &&
     layout.includes('onRequestClose={closeRemoteDialog}') &&
@@ -40,10 +50,7 @@ assert(
     remotePage.includes('onRequestClose'),
   'remote control does not open as a standalone closable dialog'
 )
-assert(
-  themePanel.includes('themePreset.remoteHint'),
-  'remote workspace palette preview is missing'
-)
+assert(themePanel.includes('themePreset.remoteHint'), 'remote workspace palette preview is missing')
 assert(
   chatStore.includes("export type SessionMode = 'chat' | 'clarify' | 'execute' | 'acp'") &&
     chatStore.includes("mode === 'cowork' || mode === 'code' || mode === 'execute'"),

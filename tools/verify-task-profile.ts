@@ -26,14 +26,15 @@ const root = process.cwd()
 const read = (relativePath: string): Promise<string> =>
   readFile(path.join(root, relativePath), 'utf8')
 
-const [chatStore, chatHome, onboarding, settingsPanel, workspaceSidebar, layout] = await Promise.all([
-  read('src/renderer/src/stores/chat-store.ts'),
-  read('src/renderer/src/components/chat/ChatHomePage.tsx'),
-  read('src/renderer/src/components/onboarding/OnboardingPage.tsx'),
-  read('src/renderer/src/components/settings/WorkModesPanel.tsx'),
-  read('src/renderer/src/components/layout/WorkspaceSidebar.tsx'),
-  read('src/renderer/src/components/layout/Layout.tsx')
-])
+const [chatStore, chatHome, onboarding, settingsPanel, workspaceSidebar, layout] =
+  await Promise.all([
+    read('src/renderer/src/stores/chat-store.ts'),
+    read('src/renderer/src/components/chat/ChatHomePage.tsx'),
+    read('src/renderer/src/components/onboarding/OnboardingPage.tsx'),
+    read('src/renderer/src/components/settings/WorkModesPanel.tsx'),
+    read('src/renderer/src/components/layout/WorkspaceSidebar.tsx'),
+    read('src/renderer/src/components/layout/Layout.tsx')
+  ])
 
 const zhLayout = JSON.parse(
   (await read('src/renderer/src/locales/zh/layout.json')).replace(/^\uFEFF/, '')
@@ -63,12 +64,24 @@ assert(resourcesPage.includes('resourcesPage.templates.title'))
 
 assert(chatStore.includes('taskProfileLocked'), 'session profile lock is missing')
 assert(chatStore.includes('lockSessionTaskProfile'), 'first-message profile lock hook is missing')
-assert(!chatHome.includes('taskProfile.work.label'), 'duplicate home profile selector should be removed')
+assert(
+  !chatHome.includes('taskProfile.work.label'),
+  'duplicate home profile selector should be removed'
+)
 assert(layout.includes('<WorkspaceSidebar />'), 'active layout sidebar is missing')
-assert(workspaceSidebar.includes('sidebar.taskProfileSwitcher'), 'sidebar profile switcher is missing')
+assert(
+  workspaceSidebar.includes('sidebar.taskProfileSwitcher'),
+  'sidebar profile switcher is missing'
+)
 assert(workspaceSidebar.includes('sidebar.newChat'), 'sidebar new conversation entry is missing')
-assert(workspaceSidebar.includes("key: 'remote'"), 'remote control entry is missing from the active sidebar')
-assert(workspaceSidebar.includes("openRemotePage('ssh')"), 'remote control entry does not open the remote page')
+assert(
+  workspaceSidebar.includes("key: 'remote'"),
+  'remote control entry is missing from the active sidebar'
+)
+assert(
+  workspaceSidebar.includes("openRemotePage('ssh')"),
+  'remote control entry does not open the remote page'
+)
 assert(
   workspaceSidebar.indexOf('sidebar.taskProfileSwitcher') <
     workspaceSidebar.indexOf('{navItems.slice(0, 3).map(renderNavItem)}'),

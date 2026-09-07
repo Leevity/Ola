@@ -24,7 +24,12 @@ assert.match(storeSource, /SshSftpSlice/)
 assert.match(storeSource, /SshTransfersSlice/)
 assert.match(storeSource, /SshExplorerSlice/)
 assert.match(storeSource, /SshUiSlice/)
-type SixSlices = SshConnectionsSlice & SshSessionsSlice & SshSftpSlice & SshTransfersSlice & SshExplorerSlice & SshUiSlice
+type SixSlices = SshConnectionsSlice &
+  SshSessionsSlice &
+  SshSftpSlice &
+  SshTransfersSlice &
+  SshExplorerSlice &
+  SshUiSlice
 void (null as unknown as SixSlices)
 assert.equal(SSH_STORE_EVENT_CHANNELS.status, 'ssh:status')
 

@@ -166,7 +166,11 @@ export function CommandPalette(): React.JSX.Element {
         {/* Quick Actions */}
         <CommandGroup heading={t('commandPalette.actions')}>
           {workbenchActions.map((action) => (
-            <CommandItem key={action.id} keywords={action.keywords} onSelect={() => runAndClose(() => void action.run())}>
+            <CommandItem
+              key={action.id}
+              keywords={action.keywords}
+              onSelect={() => runAndClose(() => void action.run())}
+            >
               <Sparkles className="size-4" />
               <span>{action.title}</span>
             </CommandItem>

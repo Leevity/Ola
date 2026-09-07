@@ -14,7 +14,11 @@ export interface ToolPresentation {
 export interface ToolPresentationAdapter {
   id: string
   matches: (name: string) => boolean
-  present: (name: string, input: Record<string, unknown>, status?: ToolExecutionStatus) => ToolPresentation
+  present: (
+    name: string,
+    input: Record<string, unknown>,
+    status?: ToolExecutionStatus
+  ) => ToolPresentation
 }
 
 function targetFromInput(input: Record<string, unknown>): string | undefined {
@@ -113,4 +117,3 @@ export class ToolPresentationRegistry {
 }
 
 export const toolPresentationRegistry = new ToolPresentationRegistry()
-

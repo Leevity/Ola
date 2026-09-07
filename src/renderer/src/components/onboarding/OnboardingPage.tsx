@@ -407,7 +407,16 @@ export function OnboardingPage(): React.JSX.Element {
     } finally {
       setFinishing(false)
     }
-  }, [interestIds, language, nickname, selectedSoul, t, taskProfile, updateSettings, writeUserProfile])
+  }, [
+    interestIds,
+    language,
+    nickname,
+    selectedSoul,
+    t,
+    taskProfile,
+    updateSettings,
+    writeUserProfile
+  ])
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
@@ -499,10 +508,20 @@ export function OnboardingPage(): React.JSX.Element {
                             </span>
                             {selected ? <Check className="ml-auto size-4" /> : null}
                           </div>
-                          <p className={cn('mt-3 text-sm leading-6', selected ? 'text-background/75' : 'text-muted-foreground')}>
+                          <p
+                            className={cn(
+                              'mt-3 text-sm leading-6',
+                              selected ? 'text-background/75' : 'text-muted-foreground'
+                            )}
+                          >
                             {t(`onboarding.profile.${value}.desc`)}
                           </p>
-                          <p className={cn('mt-4 text-xs leading-5', selected ? 'text-background/65' : 'text-muted-foreground')}>
+                          <p
+                            className={cn(
+                              'mt-4 text-xs leading-5',
+                              selected ? 'text-background/65' : 'text-muted-foreground'
+                            )}
+                          >
                             {t(`onboarding.profile.${value}.examples`)}
                           </p>
                         </button>

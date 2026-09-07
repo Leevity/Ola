@@ -786,44 +786,119 @@
     },
     "items": {
       "agents": {
-        "api-designer": { "name": "API 设计师", "description": "设计稳定、清晰且可演进的 API 接口。" },
-        "architect-reviewer": { "name": "架构评审专家", "description": "分析系统架构、边界、依赖和长期演进风险。" },
-        "code-reviewer": { "name": "代码审查专家", "description": "审查代码质量、安全风险、可维护性和潜在缺陷。" },
+        "api-designer": {
+          "name": "API 设计师",
+          "description": "设计稳定、清晰且可演进的 API 接口。"
+        },
+        "architect-reviewer": {
+          "name": "架构评审专家",
+          "description": "分析系统架构、边界、依赖和长期演进风险。"
+        },
+        "code-reviewer": {
+          "name": "代码审查专家",
+          "description": "审查代码质量、安全风险、可维护性和潜在缺陷。"
+        },
         "debugger": { "name": "调试专家", "description": "定位问题根因，设计修复方案并验证结果。" },
-        "frontend-developer": { "name": "前端开发工程师", "description": "实现界面、交互、组件和前端体验优化。" },
-        "fullstack-developer": { "name": "全栈开发工程师", "description": "协同处理前端、后端、数据和接口的完整开发任务。" },
-        "performance-engineer": { "name": "性能工程师", "description": "分析性能瓶颈并制定可验证的优化方案。" },
-        "refactor-expert": { "name": "重构专家", "description": "在保持行为稳定的前提下改善代码结构和可维护性。" },
-        "security-auditor": { "name": "安全审计专家", "description": "检查代码、依赖和配置中的安全问题与攻击面。" },
-        "test-automator": { "name": "测试自动化工程师", "description": "设计、补充并运行自动化测试和回归验证。" },
-        "copywriter": { "name": "文案写作助手", "description": "撰写、改写和优化清晰有吸引力的内容。" },
-        "meeting-summarizer": { "name": "会议总结助手", "description": "提炼会议结论、行动项、负责人和截止时间。" },
-        "data-analyst": { "name": "数据分析师", "description": "整理数据、发现趋势并输出可执行的分析结论。" },
-        "translator": { "name": "翻译助手", "description": "在保持语气和上下文的前提下进行多语言翻译。" },
-        "researcher": { "name": "研究助手", "description": "搜索、核验和综合资料，形成结构化研究结果。" },
-        "document-producer": { "name": "文档产出助手", "description": "生成报告、方案、说明文档和办公产物。" },
-        "browser-operator": { "name": "浏览器操作助手", "description": "协助浏览网页、提取信息并完成经过确认的页面操作。" },
-        "project-coordinator": { "name": "项目协调助手", "description": "拆解任务、跟踪进度、整理依赖并推动协作。" },
-        "devops-engineer": { "name": "DevOps 工程师", "description": "处理构建、部署、环境、流水线和运行保障。" },
-        "release-engineer": { "name": "发布工程师", "description": "检查发布准备度、版本变更、构建产物和回滚风险。" },
-        "project-intelligence-analyst": { "name": "项目智能分析师", "description": "结合项目索引、Wiki 和 CodeGraph 分析代码库结构。" },
-        "cron-agent": { "name": "定时任务代理", "description": "由定时任务和后台自动化流程触发的运行时代理。" }
+        "frontend-developer": {
+          "name": "前端开发工程师",
+          "description": "实现界面、交互、组件和前端体验优化。"
+        },
+        "fullstack-developer": {
+          "name": "全栈开发工程师",
+          "description": "协同处理前端、后端、数据和接口的完整开发任务。"
+        },
+        "performance-engineer": {
+          "name": "性能工程师",
+          "description": "分析性能瓶颈并制定可验证的优化方案。"
+        },
+        "refactor-expert": {
+          "name": "重构专家",
+          "description": "在保持行为稳定的前提下改善代码结构和可维护性。"
+        },
+        "security-auditor": {
+          "name": "安全审计专家",
+          "description": "检查代码、依赖和配置中的安全问题与攻击面。"
+        },
+        "test-automator": {
+          "name": "测试自动化工程师",
+          "description": "设计、补充并运行自动化测试和回归验证。"
+        },
+        "copywriter": {
+          "name": "文案写作助手",
+          "description": "撰写、改写和优化清晰有吸引力的内容。"
+        },
+        "meeting-summarizer": {
+          "name": "会议总结助手",
+          "description": "提炼会议结论、行动项、负责人和截止时间。"
+        },
+        "data-analyst": {
+          "name": "数据分析师",
+          "description": "整理数据、发现趋势并输出可执行的分析结论。"
+        },
+        "translator": {
+          "name": "翻译助手",
+          "description": "在保持语气和上下文的前提下进行多语言翻译。"
+        },
+        "researcher": {
+          "name": "研究助手",
+          "description": "搜索、核验和综合资料，形成结构化研究结果。"
+        },
+        "document-producer": {
+          "name": "文档产出助手",
+          "description": "生成报告、方案、说明文档和办公产物。"
+        },
+        "browser-operator": {
+          "name": "浏览器操作助手",
+          "description": "协助浏览网页、提取信息并完成经过确认的页面操作。"
+        },
+        "project-coordinator": {
+          "name": "项目协调助手",
+          "description": "拆解任务、跟踪进度、整理依赖并推动协作。"
+        },
+        "devops-engineer": {
+          "name": "DevOps 工程师",
+          "description": "处理构建、部署、环境、流水线和运行保障。"
+        },
+        "release-engineer": {
+          "name": "发布工程师",
+          "description": "检查发布准备度、版本变更、构建产物和回滚风险。"
+        },
+        "project-intelligence-analyst": {
+          "name": "项目智能分析师",
+          "description": "结合项目索引、Wiki 和 CodeGraph 分析代码库结构。"
+        },
+        "cron-agent": {
+          "name": "定时任务代理",
+          "description": "由定时任务和后台自动化流程触发的运行时代理。"
+        }
       },
       "commands": {
         "agents": { "name": "管理 Agent", "description": "创建、查看和管理可供任务调用的 Agent。" },
-        "analyze-project": { "name": "分析项目", "description": "扫描项目结构、关键模块和技术边界。" },
+        "analyze-project": {
+          "name": "分析项目",
+          "description": "扫描项目结构、关键模块和技术边界。"
+        },
         "build": { "name": "构建项目", "description": "执行项目构建并整理构建结果和错误。" },
-        "codegraph": { "name": "查看 CodeGraph", "description": "分析项目文件、符号和代码关系图。" },
+        "codegraph": {
+          "name": "查看 CodeGraph",
+          "description": "分析项目文件、符号和代码关系图。"
+        },
         "commit": { "name": "提交代码", "description": "生成提交计划，确认后创建 Git 提交。" },
         "debug": { "name": "调试问题", "description": "定位 Bug、实施修复并进行验证。" },
-        "devops": { "name": "DevOps 操作", "description": "处理环境、流水线、部署和运行维护任务。" },
+        "devops": {
+          "name": "DevOps 操作",
+          "description": "处理环境、流水线、部署和运行维护任务。"
+        },
         "init": { "name": "初始化项目", "description": "分析项目并初始化工作区规则和上下文。" },
         "plan": { "name": "制定计划", "description": "澄清目标、拆分步骤并形成可执行计划。" },
         "release-check": { "name": "发布检查", "description": "检查测试、构建、版本和发布风险。" },
         "report": { "name": "生成报告", "description": "把资料和结论整理成结构化报告。" },
         "research": { "name": "资料研究", "description": "搜索和综合资料，输出有依据的研究结论。" },
         "review": { "name": "代码审查", "description": "检查代码缺陷、风险和可维护性问题。" },
-        "security-review": { "name": "安全审查", "description": "检查代码和配置中的安全漏洞与风险。" },
+        "security-review": {
+          "name": "安全审查",
+          "description": "检查代码和配置中的安全漏洞与风险。"
+        },
         "summarize": { "name": "内容总结", "description": "提炼长文本、记录或对话中的重点信息。" },
         "test": { "name": "运行测试", "description": "执行测试并整理失败原因和验证结果。" },
         "wiki": { "name": "生成项目 Wiki", "description": "生成人类可读的项目说明和结构化文档。" }

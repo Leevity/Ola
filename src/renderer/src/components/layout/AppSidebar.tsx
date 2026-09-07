@@ -478,14 +478,14 @@ export function AppSidebar(): React.JSX.Element {
                       {t(`sidebar.taskProfile.${profile}.title`, {
                         defaultValue: profile === 'work' ? '工作' : '编程'
                       })}
-                      {defaultTaskProfile === profile && <CheckCircle2 className="ml-auto size-4" />}
+                      {defaultTaskProfile === profile && (
+                        <CheckCircle2 className="ml-auto size-4" />
+                      )}
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {t(`sidebar.taskProfile.${profile}.desc`, {
                         defaultValue:
-                          profile === 'work'
-                            ? '日常工作、研究和办公'
-                            : '项目、代码、终端和 Git'
+                          profile === 'work' ? '日常工作、研究和办公' : '项目、代码、终端和 Git'
                       })}
                     </span>
                   </span>
@@ -856,24 +856,30 @@ export function AppSidebar(): React.JSX.Element {
                                 <ContextMenuSub>
                                   <ContextMenuSubTrigger>
                                     <ShieldCheck className="size-4" />
-                                    {t('sidebar.advancedRuntime', { defaultValue: 'Advanced runtime' })}
+                                    {t('sidebar.advancedRuntime', {
+                                      defaultValue: 'Advanced runtime'
+                                    })}
                                   </ContextMenuSubTrigger>
                                   <ContextMenuSubContent>
-                                {sessionModeOptions
-                                  .filter((mode) => !session.projectId || mode !== 'chat')
-                                  .map((m) => (
-                                    <ContextMenuItem
-                                      key={m}
-                                      disabled={session.mode === m}
-                                      onClick={() => {
-                                        updateSessionMode(session.id, m)
-                                        toast.success(t('sidebar_toast.switchedMode', { mode: m }))
-                                      }}
-                                    >
-                                      {modeIcons[m]}
-                                      <span className="capitalize">{t(`sidebar.mode.${m}`)}</span>
-                                    </ContextMenuItem>
-                                  ))}
+                                    {sessionModeOptions
+                                      .filter((mode) => !session.projectId || mode !== 'chat')
+                                      .map((m) => (
+                                        <ContextMenuItem
+                                          key={m}
+                                          disabled={session.mode === m}
+                                          onClick={() => {
+                                            updateSessionMode(session.id, m)
+                                            toast.success(
+                                              t('sidebar_toast.switchedMode', { mode: m })
+                                            )
+                                          }}
+                                        >
+                                          {modeIcons[m]}
+                                          <span className="capitalize">
+                                            {t(`sidebar.mode.${m}`)}
+                                          </span>
+                                        </ContextMenuItem>
+                                      ))}
                                   </ContextMenuSubContent>
                                 </ContextMenuSub>
                               </ContextMenuSubContent>

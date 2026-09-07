@@ -148,11 +148,7 @@ export function ProjectWikiPanel({
         >
           {t('wiki.rescan', { defaultValue: 'Re-scan' })}
         </Button>
-        <Button
-          variant="outline"
-          disabled={!document}
-          onClick={() => void exportMarkdown()}
-        >
+        <Button variant="outline" disabled={!document} onClick={() => void exportMarkdown()}>
           <Download className="mr-2 size-4" />
           {t('wiki.export', { defaultValue: 'Export Markdown' })}
         </Button>

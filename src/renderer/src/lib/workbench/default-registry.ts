@@ -1,9 +1,5 @@
 import { useUIStore } from '@renderer/stores/ui-store'
-import {
-  registerWorkbenchAction,
-  registerWorkbenchDrawer,
-  registerWorkbenchPane
-} from './registry'
+import { registerWorkbenchAction, registerWorkbenchDrawer, registerWorkbenchPane } from './registry'
 
 let initialized = false
 

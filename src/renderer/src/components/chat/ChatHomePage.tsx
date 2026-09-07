@@ -180,7 +180,8 @@ export function ChatHomePage(): React.JSX.Element {
       options?: SendMessageOptions
     ): Promise<void> => {
       const chatStore = useChatStore.getState()
-      const chatWorkingFolder = taskProfile === 'work' ? await ensureDefaultChatWorkingFolder() : undefined
+      const chatWorkingFolder =
+        taskProfile === 'work' ? await ensureDefaultChatWorkingFolder() : undefined
       const projectIdForSession =
         selectedProjectId && chatStore.projects.some((project) => project.id === selectedProjectId)
           ? selectedProjectId

@@ -50,7 +50,12 @@ export const selectSshTransfers = (
 export interface SshTransfersSlice {
   uploadTasks: Record<string, SshUploadTask>
   transferTasks: Record<string, SftpTransferTask>
-  startUpload: (args: { connectionId: string; remoteDir: string; localPath: string; kind?: 'file' | 'folder' }) => Promise<string | null>
+  startUpload: (args: {
+    connectionId: string
+    remoteDir: string
+    localPath: string
+    kind?: 'file' | 'folder'
+  }) => Promise<string | null>
   cancelUpload: (taskId: string) => Promise<void>
   clearUploadTask: (taskId: string) => void
   startTransfer: (args: SftpTransferRequest) => Promise<string | null>

@@ -123,7 +123,10 @@ export function sortToolDefinitionsForTaskProfile(
   }
   return toolDefs
     .map((definition, index) => ({ definition, index }))
-    .sort((left, right) => rank(left.definition.name) - rank(right.definition.name) || left.index - right.index)
+    .sort(
+      (left, right) =>
+        rank(left.definition.name) - rank(right.definition.name) || left.index - right.index
+    )
     .map(({ definition }) => definition)
 }
 
