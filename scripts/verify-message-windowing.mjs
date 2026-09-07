@@ -296,6 +296,22 @@ async function stopWorker(child) {
   })
 }
 
+async function removeTempDirectory(tempDir) {
+  let lastError = null
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    try {
+      await rm(tempDir, { recursive: true, force: true })
+      return
+    } catch (error) {
+      lastError = error
+      if (!['EBUSY', 'EPERM'].includes(error?.code) || attempt === 11) throw error
+      // SQLite/WAL handles on Windows can be released a few ticks after the worker process exits.
+      await new Promise((resolve) => setTimeout(resolve, 100 * (attempt + 1)))
+    }
+  }
+  throw lastError
+}
+
 async function readRequestDebugBody(client, debugInfo) {
   if (typeof debugInfo.body === 'string') return debugInfo.body
   assert(typeof debugInfo.bodyRef === 'string', 'request_debug omitted body and bodyRef')
@@ -569,7 +585,7 @@ async function main() {
   } finally {
     client?.close()
     await stopWorker(child)
-    await rm(tempDir, { recursive: true, force: true })
+    await removeTempDirectory(tempDir)
   }
 }
 
