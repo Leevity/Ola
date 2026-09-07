@@ -6,3 +6,4 @@ internal sealed record RuntimeJobRecord(
 internal sealed record RuntimeJobMutationResult(bool Accepted, bool Duplicate, RuntimeJobRecord? Job);
 internal sealed record RuntimeJobStateResult(bool Found, RuntimeJobRecord? Job);
 internal sealed record RuntimeJobEventRecord(string JobId, long Seq, string PayloadJson, bool Terminal, long CreatedAt);
+internal sealed record RuntimeJobReapResult(int Reaped, long CutoffAt);

@@ -45,6 +45,20 @@ internal static class RuntimeJobStore
         var result = new List<RuntimeJobEventRecord>(); while (reader.Read()) result.Add(new(reader.GetString(0), reader.GetInt64(1), reader.GetString(2), reader.GetInt32(3) != 0, reader.GetInt64(4))); return result;
     }
 
+    public static RuntimeJobReapResult ReapStale(JsonElement p)
+    {
+        var maxAgeMs = p.TryGetProperty("maxAgeMs", out var raw) && raw.TryGetInt64(out var parsed)
+            ? Math.Clamp(parsed, 60_000, 7L * 24 * 60 * 60 * 1000)
+            : 30L * 60 * 1000;
+        var now = Now();
+        var cutoff = now - maxAgeMs;
+        using var connection = DbConnectionFactory.OpenReadWriteCreate(DbConnectionFactory.ResolveDbPath(p));
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE runtime_jobs SET state='failed',error_code='stale_job',error_message='Execution host stopped reporting progress.',updated_at=$now,finished_at=COALESCE(finished_at,$now) WHERE state IN ('queued','running','cancelling') AND updated_at < $cutoff";
+        Add(command, "$now", now); Add(command, "$cutoff", cutoff);
+        return new RuntimeJobReapResult(command.ExecuteNonQuery(), cutoff);
+    }
+
     public static RuntimeJobMutationResult Submit(JsonElement p)
     {
         var jobId = Required(p, "jobId");

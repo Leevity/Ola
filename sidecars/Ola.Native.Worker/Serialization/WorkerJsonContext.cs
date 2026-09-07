@@ -17,6 +17,7 @@
 [JsonSerializable(typeof(RuntimeJobStateResult))]
 [JsonSerializable(typeof(RuntimeJobEventRecord))]
 [JsonSerializable(typeof(List<RuntimeJobEventRecord>), TypeInfoPropertyName = "ListRuntimeJobEventRecord")]
+[JsonSerializable(typeof(RuntimeJobReapResult))]
 [JsonSerializable(typeof(AgentRuntimeCapabilityResult))]
 [JsonSerializable(typeof(AgentRuntimeRunResult))]
 [JsonSerializable(typeof(AgentRuntimeCancelResult))]

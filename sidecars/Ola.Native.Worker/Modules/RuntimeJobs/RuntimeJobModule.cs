@@ -11,6 +11,7 @@ internal sealed class RuntimeJobModule : IWorkerModule
         context.Register("runtime/jobs-cancel", Cancel);
         context.Register("runtime/jobs-events", Events);
         context.Register("runtime/jobs-get", Get);
+        context.Register("runtime/jobs-reap-stale", ReapStale);
     }
     private static WorkerResponse Get(JsonElement p)
     {
@@ -28,4 +29,5 @@ internal sealed class RuntimeJobModule : IWorkerModule
         return WorkerResponse.Json(RuntimeJobStore.Cancel(id), WorkerJsonContext.Default.RuntimeJobRecord);
     }
     private static WorkerResponse Events(JsonElement p) => WorkerResponse.Json(RuntimeJobStore.ReplayEvents(p), WorkerJsonContext.Default.ListRuntimeJobEventRecord);
+    private static WorkerResponse ReapStale(JsonElement p) => WorkerResponse.Json(RuntimeJobStore.ReapStale(p), WorkerJsonContext.Default.RuntimeJobReapResult);
 }
