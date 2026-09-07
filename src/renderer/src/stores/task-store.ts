@@ -10,6 +10,16 @@ import {
 } from '../../../shared/messagepack/binary-ipc'
 import { useChatStore } from './chat-store'
 
+export type TaskStatus = 'pending' | 'in_progress' | 'in_review' | 'blocked' | 'completed'
+export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
+
+export interface TaskBoardMetadata {
+  priority?: TaskPriority
+  tags?: string[]
+  startAt?: number
+  dueAt?: number
+}
+
 export interface TaskItem {
   id: string
   sessionId?: string
@@ -17,7 +27,7 @@ export interface TaskItem {
   subject: string
   description: string
   activeForm?: string
-  status: 'pending' | 'in_progress' | 'completed'
+  status: TaskStatus
   owner?: string | null
   blocks: string[]
   blockedBy: string[]
@@ -63,7 +73,7 @@ function dbDeleteTasksBySession(sessionId: string): void {
   invokeMessagePackBinary(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, sessionId).catch(() => {})
 }
 
-interface TaskRow {
+export interface TaskRow {
   id: string
   session_id: string
   plan_id: string | null
@@ -80,7 +90,7 @@ interface TaskRow {
   updated_at: number
 }
 
-function rowToTask(row: TaskRow): TaskItem {
+export function taskRowToItem(row: TaskRow): TaskItem {
   return {
     id: row.id,
     sessionId: row.session_id,
@@ -88,7 +98,7 @@ function rowToTask(row: TaskRow): TaskItem {
     subject: row.subject,
     description: row.description,
     activeForm: row.active_form ?? undefined,
-    status: row.status as TaskItem['status'],
+    status: normalizeTaskStatus(row.status),
     owner: row.owner,
     blocks: JSON.parse(row.blocks || '[]'),
     blockedBy: JSON.parse(row.blocked_by || '[]'),
@@ -96,6 +106,37 @@ function rowToTask(row: TaskRow): TaskItem {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+function normalizeTaskStatus(status: string): TaskStatus {
+  return status === 'in_progress' || status === 'in_review' || status === 'blocked' || status === 'completed'
+    ? status
+    : 'pending'
+}
+
+export function readTaskBoardMetadata(metadata: Record<string, unknown> | undefined): TaskBoardMetadata {
+  const board = metadata?.board
+  if (!board || typeof board !== 'object' || Array.isArray(board)) return {}
+  const value = board as Record<string, unknown>
+  const priority = value.priority
+  const tags = Array.isArray(value.tags) ? value.tags.filter((tag): tag is string => typeof tag === 'string') : []
+  const startAt = typeof value.startAt === 'number' && Number.isFinite(value.startAt) ? value.startAt : undefined
+  const dueAt = typeof value.dueAt === 'number' && Number.isFinite(value.dueAt) ? value.dueAt : undefined
+  return {
+    ...(priority === 'low' || priority === 'medium' || priority === 'high' || priority === 'urgent'
+      ? { priority }
+      : {}),
+    ...(tags.length ? { tags } : {}),
+    ...(startAt ? { startAt } : {}),
+    ...(dueAt ? { dueAt } : {})
+  }
+}
+
+export function withTaskBoardMetadata(
+  metadata: Record<string, unknown> | undefined,
+  patch: TaskBoardMetadata
+): Record<string, unknown> {
+  return { ...metadata, board: { ...readTaskBoardMetadata(metadata), ...patch } }
 }
 
 function buildDbPatch(
@@ -144,6 +185,8 @@ interface TaskStore {
   getProgress: () => { total: number; completed: number; percentage: number }
   /** Clear all tasks in memory (does not touch DB) */
   clearTasks: () => void
+  /** Hydrate cached session projections without creating a second task source. */
+  cacheTasks: (tasks: TaskItem[]) => void
   releaseDormantSessionTasks: (residentSessionIds: string[]) => void
   /** Delete all tasks for a session from DB and memory */
   deleteSessionTasks: (sessionId: string) => void
@@ -180,7 +223,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         DB_TASKS_LIST_BY_SESSION_MSGPACK_CHANNEL,
         sessionId
       )
-      const tasks = rows.map(rowToTask)
+      const tasks = rows.map(taskRowToItem)
       set((state) => {
         const nextTasksBySession = { ...state.tasksBySession, [sessionId]: tasks }
         // If user switched again before this async request resolved,
@@ -370,6 +413,20 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   },
 
   clearTasks: () => set({ tasks: [], todos: [], currentSessionId: null }),
+
+  cacheTasks: (tasks) => {
+    set((state) => {
+      const tasksBySession = { ...state.tasksBySession }
+      for (const task of tasks) {
+        if (!task.sessionId) continue
+        const current = tasksBySession[task.sessionId] ?? []
+        const index = current.findIndex((item) => item.id === task.id)
+        tasksBySession[task.sessionId] =
+          index === -1 ? [...current, task] : current.map((item, i) => (i === index ? task : item))
+      }
+      return { tasksBySession }
+    })
+  },
 
   releaseDormantSessionTasks: (residentSessionIds) => {
     const residentSet = new Set(residentSessionIds)

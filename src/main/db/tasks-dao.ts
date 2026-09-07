@@ -41,6 +41,10 @@ export function listTasksBySession(sessionId: string): Promise<TaskRow[]> {
   return getNativeWorker().request<TaskRow[]>('db/tasks-list-by-session', { sessionId }, 120_000)
 }
 
+export function listAllTasks(): Promise<TaskRow[]> {
+  return getNativeWorker().request<TaskRow[]>('db/tasks-list-all', {}, 120_000)
+}
+
 export async function getTask(id: string): Promise<TaskRow | undefined> {
   const result = await getNativeWorker().request<TaskFindResult>('db/tasks-get', { id }, 120_000)
   if (!result.success) {

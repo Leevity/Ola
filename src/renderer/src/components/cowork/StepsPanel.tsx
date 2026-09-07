@@ -16,7 +16,7 @@ import { useTranslation } from 'react-i18next'
 import { Badge } from '@renderer/components/ui/badge'
 import { Separator } from '@renderer/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
-import { useTaskStore, type TaskItem } from '@renderer/stores/task-store'
+import { useTaskStore, type TaskItem, type TaskStatus } from '@renderer/stores/task-store'
 import { useTeamStore } from '@renderer/stores/team-store'
 import { useAgentStore, type AgentRunChangeSet } from '@renderer/stores/agent-store'
 import { useChatStore } from '@renderer/stores/chat-store'
@@ -70,9 +70,7 @@ interface InlineChangeSummary {
   deleted: number | null
 }
 
-function buildProgress(
-  items: Array<{ status: 'pending' | 'in_progress' | 'completed' }>
-): ProgressSummary {
+function buildProgress(items: Array<{ status: TaskStatus }>): ProgressSummary {
   const total = items.length
   const completed = items.filter((item) => item.status === 'completed').length
   return {

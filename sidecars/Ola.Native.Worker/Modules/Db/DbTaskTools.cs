@@ -38,6 +38,21 @@ internal static class DbTaskTools
         }
     }
 
+    public static WorkerResponse ListAll(JsonElement parameters)
+    {
+        try
+        {
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            using var command = connection.CreateCommand();
+            command.CommandText = $"{TaskSelectSql} ORDER BY updated_at DESC, sort_order ASC";
+            return WorkerResponse.Json(ReadTaskRows(command), WorkerJsonContext.Default.ListTaskRow);
+        }
+        catch (Exception ex)
+        {
+            return WorkerResponse.Error(ex.Message);
+        }
+    }
+
     public static WorkerResponse Get(JsonElement parameters)
     {
         try
