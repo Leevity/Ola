@@ -1513,6 +1513,14 @@ if (gotSingleInstanceLock) {
       await runLoggedStartupStepAsync('native_worker_startup', () =>
         getNativeWorker().ensureStarted()
       )
+      await runLoggedStartupStepAsync('native_worker_reap_stale_jobs', async () => {
+        const result = await getNativeWorker().request<{ reaped?: number }>('runtime/jobs-reap-stale', {
+          maxAgeMs: 30 * 60 * 1000
+        })
+        if ((result.reaped ?? 0) > 0) {
+          console.warn(`[NativeWorker] marked ${result.reaped} stale runtime job(s) as failed`)
+        }
+      })
       console.log('[NativeWorker] startup ready')
     } catch (error) {
       console.warn(
