@@ -18,6 +18,7 @@ import { ConversationGuideDialog } from '@renderer/components/chat/ConversationG
 import { SettingsPage } from '@renderer/components/settings/SettingsPage'
 import { AccountAuthPage } from '@renderer/components/account/AccountAuthPage'
 import { CommandPalette } from './CommandPalette'
+import { initializeWorkbenchRegistry } from '@renderer/lib/workbench'
 import { SessionConversationPane } from './SessionConversationPane'
 import { WorkingFolderSheet } from './WorkingFolderSheet'
 import { ErrorBoundary } from '@renderer/components/error-boundary'
@@ -87,6 +88,8 @@ function LazyPageFallback(): React.JSX.Element {
     </div>
   )
 }
+
+initializeWorkbenchRegistry()
 
 interface LayoutUpdateInfo {
   newVersion: string
