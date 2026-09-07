@@ -62,8 +62,11 @@ for (const folderName of skillNames) {
 const scriptFiles = await collectFiles(root)
 const pythonFiles = scriptFiles.filter((file) => file.endsWith('.py'))
 if (pythonFiles.length > 0) {
+  // Windows commonly exposes the supported interpreter as `python`; `python3` is only a
+  // Store alias on many developer machines and exits before parsing any bundled script.
+  const pythonCommand = process.platform === 'win32' ? 'python' : 'python3'
   const syntaxCheck = spawnSync(
-    'python3',
+    pythonCommand,
     [
       '-c',
       'import ast,pathlib,sys; [ast.parse(pathlib.Path(p).read_text(encoding="utf-8"), filename=p) for p in sys.argv[1:]]',
