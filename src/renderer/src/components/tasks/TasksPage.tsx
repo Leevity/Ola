@@ -53,6 +53,7 @@ import {
   startOfLocalDay
 } from './task-schedule'
 import { RunTranscriptThread } from './RunTranscriptThread'
+import { TaskBoardPage } from './TaskBoardPage'
 
 type StatusFilter =
   | 'all'
@@ -373,6 +374,7 @@ export function TasksPage(): React.JSX.Element {
   const [editorMode, setEditorMode] = React.useState<'create' | 'edit'>('create')
   const [editorForm, setEditorForm] = React.useState<JobEditorFormState>(() => buildEditorState())
   const [submitting, setSubmitting] = React.useState(false)
+  const [surface, setSurface] = React.useState<'schedule' | 'board'>('schedule')
 
   const selectedDate = React.useMemo(() => {
     const [year, month, day] = selectedDateKey.split('-').map((value) => Number.parseInt(value, 10))
@@ -825,6 +827,10 @@ export function TasksPage(): React.JSX.Element {
   )
   const todayKey = dateKeyFromDate(new Date())
 
+  if (surface === 'board') {
+    return <TaskBoardPage onBack={() => setSurface('schedule')} />
+  }
+
   return (
     <div className="grid h-full min-w-0 grid-cols-[minmax(340px,380px)_minmax(0,1fr)] gap-4 bg-muted/10 p-4">
       <div className="grid min-w-0 min-h-0 grid-rows-[360px_minmax(0,1fr)] gap-4">
@@ -840,10 +846,15 @@ export function TasksPage(): React.JSX.Element {
                 })}
               </div>
             </div>
-            <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreateDialog}>
-              <Plus className="mr-1 size-3.5" />
-              {t('tasksPage.newButton', { defaultValue: 'New' })}
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setSurface('board')}>
+                {t('tasksPage.boardButton', { defaultValue: 'Board' })}
+              </Button>
+              <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreateDialog}>
+                <Plus className="mr-1 size-3.5" />
+                {t('tasksPage.newButton', { defaultValue: 'New' })}
+              </Button>
+            </div>
           </div>
           <div className="flex items-center justify-between px-4 pb-2">
             <div className="flex items-center gap-1">
