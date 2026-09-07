@@ -26,7 +26,17 @@ const readHandler: ToolHandler = {
     }
   },
   execute: async () => nativeOnlyResult('Read'),
-  requiresApproval: () => false
+  requiresApproval: () => false,
+  capability: {
+    readOnly: true,
+    sideEffectFree: true,
+    parallelizable: true,
+    riskLevel: 'low',
+    requiresApproval: false,
+    source: 'core',
+    owner: 'filesystem',
+    projectScoped: true
+  }
 }
 
 const writeHandler: ToolHandler = {
@@ -145,7 +155,17 @@ const lsHandler: ToolHandler = {
     }
   },
   execute: async () => nativeOnlyResult('LS'),
-  requiresApproval: () => false
+  requiresApproval: () => false,
+  capability: {
+    readOnly: true,
+    sideEffectFree: true,
+    parallelizable: true,
+    riskLevel: 'low',
+    requiresApproval: false,
+    source: 'core',
+    owner: 'filesystem',
+    projectScoped: true
+  }
 }
 
 export function registerFsTools(): void {
