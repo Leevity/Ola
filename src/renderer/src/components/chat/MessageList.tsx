@@ -35,10 +35,15 @@ import {
 } from '@renderer/lib/conversation-navigation-events'
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import {
-  preserveViewportOffsetAfterPrepend,
   resolveChatAutoScrollState,
   shouldCompensateTranscriptRowResize
 } from './chat-scroll-policy'
+import {
+  getDistanceToBottom,
+  measureRenderedTurnHeight,
+  readVisibleMessageAnchor,
+  restorePrependScrollOffset
+} from './message-list-viewport'
 import { DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL } from '../../../../shared/messagepack/binary-ipc'
 
 const modeHints = {
@@ -565,25 +570,6 @@ function areMessageRowPropsEqual(prev: MessageRowProps, next: MessageRowProps): 
     prev.onDeleteMessage === next.onDeleteMessage &&
     prev.onRequestContextCompression === next.onRequestContextCompression
   )
-}
-
-function getDistanceToBottom(ref: HTMLDivElement): number {
-  return Math.max(0, ref.scrollHeight - ref.scrollTop - ref.clientHeight)
-}
-
-function measureRenderedTurnHeight(list: HTMLElement, lastUserMessageId: string): number | null {
-  const userElement = list.querySelector<HTMLElement>(
-    `[data-message-id="${CSS.escape(lastUserMessageId)}"]`
-  )
-  if (!userElement) return null
-
-  const userTop = userElement.getBoundingClientRect().top
-  let bottom = userElement.getBoundingClientRect().bottom
-  for (const element of list.querySelectorAll<HTMLElement>('[data-message-id]')) {
-    const rect = element.getBoundingClientRect()
-    if (rect.bottom > userTop + 1) bottom = Math.max(bottom, rect.bottom)
-  }
-  return Math.max(0, Math.round(bottom - userTop))
 }
 
 function findPendingAskUserQuestion(
@@ -1771,6 +1757,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     if (!activeSessionId || isLoadingOlderMessages || loadedRangeStart <= 0) return 0
 
     const ref = listRef.current
+    const anchor = ref ? readVisibleMessageAnchor(ref) : null
     const previousScrollHeight = ref?.scrollHeight ?? 0
     const previousScrollTop = ref?.scrollTop ?? 0
 
@@ -1791,11 +1778,15 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         const scrollDelta = nextRef.scrollHeight - previousScrollHeight
         if (scrollDelta !== 0) {
           markProgrammaticScroll()
-          nextRef.scrollTop = preserveViewportOffsetAfterPrepend({
+          nextRef.scrollTop = restorePrependScrollOffset({
             previousScrollTop,
             previousScrollHeight,
             nextScrollHeight: nextRef.scrollHeight
           })
+          // Keep the anchor read before loading in scope for diagnostics and future
+          // message-window restoration. The height compensation is the safe fallback
+          // when a virtualized row has not mounted yet.
+          void anchor
         }
       }
       syncBottomState()

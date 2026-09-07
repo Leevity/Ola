@@ -33,7 +33,17 @@ const globHandler: ToolHandler = {
     }
   },
   execute: async () => nativeOnlyResult('Glob'),
-  requiresApproval: () => false
+  requiresApproval: () => false,
+  capability: {
+    readOnly: true,
+    sideEffectFree: true,
+    parallelizable: true,
+    riskLevel: 'low',
+    requiresApproval: false,
+    source: 'core',
+    owner: 'search',
+    projectScoped: true
+  }
 }
 
 const grepHandler: ToolHandler = {
@@ -177,7 +187,17 @@ const grepHandler: ToolHandler = {
     }
   },
   execute: async () => nativeOnlyResult('Grep'),
-  requiresApproval: () => false
+  requiresApproval: () => false,
+  capability: {
+    readOnly: true,
+    sideEffectFree: true,
+    parallelizable: true,
+    riskLevel: 'low',
+    requiresApproval: false,
+    source: 'core',
+    owner: 'search',
+    projectScoped: true
+  }
 }
 
 export function registerSearchTools(): void {

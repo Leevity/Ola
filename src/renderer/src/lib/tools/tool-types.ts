@@ -66,9 +66,37 @@ export interface ToolHandler {
 
 export interface ToolCapabilityMeta {
   readOnly: boolean
+  /** Does not mutate local state, remote state, or an external integration. */
+  sideEffectFree?: boolean
+  /** May be grouped with adjacent compatible calls by the native runtime. */
+  parallelizable?: boolean
   riskLevel: 'low' | 'medium' | 'high'
   requiresApproval: boolean
   source: 'core' | 'plugin' | 'extension' | 'mcp' | 'channel'
   owner: string
   projectScoped: boolean
+}
+
+export interface ResolvedToolExecutionCapabilities {
+  readOnly: boolean
+  sideEffectFree: boolean
+  parallelizable: boolean
+}
+
+/**
+ * Unknown tools are deliberately conservative. Dynamic MCP, extension and channel
+ * tools never become concurrent merely because their names look like read operations.
+ */
+export function resolveToolExecutionCapabilities(
+  capability?: ToolCapabilityMeta
+): ResolvedToolExecutionCapabilities {
+  return {
+    readOnly: capability?.readOnly === true,
+    sideEffectFree: capability?.sideEffectFree === true,
+    parallelizable:
+      capability?.readOnly === true &&
+      capability?.sideEffectFree === true &&
+      capability?.parallelizable === true &&
+      capability.requiresApproval !== true
+  }
 }
