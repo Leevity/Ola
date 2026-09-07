@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useSyncExternalStore } from 'react'
 import {
   MessageSquare,
   CircleHelp,
@@ -39,6 +39,7 @@ import { exportSessionMarkdownFromDb } from '@renderer/lib/utils/export-chat'
 import { openSessionOrFocusDetached } from '@renderer/lib/session-window'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
+import { getWorkbenchActionsSnapshot, subscribeWorkbenchRegistry } from '@renderer/lib/workbench'
 
 const MODEL_PRESETS: Record<ProviderType, string[]> = {
   'seedance-video': [],
@@ -81,6 +82,11 @@ const MODEL_PRESETS: Record<ProviderType, string[]> = {
 export function CommandPalette(): React.JSX.Element {
   const { t } = useTranslation('layout')
   const [open, setOpen] = useState(false)
+  const workbenchActions = useSyncExternalStore(
+    subscribeWorkbenchRegistry,
+    getWorkbenchActionsSnapshot,
+    getWorkbenchActionsSnapshot
+  )
 
   const sessions = useChatStore((s) => s.sessions)
   const activeSessionId = useChatStore((s) => s.activeSessionId)
@@ -159,6 +165,12 @@ export function CommandPalette(): React.JSX.Element {
 
         {/* Quick Actions */}
         <CommandGroup heading={t('commandPalette.actions')}>
+          {workbenchActions.map((action) => (
+            <CommandItem key={action.id} keywords={action.keywords} onSelect={() => runAndClose(() => void action.run())}>
+              <Sparkles className="size-4" />
+              <span>{action.title}</span>
+            </CommandItem>
+          ))}
           <CommandItem
             onSelect={() =>
               runAndClose(() => {
