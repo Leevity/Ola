@@ -924,11 +924,62 @@ internal static class OpenAIChatRuntime
     {
         var toolResults = new List<AgentRuntimeToolResult>(toolCalls.Count);
         var permissionPolicy = AgentRuntimePermissionPolicy.Resolve(parameters);
-        foreach (var originalCall in toolCalls)
+        var index = 0;
+        while (index < toolCalls.Count)
         {
-            var hookResult = await RunPreToolHookAsync(parameters, originalCall, state, context);
-            var call = originalCall with { Input = hookResult.Input };
-            var nativeTool = AgentRuntimeNativeToolExecutor.CanExecute(call.Name, parameters);
+            var originalCall = toolCalls[index];
+            if (!CanRunReadOnlyToolsInParallel(originalCall, parameters, permissionPolicy))
+            {
+                toolResults.Add(await ExecuteToolCallAsync(
+                    parameters, originalCall, state, context, permissionPolicy));
+                index++;
+                continue;
+            }
+
+            var batch = new List<AgentRuntimeNativeToolCall>();
+            while (index < toolCalls.Count &&
+                CanRunReadOnlyToolsInParallel(toolCalls[index], parameters, permissionPolicy))
+            {
+                batch.Add(toolCalls[index]);
+                index++;
+            }
+
+            // Keep the result sequence stable for the next provider turn even though
+            // card completion events naturally arrive in whichever order finishes first.
+            var results = await Task.WhenAll(batch.Select(call => ExecuteToolCallAsync(
+                parameters, call, state, context, permissionPolicy)));
+            toolResults.AddRange(results);
+        }
+
+        return toolResults;
+    }
+
+    private static bool CanRunReadOnlyToolsInParallel(
+        AgentRuntimeNativeToolCall call,
+        JsonElement parameters,
+        AgentRuntimePermissionPolicy permissionPolicy)
+    {
+        if (JsonHelpers.GetBool(parameters, "forceApproval", false) ||
+            !AgentRuntimeNativeToolExecutor.CanExecute(call.Name, parameters) ||
+            !AgentRuntimeNativeToolExecutor.IsReadOnlyParallelizable(call.Name, parameters))
+        {
+            return false;
+        }
+
+        return !AgentRuntimeNativeToolExecutor.RequiresApproval(call.Name, call.Input, parameters) &&
+            permissionPolicy.EvaluateDenyReason(call.Name, call.Input) is null;
+    }
+
+    private static async Task<AgentRuntimeToolResult> ExecuteToolCallAsync(
+        JsonElement parameters,
+        AgentRuntimeNativeToolCall originalCall,
+        AgentRuntimeTools.AgentRuntimeRunState state,
+        WorkerRequestContext context,
+        AgentRuntimePermissionPolicy permissionPolicy)
+    {
+        var hookResult = await RunPreToolHookAsync(parameters, originalCall, state, context);
+        var call = originalCall with { Input = hookResult.Input };
+        var nativeTool = AgentRuntimeNativeToolExecutor.CanExecute(call.Name, parameters);
             WorkerLog.Debug(
                 $"agent tool dispatch runId={state.RunId} tool={call.Name} id={call.Id} " +
                 $"executionPath={(nativeTool ? "native-aot" : "native-missing")}");
@@ -978,8 +1029,7 @@ internal static class OpenAIChatRuntime
                             requiresApproval,
                             rejectedAt,
                             rejectedAt)));
-                toolResults.Add(new AgentRuntimeToolResult(call.Id, rejectedContent, true));
-                continue;
+                return new AgentRuntimeToolResult(call.Id, rejectedContent, true);
             }
 
             if (requiresApproval && hookResult.PermissionDecision != "allow")
@@ -1009,8 +1059,7 @@ internal static class OpenAIChatRuntime
                                 true,
                                 deniedAt,
                                 deniedAt)));
-                    toolResults.Add(new AgentRuntimeToolResult(call.Id, deniedContent, true));
-                    continue;
+                    return new AgentRuntimeToolResult(call.Id, deniedContent, true);
                 }
             }
 
@@ -1066,13 +1115,10 @@ internal static class OpenAIChatRuntime
                         requiresApproval,
                         startedAt,
                         completedAt)));
-            toolResults.Add(new AgentRuntimeToolResult(
+            return new AgentRuntimeToolResult(
                 call.Id,
                 boundedContent,
-                result.IsError ? true : null));
-        }
-
-        return toolResults;
+                result.IsError ? true : null);
     }
 
     private sealed record PreToolHookResult(

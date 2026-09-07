@@ -302,6 +302,22 @@ internal static class AgentRuntimeNativeToolExecutor
         };
     }
 
+    /// <summary>
+    /// This is intentionally a Worker-owned allow list. Renderer metadata is useful for
+    /// presentation, but it must never grant concurrent execution to a capability the
+    /// Worker cannot independently prove is side-effect free.
+    /// </summary>
+    public static bool IsReadOnlyParallelizable(string toolName, JsonElement parameters)
+    {
+        if (!string.IsNullOrWhiteSpace(JsonHelpers.GetString(parameters, "pluginId")) ||
+            AgentRuntimeSshToolExecutor.ShouldRoute(parameters))
+        {
+            return false;
+        }
+
+        return toolName is "Read" or "LS" or "Glob" or "Grep";
+    }
+
     public static async Task<RendererToolResult> ExecuteAsync(
         NativeToolCallView call,
         JsonElement parameters,
