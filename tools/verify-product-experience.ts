@@ -16,6 +16,8 @@ const [
   capabilityCenter,
   workspaceSidebar,
   remotePage,
+  app,
+  mainIndex,
   themePanel
 ] = await Promise.all([
   read('src/renderer/src/stores/ui-store.ts'),
@@ -27,6 +29,8 @@ const [
   read('src/renderer/src/components/settings/CapabilityCenterPanel.tsx'),
   read('src/renderer/src/components/layout/WorkspaceSidebar.tsx'),
   read('src/renderer/src/components/remote/RemotePage.tsx'),
+  read('src/renderer/src/App.tsx'),
+  read('src/main/index.ts'),
   read('src/renderer/src/components/settings/GlobalThemePanel.tsx')
 ])
 
@@ -36,19 +40,16 @@ assert(
   'App mode migration to Execute is incomplete'
 )
 assert(
-  uiStore.includes('remoteDialogOpen') && uiStore.includes('openRemoteDialog'),
-  'remote dialog state is missing'
-)
-assert(
-  workspaceSidebar.includes("openRemoteDialog('ssh')") &&
-    layout.includes('open={remoteDialogOpen}') &&
-    layout.includes('<RemotePage') &&
-    layout.includes('onRequestClose={closeRemoteDialog}') &&
-    layout.includes('onToggleMaximize') &&
-    layout.includes('startRemoteDialogDrag') &&
-    remotePage.includes('closeWorkspace') &&
-    remotePage.includes('onRequestClose'),
-  'remote control does not open as a standalone closable dialog'
+  workspaceSidebar.includes('IPC.SSH_WINDOW_OPEN') &&
+    !workspaceSidebar.includes('openRemoteDialog') &&
+    (workspaceSidebar.match(/navRail\.remote/g) ?? []).length === 1 &&
+    !layout.includes('<RemotePage') &&
+    !layout.includes('remoteDialogOpen') &&
+    app.includes('<RemotePage standalone />') &&
+    mainIndex.includes("registerMessagePackHandler<void>('ssh-window:open'") &&
+    mainIndex.includes('showSshWindow()') &&
+    remotePage.includes("ipcClient.invoke('window:close')"),
+  'remote control must use the dedicated native window without an embedded duplicate'
 )
 assert(themePanel.includes('themePreset.remoteHint'), 'remote workspace palette preview is missing')
 assert(

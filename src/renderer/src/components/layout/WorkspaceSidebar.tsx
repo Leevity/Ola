@@ -424,8 +424,6 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const skillsPageOpen = useUIStore((state) => state.skillsPageOpen)
   const soulsPageOpen = useUIStore((state) => state.soulsPageOpen)
   const syncPageOpen = useUIStore((state) => state.syncPageOpen)
-  const remotePageOpen = useUIStore((state) => state.remotePageOpen)
-  const remoteDialogOpen = useUIStore((state) => state.remoteDialogOpen)
   const resourcesPageOpen = useUIStore((state) => state.resourcesPageOpen)
   const drawPageOpen = useUIStore((state) => state.drawPageOpen)
   const translatePageOpen = useUIStore((state) => state.translatePageOpen)
@@ -579,18 +577,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
     !skillsPageOpen &&
     !soulsPageOpen &&
     !syncPageOpen &&
-    !remotePageOpen &&
     !resourcesPageOpen &&
     !drawPageOpen &&
     !translatePageOpen &&
     !tasksPageOpen
   const featureMenuActive =
-    resourcesPageOpen ||
-    skillsPageOpen ||
-    soulsPageOpen ||
-    syncPageOpen ||
-    remotePageOpen ||
-    drawPageOpen
+    resourcesPageOpen || skillsPageOpen || soulsPageOpen || syncPageOpen || drawPageOpen
   const sessionsByProject = useMemo(() => {
     const next = new Map<string, SessionListItem[]>()
     for (const session of sessions) {
@@ -668,6 +660,10 @@ export function WorkspaceSidebar(): React.JSX.Element {
         bubbles: true
       })
     )
+  }, [])
+
+  const openRemoteWindow = useCallback(() => {
+    void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
   }, [])
 
   const openChatHome = useCallback(() => {
@@ -1094,8 +1090,8 @@ export function WorkspaceSidebar(): React.JSX.Element {
       key: 'remote',
       label: t('navRail.remote', { defaultValue: '远控' }),
       icon: <Server className="size-4 shrink-0" />,
-      active: remotePageOpen || remoteDialogOpen,
-      onClick: () => useUIStore.getState().openRemoteDialog('ssh')
+      active: false,
+      onClick: openRemoteWindow
     }
   ]
 
@@ -1531,13 +1527,6 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 >
                   <CloudSync className="size-4" />
                   <span>{t('navRail.sync')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => useUIStore.getState().openRemoteDialog('ssh')}
-                  className={cn(remoteDialogOpen && 'bg-accent text-accent-foreground')}
-                >
-                  <Server className="size-4" />
-                  <span>{t('navRail.remote', { defaultValue: '远控' })}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

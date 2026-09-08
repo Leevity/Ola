@@ -79,8 +79,8 @@ assert(
   'remote control entry is missing from the active sidebar'
 )
 assert(
-  workspaceSidebar.includes("openRemotePage('ssh')"),
-  'remote control entry does not open the remote page'
+  workspaceSidebar.includes('IPC.SSH_WINDOW_OPEN'),
+  'remote control entry does not open the dedicated window'
 )
 assert(
   workspaceSidebar.indexOf('sidebar.taskProfileSwitcher') <

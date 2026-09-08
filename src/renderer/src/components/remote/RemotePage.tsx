@@ -47,6 +47,7 @@ import {
 } from '@renderer/lib/theme-presets'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { SshPage } from '@renderer/components/ssh/SshPage'
 import { IronRdpViewer } from './IronRdpViewer'
 import { NoVncViewer } from './NoVncViewer'
@@ -118,7 +119,6 @@ export function RemotePage({
   const isMac = /Mac/.test(navigator.userAgent)
   const theme = useSettingsStore((state) => state.theme)
   const sshTerminalThemePreset = useSettingsStore((state) => state.sshTerminalThemePreset)
-  const closeRemotePage = useUIStore((state) => state.closeRemotePage)
   const resolvedThemeMode = resolveAppThemeMode(theme === 'system' ? resolvedTheme : theme)
   const remotePalette = useMemo(
     () => getSshChromePalette(sshTerminalThemePreset, resolvedThemeMode),
@@ -142,7 +142,7 @@ export function RemotePage({
   const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>(() => [
     { id: 'workspace-initial', kind: section, title: '' }
   ])
-  const handleRequestClose = onRequestClose ?? closeRemotePage
+  const handleRequestClose = onRequestClose ?? (() => void ipcClient.invoke('window:close'))
   const [activeSurface, setActiveSurface] = useState<string>('workspace:workspace-initial')
   const sshTabs = useSshStore((state) => state.openTabs)
   const sshActiveTabId = useSshStore((state) => state.activeTabId)
