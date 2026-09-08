@@ -58,11 +58,6 @@ const ResourcesPage = lazy(async () => {
   return { default: mod.ResourcesPage }
 })
 
-const RemotePage = lazy(async () => {
-  const mod = await import('@renderer/components/remote/RemotePage')
-  return { default: mod.RemotePage }
-})
-
 const TranslatePage = lazy(async () => {
   const mod = await import('@renderer/components/translate/TranslatePage')
   return { default: mod.TranslatePage }
@@ -106,7 +101,6 @@ interface LayoutProps {
 export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.JSX.Element {
   const { t } = useTranslation('layout')
   const mode = useUIStore((s) => s.mode)
-  const remoteDialogOpen = useUIStore((s) => s.remoteDialogOpen)
   const setMode = useUIStore((s) => s.setMode)
   const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen)
   const leftSidebarWidth = useUIStore((s) => s.leftSidebarWidth)
@@ -164,56 +158,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === 'undefined' ? 1440 : window.innerWidth
   )
-  const [remoteDialogMaximized, setRemoteDialogMaximized] = useState(false)
-  const [remoteDialogPosition, setRemoteDialogPosition] = useState({ x: 0, y: 0 })
-  const remoteDialogDragRef = useRef<
-    { startX: number; startY: number; originX: number; originY: number } | undefined
-  >(undefined)
   const autoCollapsedSidebarForCrowdingRef = useRef(false)
-
-  const startRemoteDialogDrag = useCallback(
-    (event: React.PointerEvent<HTMLElement>): void => {
-      if (remoteDialogMaximized || event.button !== 0) return
-      event.preventDefault()
-      remoteDialogDragRef.current = {
-        startX: event.clientX,
-        startY: event.clientY,
-        originX: remoteDialogPosition.x,
-        originY: remoteDialogPosition.y
-      }
-    },
-    [remoteDialogMaximized, remoteDialogPosition]
-  )
-
-  useEffect(() => {
-    const handlePointerMove = (event: PointerEvent): void => {
-      const drag = remoteDialogDragRef.current
-      if (!drag) return
-      setRemoteDialogPosition({
-        x: drag.originX + event.clientX - drag.startX,
-        y: drag.originY + event.clientY - drag.startY
-      })
-    }
-    const stopRemoteDialogDrag = (): void => {
-      remoteDialogDragRef.current = undefined
-    }
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', stopRemoteDialogDrag)
-    window.addEventListener('pointercancel', stopRemoteDialogDrag)
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', stopRemoteDialogDrag)
-      window.removeEventListener('pointercancel', stopRemoteDialogDrag)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!remoteDialogOpen) {
-      setRemoteDialogMaximized(false)
-      setRemoteDialogPosition({ x: 0, y: 0 })
-      remoteDialogDragRef.current = undefined
-    }
-  }, [remoteDialogOpen])
 
   const runningSubAgentNamesSig = useAgentStore((s) => s.runningSubAgentNamesSig)
   const runningSubAgentCount = runningSubAgentNamesSig
@@ -361,8 +306,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const skillsPageOpen = activeSurface === 'capabilities'
   const soulsPageOpen = activeSurface === 'personalization'
   const syncPageOpen = activeSurface === 'data'
-  const remotePageOpen = activeSurface === 'remote'
-  const closeRemoteDialog = useUIStore((s) => s.closeRemoteDialog)
   const resourcesPageOpen = activeSurface === 'resources'
   const drawPageOpen = activeSurface === 'draw'
   const translatePageOpen = activeSurface === 'translate'
@@ -374,9 +317,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     }
     if (resourcesPageOpen) {
       return { title: t('navRail.resources', { defaultValue: 'Resources' }), subtitle: null }
-    }
-    if (remotePageOpen) {
-      return { title: t('navRail.remote', { defaultValue: 'Remote' }), subtitle: null }
     }
     if (skillsPageOpen) {
       return { title: t('navRail.skills', { defaultValue: 'Tools' }), subtitle: null }
@@ -442,7 +382,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     chatView,
     drawPageOpen,
     mode,
-    remotePageOpen,
     resourcesPageOpen,
     settingsPageOpen,
     skillsPageOpen,
@@ -785,15 +724,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
                   <ResourcesPage />
                 </Suspense>
               </PageTransition>
-            ) : remotePageOpen ? (
-              <PageTransition
-                key="remote-page"
-                className="flex-1 min-w-0 bg-background overflow-hidden"
-              >
-                <Suspense fallback={<LazyPageFallback />}>
-                  <RemotePage />
-                </Suspense>
-              </PageTransition>
             ) : skillsPageOpen ? (
               <PageTransition
                 key="skills-page"
@@ -944,45 +874,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   return (
     <TooltipProvider delayDuration={0}>
       {mainContent}
-
-      <Dialog
-        open={remoteDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) closeRemoteDialog()
-        }}
-      >
-        <DialogContent
-          showCloseButton={false}
-          className={`overflow-hidden border-0 bg-transparent p-0 shadow-2xl sm:max-w-none ${
-            remoteDialogMaximized
-              ? 'left-0 top-0 h-screen w-screen max-w-none translate-x-0 translate-y-0 rounded-none'
-              : 'h-[min(900px,calc(100vh-4rem))] w-[min(1400px,calc(100vw-2rem))] max-w-none'
-          }`}
-          style={
-            remoteDialogMaximized
-              ? undefined
-              : {
-                  transform: `translate(calc(-50% + ${remoteDialogPosition.x}px), calc(-50% + ${remoteDialogPosition.y}px))`
-                }
-          }
-        >
-          <DialogHeader className="sr-only">
-            <DialogTitle>{t('navRail.remote', { defaultValue: 'Remote control' })}</DialogTitle>
-          </DialogHeader>
-          <Suspense fallback={<LazyPageFallback />}>
-            <RemotePage
-              standalone
-              maximized={remoteDialogMaximized}
-              onRequestClose={closeRemoteDialog}
-              onToggleMaximize={() => {
-                setRemoteDialogMaximized((value) => !value)
-                setRemoteDialogPosition({ x: 0, y: 0 })
-              }}
-              onWindowDragStart={startRemoteDialogDrag}
-            />
-          </Suspense>
-        </DialogContent>
-      </Dialog>
 
       <Dialog
         open={subAgentExecutionDetailOpen}

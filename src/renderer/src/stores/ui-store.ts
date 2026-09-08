@@ -37,7 +37,6 @@ export type ActiveSurface =
   | 'capabilities'
   | 'personalization'
   | 'data'
-  | 'remote'
   | 'resources'
   | 'draw'
   | 'translate'
@@ -412,14 +411,8 @@ interface UIStore {
   syncPageOpen: boolean
   openSyncPage: () => void
   closeSyncPage: () => void
-  remotePageOpen: boolean
-  remoteDialogOpen: boolean
   remoteWorkspaceSection: RemoteWorkspaceSection
-  openRemotePage: (section?: RemoteWorkspaceSection) => void
-  openRemoteDialog: (section?: RemoteWorkspaceSection) => void
   setRemoteWorkspaceSection: (section: RemoteWorkspaceSection) => void
-  closeRemotePage: () => void
-  closeRemoteDialog: () => void
   resourcesPageOpen: boolean
   openResourcesPage: () => void
   closeResourcesPage: () => void
@@ -718,8 +711,6 @@ const CHAT_SURFACE_NAV_RESET = {
   skillsPageOpen: false,
   soulsPageOpen: false,
   syncPageOpen: false,
-  remotePageOpen: false,
-  remoteDialogOpen: false,
   resourcesPageOpen: false,
   translatePageOpen: false,
   drawPageOpen: false,
@@ -736,8 +727,6 @@ function activeSurfacePatch(activeSurface: ActiveSurface): Partial<UIStore> {
     skillsPageOpen: activeSurface === 'capabilities',
     soulsPageOpen: activeSurface === 'personalization',
     syncPageOpen: activeSurface === 'data',
-    remotePageOpen: activeSurface === 'remote',
-    remoteDialogOpen: false,
     resourcesPageOpen: activeSurface === 'resources',
     drawPageOpen: activeSurface === 'draw',
     translatePageOpen: activeSurface === 'translate'
@@ -1391,29 +1380,8 @@ export const useUIStore = create<UIStore>()(
       closeSyncPage: () => {
         if (get().activeSurface === 'data') set(activeSurfacePatch('workspace'))
       },
-      remotePageOpen: false,
-      remoteDialogOpen: false,
       remoteWorkspaceSection: 'ssh',
-      openRemotePage: (section) =>
-        set({
-          activeNavItem: 'remote',
-          ...activeSurfacePatch('remote'),
-          ...(section ? { remoteWorkspaceSection: section } : {}),
-          ...closeRightSidePanels()
-        }),
-      openRemoteDialog: (section) =>
-        set({
-          activeNavItem: 'remote',
-          ...activeSurfacePatch('workspace'),
-          remoteDialogOpen: true,
-          ...(section ? { remoteWorkspaceSection: section } : {}),
-          ...closeRightSidePanels()
-        }),
       setRemoteWorkspaceSection: (remoteWorkspaceSection) => set({ remoteWorkspaceSection }),
-      closeRemotePage: () => {
-        if (get().activeSurface === 'remote') set(activeSurfacePatch('workspace'))
-      },
-      closeRemoteDialog: () => set({ remoteDialogOpen: false }),
       resourcesPageOpen: false,
       openResourcesPage: () =>
         set({
