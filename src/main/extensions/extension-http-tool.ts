@@ -224,7 +224,6 @@ export async function executeExtensionHttpTool(args: {
   const data = responseResult(response, await readResponseText(response))
   return {
     __olaExtensionResult: true,
-    __olaExtensionResult: true,
     extensionId: args.manifest.id,
     toolName: tool.name,
     text: data.ok

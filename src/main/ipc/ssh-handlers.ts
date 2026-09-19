@@ -85,9 +85,8 @@ interface LayeredSshError {
 }
 
 const sshSessions = new Map<string, SshSession>()
-;(
-  globalThis as typeof globalThis & { __olaSshSessions?: typeof sshSessions }
-).__olaSshSessions = sshSessions
+;(globalThis as typeof globalThis & { __olaSshSessions?: typeof sshSessions }).__olaSshSessions =
+  sshSessions
 let nextSessionId = 1
 const MAX_OUTPUT_BUFFER_BYTES = 1024 * 1024
 const MAX_SSH_DIAGNOSTIC_ENTRIES = 500

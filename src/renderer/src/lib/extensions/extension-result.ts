@@ -17,10 +17,9 @@ function contentAsText(content?: ToolResultContent): string | null {
 }
 
 export function encodeExtensionToolResult(
-  result: Omit<ExtensionToolResult, '__olaExtensionResult' | '__olaExtensionResult'>
+  result: Omit<ExtensionToolResult, '__olaExtensionResult'>
 ): string {
   return encodeStructuredToolResult({
-    __olaExtensionResult: true,
     __olaExtensionResult: true,
     ...result
   })
@@ -31,8 +30,7 @@ export function parseExtensionToolResult(content?: ToolResultContent): Extension
   if (!text) return null
   const parsed = decodeStructuredToolResult(text)
   if (!parsed || Array.isArray(parsed)) return null
-  if (parsed.__olaExtensionResult !== true && parsed.__olaExtensionResult !== true)
-    return null
+  if (parsed.__olaExtensionResult !== true) return null
   if (typeof parsed.extensionId !== 'string') return null
   return parsed as unknown as ExtensionToolResult
 }

@@ -85,7 +85,6 @@ export interface ExtensionInstance {
 
 export interface ExtensionToolResult {
   __olaExtensionResult: true
-  __olaExtensionResult?: true
   extensionId: string
   toolName?: string
   text?: string
