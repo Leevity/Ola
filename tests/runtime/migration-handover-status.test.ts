@@ -82,7 +82,7 @@ describe('business handover status IPC authorization', () => {
   it('does not quiesce Native when the TS runtime is unavailable', async () => {
     const previousFlag = process.env.OLA_ENABLE_BUSINESS_HANDOVER
     process.env.OLA_ENABLE_BUSINESS_HANDOVER = '1'
-    desktopRuntime.isAvailable = false
+    vi.spyOn(desktopRuntime, 'isAvailable', 'get').mockReturnValue(false)
     const sender = { mainFrame: {} }
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
     const handler = handlers.get('migration:business-handover')!

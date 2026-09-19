@@ -32,7 +32,8 @@ describe('renderer channel tool bridge', () => {
   it('requires an explicit chat target for replies', () => {
     registerPluginTools()
     const handler = toolRegistry.get('PluginReplyMessage')
-    expect(handler?.definition.inputSchema.required).toEqual([
+    const schema = handler?.definition.inputSchema
+    expect(schema && schema.type === 'object' && 'required' in schema ? schema.required : undefined).toEqual([
       'plugin_id',
       'chat_id',
       'message_id',

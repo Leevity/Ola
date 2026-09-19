@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const hosts = new Map<number, Record<string, unknown>>()
-const guests = new Map<number, Record<string, unknown>>()
+type FakeContents = Record<string, unknown> & { destroy: () => void }
+
+const hosts = new Map<number, FakeContents>()
+const guests = new Map<number, FakeContents>()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -17,7 +19,7 @@ vi.mock('electron', () => ({
 
 import { MainBrowserService } from '../../src/main/browser/browser-service'
 
-function fakeContents(id: number, type: 'window' | 'webview'): Record<string, unknown> {
+function fakeContents(id: number, type: 'window' | 'webview'): FakeContents {
   const listeners = new Map<string, () => void>()
   return {
     id,

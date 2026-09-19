@@ -320,13 +320,18 @@ describe('real Native Worker to TS business repository handover contract', () =>
     await applySyncDbMerge({
       recordsToApply: [
         {
-          ...session,
+          domain: session!.domain,
+          recordId: session!.recordId,
+          hash: 'sync-hash',
+          updatedAt: session!.updatedAt,
           value: { ...value, row: { ...value.row, title: 'After sync', updated_at: 2 } }
         }
       ],
       recordsToDelete: []
     })
-    await expect(canaryListSessions({ workspaceId: 'local-personal' })).resolves.toEqual(
+    await expect(
+      canaryListSessions({ workspaceId: 'local-personal', limit: 10, offset: 0 })
+    ).resolves.toEqual(
       expect.arrayContaining([expect.objectContaining({ id: 'sync-session', title: 'After sync' })])
     )
     const native = new DatabaseSync(dbPath, { readOnly: true })
