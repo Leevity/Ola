@@ -13,14 +13,13 @@ import { Button } from '@renderer/components/ui/button'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useCredentialsStore } from '@renderer/stores/credentials-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { getBrowserAccessDecision } from '@renderer/lib/app-plugin/browser-access'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import {
   describeWebviewOperationError,
-  isPromiseLike,
-  isWebviewConnected,
-  type MaybePromise
+  isWebviewConnected
 } from '@renderer/lib/browser/webview-helpers'
 import { useTranslation } from 'react-i18next'
 import {
@@ -29,7 +28,7 @@ import {
 } from '@renderer/components/credentials/LoginProgressOverlay'
 import { LoginStepPanel } from '@renderer/components/credentials/LoginStepPanel'
 import {
-  BUILTIN_BROWSER_PARTITION,
+  browserPartitionForWorkspace,
   stripElectronFromUserAgent
 } from '../../../../shared/browser-plugin'
 
@@ -56,6 +55,7 @@ export function BrowserPanel({
   const setBrowserWebviewRef = useUIStore((s) => s.setBrowserWebviewRef)
   const setBrowserWebContentsId = useUIStore((s) => s.setBrowserWebContentsId)
   const browserUserDataReuseEnabled = useSettingsStore((s) => s.browserUserDataReuseEnabled)
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
 
   const [inputUrl, setInputUrl] = useState(storedUrl)
   const [committedUrl, setCommittedUrl] = useState(storedUrl)
@@ -66,13 +66,25 @@ export function BrowserPanel({
     browserUserDataReuseEnabled ? stripElectronFromUserAgent(navigator.userAgent) : undefined
   )
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  // A tab registration is scoped to its workspace. Reusing its ID across a
+  // workspace change makes Main reject the new provenance and can leave the
+  // old guest/profile alive, so rotate both the guest and tab identity here.
+  const browserTabIdRef = useRef({
+    workspaceId,
+    tabId: `browser-tab-${crypto.randomUUID()}`
+  })
+  if (browserTabIdRef.current.workspaceId !== workspaceId) {
+    browserTabIdRef.current = { workspaceId, tabId: `browser-tab-${crypto.randomUUID()}` }
+  }
   const internalBrowserUrlUpdateRef = useRef(false)
   const initialBrowserUserDataReuseEnabledRef = useRef(browserUserDataReuseEnabled)
   const [loginOverlayStep] = useState<LoginProgressStep | null>(null)
   const refs = useCredentialsStore((s) => s.refs)
   const webviewUserAgent = runtimeBrowserUserDataReuseEnabled ? runtimeBrowserUserAgent : undefined
   const webviewSessionProps: Record<string, string> = {
-    ...(runtimeBrowserUserDataReuseEnabled ? {} : { partition: BUILTIN_BROWSER_PARTITION }),
+    ...(runtimeBrowserUserDataReuseEnabled
+      ? {}
+      : { partition: browserPartitionForWorkspace(workspaceId) }),
     allowpopups: 'true',
     ...(runtimeBrowserUserDataReuseEnabled ? { plugins: 'true' } : {}),
     ...(webviewUserAgent ? { useragent: webviewUserAgent } : {})
@@ -117,31 +129,23 @@ export function BrowserPanel({
     [projectId, sessionId, setBrowserCanGoBack, setBrowserCanGoForward, setBrowserLoading]
   )
 
-  const runWebviewCommand = useCallback(
-    (action: string, command: (webview: Electron.WebviewTag) => MaybePromise<void>): void => {
-      const wv = webviewRef.current
-      if (!isWebviewConnected(wv)) return
-
-      try {
-        const result = command(wv)
-        if (isPromiseLike(result)) {
-          void Promise.resolve(result).catch((error) => handleWebviewOperationError(action, error))
-        }
-      } catch (error) {
-        handleWebviewOperationError(action, error)
-      }
-    },
-    [handleWebviewOperationError]
-  )
-
   useEffect(() => {
+    const tabId = browserTabIdRef.current.tabId
     setBrowserWebviewRef(webviewRef, sessionId, projectId)
     return () => {
+      void ipcClient.invoke(IPC.BROWSER_UNREGISTER_TAB, { tabId })
       setBrowserWebviewRef(null, sessionId, projectId)
       setBrowserWebContentsId(null, sessionId, projectId)
       setBrowserLoading(false, sessionId, projectId)
     }
-  }, [projectId, sessionId, setBrowserLoading, setBrowserWebContentsId, setBrowserWebviewRef])
+  }, [
+    projectId,
+    sessionId,
+    setBrowserLoading,
+    setBrowserWebContentsId,
+    setBrowserWebviewRef,
+    workspaceId
+  ])
 
   useEffect(() => {
     setInputUrl(storedUrl)
@@ -187,31 +191,67 @@ export function BrowserPanel({
     [blockNavigation]
   )
 
+  const takeBrowserControl = useCallback((): void => {
+    void ipcClient.invoke(IPC.BROWSER_TAKE_CONTROL, { tabId: browserTabIdRef.current.tabId })
+  }, [])
+
+  const navigateThroughMain = useCallback(
+    async (
+      action: 'back' | 'forward' | 'reload' | 'stop' | 'goto',
+      url?: string
+    ): Promise<boolean> => {
+      try {
+        const result = (await ipcClient.invoke(IPC.BROWSER_NAVIGATE, {
+          tabId: browserTabIdRef.current.tabId,
+          action,
+          ...(url === undefined ? {} : { url })
+        })) as
+          | {
+              success: true
+              state: { url: string; title: string; canGoBack: boolean; canGoForward: boolean }
+            }
+          | { success: false; error?: string }
+        if (!result.success) throw new Error(result.error ?? 'Browser navigation was rejected')
+        setBrowserUrl(result.state.url, sessionId, projectId)
+        setBrowserPageTitle(result.state.title, sessionId, projectId)
+        setBrowserCanGoBack(result.state.canGoBack, sessionId, projectId)
+        setBrowserCanGoForward(result.state.canGoForward, sessionId, projectId)
+        return true
+      } catch (error) {
+        handleWebviewOperationError(action, error)
+        return false
+      }
+    },
+    [
+      handleWebviewOperationError,
+      projectId,
+      sessionId,
+      setBrowserCanGoBack,
+      setBrowserCanGoForward,
+      setBrowserPageTitle,
+      setBrowserUrl
+    ]
+  )
+
   const navigate = useCallback(
     (url: string): void => {
       const normalized = normalizeUrl(url)
       if (!normalized) return
       setInputUrl(normalized)
       if (!canNavigateTo(normalized)) return
-      setCommittedUrl(normalized)
-      setBrowserUrl(normalized, sessionId, projectId)
       setBrowserErrorInfo(null, sessionId, projectId)
-      const wv = webviewRef.current
-      if (isWebviewConnected(wv)) {
-        try {
-          wv.src = normalized
-        } catch (error) {
-          handleWebviewOperationError('navigate', error)
-        }
-      }
+      setBrowserLoading(true, sessionId, projectId)
+      void navigateThroughMain('goto', normalized).then((navigated) => {
+        if (navigated) setCommittedUrl(normalized)
+      })
     },
     [
       canNavigateTo,
-      handleWebviewOperationError,
+      navigateThroughMain,
       projectId,
       sessionId,
       setBrowserErrorInfo,
-      setBrowserUrl
+      setBrowserLoading
     ]
   )
 
@@ -241,11 +281,58 @@ export function BrowserPanel({
     const wv = webviewRef.current
     if (!isWebviewConnected(wv)) return
     try {
-      setBrowserWebContentsId(wv.getWebContentsId(), sessionId, projectId)
+      const guestWebContentsId = wv.getWebContentsId()
+      setBrowserWebContentsId(guestWebContentsId, sessionId, projectId)
+      void ipcClient
+        .invoke(IPC.BROWSER_REGISTER_TAB, {
+          tabId: browserTabIdRef.current.tabId,
+          workspaceId,
+          profileId: runtimeBrowserUserDataReuseEnabled
+            ? 'external-user-data'
+            : browserPartitionForWorkspace(workspaceId),
+          guestWebContentsId,
+          sessionId,
+          projectId
+        })
+        .then((result) => {
+          if (
+            !result ||
+            typeof result !== 'object' ||
+            (result as { success?: unknown }).success !== true
+          ) {
+            setBrowserErrorInfo(
+              {
+                code: -11,
+                desc: 'Browser tab registration was rejected. Reload the browser panel.',
+                url: wv.getURL()
+              },
+              sessionId,
+              projectId
+            )
+          }
+        })
+        .catch(() => {
+          setBrowserErrorInfo(
+            {
+              code: -11,
+              desc: 'Browser tab registration failed. Reload the browser panel.',
+              url: wv.getURL()
+            },
+            sessionId,
+            projectId
+          )
+        })
     } catch {
       // Electron only exposes getWebContentsId after dom-ready.
     }
-  }, [projectId, sessionId, setBrowserWebContentsId])
+  }, [
+    projectId,
+    runtimeBrowserUserDataReuseEnabled,
+    sessionId,
+    setBrowserErrorInfo,
+    setBrowserWebContentsId,
+    workspaceId
+  ])
 
   // Compute the toolbar credential badge outside of JSX so the JSX stays
   // a pure render expression and React's error-boundary lint stays happy.
@@ -380,7 +467,7 @@ export function BrowserPanel({
           variant="ghost"
           size="icon"
           className="size-6"
-          onClick={() => runWebviewCommand('go back', (wv) => wv.goBack())}
+          onClick={() => void navigateThroughMain('back')}
           disabled={!canGoBack}
           title={t('browser.back')}
         >
@@ -390,7 +477,7 @@ export function BrowserPanel({
           variant="ghost"
           size="icon"
           className="size-6"
-          onClick={() => runWebviewCommand('go forward', (wv) => wv.goForward())}
+          onClick={() => void navigateThroughMain('forward')}
           disabled={!canGoForward}
           title={t('browser.forward')}
         >
@@ -401,7 +488,7 @@ export function BrowserPanel({
             variant="ghost"
             size="icon"
             className="size-6"
-            onClick={() => runWebviewCommand('stop loading', (wv) => wv.stop())}
+            onClick={() => void navigateThroughMain('stop')}
             title={t('browser.stop')}
           >
             <Square className="size-3" />
@@ -411,7 +498,7 @@ export function BrowserPanel({
             variant="ghost"
             size="icon"
             className="size-6"
-            onClick={() => runWebviewCommand('refresh', (wv) => wv.reload())}
+            onClick={() => void navigateThroughMain('reload')}
             title={t('browser.refresh')}
           >
             <RefreshCw className="size-3.5" />
@@ -452,7 +539,11 @@ export function BrowserPanel({
       <LoginStepPanel />
 
       {/* Content */}
-      <div className="relative min-h-0 min-w-0 flex-1 overflow-hidden">
+      <div
+        className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
+        onPointerDown={takeBrowserControl}
+        onFocusCapture={takeBrowserControl}
+      >
         <LoginProgressOverlay
           open={loginOverlayStep !== null}
           step={loginOverlayStep ?? 'resolving'}
@@ -466,7 +557,7 @@ export function BrowserPanel({
         />
         {committedUrl && (
           <webview
-            key={runtimeBrowserUserDataReuseEnabled ? 'user-browser-profile' : 'ola-profile'}
+            key={`${runtimeBrowserUserDataReuseEnabled ? 'user-browser-profile' : 'ola-profile'}:${workspaceId}`}
             ref={webviewRef as React.Ref<Electron.WebviewTag>}
             src={committedUrl}
             className="size-full"
@@ -487,7 +578,7 @@ export function BrowserPanel({
                 size="sm"
                 onClick={() => {
                   setBrowserErrorInfo(null, sessionId, projectId)
-                  runWebviewCommand('retry load', (wv) => wv.reload())
+                  void navigateThroughMain('reload')
                 }}
               >
                 {t('rightPanel.browserRetry')}

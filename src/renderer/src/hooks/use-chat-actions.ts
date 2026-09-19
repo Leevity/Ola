@@ -1,4 +1,7 @@
-﻿import { useCallback, useEffect } from 'react'
+import { workspaceModelProviders } from '@renderer/lib/workspace-models'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { isOlaManagedProviderId } from '@renderer/lib/workspace-context'
+import { useCallback, useEffect } from 'react'
 import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
 import { useLiveCompressionStore } from '@renderer/stores/live-compression-store'
@@ -11,6 +14,7 @@ import {
 } from '@renderer/stores/settings-store'
 import {
   modelSupportsComputerUse,
+  modelExplicitlyRejectsVision,
   modelSupportsVision,
   useProviderStore
 } from '@renderer/stores/provider-store'
@@ -96,6 +100,7 @@ import {
   extractEditableUserMessageDraft,
   hasEditableDraftContent,
   imageAttachmentToContentBlock,
+  VisionInputUnsupportedError,
   isEditableUserMessage,
   type EditableUserMessageDraft,
   type ImageAttachment
@@ -154,6 +159,7 @@ import type { CompressionConfig } from '@renderer/lib/agent/context-compression'
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { useAppPluginStore } from '@renderer/stores/app-plugin-store'
 import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
+import { useExtensionStore } from '@renderer/stores/extension-store'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import {
   registerPluginTools,
@@ -214,6 +220,21 @@ import {
   runSidecarContextCompression,
   streamSidecarProviderTurn
 } from '@renderer/lib/ipc/agent-bridge'
+import {
+  isTsRuntimeAvailable,
+  respondTsRuntimeInteraction,
+  streamTsRuntimeTextTurn
+} from '@renderer/lib/ipc/ts-runtime-bridge'
+import type {
+  TsRuntimeInteractionEvent,
+  TsRuntimeProjectedEvent
+} from '@renderer/lib/ipc/ts-runtime-projection'
+import {
+  assessTsRuntimeTextEligibility,
+  explicitTsRuntimeModelSource,
+  supportsTsRuntimeReadOnlyTools
+} from '@renderer/lib/ipc/ts-runtime-text-eligibility'
+import { assessTsRuntimeAgentEligibility } from '@renderer/lib/ipc/ts-runtime-agent-eligibility'
 import {
   buildSidecarAgentRunRequest,
   isNativeSidecarProviderConfig,
@@ -595,6 +616,7 @@ const pendingSessionMessages = new Map<string, QueuedSessionMessage[]>()
 const pendingSessionMessageViews = new Map<string, PendingSessionMessageItem[]>()
 const pendingSessionMessageListeners = new Set<() => void>()
 const pausedPendingSessionDispatch = new Set<string>()
+const MAX_PENDING_SESSION_MESSAGES = 50
 
 const QUEUED_MESSAGE_SYSTEM_REMIND = `<system-reminder>
 A new user message was queued while you were still processing the previous request.
@@ -1215,7 +1237,9 @@ function findProviderModel(
     return { modelConfig: null }
   }
 
-  const provider = useProviderStore.getState().providers.find((item) => item.id === providerId)
+  const provider = [...useProviderStore.getState().providers, ...workspaceModelProviders()].find(
+    (item) => item.id === providerId
+  )
   const model = provider?.models.find((item) => item.id === modelId) ?? null
 
   return {
@@ -1611,11 +1635,15 @@ async function resolveMainRequestProvider(options: {
   const channelMeta = session?.pluginId
     ? (useChannelStore.getState().channels.find((item) => item.id === session.pluginId) ?? null)
     : null
+  const workspaceState = useWorkspaceStore.getState()
+  const workspaceSelection = workspaceState.getModelSelection(
+    session?.workspaceId ?? workspaceState.activeWorkspaceId
+  )
   const sessionModelSelection = resolveSessionModelSelection({
     session,
-    providers: providerStore.providers,
-    activeProviderId: providerStore.activeProviderId,
-    activeModelId: providerStore.activeModelId,
+    providers: [...providerStore.providers, ...workspaceModelProviders()],
+    activeProviderId: workspaceSelection?.providerId ?? providerStore.activeProviderId,
+    activeModelId: workspaceSelection?.modelId ?? providerStore.activeModelId,
     globalMode: settings.mainModelSelectionMode,
     channelProviderId: channelMeta?.providerId,
     channelModelId: channelMeta?.model
@@ -1699,7 +1727,11 @@ async function resolveHealthyAutoProvider(options: {
   modelConfig: AIModelConfig | null
   requiresVision: boolean
 }): Promise<{ providerConfig: ProviderConfig | null; modelConfig: AIModelConfig | null }> {
-  if (!options.providerConfig?.providerId) return options
+  if (
+    !options.providerConfig?.providerId ||
+    isOlaManagedProviderId(options.providerConfig.providerId)
+  )
+    return options
   const providerStore = useProviderStore.getState()
   const candidates = providerStore.providers.flatMap((provider) =>
     provider.models
@@ -2132,8 +2164,9 @@ export function quotePendingSessionMessageIntoConversation(
 function enqueuePendingSessionMessage(
   sessionId: string,
   msg: Omit<QueuedSessionMessage, 'id' | 'createdAt'>
-): number {
+): number | null {
   const queue = pendingSessionMessages.get(sessionId) ?? []
+  if (queue.length >= MAX_PENDING_SESSION_MESSAGES) return null
   const next = [
     ...queue,
     {
@@ -2732,6 +2765,11 @@ function acquireGoalContinuationListener(): () => void {
 
   if (!stopGoalContinuationListener) {
     stopGoalContinuationListener = ipcClient.on('goal:continue-requested', (payload: unknown) => {
+      const workspaceId =
+        payload && typeof payload === 'object'
+          ? (payload as { workspaceId?: unknown }).workspaceId
+          : undefined
+      if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
       const sessionId =
         payload && typeof payload === 'object'
           ? (payload as { sessionId?: unknown }).sessionId
@@ -3173,7 +3211,7 @@ function createStreamDeltaBuffer(
   }
 }
 
-function shouldHandleAgentEventAfterAbort(event: AgentEvent): boolean {
+function shouldHandleAgentEventAfterAbort(event: AgentEvent | TsRuntimeProjectedEvent): boolean {
   switch (event.type) {
     case 'tool_call_result':
     case 'iteration_end':
@@ -3770,13 +3808,19 @@ export function useChatActions(): {
         hasPendingQueue &&
         source !== 'queued'
       ) {
-        enqueuePendingSessionMessage(sessionId, {
+        const queued = enqueuePendingSessionMessage(sessionId, {
           text: resolvedCommand.command ? resolvedCommand.userText : text,
           images,
           command: resolvedCommand.command,
           source,
           options
         })
+        if (queued === null) {
+          toast.error('Message queue is full', {
+            description: `This conversation can hold up to ${MAX_PENDING_SESSION_MESSAGES} pending messages.`
+          })
+          return
+        }
         if (source === undefined) {
           setPendingSessionDispatchPaused(sessionId, false)
           dispatchNextQueuedMessage(sessionId)
@@ -3797,13 +3841,18 @@ export function useChatActions(): {
         source !== 'continue' && (hasActiveRun || (statusIsRunning && source !== 'queued'))
 
       if (shouldQueue) {
-        enqueuePendingSessionMessage(sessionId, {
+        const queued = enqueuePendingSessionMessage(sessionId, {
           text: resolvedCommand.command ? resolvedCommand.userText : text,
           images,
           command: resolvedCommand.command,
           source,
           options
         })
+        if (queued === null) {
+          toast.error('Message queue is full', {
+            description: `This conversation can hold up to ${MAX_PENDING_SESSION_MESSAGES} pending messages.`
+          })
+        }
         return
       }
 
@@ -3852,6 +3901,10 @@ export function useChatActions(): {
           : resolvedCommand
 
         const resolvedSession = useChatStore.getState().sessions.find((s) => s.id === sessionId)
+        const workspaceState = useWorkspaceStore.getState()
+        const workspaceSelection = workspaceState.getModelSelection(
+          resolvedSession?.workspaceId ?? workspaceState.activeWorkspaceId
+        )
         let resolvedSessionMode = resolvedSession?.mode ?? uiStore.mode
         const resolvedChannelMeta = resolvedSession?.pluginId
           ? (useChannelStore
@@ -3860,9 +3913,9 @@ export function useChatActions(): {
           : null
         const resolvedSessionModelSelection = resolveSessionModelSelection({
           session: resolvedSession,
-          providers: providerStore.providers,
-          activeProviderId: providerStore.activeProviderId,
-          activeModelId: providerStore.activeModelId,
+          providers: [...providerStore.providers, ...workspaceModelProviders()],
+          activeProviderId: workspaceSelection?.providerId ?? providerStore.activeProviderId,
+          activeModelId: workspaceSelection?.modelId ?? providerStore.activeModelId,
           globalMode: settings.mainModelSelectionMode,
           channelProviderId: resolvedChannelMeta?.providerId,
           channelModelId: resolvedChannelMeta?.model
@@ -3947,6 +4000,29 @@ export function useChatActions(): {
         }
         if (shouldShowAutoRouting) {
           useUIStore.getState().setAutoModelRoutingState(sessionId, 'idle')
+        }
+
+        // Stop before appending a user message or opening an assistant stream. Text-only
+        // endpoints may silently drop an image and make the model claim it saw no attachment.
+        if (
+          latestUserHasImages &&
+          !options?.imageEdit &&
+          modelExplicitlyRejectsVision(healthyProvider.modelConfig, baseProviderConfig?.type)
+        ) {
+          clearPreflightIndicator()
+          const modelName =
+            healthyProvider.modelConfig?.name?.trim() || baseProviderConfig?.model || 'Model'
+          toast.error(i18n.t('input.visionUnsupportedTitle', { ns: 'chat' }), {
+            description: i18n.t('input.visionUnsupportedDescription', {
+              ns: 'chat',
+              model: modelName
+            }),
+            action: {
+              label: i18n.t('input.openModelSettings', { ns: 'chat' }),
+              onClick: () => uiStore.openSettingsPage('model')
+            }
+          })
+          throw new VisionInputUnsupportedError()
         }
 
         if (
@@ -4251,6 +4327,7 @@ export function useChatActions(): {
         const sessionScope: SessionMemoryScope = session?.pluginId ? 'channel' : 'main'
         const sessionWorkingFolder = resolveSessionWorkingFolder(session)
         const memorySnapshot = await loadLayeredMemorySnapshot(ipcClient, {
+          workspaceId: session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
           workingFolder: sessionWorkingFolder,
           sshConnectionId: session?.sshConnectionId,
           scope: sessionScope
@@ -4267,7 +4344,28 @@ export function useChatActions(): {
         })
         const activeTeam = useTeamStore.getState().activeTeam
 
-        if (mode === 'chat' && chatModeToolDefs.length === 0 && !hasGoalContextForRun) {
+        // This is the first tool-capable TS chat slice. The whitelist is kept
+        // deliberately narrow: it consists only of Main-owned read tools whose
+        // schemas match the legacy Chat catalog. Any plugin, MCP, memory or
+        // unsupported tool continues through the complete sidecar agent path.
+        const tsCompatibleChatTools =
+          mode === 'chat' &&
+          chatModeToolDefs.length > 0 &&
+          !hasGoalContextForRun &&
+          !session?.pluginId &&
+          scopedActiveChannels.length === 0 &&
+          !hasChatModePluginTools(chatModeToolDefs) &&
+          !(chatMcpContext?.activeMcps.length ?? 0) &&
+          supportsTsRuntimeReadOnlyTools({
+            toolNames: chatModeToolDefs.map((tool) => tool.name),
+            workingDirectory: sessionWorkingFolder
+          })
+
+        if (
+          mode === 'chat' &&
+          !hasGoalContextForRun &&
+          (chatModeToolDefs.length === 0 || tsCompatibleChatTools)
+        ) {
           // Chat mode without enabled chat-mode tools: single API call, no tools
           const cachedPromptSnapshot = session?.promptSnapshot
           const chatPromptContextCacheKey = buildChatModePromptContextCacheKey({
@@ -4278,7 +4376,9 @@ export function useChatActions(): {
             environmentContext,
             memorySnapshot,
             sessionScope,
-            hasWebSearch: false,
+            hasWebSearch: chatModeToolDefs.some(
+              (tool) => tool.name === 'WebSearch' || tool.name === 'WebFetch'
+            ),
             hasPluginTools: false,
             activeMcps: [],
             activeMcpTools: {}
@@ -4300,7 +4400,9 @@ export function useChatActions(): {
               environmentContext,
               memorySnapshot,
               sessionScope,
-              hasWebSearch: false,
+              hasWebSearch: chatModeToolDefs.some(
+                (tool) => tool.name === 'WebSearch' || tool.name === 'WebFetch'
+              ),
               hasPluginTools: false,
               activeMcps: [],
               activeMcpTools: {}
@@ -4350,7 +4452,8 @@ export function useChatActions(): {
               abortController.signal,
               {
                 includeTrailingAssistantPlaceholder: !!existingAssistantMessage,
-                expectedUserMessage: expectedUserRequestMessage
+                expectedUserMessage: expectedUserRequestMessage,
+                ...(tsCompatibleChatTools ? { toolDefinitions: chatModeToolDefs } : {})
               }
             )
           } finally {
@@ -4406,7 +4509,7 @@ export function useChatActions(): {
 
           // Image models: disable all tools (image generation doesn't use tools)
           // Exception: allow tools when continuing an existing agent run
-          const resolvedModelConfig = providerResolution.modelConfig
+          const resolvedModelConfig = healthyProvider.modelConfig
           if (resolvedModelConfig?.category === 'image' && source !== 'continue') {
             promptCandidateToolDefs = []
           }
@@ -4857,30 +4960,81 @@ export function useChatActions(): {
               includeFullDebugBody: settings.devMode && shouldKeepFullDebugBody()
             })
 
-            const useSidecar = await canUseSidecarForAgentRun({
+            const tsAgentModelSource = explicitTsRuntimeModelSource({
+              sessionModelSource: session?.modelSource,
+              providerId: agentProviderConfig.providerId,
+              modelId: agentProviderConfig.model
+            })
+            const tsAgentWorkspaceId =
+              session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId
+            // Capture the project activation at submit time. The Main-owned
+            // runtime resolves extension configuration itself, so neither
+            // extension secrets nor mutable Renderer state enter the run.
+            const tsAgentExtensionIds = useExtensionStore
+              .getState()
+              .getActiveExtensionIds(session?.projectId ?? null)
+            // Only declarative HTTP extension names are equivalent to the
+            // Main-owned runtime adapter. JS extensions deliberately retain
+            // their sidecar path until they have the same isolation contract.
+            const tsAgentExtensionToolNames = new Set(
+              useExtensionStore
+                .getState()
+                .extensions.filter(
+                  (extension) => extension.enabled && tsAgentExtensionIds.includes(extension.id)
+                )
+                .flatMap((extension) =>
+                  extension.manifest.tools
+                    .filter((tool) => tool.kind === 'http')
+                    .map((tool) => `extension__${extension.id}__${tool.name}`)
+                )
+            )
+            const tsAgentEligibility = assessTsRuntimeAgentEligibility({
+              mode,
               messages: messagesToSend,
               provider: agentProviderConfig,
-              tools: effectiveToolDefs,
-              sessionId,
-              workingFolder: sessionWorkingFolder,
-              sshConnectionId: session?.sshConnectionId,
-              maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
-              forceApproval: false,
-              compression: compressionConfig,
-              isPlanMode,
-              sessionMode: mode,
-              desktopControlMode: promptAllowsToolContext ? desktopControlMode : 'disabled',
-              hasChannels: promptAllowsToolContext && scopedActiveChannels.length > 0,
-              hasMcps: promptAllowsToolContext && activeMcps.length > 0,
-              teamToolsActive: settings.teamToolsEnabled && !!activeTeam,
-              activeTeamName: activeTeam?.name,
-              imagePluginProvider: imagePluginConfig
+              modelSource: tsAgentModelSource,
+              workspaceId: tsAgentWorkspaceId,
+              workingDirectory: sessionWorkingFolder,
+              toolNames: effectiveToolDefs.map((tool) => tool.name),
+              hasPlan: isPlanMode || Boolean(pendingPlanRevisionContext),
+              hasGoal: hasGoalContextForRun,
+              hasSsh: Boolean(session?.sshConnectionId),
+              hasPlugin: Boolean(session?.pluginId),
+              hasChannels: scopedActiveChannels.length > 0,
+              hasTeam: Boolean(activeTeam),
+              hasImages: messagesToSend.some(messageContainsImage),
+              extensionToolNames: [...tsAgentExtensionToolNames]
             })
+            const useTsAgent =
+              !!tsAgentEligibility?.eligible && (await isTsRuntimeAvailable().catch(() => false))
+
+            const useSidecar =
+              !useTsAgent &&
+              (await canUseSidecarForAgentRun({
+                messages: messagesToSend,
+                provider: agentProviderConfig,
+                tools: effectiveToolDefs,
+                sessionId,
+                workingFolder: sessionWorkingFolder,
+                sshConnectionId: session?.sshConnectionId,
+                maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
+                forceApproval: false,
+                compression: compressionConfig,
+                isPlanMode,
+                sessionMode: mode,
+                desktopControlMode: promptAllowsToolContext ? desktopControlMode : 'disabled',
+                hasChannels: promptAllowsToolContext && scopedActiveChannels.length > 0,
+                hasMcps: promptAllowsToolContext && activeMcps.length > 0,
+                teamToolsActive: settings.teamToolsEnabled && !!activeTeam,
+                activeTeamName: activeTeam?.name,
+                imagePluginProvider: imagePluginConfig
+              }))
 
             console.log('[ChatActions] Agent execution path', {
               sessionId,
               useSidecar,
-              executionPath: 'sidecar',
+              useTsAgent,
+              executionPath: useTsAgent ? 'ts-runtime' : 'sidecar',
               providerType: agentProviderConfig.type,
               toolNames: effectiveToolDefs.map((tool) => tool.name),
               hasSidecarRequest: !!sidecarRequest,
@@ -4890,33 +5044,55 @@ export function useChatActions(): {
               hasMcps: promptAllowsToolContext && activeMcps.length > 0
             })
 
-            if (!useSidecar) {
+            if (!useTsAgent && !useSidecar) {
               throw new Error(
                 'Native sidecar agent runtime is required for this provider, but its capability check failed.'
               )
             }
 
-            if (!sidecarRequest) {
+            if (!useTsAgent && !sidecarRequest) {
               throw new Error('Main-process agent request build failed')
             }
 
             setRequestTraceInfo(assistantMsgId, {
-              executionPath: 'sidecar'
+              executionPath: useTsAgent ? 'ts-runtime' : 'sidecar'
             })
 
-            const initialized = await agentBridge.initialize()
-            if (!initialized) {
-              throw new Error('Sidecar unavailable')
+            if (useSidecar) {
+              const initialized = await agentBridge.initialize()
+              if (!initialized) {
+                throw new Error('Sidecar unavailable')
+              }
             }
 
-            const loop: AsyncIterable<AgentEvent> = createSidecarEventStream({
-              sessionId,
-              sidecarRequest,
-              signal: abortController.signal,
-              logLabel: 'agent',
-              onRunIdAssigned: (runId) =>
-                useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
-            })
+            const loop: AsyncIterable<AgentEvent> | AsyncIterable<TsRuntimeProjectedEvent> =
+              useTsAgent && tsAgentEligibility?.eligible && tsAgentModelSource
+                ? streamTsRuntimeTextTurn({
+                    workspaceId: tsAgentWorkspaceId,
+                    sessionId,
+                    assistantMessageId: assistantMsgId,
+                    modelSource: tsAgentModelSource,
+                    prompt: tsAgentEligibility.prompt,
+                    ...(tsAgentEligibility.history.length
+                      ? { history: tsAgentEligibility.history }
+                      : {}),
+                    modelOptions: tsAgentEligibility.modelOptions,
+                    ...(sessionWorkingFolder ? { workingDirectory: sessionWorkingFolder } : {}),
+                    ...(tsAgentExtensionIds.length ? { extensionIds: tsAgentExtensionIds } : {}),
+                    toolNames: effectiveToolDefs.map((tool) => tool.name),
+                    maxTurns: DEFAULT_AGENT_MAX_ITERATIONS,
+                    onRunIdAssigned: (runId) =>
+                      useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId),
+                    signal: abortController.signal
+                  })
+                : createSidecarEventStream({
+                    sessionId,
+                    sidecarRequest,
+                    signal: abortController.signal,
+                    logLabel: 'agent',
+                    onRunIdAssigned: (runId) =>
+                      useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
+                  })
 
             let thinkingDone = false
             let hasThinkingDelta = false
@@ -5143,7 +5319,11 @@ export function useChatActions(): {
               }
             }
 
-            for await (const event of loop) {
+            for await (const rawEvent of loop) {
+              // TS Runtime events are projected into the established chat event
+              // vocabulary. Only its persisted interaction request has no
+              // legacy counterpart; all other projected events follow AgentEvent.
+              const event = rawEvent as AgentEvent | TsRuntimeInteractionEvent
               if (abortController.signal.aborted && !shouldHandleAgentEventAfterAbort(event)) {
                 continue
               }
@@ -5464,6 +5644,63 @@ export function useChatActions(): {
                       sessionId!
                     )
                   }
+                  break
+                }
+
+                case 'runtime_interaction_requested': {
+                  // The TS scheduler persists this request before exposing it.
+                  // Reuse the existing approval UI and always resolve malformed
+                  // or unsupported interactions so an Execute run cannot stall.
+                  if (event.interaction.kind !== 'tool-approval') {
+                    await respondTsRuntimeInteraction({
+                      workspaceId: event.interaction.workspaceId,
+                      runId: event.interaction.runId,
+                      interactionId: event.interaction.interactionId,
+                      response: {
+                        approved: false,
+                        reason: `Unsupported TS runtime interaction: ${event.interaction.kind}`
+                      }
+                    })
+                    break
+                  }
+                  const request = normalizeSidecarApprovalRequest({
+                    runId: event.interaction.runId,
+                    sessionId: sessionId!,
+                    toolCall: event.interaction.payload
+                  })
+                  if (!request) {
+                    await respondTsRuntimeInteraction({
+                      workspaceId: event.interaction.workspaceId,
+                      runId: event.interaction.runId,
+                      interactionId: event.interaction.interactionId,
+                      response: {
+                        approved: false,
+                        reason: 'Invalid TS runtime tool approval request'
+                      }
+                    })
+                    break
+                  }
+                  useRuntimeProjectionStore.getState().setPhase(sessionId!, 'waiting_user')
+                  runUsedTools = true
+                  const agentStore = useAgentStore.getState()
+                  const autoApprove =
+                    useSettingsStore.getState().autoApprove ||
+                    agentStore.approvedToolNames.includes(request.toolCall.name)
+                  if (!autoApprove && isSessionForeground(sessionId!)) {
+                    agentStore.addToolCall(request.toolCall, sessionId!)
+                  }
+                  const approved = autoApprove
+                    ? true
+                    : await agentStore.requestApproval(request.toolCall.id)
+                  if (approved) agentStore.addApprovedTool(request.toolCall.name)
+                  await respondTsRuntimeInteraction({
+                    workspaceId: event.interaction.workspaceId,
+                    runId: event.interaction.runId,
+                    interactionId: event.interaction.interactionId,
+                    response: approved
+                      ? { approved: true }
+                      : { approved: false, reason: 'User denied permission' }
+                  })
                   break
                 }
 
@@ -6304,6 +6541,9 @@ export function useChatActions(): {
       // assistant message that was just removed from the in-memory store.
       await invokeMessagePack(DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL, {
         sessionId,
+        workspaceId:
+          chatStore.sessions.find((session) => session.id === sessionId)?.workspaceId ??
+          'local-personal',
         fromSortOrder: target.userIndex
       }).catch(() => {})
       await sendMessage(
@@ -6340,6 +6580,9 @@ export function useChatActions(): {
       chatStore.truncateMessagesFrom(sessionId, target.index)
       await invokeMessagePack(DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL, {
         sessionId,
+        workspaceId:
+          chatStore.sessions.find((session) => session.id === sessionId)?.workspaceId ??
+          'local-personal',
         fromSortOrder: target.index
       }).catch(() => {})
       await sendMessage(
@@ -6414,12 +6657,8 @@ export function useChatActions(): {
           session.providerId,
           session.modelId
         )
-        if (sessionProviderConfig?.apiKey) {
-          config.type = sessionProviderConfig.type
-          config.apiKey = sessionProviderConfig.apiKey
-          config.baseUrl = sessionProviderConfig.baseUrl
-          config.model = sessionProviderConfig.model
-        }
+        if (!sessionProviderConfig) return null
+        Object.assign(config, sessionProviderConfig, { sessionId })
       }
 
       const preTokens = estimateManualCompressionInputTokens(messages, config)
@@ -6553,12 +6792,8 @@ export function useChatActions(): {
         compressSession.providerId,
         compressSession.modelId
       )
-      if (sessionProviderConfig?.apiKey) {
-        config.type = sessionProviderConfig.type
-        config.apiKey = sessionProviderConfig.apiKey
-        config.baseUrl = sessionProviderConfig.baseUrl
-        config.model = sessionProviderConfig.model
-      }
+      if (!sessionProviderConfig) return 'blocked'
+      Object.assign(config, sessionProviderConfig, { sessionId })
     }
 
     try {
@@ -6836,6 +7071,8 @@ async function runSimpleChat(
   options?: {
     includeTrailingAssistantPlaceholder?: boolean
     expectedUserMessage?: UnifiedMessage | null
+    /** A compatibility-proven, read-only Chat tool snapshot. */
+    toolDefinitions?: ToolDefinition[]
   }
 ): Promise<'completed' | 'failed' | 'canceled'> {
   const chatStore = useChatStore.getState()
@@ -6855,21 +7092,56 @@ async function runSimpleChat(
   requestMessages = prependTurnContextToLastUserMessage(requestMessages, {
     planMode: isPlanMode
   })
+  const toolDefinitions = options?.toolDefinitions ?? []
+  const toolNames = toolDefinitions.map((tool) => tool.name)
   const simpleRequestCacheShape = buildCacheShapeDebugInfo({
     systemPrompt: config.systemPrompt ?? '',
-    tools: [],
+    tools: toolDefinitions,
     messages: requestMessages
   })
   const streamDeltaBuffer = createStreamDeltaBuffer(sessionId, assistantMsgId)
   const requestHasImages = requestMessages.some(messageContainsImage)
-  const useProviderTurnOnlyPath = useSettingsStore.getState().devMode || requestHasImages
+  const settings = useSettingsStore.getState()
+  const useProviderTurnOnlyPath = settings.devMode || requestHasImages
+  const session = chatStore.sessions.find((item) => item.id === sessionId)
+  const workspaceId = session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId
+  // Capture project activation at submission time. The Main runtime receives a
+  // stable allowlist for this run rather than consulting Renderer state later.
+  const activeExtensionIds = useExtensionStore
+    .getState()
+    .getActiveExtensionIds(session?.projectId ?? null)
+  const tsRuntimeModelSource = explicitTsRuntimeModelSource({
+    sessionModelSource: session?.modelSource,
+    providerId: config.providerId,
+    modelId: config.model
+  })
+  const tsRuntimeEligibility =
+    !requestHasImages &&
+    !isPlanMode &&
+    !session?.sshConnectionId &&
+    !session?.pluginId &&
+    tsRuntimeModelSource &&
+    (tsRuntimeModelSource.kind === 'local' || tsRuntimeModelSource.workspaceId === workspaceId)
+      ? assessTsRuntimeTextEligibility({
+          messages: requestMessages,
+          provider: config,
+          modelSource: tsRuntimeModelSource
+        })
+      : null
+  const useTsRuntime =
+    !!tsRuntimeEligibility?.eligible &&
+    supportsTsRuntimeReadOnlyTools({
+      toolNames,
+      workingDirectory: session?.workingFolder
+    }) &&
+    (await isTsRuntimeAvailable().catch(() => false))
   const nativeProvider = isNativeSidecarProviderConfig(config)
   const sidecarRequest = buildSidecarAgentRunRequest({
     messages: requestMessages,
     provider: config,
-    tools: [],
+    tools: toolDefinitions,
     sessionId,
-    maxIterations: 1,
+    maxIterations: toolDefinitions.length ? DEFAULT_AGENT_MAX_ITERATIONS : 1,
     forceApproval: false,
     sessionMode: 'chat'
   })
@@ -6915,22 +7187,28 @@ async function runSimpleChat(
     supportsAgentRun,
     supportsProvider,
     requestHasImages,
-    devMode: useSettingsStore.getState().devMode,
+    devMode: settings.devMode,
     useProviderTurnOnlyPath,
-    useSidecar
+    useSidecar,
+    useTsRuntime,
+    toolNames,
+    tsRuntimeEligibility: tsRuntimeEligibility?.eligible ? 'eligible' : tsRuntimeEligibility?.reason
   })
 
   if (!sidecarRequest && !useProviderTurnOnlyPath) {
     throw new Error('Sidecar chat request build failed')
   }
+  if (toolDefinitions.length && !useTsRuntime && !useSidecar) {
+    throw new Error('Tool-capable chat requires an available Agent runtime')
+  }
 
   setRequestTraceInfo(assistantMsgId, {
-    executionPath: 'sidecar'
+    executionPath: useTsRuntime ? 'ts-runtime' : 'sidecar'
   })
 
   let runFailed = false
   try {
-    let stream: AsyncIterable<AgentEvent | StreamEvent>
+    let stream: AsyncIterable<AgentEvent | StreamEvent | TsRuntimeProjectedEvent>
     if (useSidecar) {
       const initialized = await agentBridge.initialize()
       if (!initialized) {
@@ -6943,6 +7221,22 @@ async function runSimpleChat(
         logLabel: 'chat',
         onRunIdAssigned: (runId) =>
           useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
+      })
+    } else if (useTsRuntime && tsRuntimeEligibility?.eligible && tsRuntimeModelSource) {
+      stream = streamTsRuntimeTextTurn({
+        workspaceId,
+        sessionId,
+        assistantMessageId: assistantMsgId,
+        modelSource: tsRuntimeModelSource,
+        prompt: tsRuntimeEligibility.prompt,
+        ...(tsRuntimeEligibility.history.length ? { history: tsRuntimeEligibility.history } : {}),
+        modelOptions: tsRuntimeEligibility.modelOptions,
+        ...(session?.workingFolder?.trim()
+          ? { workingDirectory: session.workingFolder.trim() }
+          : {}),
+        ...(activeExtensionIds.length ? { extensionIds: activeExtensionIds } : {}),
+        ...(toolNames.length ? { toolNames } : {}),
+        signal
       })
     } else {
       stream = streamSidecarProviderTurn({
@@ -7047,6 +7341,97 @@ async function runSimpleChat(
           setGeneratingImagePreviewWithSync(assistantMsgId, null)
           setGeneratingImageWithSync(assistantMsgId, false)
           break
+        case 'tool_use_generated':
+          streamDeltaBuffer.flushNow()
+          if (!thinkingDone) {
+            thinkingDone = true
+            completeRuntimeThinking(sessionId, assistantMsgId)
+          }
+          appendRuntimeToolUse(sessionId, assistantMsgId, {
+            type: 'tool_use',
+            id: event.toolUseBlock.id,
+            name: event.toolUseBlock.name,
+            input: event.toolUseBlock.input
+          })
+          if (isSessionForeground(sessionId)) {
+            useAgentStore.getState().addToolCall(
+              {
+                id: event.toolUseBlock.id,
+                name: event.toolUseBlock.name,
+                input: event.toolUseBlock.input,
+                status: 'running',
+                requiresApproval: false,
+                startedAt: Date.now()
+              },
+              sessionId
+            )
+          }
+          break
+        case 'tool_call_result':
+          if (isSessionForeground(sessionId)) {
+            useAgentStore.getState().updateToolCall(
+              event.toolCall.id,
+              {
+                status: event.toolCall.status,
+                output: event.toolCall.output,
+                error: event.toolCall.error,
+                completedAt: event.toolCall.completedAt
+              },
+              sessionId
+            )
+          }
+          break
+        case 'runtime_interaction_requested': {
+          // The TS scheduler persists an interaction before it emits it. Reuse
+          // the existing approval UI, but reject interaction kinds that do not
+          // yet have a dedicated renderer rather than leaving a run stranded.
+          if (event.interaction.kind !== 'tool-approval') {
+            await respondTsRuntimeInteraction({
+              workspaceId: event.interaction.workspaceId,
+              runId: event.interaction.runId,
+              interactionId: event.interaction.interactionId,
+              response: {
+                approved: false,
+                reason: `Unsupported TS runtime interaction: ${event.interaction.kind}`
+              }
+            })
+            break
+          }
+          const request = normalizeSidecarApprovalRequest({
+            runId: event.interaction.runId,
+            sessionId,
+            toolCall: event.interaction.payload
+          })
+          if (!request) {
+            await respondTsRuntimeInteraction({
+              workspaceId: event.interaction.workspaceId,
+              runId: event.interaction.runId,
+              interactionId: event.interaction.interactionId,
+              response: { approved: false, reason: 'Invalid TS runtime tool approval request' }
+            })
+            break
+          }
+          const agentStore = useAgentStore.getState()
+          const autoApprove =
+            useSettingsStore.getState().autoApprove ||
+            agentStore.approvedToolNames.includes(request.toolCall.name)
+          if (!autoApprove && isSessionForeground(sessionId)) {
+            agentStore.addToolCall(request.toolCall, sessionId)
+          }
+          const approved = autoApprove
+            ? true
+            : await agentStore.requestApproval(request.toolCall.id)
+          if (approved) agentStore.addApprovedTool(request.toolCall.name)
+          await respondTsRuntimeInteraction({
+            workspaceId: event.interaction.workspaceId,
+            runId: event.interaction.runId,
+            interactionId: event.interaction.interactionId,
+            response: approved
+              ? { approved: true }
+              : { approved: false, reason: 'User denied permission' }
+          })
+          break
+        }
         case 'message_end': {
           streamDeltaBuffer.flushNow()
           if (!thinkingDone) {
@@ -7062,7 +7447,7 @@ async function runSimpleChat(
               ? debugContextEstimate.tokenCount ||
                 estimateContextTokensForRequest({
                   messages: requestMessages,
-                  tools: [],
+                  tools: toolDefinitions,
                   providerConfig: config
                 })
               : 0

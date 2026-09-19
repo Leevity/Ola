@@ -11,6 +11,7 @@ import { confirm } from '@renderer/components/ui/confirm-dialog'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type {
   SyncConfig,
   SyncConflict,
@@ -59,6 +60,7 @@ function summarizeConflict(conflict: SyncConflict): string {
 
 export function SyncPage(): React.JSX.Element {
   const { t } = useTranslation('settings')
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const [config, setConfig] = useState<SyncConfig | null>(null)
   const [provider, setProvider] = useState<SyncProviderConfig>(createFallbackProvider)
   const [status, setStatus] = useState<SyncStatus | null>(null)
@@ -99,6 +101,7 @@ export function SyncPage(): React.JSX.Element {
   }, [t])
 
   useEffect(() => {
+    if (workspaceId !== 'local-personal') return
     void load()
     const offStatus = ipcClient.on(IPC.SYNC_STATUS_CHANGED, (payload) => {
       setStatus(payload as SyncStatus)
@@ -122,7 +125,7 @@ export function SyncPage(): React.JSX.Element {
       offStatus()
       offFinished()
     }
-  }, [load, t])
+  }, [load, t, workspaceId])
 
   const mergedConfig = useMemo<SyncConfig>(() => {
     const base: SyncConfig = config ?? {
@@ -252,6 +255,22 @@ export function SyncPage(): React.JSX.Element {
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
         <Loader2 className="mr-2 size-4 animate-spin" />
         {t('sync.loading', { defaultValue: 'Loading sync settings...' })}
+      </div>
+    )
+  }
+
+  if (workspaceId !== 'local-personal') {
+    return (
+      <div className="mx-auto max-w-2xl px-6 py-12">
+        <h1 className="text-xl font-semibold">
+          {t('sync.workspaceUnavailable.title', { defaultValue: 'Sync is unavailable here' })}
+        </h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {t('sync.workspaceUnavailable.description', {
+            defaultValue:
+              'Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated.'
+          })}
+        </p>
       </div>
     )
   }

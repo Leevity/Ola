@@ -216,7 +216,10 @@ export async function exportSessionMarkdownFromDb(session: Session): Promise<str
   const totals: TokenTotals = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0, reasoning: 0 }
   const totalMessages =
     session.messageCount ??
-    (await invokeMessagePackBinary<number>(DB_MESSAGES_COUNT_MSGPACK_CHANNEL, session.id))
+    (await invokeMessagePackBinary<number>(DB_MESSAGES_COUNT_MSGPACK_CHANNEL, {
+      sessionId: session.id,
+      workspaceId: session.workspaceId ?? 'local-personal'
+    }))
 
   appendSessionHeader(lines, session, totalMessages)
 
@@ -225,6 +228,7 @@ export async function exportSessionMarkdownFromDb(session: Session): Promise<str
       DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL,
       {
         sessionId: session.id,
+        workspaceId: session.workspaceId ?? 'local-personal',
         limit: EXPORT_MESSAGE_PAGE_SIZE,
         offset
       }
@@ -265,7 +269,10 @@ export async function exportSessionResultReportFromDb(session: Session): Promise
 export async function exportSessionSnapshotFromDb(session: Session): Promise<Session> {
   const totalMessages =
     session.messageCount ??
-    (await invokeMessagePackBinary<number>(DB_MESSAGES_COUNT_MSGPACK_CHANNEL, session.id))
+    (await invokeMessagePackBinary<number>(DB_MESSAGES_COUNT_MSGPACK_CHANNEL, {
+      sessionId: session.id,
+      workspaceId: session.workspaceId ?? 'local-personal'
+    }))
   const messages: UnifiedMessage[] = []
 
   for (let offset = 0; offset < totalMessages; offset += EXPORT_MESSAGE_PAGE_SIZE) {
@@ -273,6 +280,7 @@ export async function exportSessionSnapshotFromDb(session: Session): Promise<Ses
       DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL,
       {
         sessionId: session.id,
+        workspaceId: session.workspaceId ?? 'local-personal',
         limit: EXPORT_MESSAGE_PAGE_SIZE,
         offset
       }

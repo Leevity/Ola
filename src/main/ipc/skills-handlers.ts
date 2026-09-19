@@ -1,18 +1,17 @@
 import { app, shell } from 'electron'
+import { tmpdir } from 'node:os'
 import * as path from 'path'
 import { getDefaultApiUserAgent } from '../lib/api-user-agent'
-import { getNativeWorker } from '../lib/native-worker'
+import { olaExternalDataHome } from '../lib/ola-data-root'
 import { registerMessagePackHandler } from './messagepack-handler'
-
-const SKILLS_NATIVE_TIMEOUT_MS = 120_000
+import { SkillCatalog } from '../user-content/skill-catalog'
+import { SkillMarketClient } from '../user-content/skill-market-client'
+import { scanSkillDirectory } from '../user-content/skill-scanner'
+import { cleanupSkillTemporaryDirectory } from '../user-content/skill-archive'
 
 type MutationResult = {
   success: boolean
   error?: string
-}
-
-type SkillPathResult = MutationResult & {
-  path?: string
 }
 
 export interface MarketSkillInfo {
@@ -69,66 +68,50 @@ function getBundledSkillDirCandidates(): string[] {
   ]
 }
 
-function skillsParams(args?: Record<string, unknown>): Record<string, unknown> {
-  return {
-    ...(args ?? {}),
-    bundledDirCandidates: getBundledSkillDirCandidates(),
-    userAgent: getDefaultApiUserAgent()
-  }
-}
-
-async function nativeSkillsRequest<TResult>(
-  method: string,
-  args?: Record<string, unknown>
-): Promise<TResult> {
-  return await getNativeWorker().request<TResult>(
-    method,
-    skillsParams(args),
-    SKILLS_NATIVE_TIMEOUT_MS
-  )
-}
-
 export function registerSkillsHandlers(): void {
-  void nativeSkillsRequest<MutationResult>('skills/ensure-builtins').catch((err) => {
-    console.error('[Skills] Failed to initialize builtin skills:', err)
+  const catalog = new SkillCatalog({
+    homeDirectory: olaExternalDataHome(),
+    bundledDirectoryCandidates: getBundledSkillDirCandidates()
   })
-
+  const marketClient = new SkillMarketClient(getDefaultApiUserAgent())
+  void catalog.ensureBuiltins().then((result) => {
+    if (result.success) return
+    console.error('[Skills] Failed to initialize builtin skills:', result.error)
+  })
   registerMessagePackHandler<{ name: string }, MutationResult & { name?: string }>(
     'skills:ensure-builtin',
-    async (args) => nativeSkillsRequest('skills/ensure-builtin', args)
+    async (args) => await catalog.ensureBuiltin(args.name)
   )
 
-  registerMessagePackHandler<undefined, SkillInfo[]>('skills:list', async () => {
-    return nativeSkillsRequest<SkillInfo[]>('skills/list')
-  })
+  registerMessagePackHandler<undefined, SkillInfo[]>(
+    'skills:list',
+    async () => await catalog.list()
+  )
 
   registerMessagePackHandler<
     { name: string },
     { content: string; workingDirectory: string } | { error: string }
-  >('skills:load', async (args) => nativeSkillsRequest('skills/load', args))
+  >('skills:load', async (args) => await catalog.load(args.name))
 
   registerMessagePackHandler<{ name: string }, { content: string } | { error: string }>(
     'skills:read',
-    async (args) => nativeSkillsRequest('skills/read', args)
+    async (args) => await catalog.read(args.name)
   )
 
   registerMessagePackHandler<{ name: string }, { files: ScanFileInfo[] } | { error: string }>(
     'skills:list-files',
-    async (args) => nativeSkillsRequest('skills/list-files', args)
+    async (args) => await catalog.listFiles(args.name)
   )
 
   registerMessagePackHandler<{ name: string }, MutationResult>('skills:delete', async (args) =>
-    nativeSkillsRequest('skills/delete', args)
+    catalog.delete(args.name)
   )
 
-  registerMessagePackHandler<{ name: string }, MutationResult>(
+  registerMessagePackHandler<{ name: string }, MutationResult & { path?: string }>(
     'skills:open-folder',
     async (args) => {
-      const result = await nativeSkillsRequest<SkillPathResult>('skills/resolve-path', args)
-      if (!result.success || !result.path) {
-        return { success: false, error: result.error ?? 'Skill path not found' }
-      }
-
+      const result = await catalog.resolvePath(args.name)
+      if (!result.success || !result.path) return result
       const error = await shell.openPath(result.path)
       return error ? { success: false, error } : { success: true }
     }
@@ -136,17 +119,17 @@ export function registerSkillsHandlers(): void {
 
   registerMessagePackHandler<{ sourcePath: string }, MutationResult & { name?: string }>(
     'skills:add-from-folder',
-    async (args) => nativeSkillsRequest('skills/add-from-folder', args)
+    async (args) => await catalog.addFromFolder(args.sourcePath)
   )
 
   registerMessagePackHandler<{ name: string; content: string }, MutationResult>(
     'skills:save',
-    async (args) => nativeSkillsRequest('skills/save', args)
+    async (args) => await catalog.save(args.name, args.content)
   )
 
   registerMessagePackHandler<{ sourcePath: string }, ScanResult | { error: string }>(
     'skills:scan',
-    async (args) => nativeSkillsRequest('skills/scan', args)
+    async (args) => await scanSkillDirectory(args.sourcePath)
   )
 
   registerMessagePackHandler<
@@ -158,7 +141,7 @@ export function registerSkillsHandlers(): void {
       apiKey?: string
     },
     { total: number; skills: MarketSkillInfo[] }
-  >('skills:market-list', async (args) => nativeSkillsRequest('skills/market-list', args))
+  >('skills:market-list', async (args) => await marketClient.list(args))
 
   registerMessagePackHandler<
     {
@@ -171,10 +154,16 @@ export function registerSkillsHandlers(): void {
       downloadUrl?: string
     },
     { tempPath?: string; files?: { path: string; content: string }[]; error?: string }
-  >('skills:download-remote', async (args) => nativeSkillsRequest('skills/download-remote', args))
+  >('skills:download-remote', async (args) => {
+    try {
+      return await marketClient.download(args, tmpdir())
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) }
+    }
+  })
 
   registerMessagePackHandler<{ tempPath: string }, { success: boolean }>(
     'skills:cleanup-temp',
-    async (args) => nativeSkillsRequest('skills/cleanup-temp', args)
+    async (args) => ({ success: await cleanupSkillTemporaryDirectory(tmpdir(), args.tempPath) })
   )
 }

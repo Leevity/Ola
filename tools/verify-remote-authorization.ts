@@ -41,6 +41,8 @@ unsubscribe()
 
 const inputController = readFileSync('src/main/remote/input-controller.ts', 'utf8')
 const engine = readFileSync('src/main/remote/engine.ts', 'utf8')
+const remoteAccountStore = readFileSync('src/renderer/src/stores/remote-account-store.ts', 'utf8')
+const remoteAccountClient = readFileSync('src/main/remote/account-client.ts', 'utf8')
 assert.match(inputController, /export function clearRemoteInputSessionIfOwned\(/)
 assert.match(
   inputController,
@@ -50,6 +52,12 @@ assert.match(
   engine,
   /disconnect\(sessionId: string, ownerWebContentsId: number\)[\s\S]*clearRemoteInputSessionIfOwned\(sessionId, ownerWebContentsId\)/
 )
+assert.match(remoteAccountStore, /DEFAULT_API_BASE_URL = 'https:\/\/lbxai\.cn'/)
+assert.match(remoteAccountStore, /LEGACY_DEFAULT_API_BASE_URL = 'http:\/\/100\.64\.0\.6:7300'/)
+assert.match(remoteAccountStore, /normalizeApiBaseUrl\(parsed\.apiBaseUrl\)/)
+assert.match(remoteAccountClient, /DEFAULT_REMOTE_ACCOUNT_API_BASE_URL = 'https:\/\/lbxai\.cn'/)
+assert.match(remoteAccountClient, /migrateLegacyRemoteApiBaseUrl\(memoryState\.apiBaseUrl\)/)
+assert.match(remoteAccountClient, /\/oauth\/authorize/)
 assert.match(
   engine,
   /disconnectOwnedBy\(ownerWebContentsId: number\)[\s\S]*clearRemoteInputSession\(ownerWebContentsId\)/

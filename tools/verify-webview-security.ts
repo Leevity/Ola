@@ -6,7 +6,8 @@ const browserPanel = await readFile('src/renderer/src/components/layout/BrowserP
 
 assert.match(main, /window\.webContents\.on\('will-attach-webview'/)
 assert.match(main, /const isHttpUrl = \/\^https\?:\\\/\\\//)
-assert.match(main, /params\.partition === 'persist:ola-browser'/)
+assert.match(main, /isBuiltInBrowserPartition\(params\.partition\)/)
+assert.match(main, /browserSession\.setPermissionCheckHandler\(\(\) => false\)/)
 assert.match(main, /event\.preventDefault\(\)/)
 assert.match(main, /delete webPreferences\.preload/)
 assert.match(main, /delete webPreferences\.additionalArguments/)
@@ -23,7 +24,7 @@ assert.match(main, /window\.webContents\.setWindowOpenHandler/)
 assert.match(main, /return \{ action: 'deny' \}/)
 assert.match(main, /webviewTag: false/)
 assert.match(browserPanel, /<webview/)
-assert.match(browserPanel, /partition: BUILTIN_BROWSER_PARTITION/)
+assert.match(browserPanel, /partition: browserPartitionForWorkspace\(workspaceId\)/)
 assert.match(browserPanel, /canNavigateTo\(normalized\)/)
 
 console.log('webview security verification passed')

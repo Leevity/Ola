@@ -1,3 +1,6 @@
+import { useWorkspaceStore } from './workspace-store'
+import { managedProviderConfig, workspaceModelProviders } from '@renderer/lib/workspace-models'
+import { isOlaManagedProviderId } from '@renderer/lib/workspace-context'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import { nanoid } from 'nanoid'
@@ -327,6 +330,20 @@ export function modelSupportsVision(
   return Boolean(
     model.supportsVision || model.category === 'image' || requestType === 'openai-images'
   )
+}
+
+/**
+ * Unknown custom-model metadata must remain usable because many compatible APIs do not
+ * declare capabilities. Only an explicit false value is a safe reason to block image input.
+ */
+export function modelExplicitlyRejectsVision(
+  model: AIModelConfig | null | undefined,
+  providerType?: ProviderType
+): boolean {
+  if (!model) return false
+  const requestType = model.type ?? providerType
+  if (model.category === 'image' || requestType === 'openai-images') return false
+  return model.supportsVision === false
 }
 
 export function modelSupportsComputerUse(
@@ -1152,12 +1169,28 @@ export const useProviderStore = create<ProviderStore>()(
         ),
 
       getActiveProvider: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(workspace.activeWorkspaceId)
+        if (selected)
+          return (
+            [...get().providers, ...workspaceModelProviders()].find(
+              (p) => p.id === selected.providerId
+            ) ?? null
+          )
         const { providers, activeProviderId } = get()
         if (!activeProviderId) return null
         return providers.find((p) => p.id === activeProviderId) ?? null
       },
 
       getActiveModelConfig: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(workspace.activeWorkspaceId)
+        if (selected)
+          return (
+            [...get().providers, ...workspaceModelProviders()]
+              .find((p) => p.id === selected.providerId)
+              ?.models.find((m) => m.id === selected.modelId) ?? null
+          )
         const { providers, activeProviderId, activeModelId } = get()
         if (!activeProviderId) return null
         const provider = providers.find((p) => p.id === activeProviderId)
@@ -1166,6 +1199,9 @@ export const useProviderStore = create<ProviderStore>()(
       },
 
       getActiveProviderConfig: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(workspace.activeWorkspaceId)
+        if (selected) return get().getProviderConfigById(selected.providerId, selected.modelId)
         const { providers, activeProviderId, activeModelId } = get()
         if (!activeProviderId) return null
         const provider = providers.find((p) => p.id === activeProviderId)
@@ -1251,6 +1287,11 @@ export const useProviderStore = create<ProviderStore>()(
       },
 
       getTranslationProviderConfig: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(
+          JSON.stringify([workspace.activeWorkspaceId, 'translation'])
+        )
+        if (selected) return get().getProviderConfigById(selected.providerId, selected.modelId)
         const {
           providers,
           activeTranslationProviderId,
@@ -1283,18 +1324,29 @@ export const useProviderStore = create<ProviderStore>()(
       },
 
       getSpeechProviderConfig: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(
+          JSON.stringify([workspace.activeWorkspaceId, 'speech'])
+        )
+        if (selected) return get().getProviderConfigById(selected.providerId, selected.modelId)
         const { activeSpeechProviderId, activeSpeechModelId, getProviderConfigById } = get()
         if (!activeSpeechProviderId || !activeSpeechModelId) return null
         return getProviderConfigById(activeSpeechProviderId, activeSpeechModelId)
       },
 
       getImageProviderConfig: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(
+          JSON.stringify([workspace.activeWorkspaceId, 'image'])
+        )
+        if (selected) return get().getProviderConfigById(selected.providerId, selected.modelId)
         const { activeImageProviderId, activeImageModelId, getProviderConfigById } = get()
         if (!activeImageProviderId || !activeImageModelId) return null
         return getProviderConfigById(activeImageProviderId, activeImageModelId)
       },
 
       getProviderConfigById: (providerId, modelId) => {
+        if (isOlaManagedProviderId(providerId)) return managedProviderConfig(providerId, modelId)
         const provider = get().providers.find((p) => p.id === providerId)
         if (!provider) return null
         const resolvedModelId =
@@ -1371,6 +1423,11 @@ export const useProviderStore = create<ProviderStore>()(
       },
 
       getFastProviderConfig: () => {
+        const workspace = useWorkspaceStore.getState()
+        const selected = workspace.getModelSelection(
+          JSON.stringify([workspace.activeWorkspaceId, 'fast'])
+        )
+        if (selected) return get().getProviderConfigById(selected.providerId, selected.modelId)
         const {
           providers,
           activeProviderId,
@@ -1570,6 +1627,13 @@ function syncManagedModelsWithBuiltins(): void {
  * and a token is present.
  */
 function migrateLegacyOAuthProviders(): void {
+  const before = useProviderStore.getState()
+  const localProviders = before.providers.filter(
+    (provider) => provider.id !== 'ola-account-gateway' && !isOlaManagedProviderId(provider.id)
+  )
+  if (localProviders.length !== before.providers.length) {
+    useProviderStore.setState({ providers: localProviders })
+  }
   const state = useProviderStore.getState()
   let changed = false
   const nextProviders = state.providers.map((provider) => {

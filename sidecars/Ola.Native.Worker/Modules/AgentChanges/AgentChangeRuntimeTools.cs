@@ -13,6 +13,7 @@ internal static class AgentChangeRuntimeTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId").Trim();
+            var workspaceId = RequireString(parameters, "workspaceId");
             if (sessionId.Length == 0)
             {
                 return Json(
@@ -21,7 +22,8 @@ internal static class AgentChangeRuntimeTools
             }
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var changeSets = DbAgentChangeTools.LoadChangeSetsBySession(connection, sessionId)
+            DbAgentChangeTools.AssertSessionWorkspace(connection, sessionId, workspaceId);
+            var changeSets = DbAgentChangeTools.LoadChangeSetsBySession(connection, sessionId, workspaceId)
                 .Select(HydrateLocalAfterSnapshots)
                 .ToList();
 
@@ -42,8 +44,9 @@ internal static class AgentChangeRuntimeTools
         try
         {
             var runId = RequireString(parameters, "runId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var changeSet = DbAgentChangeTools.LoadChangeSetByRunId(connection, runId);
+            var changeSet = DbAgentChangeTools.LoadChangeSetByRunId(connection, runId, workspaceId);
 
             return Json(
                 new AgentChangeHydratedGetResult(
@@ -66,7 +69,8 @@ internal static class AgentChangeRuntimeTools
         {
             var runId = RequireString(parameters, "runId");
             var changeId = RequireString(parameters, "changeId");
-            var found = FindChange(parameters, runId, changeId);
+            var workspaceId = RequireString(parameters, "workspaceId");
+            var found = FindChange(parameters, runId, changeId, workspaceId);
             if (found is null)
             {
                 return Json(
@@ -119,7 +123,13 @@ internal static class AgentChangeRuntimeTools
     {
         try
         {
-            var change = ReadChange(parameters);
+            var runId = RequireString(parameters, "runId");
+            var changeId = RequireString(parameters, "changeId");
+            var workspaceId = RequireString(parameters, "workspaceId");
+            var found = FindChange(parameters, runId, changeId, workspaceId);
+            if (found is null)
+                return Json(new AgentChangeRollbackResult(false, true, false, null, null, "Change not found"), WorkerJsonContext.Default.AgentChangeRollbackResult);
+            var change = found.Value.Change;
             if (!IsLocal(change))
             {
                 return Json(
@@ -148,26 +158,13 @@ internal static class AgentChangeRuntimeTools
     private static (StoredRunChangeSet ChangeSet, StoredTrackedFileChange Change)? FindChange(
         JsonElement parameters,
         string runId,
-        string changeId)
+        string changeId,
+        string workspaceId)
     {
         using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-        var changeSet = DbAgentChangeTools.LoadChangeSetByRunId(connection, runId);
+        var changeSet = DbAgentChangeTools.LoadChangeSetByRunId(connection, runId, workspaceId);
         var change = changeSet?.Changes.FirstOrDefault(entry => entry.Id == changeId);
         return changeSet is null || change is null ? null : (changeSet, change);
-    }
-
-    private static StoredTrackedFileChange ReadChange(JsonElement parameters)
-    {
-        if (!parameters.TryGetProperty("change", out var changeElement) ||
-            changeElement.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("Missing required agent change object: change");
-        }
-
-        return JsonSerializer.Deserialize(
-                changeElement.GetRawText(),
-                WorkerJsonContext.Default.StoredTrackedFileChange) ??
-            throw new InvalidOperationException("Invalid agent change payload.");
     }
 
     private static StoredRunChangeSet HydrateLocalAfterSnapshots(StoredRunChangeSet changeSet)

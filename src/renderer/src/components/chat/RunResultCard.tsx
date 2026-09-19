@@ -1,15 +1,5 @@
 ﻿import * as React from 'react'
-import {
-  Check,
-  CircleAlert,
-  Copy,
-  FileOutput,
-  GitFork,
-  Loader2,
-  RotateCcw,
-  ScanSearch,
-  X
-} from 'lucide-react'
+import { Check, CircleAlert, Copy, FileOutput, GitFork, Loader2, ScanSearch, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
 import type { ChatRunPresentation } from './chat-run-view-model'
@@ -21,7 +11,6 @@ interface RunResultCardProps {
   onReviewChanges?: () => void
   onExportResult?: () => void
   onFork?: () => void
-  children?: React.ReactNode
 }
 
 function durationLabel(durationMs: number | undefined): string | null {
@@ -37,17 +26,9 @@ export function RunResultCard({
   onCopyResult,
   onReviewChanges,
   onExportResult,
-  onFork,
-  children
+  onFork
 }: RunResultCardProps): React.JSX.Element | null {
   const { t } = useTranslation('chat')
-  const [expanded, setExpanded] = React.useState(false)
-
-  React.useEffect(() => {
-    if (presentation?.status === 'failed' || presentation?.status === 'pending-approval') {
-      setExpanded(true)
-    }
-  }, [presentation?.status])
 
   if (!presentation) return null
 
@@ -70,21 +51,16 @@ export function RunResultCard({
           ? CircleAlert
           : Check
   const duration = durationLabel(presentation.durationMs)
-  const hasDetails =
-    presentation.changeSummary.fileCount > 0 ||
-    presentation.attentionCount > 0 ||
-    presentation.usageTotalTokens > 0
-
   return (
     <section
       className={cn(
-        'mt-3 overflow-hidden rounded-lg border border-border/60 bg-muted/15 text-xs',
-        presentation.status === 'failed' && 'border-destructive/30 bg-destructive/5',
-        presentation.status === 'pending-approval' && 'border-amber-500/30 bg-amber-500/5'
+        'mt-2 border-b border-border/60 text-xs',
+        presentation.status === 'failed' && 'border-destructive/30',
+        presentation.status === 'pending-approval' && 'border-amber-500/30'
       )}
       aria-label={t('runResult.title')}
     >
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1 py-2">
         <StatusIcon
           className={cn(
             'size-3.5 shrink-0',
@@ -171,25 +147,8 @@ export function RunResultCard({
               <Copy className="size-3.5" />
             </button>
           ) : null}
-          {hasDetails ? (
-            <button
-              type="button"
-              className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background/70 hover:text-foreground"
-              onClick={() => setExpanded((current) => !current)}
-              aria-expanded={expanded}
-              title={expanded ? t('runResult.hideDetails') : t('runResult.showDetails')}
-              aria-label={expanded ? t('runResult.hideDetails') : t('runResult.showDetails')}
-            >
-              <RotateCcw
-                className={cn('size-3.5 transition-transform', expanded && 'rotate-180')}
-              />
-            </button>
-          ) : null}
         </div>
       </div>
-      {expanded && hasDetails ? (
-        <div className="border-t border-border/50 px-3 py-2">{children}</div>
-      ) : null}
     </section>
   )
 }

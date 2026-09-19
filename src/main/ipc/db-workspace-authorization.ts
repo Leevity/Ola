@@ -1,0 +1,15 @@
+export async function authorizeDbWorkspace(
+  rawWorkspaceId: unknown,
+  availableWorkspaceIds: () => Promise<ReadonlySet<string>>
+): Promise<string> {
+  if (
+    typeof rawWorkspaceId !== 'string' ||
+    !rawWorkspaceId ||
+    rawWorkspaceId !== rawWorkspaceId.trim() ||
+    rawWorkspaceId.length > 1024
+  )
+    throw new Error('db-workspace-required')
+  if (rawWorkspaceId !== 'local-personal' && !(await availableWorkspaceIds()).has(rawWorkspaceId))
+    throw new Error('db-workspace-unavailable')
+  return rawWorkspaceId
+}

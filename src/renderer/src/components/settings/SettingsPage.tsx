@@ -1,8 +1,8 @@
-﻿import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useWorkspaceProviders, useWorkspaceModelRoute } from '@renderer/hooks/use-workspace-models'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import {
   ArrowLeft,
   Settings,
-  BarChart3,
   Info,
   Server,
   Cable,
@@ -23,42 +23,30 @@ import {
   MessageSquareQuote,
   Code2,
   Network,
-  PawPrint,
   KeyRound,
   ShieldCheck,
   MousePointer2,
   Search,
-  BriefcaseBusiness
+  BriefcaseBusiness,
+  Layers3,
+  Cloud,
+  SlidersHorizontal,
+  UserRound,
+  FlaskConical
 } from 'lucide-react'
 import { useTheme } from 'next-themes'
-import { useUIStore, type SettingsTab } from '@renderer/stores/ui-store'
-import { PermissionPanel } from './PermissionPanel'
-import { HooksPanel } from './HooksPanel'
+import { useUIStore } from '@renderer/stores/ui-store'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import {
-  clampMaxParallelToolCalls,
-  clampMaxConcurrentSubAgents,
-  clampProviderRetryMaxAttempts,
   DEFAULT_THEME_MODE,
   DEFAULT_MAX_PARALLEL_TOOL_CALLS,
   DEFAULT_MAX_CONCURRENT_SUB_AGENTS,
-  DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS,
   DEFAULT_SHELL_EXECUTION_ENDPOINT,
-  MAX_MAX_PARALLEL_TOOL_CALLS,
-  MIN_MAX_PARALLEL_TOOL_CALLS,
-  MAX_MAX_CONCURRENT_SUB_AGENTS,
-  MIN_MAX_CONCURRENT_SUB_AGENTS,
-  MIN_PROVIDER_RETRY_MAX_ATTEMPTS,
-  MAX_PROVIDER_RETRY_MAX_ATTEMPTS,
   resolveShellExecutable,
   type ShellExecutionEndpoint,
   useSettingsStore
 } from '@renderer/stores/settings-store'
-import {
-  clampCompressionThreshold,
-  MIN_CONTEXT_COMPRESSION_THRESHOLD,
-  MAX_CONTEXT_COMPRESSION_THRESHOLD
-} from '@renderer/lib/agent/context-compression'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
@@ -85,23 +73,11 @@ import {
   useProviderStore
 } from '@renderer/stores/provider-store'
 import { ModelManagementPanel, ProviderPanel } from './ProviderPanel'
-import { ChannelPanel } from './PluginPanel'
-import { CapabilityCenterPanel } from './CapabilityCenterPanel'
-import { AiCodingConfigPanel } from './AiCodingConfigPanel'
-import { ExtensionPanel } from './ExtensionPanel'
-import { McpPanel } from './McpPanel'
-import { WebSearchPanel } from './WebSearchPanel'
-import { SkillsMarketPanel } from './SkillsMarketPanel'
 
 import { GlobalThemePanel } from './GlobalThemePanel'
 import { AnalyticsOverview } from './AnalyticsOverview'
-import { ProfilePanel } from './ProfilePanel'
 import { ModelIcon, ProviderIcon } from './provider-icons'
 import { AutoMemoryPanel } from '@renderer/components/memory/AutoMemoryPanel'
-import { PetPanel } from './PetPanel'
-import { CredentialsPanel } from '@renderer/components/credentials/CredentialsPanel'
-import { ProjectWikiPanel } from './ProjectWikiPanel'
-import { DesktopAutomationPanel } from './DesktopAutomationPanel'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import {
@@ -135,8 +111,14 @@ import {
   DEFAULT_SSH_TERMINAL_THEME_PRESET
 } from '@renderer/lib/theme-presets'
 import { WindowControls } from '@renderer/components/layout/WindowControls'
-import { isSettingsFullPanelTab, normalizeSettingsTab } from './settings-nav'
-import { WorkModesPanel } from './WorkModesPanel'
+import { isSettingsFullPanelTab } from './settings-nav'
+import {
+  getPagesForSection,
+  SETTINGS_SECTIONS,
+  type SettingsIcon,
+  type SettingsPageId
+} from './settings-registry'
+import { renderSettingsPanel, type SettingsPanelComponent } from './settings-panel-resolver'
 import {
   DEFAULT_BUILTIN_SOUL_TEMPLATE_ID,
   type BuiltinSoulTemplateWithContent
@@ -403,176 +385,32 @@ function getShellEndpointOptions(platform: string): ShellEndpointOption[] {
   ]
 }
 
-const menuGroupDefs: Array<{
-  labelKey: string
-  items: { id: SettingsTab; icon: React.ReactNode; labelKey: string; descKey: string }[]
-}> = [
-  {
-    labelKey: 'page.groups.general',
-    items: [
-      {
-        id: 'general',
-        icon: <Settings className="size-4" />,
-        labelKey: 'general.title',
-        descKey: 'general.subtitle'
-      },
-      {
-        id: 'workModes',
-        icon: <BriefcaseBusiness className="size-4" />,
-        labelKey: 'workModes.title',
-        descKey: 'workModes.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.aiAndModels',
-    items: [
-      {
-        id: 'provider',
-        icon: <Server className="size-4" />,
-        labelKey: 'provider.title',
-        descKey: 'provider.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.executionSecurity',
-    items: [
-      {
-        id: 'permission',
-        icon: <ShieldCheck className="size-4" />,
-        labelKey: 'permission.title',
-        descKey: 'permission.subtitle'
-      },
-      {
-        id: 'system',
-        icon: <Terminal className="size-4" />,
-        labelKey: 'system.title',
-        descKey: 'system.subtitle'
-      },
-      {
-        id: 'desktopAutomation',
-        icon: <MousePointer2 className="size-4" />,
-        labelKey: 'desktopAutomation.title',
-        descKey: 'desktopAutomation.subtitle'
-      },
-      {
-        id: 'aiCoding',
-        icon: <Code2 className="size-4" />,
-        labelKey: 'aiCoding.title',
-        descKey: 'aiCoding.subtitle'
-      },
-      {
-        id: 'hooks',
-        icon: <RefreshCw className="size-4" />,
-        labelKey: 'hooks.title',
-        descKey: 'hooks.subtitle'
-      },
-      {
-        id: 'credentials',
-        icon: <KeyRound className="size-4" />,
-        labelKey: 'credentials.title',
-        descKey: 'credentials.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.integrations',
-    items: [
-      {
-        id: 'plugin',
-        icon: <Puzzle className="size-4" />,
-        labelKey: 'plugin.title',
-        descKey: 'plugin.subtitle'
-      },
-      {
-        id: 'mcp',
-        icon: <Cable className="size-4" />,
-        labelKey: 'mcp.title',
-        descKey: 'mcp.subtitle'
-      },
-      {
-        id: 'skillsmarket',
-        icon: <Wand2 className="size-4" />,
-        labelKey: 'skillsmarket.title',
-        descKey: 'skillsmarket.subtitle'
-      },
-      {
-        id: 'channel',
-        icon: <MessagesSquare className="size-4" />,
-        labelKey: 'channel.title',
-        descKey: 'channel.subtitle'
-      },
-      {
-        id: 'websearch',
-        icon: <Globe className="size-4" />,
-        labelKey: 'websearch.title',
-        descKey: 'websearch.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.personalization',
-    items: [
-      {
-        id: 'memory',
-        icon: <BookOpen className="size-4" />,
-        labelKey: 'memory.title',
-        descKey: 'memory.subtitle'
-      },
-      {
-        id: 'pet',
-        icon: <PawPrint className="size-4" />,
-        labelKey: 'pet.title',
-        descKey: 'pet.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.dataUsage',
-    items: [
-      {
-        id: 'analytics',
-        icon: <BarChart3 className="size-4" />,
-        labelKey: 'analytics.title',
-        descKey: 'analytics.subtitle'
-      }
-    ]
-  },
-  {
-    labelKey: 'page.groups.about',
-    items: [
-      {
-        id: 'about',
-        icon: <Info className="size-4" />,
-        labelKey: 'about.title',
-        descKey: 'about.subtitle'
-      }
-    ]
-  }
-]
-
-// ─── General Settings Panel ───
+const settingsIcons: Record<SettingsIcon, React.ComponentType<{ className?: string }>> = {
+  settings: Settings,
+  briefcase: BriefcaseBusiness,
+  info: Info,
+  server: Server,
+  cloud: Cloud,
+  sliders: SlidersHorizontal,
+  layers: Layers3,
+  shield: ShieldCheck,
+  terminal: Terminal,
+  mouse: MousePointer2,
+  key: KeyRound,
+  puzzle: Puzzle,
+  wand: Wand2,
+  cable: Cable,
+  messages: MessagesSquare,
+  globe: Globe,
+  network: Network,
+  user: UserRound,
+  book: BookOpen,
+  flask: FlaskConical
+}
 
 function GeneralPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
-  const providers = useProviderStore((state) => state.providers)
-  const compressionModels = providers.flatMap((provider) =>
-    provider.models
-      .filter(
-        (model) =>
-          model.enabled &&
-          (model.category ?? 'chat') === 'chat' &&
-          isProviderAvailableForModelSelection(provider)
-      )
-      .map((model) => ({
-        value: `${provider.id}::${model.id}`,
-        providerId: provider.id,
-        modelId: model.id,
-        label: `${provider.name} · ${model.name || model.id}`
-      }))
-  )
   const { setTheme } = useTheme()
   const currentVersion = normalizeVersion(packageJson.version ?? '0.0.0')
   const [latestVersion, setLatestVersion] = useState<string | null>(null)
@@ -829,8 +667,6 @@ function GeneralPanel(): React.JSX.Element {
         <h2 className="text-lg font-semibold">{t('general.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('general.subtitle')}</p>
       </div>
-
-      <ProfilePanel />
 
       <section className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
         <div className="flex flex-col gap-1 text-sm">
@@ -1248,426 +1084,6 @@ function GeneralPanel(): React.JSX.Element {
 
       <Separator />
 
-      {/* Tool Result Format */}
-      <section className="space-y-3">
-        <div>
-          <label className="text-sm font-medium">{t('general.toolResultFormat')}</label>
-          <p className="text-xs text-muted-foreground">{t('general.toolResultFormatDesc')}</p>
-        </div>
-        <Select
-          value={settings.toolResultFormat}
-          onValueChange={(v: 'toon' | 'json') => settings.updateSettings({ toolResultFormat: v })}
-        >
-          <SelectTrigger className="w-60 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="toon" className="text-xs">
-              {t('general.toolResultFormatToon')}
-            </SelectItem>
-            <SelectItem value="json" className="text-xs">
-              {t('general.toolResultFormatJson')}
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </section>
-
-      <Separator />
-
-      {/* Team Tools */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.teamTools')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.teamToolsDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.teamToolsEnabled}
-            onCheckedChange={(checked) => settings.updateSettings({ teamToolsEnabled: checked })}
-          />
-        </div>
-        {settings.teamToolsEnabled && (
-          <p className="text-xs text-muted-foreground/70">{t('general.teamToolsEnabled')}</p>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* Tool Parallelism */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.maxParallelToolCalls')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.maxParallelToolCallsDesc')}</p>
-          </div>
-          <span className="text-sm font-mono text-muted-foreground">
-            {settings.maxParallelToolCalls}
-          </span>
-        </div>
-        <Slider
-          value={[settings.maxParallelToolCalls]}
-          onValueChange={([value]) =>
-            settings.updateSettings({
-              maxParallelToolCalls: clampMaxParallelToolCalls(value)
-            })
-          }
-          min={MIN_MAX_PARALLEL_TOOL_CALLS}
-          max={MAX_MAX_PARALLEL_TOOL_CALLS}
-          step={1}
-          className="max-w-lg"
-        />
-        <div className="flex items-center justify-between max-w-lg text-[10px] text-muted-foreground/60">
-          <span>{MIN_MAX_PARALLEL_TOOL_CALLS}</span>
-          <span>{DEFAULT_MAX_PARALLEL_TOOL_CALLS}</span>
-          <span>{MAX_MAX_PARALLEL_TOOL_CALLS}</span>
-        </div>
-        <p className="text-xs text-muted-foreground/70">{t('general.maxParallelToolCallsHint')}</p>
-        <div className="flex items-center gap-1">
-          {[1, 4, 8, 12, 16].map((value) => (
-            <button
-              key={value}
-              onClick={() => settings.updateSettings({ maxParallelToolCalls: value })}
-              className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
-                settings.maxParallelToolCalls === value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Sub-Agent Concurrency */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">
-              {t('general.maxConcurrentSubAgents', { defaultValue: 'Max Concurrent Sub-Agents' })}
-            </label>
-            <p className="text-xs text-muted-foreground">
-              {t('general.maxConcurrentSubAgentsDesc', {
-                defaultValue:
-                  'How many Task sub-agents (and background teammates per team) may run at once. Extra launches queue until a slot frees.'
-              })}
-            </p>
-          </div>
-          <span className="text-sm font-mono text-muted-foreground">
-            {settings.maxConcurrentSubAgents}
-          </span>
-        </div>
-        <Slider
-          value={[settings.maxConcurrentSubAgents]}
-          onValueChange={([value]) =>
-            settings.updateSettings({
-              maxConcurrentSubAgents: clampMaxConcurrentSubAgents(value)
-            })
-          }
-          min={MIN_MAX_CONCURRENT_SUB_AGENTS}
-          max={MAX_MAX_CONCURRENT_SUB_AGENTS}
-          step={1}
-          className="max-w-lg"
-        />
-        <div className="flex items-center justify-between max-w-lg text-[10px] text-muted-foreground/60">
-          <span>{MIN_MAX_CONCURRENT_SUB_AGENTS}</span>
-          <span>{DEFAULT_MAX_CONCURRENT_SUB_AGENTS}</span>
-          <span>{MAX_MAX_CONCURRENT_SUB_AGENTS}</span>
-        </div>
-        <div className="flex items-center gap-1">
-          {[1, 2, 4, 6, 8].map((value) => (
-            <button
-              key={value}
-              onClick={() => settings.updateSettings({ maxConcurrentSubAgents: value })}
-              className={`rounded px-2 py-0.5 text-[10px] transition-colors ${
-                settings.maxConcurrentSubAgents === value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {value}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Provider Retry */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.providerRetryMaxAttempts')}</label>
-            <p className="text-xs text-muted-foreground">
-              {t('general.providerRetryMaxAttemptsDesc')}
-            </p>
-          </div>
-          <span className="text-sm font-mono text-muted-foreground">
-            {settings.providerRetryMaxAttempts}
-          </span>
-        </div>
-        <Slider
-          value={[settings.providerRetryMaxAttempts]}
-          onValueChange={([value]) =>
-            settings.updateSettings({
-              providerRetryMaxAttempts: clampProviderRetryMaxAttempts(value)
-            })
-          }
-          min={MIN_PROVIDER_RETRY_MAX_ATTEMPTS}
-          max={MAX_PROVIDER_RETRY_MAX_ATTEMPTS}
-          step={1}
-          className="max-w-lg"
-        />
-        <div className="flex items-center justify-between max-w-lg text-[10px] text-muted-foreground/60">
-          <span>{MIN_PROVIDER_RETRY_MAX_ATTEMPTS}</span>
-          <span>{DEFAULT_PROVIDER_RETRY_MAX_ATTEMPTS}</span>
-          <span>{MAX_PROVIDER_RETRY_MAX_ATTEMPTS}</span>
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Context Compression */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.contextCompression')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.contextCompressionDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.contextCompressionEnabled}
-            onCheckedChange={(checked) =>
-              settings.updateSettings({ contextCompressionEnabled: checked })
-            }
-          />
-        </div>
-        {settings.contextCompressionEnabled && (
-          <div className="max-w-lg space-y-4">
-            <p className="text-xs text-muted-foreground/70">
-              {t('general.contextCompressionEnabled')}
-            </p>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="text-sm font-medium">
-                    {t('general.contextCompressionThreshold')}
-                  </label>
-                  <p className="text-xs text-muted-foreground">
-                    {t('general.contextCompressionThresholdDesc')}
-                  </p>
-                </div>
-                <span className="font-mono text-sm text-muted-foreground">
-                  {Math.round(settings.contextCompressionThreshold * 100)}%
-                </span>
-              </div>
-              <Slider
-                value={[settings.contextCompressionThreshold * 100]}
-                onValueChange={([value]) =>
-                  settings.updateSettings({
-                    contextCompressionThreshold: clampCompressionThreshold(value / 100)
-                  })
-                }
-                min={MIN_CONTEXT_COMPRESSION_THRESHOLD * 100}
-                max={MAX_CONTEXT_COMPRESSION_THRESHOLD * 100}
-                step={1}
-              />
-            </div>
-            <div className="space-y-2">
-              <div>
-                <label className="text-sm font-medium">
-                  {t('general.contextCompressionModel')}
-                </label>
-                <p className="text-xs text-muted-foreground">
-                  {t('general.contextCompressionModelDesc')}
-                </p>
-              </div>
-              <Select
-                value={
-                  settings.contextCompressionModel
-                    ? `${settings.contextCompressionModel.providerId}::${settings.contextCompressionModel.modelId}`
-                    : 'current'
-                }
-                onValueChange={(value) => {
-                  const selected = compressionModels.find((option) => option.value === value)
-                  settings.updateSettings({
-                    contextCompressionModel: selected
-                      ? { providerId: selected.providerId, modelId: selected.modelId }
-                      : null
-                  })
-                }}
-              >
-                <SelectTrigger className="w-full text-xs">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="current">
-                    {t('general.contextCompressionModelCurrent')}
-                  </SelectItem>
-                  {compressionModels.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* Editor Workspace */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.editorWorkspace')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.editorWorkspaceDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.editorWorkspaceEnabled}
-            onCheckedChange={(checked) =>
-              settings.updateSettings({
-                editorWorkspaceEnabled: checked,
-                editorRemoteLanguageServiceEnabled: checked
-                  ? settings.editorRemoteLanguageServiceEnabled
-                  : false
-              })
-            }
-          />
-        </div>
-        {settings.editorWorkspaceEnabled && (
-          <p className="text-xs text-muted-foreground/70">{t('general.editorWorkspaceEnabled')}</p>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* Remote Language Service */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">
-              {t('general.editorRemoteLanguageService')}
-            </label>
-            <p className="text-xs text-muted-foreground">
-              {t('general.editorRemoteLanguageServiceDesc')}
-            </p>
-          </div>
-          <Switch
-            checked={settings.editorRemoteLanguageServiceEnabled}
-            disabled={!settings.editorWorkspaceEnabled}
-            onCheckedChange={(checked) =>
-              settings.updateSettings({ editorRemoteLanguageServiceEnabled: checked })
-            }
-          />
-        </div>
-        {settings.editorRemoteLanguageServiceEnabled && settings.editorWorkspaceEnabled && (
-          <p className="text-xs text-muted-foreground/70">
-            {t('general.editorRemoteLanguageServiceEnabled')}
-          </p>
-        )}
-      </section>
-
-      <Separator />
-
-      {/* Clarify Auto Accept Recommended */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">
-              {t('general.clarifyAutoAcceptRecommended')}
-            </label>
-            <p className="text-xs text-muted-foreground">
-              {t('general.clarifyAutoAcceptRecommendedDesc')}
-            </p>
-          </div>
-          <Switch
-            checked={settings.clarifyAutoAcceptRecommended}
-            onCheckedChange={(checked) =>
-              settings.updateSettings({ clarifyAutoAcceptRecommended: checked })
-            }
-          />
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Auto Approve */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.autoApprove')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.autoApproveDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.autoApprove}
-            onCheckedChange={async (checked) => {
-              if (checked) {
-                const ok = await confirm({ title: t('general.autoApproveWarning') })
-                if (!ok) return
-              }
-              settings.updateSettings({ autoApprove: checked })
-            }}
-          />
-        </div>
-        {settings.autoApprove && (
-          <p className="text-xs text-destructive">{t('general.autoApproveWarning')}</p>
-        )}
-      </section>
-
-      <Separator />
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.advancedDraw')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.advancedDrawDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.advancedDrawEnabled}
-            onCheckedChange={(checked) => settings.updateSettings({ advancedDrawEnabled: checked })}
-          />
-        </div>
-      </section>
-
-      <Separator />
-
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.videoGeneration')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.videoGenerationDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.videoGenerationEnabled}
-            onCheckedChange={(checked) =>
-              settings.updateSettings({ videoGenerationEnabled: checked })
-            }
-          />
-        </div>
-      </section>
-
-      <Separator />
-
-      {/* Developer Mode */}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label className="text-sm font-medium">{t('general.devMode')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.devModeDesc')}</p>
-          </div>
-          <Switch
-            checked={settings.devMode}
-            onCheckedChange={(checked) => settings.updateSettings({ devMode: checked })}
-          />
-        </div>
-      </section>
-
-      <Separator />
-
       {/* Data Management */}
       <section className="space-y-4 rounded-xl border border-border/60 bg-muted/15 p-4">
         <div>
@@ -2033,7 +1449,10 @@ function MemoryPanel(): React.JSX.Element {
       }
       const defaultSoulContent =
         builtinTemplates[0]?.content ?? DEFAULT_GLOBAL_MEMORY_TEMPLATES.soul
-      const rootPath = await resolveGlobalMemoryHomePath(ipcClient)
+      const rootPath = await resolveGlobalMemoryHomePath(
+        ipcClient,
+        useWorkspaceStore.getState().activeWorkspaceId
+      )
       if (!rootPath) {
         toast.error(t('memory.resolvePathFailed'))
         setMemoryRootPath('')
@@ -2448,8 +1867,9 @@ function MemoryPanel(): React.JSX.Element {
 
 // ─── Model Configuration Panel ───
 
-function AnalyticsPanel(): React.JSX.Element {
+export function AnalyticsPanel(): React.JSX.Element {
   const { t, i18n } = useTranslation('settings')
+  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const [rangeDays, setRangeDays] = useState<1 | 7 | 30>(7)
   const [loading, setLoading] = useState(true)
   const [selectedProviderId, setSelectedProviderId] = useState<string>('__all__')
@@ -2507,13 +1927,14 @@ function AnalyticsPanel(): React.JSX.Element {
     return {
       from: fromDate.getTime(),
       to,
+      workspaceId: activeWorkspaceId,
       limit: 50,
       offset: 0,
       providerId: selectedProviderId === '__all__' ? null : selectedProviderId,
       modelId: selectedModelId === '__all__' ? null : selectedModelId,
       sourceKind: selectedSourceKind === '__all__' ? null : selectedSourceKind
     }
-  }, [rangeDays, selectedModelId, selectedProviderId, selectedSourceKind])
+  }, [activeWorkspaceId, rangeDays, selectedModelId, selectedProviderId, selectedSourceKind])
 
   const loadAnalytics = useCallback(
     async (signal?: { cancelled: boolean }): Promise<void> => {
@@ -2571,7 +1992,7 @@ function AnalyticsPanel(): React.JSX.Element {
 
   const handleClearLogs = useCallback(async (): Promise<void> => {
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000
-    const purgeQuery = { from: 0, to: cutoff }
+    const purgeQuery = { from: 0, to: cutoff, workspaceId: activeWorkspaceId }
     const preview = (await getUsageOverview(purgeQuery)) as { request_count?: number } | null
     const count = Number(preview?.request_count ?? 0)
     if (count <= 0) {
@@ -2596,7 +2017,7 @@ function AnalyticsPanel(): React.JSX.Element {
     } finally {
       setClearing(false)
     }
-  }, [loadAnalytics, t])
+  }, [activeWorkspaceId, loadAnalytics, t])
 
   const tokenLocale = resolveIntlLocale(i18n.language)
   const inputTokenLabel = t('analytics.billableInputTokens', {
@@ -2989,28 +2410,33 @@ function AnalyticsPanel(): React.JSX.Element {
 function ModelPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
-  const providers = useProviderStore((s) => s.providers)
+  const providers = useWorkspaceProviders()
   const mainModelSelectionMode = settings.mainModelSelectionMode
-  const activeProviderId = useProviderStore((s) => s.activeProviderId)
-  const activeModelId = useProviderStore((s) => s.activeModelId)
-  const activeFastModelId = useProviderStore((s) => s.activeFastModelId)
-  const activeFastProviderId = useProviderStore((s) => s.activeFastProviderId)
-  const activeTranslationProviderId = useProviderStore((s) => s.activeTranslationProviderId)
-  const activeTranslationModelId = useProviderStore((s) => s.activeTranslationModelId)
-  const activeSpeechProviderId = useProviderStore((s) => s.activeSpeechProviderId)
-  const activeSpeechModelId = useProviderStore((s) => s.activeSpeechModelId)
-  const activeImageProviderId = useProviderStore((s) => s.activeImageProviderId)
-  const activeImageModelId = useProviderStore((s) => s.activeImageModelId)
-  const setActiveProvider = useProviderStore((s) => s.setActiveProvider)
-  const setActiveModel = useProviderStore((s) => s.setActiveModel)
-  const setActiveFastModel = useProviderStore((s) => s.setActiveFastModel)
-  const setActiveFastProvider = useProviderStore((s) => s.setActiveFastProvider)
-  const setActiveTranslationProvider = useProviderStore((s) => s.setActiveTranslationProvider)
-  const setActiveTranslationModel = useProviderStore((s) => s.setActiveTranslationModel)
-  const setActiveSpeechProvider = useProviderStore((s) => s.setActiveSpeechProvider)
-  const setActiveSpeechModel = useProviderStore((s) => s.setActiveSpeechModel)
-  const setActiveImageProvider = useProviderStore((s) => s.setActiveImageProvider)
-  const setActiveImageModel = useProviderStore((s) => s.setActiveImageModel)
+  const mainRoute = useWorkspaceModelRoute('main')
+  const activeProviderId = mainRoute.providerId
+  const activeModelId = mainRoute.modelId
+  const fastRoute = useWorkspaceModelRoute('fast')
+  const activeFastModelId = fastRoute.modelId
+  const activeFastProviderId = fastRoute.providerId
+  const translationRoute = useWorkspaceModelRoute('translation')
+  const activeTranslationProviderId = translationRoute.providerId
+  const activeTranslationModelId = translationRoute.modelId
+  const speechRoute = useWorkspaceModelRoute('speech')
+  const activeSpeechProviderId = speechRoute.providerId
+  const activeSpeechModelId = speechRoute.modelId
+  const imageRoute = useWorkspaceModelRoute('image')
+  const activeImageProviderId = imageRoute.providerId
+  const activeImageModelId = imageRoute.modelId
+  const setActiveProvider = mainRoute.setProvider
+  const setActiveModel = mainRoute.setModel
+  const setActiveFastModel = fastRoute.setModel
+  const setActiveFastProvider = fastRoute.setProvider
+  const setActiveTranslationProvider = translationRoute.setProvider
+  const setActiveTranslationModel = translationRoute.setModel
+  const setActiveSpeechProvider = speechRoute.setProvider
+  const setActiveSpeechModel = speechRoute.setModel
+  const setActiveImageProvider = imageRoute.setProvider
+  const setActiveImageModel = imageRoute.setModel
 
   const enabledProviders = providers.filter((p) => isProviderAvailableForModelSelection(p))
   const chatProviderGroups = enabledProviders
@@ -3878,29 +3304,14 @@ function AiModelsPanel(): React.JSX.Element {
   )
 }
 
-const panelMap: Record<SettingsTab, () => React.JSX.Element> = {
+const localSettingsPanelBindings: Partial<Record<SettingsPageId, SettingsPanelComponent>> = {
   general: GeneralPanel,
-  workModes: WorkModesPanel,
-  system: SystemPanel,
-  permission: PermissionPanel,
-  hooks: HooksPanel,
-  memory: MemoryPanel,
-  analytics: AnalyticsPanel,
+  about: AboutPanel,
   provider: AiModelsPanel,
   modelManagement: AiModelsPanel,
-  plugin: CapabilityCenterPanel,
-  extension: ExtensionPanel,
-  channel: ChannelPanel,
-  mcp: McpPanel,
   model: AiModelsPanel,
-  aiCoding: AiCodingConfigPanel,
-  websearch: WebSearchPanel,
-  skillsmarket: SkillsMarketPanel,
-  pet: PetPanel,
-  credentials: CredentialsPanel,
-  wiki: ProjectWikiPanel,
-  desktopAutomation: DesktopAutomationPanel,
-  about: AboutPanel
+  system: SystemPanel,
+  memory: MemoryPanel
 }
 
 export function SettingsPage(): React.JSX.Element {
@@ -3925,19 +3336,18 @@ export function SettingsPage(): React.JSX.Element {
     }
   }, [])
 
-  const effectiveSettingsTab = normalizeSettingsTab(settingsTab)
-  const ActivePanel = panelMap[effectiveSettingsTab]
+  const effectiveSettingsTab = settingsTab
+  const activePanelContent = renderSettingsPanel(effectiveSettingsTab, localSettingsPanelBindings)
   const visibleMenuGroups = useMemo(() => {
     const query = settingsSearch.trim().toLocaleLowerCase()
-    if (!query) return menuGroupDefs
-    return menuGroupDefs
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) =>
-          `${t(item.labelKey)} ${t(item.descKey)}`.toLocaleLowerCase().includes(query)
-        )
-      }))
-      .filter((group) => group.items.length > 0)
+    return SETTINGS_SECTIONS.map((section) => ({
+      ...section,
+      items: getPagesForSection(section.id).filter(
+        (item) =>
+          !query ||
+          `${t(item.titleKey)} ${t(item.descriptionKey)}`.toLocaleLowerCase().includes(query)
+      )
+    })).filter((group) => group.items.length > 0)
   }, [settingsSearch, t])
 
   return (
@@ -3993,7 +3403,7 @@ export function SettingsPage(): React.JSX.Element {
           </div>
           <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 pb-2 pt-4">
             {visibleMenuGroups.map((group) => (
-              <div key={group.labelKey} className="space-y-0.5">
+              <div key={group.id} className="space-y-0.5">
                 <p className="mb-1 px-3 text-[11px] font-medium text-muted-foreground/70">
                   {t(group.labelKey)}
                 </p>
@@ -4017,9 +3427,12 @@ export function SettingsPage(): React.JSX.Element {
                             : 'text-muted-foreground group-hover:text-foreground'
                         }`}
                       >
-                        {item.icon}
+                        {(() => {
+                          const Icon = settingsIcons[item.icon]
+                          return <Icon className="size-4" />
+                        })()}
                       </span>
-                      <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+                      <span className="min-w-0 flex-1 truncate">{t(item.titleKey)}</span>
                     </button>
                   )
                 })}
@@ -4036,13 +3449,11 @@ export function SettingsPage(): React.JSX.Element {
           {/* Content */}
           {isSettingsFullPanelTab(effectiveSettingsTab) ? (
             <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
-              <ActivePanel />
+              {activePanelContent}
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              <div className="w-full px-6 pb-16 pt-10">
-                <ActivePanel />
-              </div>
+              <div className="w-full px-6 pb-16 pt-10">{activePanelContent}</div>
             </div>
           )}
         </div>

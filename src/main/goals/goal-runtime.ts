@@ -25,6 +25,7 @@ type GoalRunSource = 'user_turn' | 'continue'
 interface ActiveRunState {
   runId: string
   sessionId: string
+  workspaceId: string
   planMode: boolean
   source: GoalRunSource
   goalId: string | null
@@ -32,6 +33,7 @@ interface ActiveRunState {
   accountedTimeSeconds: number
   budgetLimitPromptQueued: boolean
   runStartedAt: number
+  pendingPrompts: string[]
   failedToolNames: Set<string>
   unsettledToolNames: Map<string, string>
   lastLoopEndReason: 'completed' | 'max_iterations' | 'aborted' | 'error' | null
@@ -202,7 +204,8 @@ function injectGoalContextIntoMessages(args: {
     return nextMessages
   }
 
-  const lastUserIndex = nextMessages.findLastIndex((message) => message.role === 'user')
+  let lastUserIndex = nextMessages.length - 1
+  while (lastUserIndex >= 0 && nextMessages[lastUserIndex].role !== 'user') lastUserIndex--
   if (lastUserIndex < 0) {
     nextMessages.push({
       id: nanoid(),
@@ -278,6 +281,7 @@ export class GoalRuntimeService {
   async prepareRun(args: {
     runId: string
     sessionId?: string
+    workspaceId: string
     planMode?: boolean
     source?: GoalRunSource
     messages: RuntimeMessage[]
@@ -288,13 +292,22 @@ export class GoalRuntimeService {
     const planMode = args.planMode === true
     if (!sessionId) return args.messages
 
-    const goal = (await goalsDao.getGoal(sessionId)) ?? null
+    const goal = (await goalsDao.getGoal(sessionId, args.workspaceId)) ?? null
     const pendingPrompts = this.pendingPromptsBySession.get(sessionId) ?? []
-    this.pendingPromptsBySession.delete(sessionId)
+    const preparedMessages =
+      !goal || planMode || goal.status === 'paused' || goal.status === 'complete'
+        ? args.messages
+        : injectGoalContextIntoMessages({
+            messages: args.messages,
+            goal,
+            source,
+            pendingPrompts
+          })
 
     const runState: ActiveRunState = {
       runId: args.runId,
       sessionId,
+      workspaceId: args.workspaceId,
       planMode,
       source,
       goalId: !planMode && goal?.status === 'active' ? goal.goal_id : null,
@@ -302,6 +315,7 @@ export class GoalRuntimeService {
       accountedTimeSeconds: 0,
       budgetLimitPromptQueued: goal?.status === 'budget_limited',
       runStartedAt: Date.now(),
+      pendingPrompts,
       failedToolNames: new Set<string>(),
       unsettledToolNames: new Map<string, string>(),
       lastLoopEndReason: null,
@@ -309,6 +323,7 @@ export class GoalRuntimeService {
       enqueueMessages: args.enqueueMessages
     }
 
+    this.pendingPromptsBySession.delete(sessionId)
     this.activeRuns.set(args.runId, runState)
     this.activeRunIdsBySession.set(sessionId, args.runId)
 
@@ -322,16 +337,27 @@ export class GoalRuntimeService {
       })
     }
 
-    if (!goal || planMode || goal.status === 'paused' || goal.status === 'complete') {
-      return args.messages
-    }
+    return preparedMessages
+  }
 
-    return injectGoalContextIntoMessages({
-      messages: args.messages,
-      goal,
-      source,
-      pendingPrompts
-    })
+  /** Discard a prepared run that was never admitted to the Agent runtime. */
+  discardPreparedRun(runId: string): void {
+    const run = this.activeRuns.get(runId)
+    if (!run) return
+    this.activeRuns.delete(runId)
+    if (this.activeRunIdsBySession.get(run.sessionId) === runId)
+      this.activeRunIdsBySession.delete(run.sessionId)
+    if (run.pendingPrompts.length) {
+      const pending = this.pendingPromptsBySession.get(run.sessionId) ?? []
+      this.pendingPromptsBySession.set(run.sessionId, [...run.pendingPrompts, ...pending])
+    }
+    if (run.goalId)
+      emitGoalRunState({
+        sessionId: run.sessionId,
+        active: false,
+        goalId: run.goalId,
+        reason: 'run-preparation-discarded'
+      })
   }
 
   async observeEvent(runId: string, event: InteractiveAgentEvent): Promise<void> {
@@ -385,17 +411,22 @@ export class GoalRuntimeService {
     await this.accountRunUsage(run, undefined, this.elapsedDeltaSeconds(run))
 
     let requestContinue = false
-    const goal = (await goalsDao.getGoal(sessionId)) ?? null
+    const goal = (await goalsDao.getGoal(sessionId, run.workspaceId)) ?? null
     if (goalId && goal?.goal_id === goalId) {
       if (goal.status === 'complete') {
         const blockers = this.buildCompletionGateBlockers(run)
         if (blockers.length > 0) {
-          const restored = await goalsDao.updateGoal(sessionId, { status: 'active' })
+          const restored = await goalsDao.updateGoal(
+            sessionId,
+            { status: 'active' },
+            run.workspaceId
+          )
           if (restored) {
             emitGoalUpdated(restored, 'goal-completion-deferred')
           }
           await this.noteGoalTurnBlocker({
             sessionId,
+            workspaceId: run.workspaceId,
             goalId: restored?.goal_id ?? goal.goal_id,
             blockers,
             eventType: 'completion_deferred'
@@ -404,6 +435,7 @@ export class GoalRuntimeService {
           this.resetBlockedAudit(sessionId, goal.goal_id)
           const completedEvent = await goalsDao.addGoalEvent({
             sessionId,
+            workspaceId: run.workspaceId,
             goalId: goal.goal_id,
             eventType: 'completed',
             metadata: {
@@ -416,12 +448,13 @@ export class GoalRuntimeService {
         }
       } else if (goal.status === 'active') {
         if (run.aborted || run.lastLoopEndReason === 'aborted') {
-          const paused = await goalsDao.updateGoal(sessionId, { status: 'paused' })
+          const paused = await goalsDao.updateGoal(sessionId, { status: 'paused' }, run.workspaceId)
           if (paused) {
             this.resetBlockedAudit(sessionId, paused.goal_id)
             emitGoalUpdated(paused, 'goal-stall-paused')
             const pausedEvent = await goalsDao.addGoalEvent({
               sessionId,
+              workspaceId: run.workspaceId,
               goalId: paused.goal_id,
               eventType: 'stall_paused',
               message: 'the user stopped the run'
@@ -433,6 +466,7 @@ export class GoalRuntimeService {
           if (blockers.length > 0) {
             const blocked = await this.noteGoalTurnBlocker({
               sessionId,
+              workspaceId: run.workspaceId,
               goalId: goal.goal_id,
               blockers,
               eventType: 'auto_continue_blocked'
@@ -572,7 +606,7 @@ export class GoalRuntimeService {
     timeDeltaSeconds = 0
   ): Promise<void> {
     if (run.planMode || !run.goalId) return
-    const goal = await goalsDao.getGoal(run.sessionId)
+    const goal = await goalsDao.getGoal(run.sessionId, run.workspaceId)
     if (!goal || goal.goal_id !== run.goalId) return
 
     const tokenDelta = usage ? goalTokenDeltaForUsage(usage) : 0
@@ -581,6 +615,7 @@ export class GoalRuntimeService {
 
     const updated = await goalsDao.accountGoalUsage({
       sessionId: run.sessionId,
+      workspaceId: run.workspaceId,
       tokenDelta,
       timeDeltaSeconds: safeTimeDelta,
       expectedGoalId: run.goalId
@@ -600,18 +635,23 @@ export class GoalRuntimeService {
   }
 
   private async markRunUsageLimited(run: ActiveRunState, message?: string): Promise<void> {
-    const goal = await goalsDao.getGoal(run.sessionId)
+    const goal = await goalsDao.getGoal(run.sessionId, run.workspaceId)
     if (!goal || goal.goal_id !== run.goalId || goal.status !== 'active') return
 
     const timeDeltaSeconds = this.elapsedDeltaSeconds(run)
     await this.accountRunUsage(run, undefined, timeDeltaSeconds)
-    const limited = await goalsDao.updateGoal(run.sessionId, { status: 'usage_limited' })
+    const limited = await goalsDao.updateGoal(
+      run.sessionId,
+      { status: 'usage_limited' },
+      run.workspaceId
+    )
     if (!limited) return
 
     emitGoalUpdated(limited, 'goal-usage-limited')
     if (message?.trim()) {
       const limitedEvent = await goalsDao.addGoalEvent({
         sessionId: run.sessionId,
+        workspaceId: run.workspaceId,
         goalId: limited.goal_id,
         eventType: 'usage_limited',
         message: message.trim()
@@ -657,6 +697,7 @@ export class GoalRuntimeService {
 
   private async noteGoalTurnBlocker(args: {
     sessionId: string
+    workspaceId: string
     goalId: string
     blockers: string[]
     eventType: Extract<
@@ -683,6 +724,7 @@ export class GoalRuntimeService {
 
     const blockerEvent = await goalsDao.addGoalEvent({
       sessionId: args.sessionId,
+      workspaceId: args.workspaceId,
       goalId: args.goalId,
       eventType: args.eventType,
       message: blockers.join('; '),
@@ -698,12 +740,17 @@ export class GoalRuntimeService {
       return true
     }
 
-    const blocked = await goalsDao.updateGoal(args.sessionId, { status: 'blocked' })
+    const blocked = await goalsDao.updateGoal(
+      args.sessionId,
+      { status: 'blocked' },
+      args.workspaceId
+    )
     if (!blocked) return true
 
     emitGoalUpdated(blocked, 'goal-blocked')
     const blockedEvent = await goalsDao.addGoalEvent({
       sessionId: args.sessionId,
+      workspaceId: args.workspaceId,
       goalId: blocked.goal_id,
       eventType: 'blocked',
       message: blockers.join('; '),

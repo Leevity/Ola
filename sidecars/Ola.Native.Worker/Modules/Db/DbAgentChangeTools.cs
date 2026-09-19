@@ -35,8 +35,9 @@ internal static class DbAgentChangeTools
         try
         {
             var runId = RequireString(parameters, "runId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var changeSet = LoadChangeSetByRunId(connection, runId);
+            var changeSet = LoadChangeSetByRunId(connection, runId, workspaceId);
             return WorkerResponse.Json(
                 new AgentChangeSetFindResult(true, changeSet, null),
                 WorkerJsonContext.Default.AgentChangeSetFindResult);
@@ -54,14 +55,16 @@ internal static class DbAgentChangeTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId").Trim();
+            var workspaceId = RequireString(parameters, "workspaceId");
             if (sessionId.Length == 0)
             {
                 return WorkerResponse.Json(new List<StoredRunChangeSet>(), WorkerJsonContext.Default.ListStoredRunChangeSet);
             }
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            RequireSessionWorkspace(connection, null, sessionId, workspaceId);
             return WorkerResponse.Json(
-                LoadChangeSetsBySession(connection, sessionId),
+                LoadChangeSetsBySession(connection, sessionId, workspaceId),
                 WorkerJsonContext.Default.ListStoredRunChangeSet);
         }
         catch (Exception ex)
@@ -77,6 +80,7 @@ internal static class DbAgentChangeTools
             var runId = RequireString(parameters, "runId");
             var assistantMessageId = RequireString(parameters, "assistantMessageId");
             var sessionId = GetOptionalString(parameters, "sessionId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             var now = JsonHelpers.GetLong(parameters, "now", Now());
             var changeElement = RequireObject(parameters, "change");
             var change = new StoredTrackedFileChange
@@ -106,7 +110,8 @@ internal static class DbAgentChangeTools
                 sessionId,
                 assistantMessageId,
                 change,
-                now);
+                now,
+                workspaceId);
             transaction.Commit();
             return Mutation(changed);
         }
@@ -122,9 +127,11 @@ internal static class DbAgentChangeTools
         {
             var runId = RequireString(parameters, "runId");
             var changeId = RequireString(parameters, "changeId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             var revertedAt = JsonHelpers.GetLong(parameters, "revertedAt", Now());
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireChangeSetWorkspace(connection, transaction, runId, workspaceId);
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -152,9 +159,11 @@ internal static class DbAgentChangeTools
         try
         {
             var runId = RequireString(parameters, "runId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             var now = JsonHelpers.GetLong(parameters, "now", Now());
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireChangeSetWorkspace(connection, transaction, runId, workspaceId);
             var changed = RecomputeRunStatus(connection, transaction, runId, now);
             transaction.Commit();
             return Mutation(changed);
@@ -224,9 +233,9 @@ internal static class DbAgentChangeTools
         }
     }
 
-    internal static StoredRunChangeSet? LoadChangeSetByRunId(SqliteConnection connection, string runId)
+    internal static StoredRunChangeSet? LoadChangeSetByRunId(SqliteConnection connection, string runId, string? workspaceId = null)
     {
-        return LoadChangeSetsByRunIds(connection, [runId]).FirstOrDefault();
+        return LoadChangeSetsByRunIds(connection, [runId], workspaceId).FirstOrDefault();
     }
 
     internal static int AppendTrackedFileChange(
@@ -258,8 +267,18 @@ internal static class DbAgentChangeTools
         string? sessionId,
         string assistantMessageId,
         StoredTrackedFileChange change,
-        long now)
+        long now,
+        string? requestedWorkspaceId = null)
     {
+        if (sessionId is not null && change.SessionId is not null && sessionId != change.SessionId)
+            throw new InvalidOperationException("agent-change-session-mismatch");
+        var effectiveSessionId = sessionId ?? change.SessionId;
+        var workspaceId = effectiveSessionId is null
+            ? "local-personal"
+            : ReadSessionWorkspace(connection, transaction, effectiveSessionId);
+        if (requestedWorkspaceId is not null && requestedWorkspaceId != workspaceId)
+            throw new InvalidOperationException("agent-change-workspace-mismatch");
+        RequireExistingChangeSetWorkspace(connection, transaction, runId, workspaceId);
         DbSql.ExecuteNonQuery(
             connection,
             transaction,
@@ -267,6 +286,7 @@ internal static class DbAgentChangeTools
             INSERT INTO agent_change_sets (
               run_id,
               session_id,
+              workspace_id,
               assistant_message_id,
               status,
               created_at,
@@ -274,6 +294,7 @@ internal static class DbAgentChangeTools
             ) VALUES (
               $runId,
               $sessionId,
+              $workspaceId,
               $assistantMessageId,
               'open',
               $createdAt,
@@ -286,7 +307,8 @@ internal static class DbAgentChangeTools
               updated_at = excluded.updated_at
             """,
             new DbSql.SqlParam("$runId", runId),
-            new DbSql.SqlParam("$sessionId", sessionId),
+            new DbSql.SqlParam("$sessionId", effectiveSessionId),
+            new DbSql.SqlParam("$workspaceId", workspaceId),
             new DbSql.SqlParam("$assistantMessageId", assistantMessageId),
             new DbSql.SqlParam("$createdAt", now),
             new DbSql.SqlParam("$updatedAt", now));
@@ -337,7 +359,7 @@ internal static class DbAgentChangeTools
             """,
             new DbSql.SqlParam("$id", change.Id),
             new DbSql.SqlParam("$runId", runId),
-            new DbSql.SqlParam("$sessionId", change.SessionId ?? sessionId),
+            new DbSql.SqlParam("$sessionId", effectiveSessionId),
             new DbSql.SqlParam("$toolUseId", change.ToolUseId),
             new DbSql.SqlParam("$toolName", change.ToolName),
             new DbSql.SqlParam("$filePath", change.FilePath),
@@ -354,16 +376,19 @@ internal static class DbAgentChangeTools
 
     internal static List<StoredRunChangeSet> LoadChangeSetsBySession(
         SqliteConnection connection,
-        string sessionId)
+        string sessionId,
+        string? workspaceId = null)
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT DISTINCT s.run_id
               FROM agent_change_sets s
               LEFT JOIN agent_file_changes c ON c.run_id = s.run_id
-             WHERE s.session_id = $sessionId OR c.session_id = $sessionId
+             WHERE (s.session_id = $sessionId OR c.session_id = $sessionId)
+               AND ($workspaceId IS NULL OR s.workspace_id = $workspaceId)
             """;
         command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$workspaceId", (object?)workspaceId ?? DBNull.Value);
         var runIds = new List<string>();
         using (var reader = command.ExecuteReader())
         {
@@ -373,12 +398,71 @@ internal static class DbAgentChangeTools
             }
         }
 
-        return LoadChangeSetsByRunIds(connection, runIds);
+        return LoadChangeSetsByRunIds(connection, runIds, workspaceId);
+    }
+
+    private static string ReadSessionWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string sessionId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT workspace_id FROM sessions WHERE id = $sessionId";
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        return command.ExecuteScalar() as string
+            ?? throw new InvalidOperationException("agent-change-session-not-found");
+    }
+
+    private static void RequireSessionWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string sessionId,
+        string workspaceId)
+    {
+        if (ReadSessionWorkspace(connection, transaction, sessionId) != workspaceId)
+            throw new InvalidOperationException("agent-change-workspace-mismatch");
+    }
+
+    internal static void AssertSessionWorkspace(SqliteConnection connection, string sessionId, string workspaceId)
+    {
+        RequireSessionWorkspace(connection, null, sessionId, workspaceId);
+    }
+
+    private static void RequireExistingChangeSetWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        string workspaceId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT workspace_id FROM agent_change_sets WHERE run_id = $runId";
+        command.Parameters.AddWithValue("$runId", runId);
+        var existing = command.ExecuteScalar() as string;
+        if (existing is not null && existing != workspaceId)
+            throw new InvalidOperationException("agent-change-workspace-mismatch");
+    }
+
+    private static void RequireChangeSetWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string runId,
+        string workspaceId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT workspace_id FROM agent_change_sets WHERE run_id = $runId";
+        command.Parameters.AddWithValue("$runId", runId);
+        var existing = command.ExecuteScalar() as string;
+        if (existing is null || existing != workspaceId)
+            throw new InvalidOperationException("agent-change-workspace-mismatch");
     }
 
     internal static List<StoredRunChangeSet> LoadChangeSetsByRunIds(
         SqliteConnection connection,
-        IEnumerable<string> runIds)
+        IEnumerable<string> runIds,
+        string? workspaceId = null)
     {
         var ids = runIds.Where(static id => !string.IsNullOrWhiteSpace(id)).Distinct().ToArray();
         if (ids.Length == 0)
@@ -388,7 +472,8 @@ internal static class DbAgentChangeTools
 
         var inClause = AddInParameters(ids, "$run", out var parameters);
         using var setCommand = connection.CreateCommand();
-        setCommand.CommandText = $"SELECT {ChangeSetSelectColumns} FROM agent_change_sets WHERE run_id IN ({inClause})";
+        setCommand.CommandText = $"SELECT {ChangeSetSelectColumns} FROM agent_change_sets WHERE run_id IN ({inClause}) AND ($workspaceId IS NULL OR workspace_id = $workspaceId)";
+        setCommand.Parameters.AddWithValue("$workspaceId", (object?)workspaceId ?? DBNull.Value);
         foreach (var parameter in parameters)
         {
             setCommand.Parameters.AddWithValue(parameter.Name, parameter.Value);

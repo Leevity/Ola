@@ -240,6 +240,7 @@ internal static class TerminalTools
         }
 
         ApplyEnvironment(startInfo, parameters);
+        OlaDataRoot.ApplyIsolatedHome(startInfo);
         startInfo.Environment["TERM"] = startInfo.Environment.TryGetValue("TERM", out var term) && !string.IsNullOrWhiteSpace(term)
             ? term
             : "xterm-256color";
@@ -341,7 +342,7 @@ internal static class TerminalTools
             return Path.GetFullPath(cwd);
         }
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = OlaDataRoot.ExternalDataHome;
         return Directory.Exists(home) ? home : Environment.CurrentDirectory;
     }
 

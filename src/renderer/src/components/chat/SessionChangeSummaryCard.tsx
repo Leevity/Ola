@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import { MONO_FONT } from '@renderer/lib/constants'
 import { useAgentStore, type AgentRunChangeSet } from '@renderer/stores/agent-store'
+import { useChatStore } from '@renderer/stores/chat-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useAggregatedChangeSummaries } from './change-summary-utils'
 import {
@@ -19,6 +20,15 @@ interface SessionChangeSummaryCardProps {
 }
 
 const DEFAULT_EXPANDED_FILE_LIMIT = 4
+
+function isAbsolutePath(value: string): boolean {
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\')
+}
+
+function resolvePreviewPath(filePath: string, workingFolder?: string | null): string {
+  if (isAbsolutePath(filePath) || !workingFolder) return filePath
+  return `${workingFolder.replace(/[\\/]+$/, '')}/${filePath.replace(/^[\\/]+/, '')}`
+}
 
 function changeSetMatchesMessage(
   changeSet: AgentRunChangeSet,
@@ -74,6 +84,10 @@ export function SessionChangeSummaryCard({
   const undoFileChange = useAgentStore((state) => state.undoFileChange)
   const undoRunChanges = useAgentStore((state) => state.undoRunChanges)
   const openDetailPanel = useUIStore((state) => state.openDetailPanel)
+  const openFilePreview = useUIStore((state) => state.openFilePreview)
+  const session = useChatStore((state) =>
+    sessionId ? state.sessions.find((candidate) => candidate.id === sessionId) : undefined
+  )
   const changeSets = useMessageChangeSets({ sessionId, messageId, toolUseIds })
   const latestChangeSet = React.useMemo(
     () => latestDisplayableRunChangeSet(changeSets),
@@ -174,6 +188,8 @@ export function SessionChangeSummaryCard({
     const lastSource = change.sourceChanges[change.sourceChanges.length - 1]
     const undoTargetRunId = lastSource?.runId ?? change.runId
     const undoTargetChangeId = lastSource?.id ?? change.lastChangeId
+    const previewPath = resolvePreviewPath(change.filePath, session?.workingFolder)
+    const connectionId = change.connectionId ?? session?.sshConnectionId ?? undefined
     const handleUndoFile = async (): Promise<void> => {
       const confirmed = await confirm({
         title: t('fileChange.undoFileConfirmTitle'),
@@ -194,7 +210,8 @@ export function SessionChangeSummaryCard({
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
-          onClick={handleOpenReview}
+          onClick={() => openFilePreview(previewPath, 'code', connectionId, sessionId)}
+          title={t('fileChange.openFile', { defaultValue: 'Open file' })}
         >
           <span
             className="min-w-0 flex-1 truncate text-[13px] text-foreground/90"

@@ -169,7 +169,8 @@ export async function captureDesktopScreenshot(): Promise<DesktopScreenshotResul
 }
 
 export function desktopInputClick(
-  args: ClickArgs
+  args: ClickArgs,
+  ownerId?: number
 ):
   | { success: true; x: number; y: number; button: string; action: string }
   | { success: false; error: string } {
@@ -214,12 +215,10 @@ export function desktopInputClick(
       robot.mouseClick(button)
     }
 
-    recordDesktopFlowStep({
-      type: action === 'double_click' ? 'double_click' : 'click',
-      x,
-      y,
-      button
-    })
+    recordDesktopFlowStep(
+      { type: action === 'double_click' ? 'double_click' : 'click', x, y, button },
+      ownerId
+    )
     return { success: true, x, y, button, action }
   } catch (error) {
     return {
@@ -250,7 +249,8 @@ export function desktopInputMove(
 }
 
 export function desktopInputType(
-  args: TypeArgs
+  args: TypeArgs,
+  ownerId?: number
 ):
   | { success: true; mode: 'text'; textLength: number }
   | { success: true; mode: 'key'; key: string; action?: 'down' | 'up' }
@@ -265,7 +265,7 @@ export function desktopInputType(
     if (typeof args.text === 'string') {
       robot.setKeyboardDelay(0)
       robot.typeString(args.text)
-      recordDesktopFlowStep({ type: 'type', text: args.text })
+      recordDesktopFlowStep({ type: 'type', text: args.text }, ownerId)
       return { success: true, mode: 'text', textLength: args.text.length }
     }
 
@@ -284,11 +284,14 @@ export function desktopInputType(
           args.action,
           modifiers.length === 0 ? undefined : (modifiers as string[])
         )
-        recordDesktopFlowStep({ type: 'keypress', key: args.key, keys: args.modifiers ?? [] })
+        recordDesktopFlowStep(
+          { type: 'keypress', key: args.key, keys: args.modifiers ?? [] },
+          ownerId
+        )
         return { success: true, mode: 'key', key: args.key, action: args.action }
       }
       robot.keyTap(resolved)
-      recordDesktopFlowStep({ type: 'keypress', key: args.key })
+      recordDesktopFlowStep({ type: 'keypress', key: args.key }, ownerId)
       return { success: true, mode: 'key', key: args.key }
     }
 
@@ -305,7 +308,7 @@ export function desktopInputType(
       const modifiers = keys.slice(0, -1)
       const mainKey = keys[keys.length - 1]
       robot.keyTap(mainKey, modifiers.length === 1 ? modifiers[0] : modifiers)
-      recordDesktopFlowStep({ type: 'keypress', keys: args.hotkey })
+      recordDesktopFlowStep({ type: 'keypress', keys: args.hotkey }, ownerId)
       return { success: true, mode: 'hotkey', hotkey: args.hotkey }
     }
 
@@ -319,7 +322,8 @@ export function desktopInputType(
 }
 
 export function desktopInputScroll(
-  args: ScrollArgs
+  args: ScrollArgs,
+  ownerId?: number
 ):
   | { success: true; x?: number; y?: number; scrollX: number; scrollY: number }
   | { success: false; error: string } {
@@ -354,13 +358,10 @@ export function desktopInputScroll(
 
     robot.scrollMouse(Math.round(scrollX), Math.round(scrollY))
 
-    recordDesktopFlowStep({
-      type: 'scroll',
-      x: x ?? undefined,
-      y: y ?? undefined,
-      scrollX,
-      scrollY
-    })
+    recordDesktopFlowStep(
+      { type: 'scroll', x: x ?? undefined, y: y ?? undefined, scrollX, scrollY },
+      ownerId
+    )
 
     return {
       success: true,

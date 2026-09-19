@@ -1,11 +1,22 @@
 import { toolRegistry } from '../agent/tool-registry'
-import { encodeToolError } from './tool-result-format'
+import { handleNativeBrowserToolRequest } from './browser-native-ui'
 import type { ToolHandler } from './tool-types'
 
-function nativeOnlyBrowserResult(toolName: string): string {
-  return encodeToolError(
-    `${toolName} executes in the .NET Native Worker and is unavailable through the renderer boundary.`
-  )
+async function executeBrowserTool(
+  toolName: string,
+  input: Record<string, unknown>,
+  ctx: Parameters<NonNullable<ToolHandler['execute']>>[1]
+) {
+  const response = await handleNativeBrowserToolRequest({
+    toolName,
+    input,
+    sessionId: ctx.sessionId,
+    projectId: ctx.projectId,
+    workingFolder: ctx.workingFolder,
+    toolUseId: ctx.currentToolUseId,
+    agentRunId: ctx.agentRunId
+  })
+  return response.content
 }
 
 const browserNavigateHandler: ToolHandler = {
@@ -35,7 +46,7 @@ const browserNavigateHandler: ToolHandler = {
       }
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserNavigate')
+  execute: (input, ctx) => executeBrowserTool('BrowserNavigate', input, ctx)
 }
 
 const browserGetContentHandler: ToolHandler = {
@@ -66,7 +77,7 @@ const browserGetContentHandler: ToolHandler = {
       }
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserGetContent')
+  execute: (input, ctx) => executeBrowserTool('BrowserGetContent', input, ctx)
 }
 
 const browserScreenshotHandler: ToolHandler = {
@@ -84,7 +95,7 @@ const browserScreenshotHandler: ToolHandler = {
       properties: {}
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserScreenshot')
+  execute: (input, ctx) => executeBrowserTool('BrowserScreenshot', input, ctx)
 }
 
 const browserSnapshotHandler: ToolHandler = {
@@ -103,7 +114,7 @@ const browserSnapshotHandler: ToolHandler = {
       properties: {}
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserSnapshot')
+  execute: (input, ctx) => executeBrowserTool('BrowserSnapshot', input, ctx)
 }
 
 const browserClickHandler: ToolHandler = {
@@ -129,7 +140,7 @@ const browserClickHandler: ToolHandler = {
       required: ['selector']
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserClick')
+  execute: (input, ctx) => executeBrowserTool('BrowserClick', input, ctx)
 }
 
 const browserTypeHandler: ToolHandler = {
@@ -166,7 +177,7 @@ const browserTypeHandler: ToolHandler = {
       required: ['selector', 'text']
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserType')
+  execute: (input, ctx) => executeBrowserTool('BrowserType', input, ctx)
 }
 
 const browserScrollHandler: ToolHandler = {
@@ -193,7 +204,7 @@ const browserScrollHandler: ToolHandler = {
       }
     }
   },
-  execute: async () => nativeOnlyBrowserResult('BrowserScroll')
+  execute: (input, ctx) => executeBrowserTool('BrowserScroll', input, ctx)
 }
 
 const ALL_HANDLERS: ToolHandler[] = [

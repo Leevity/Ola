@@ -312,6 +312,7 @@ interface MessageListSessionSelection {
   loadedRangeStart: number
   loadedRangeEnd: number
   projectId?: string
+  workspaceId?: string
 }
 
 interface SessionScopedTeamSelection {
@@ -329,6 +330,7 @@ const EMPTY_MESSAGE_LIST_SESSION_SELECTION: MessageListSessionSelection = {
   loadedRangeStart: 0,
   loadedRangeEnd: 0,
   projectId: undefined,
+  workspaceId: undefined,
   workingFolder: undefined
 }
 
@@ -480,7 +482,8 @@ function selectMessageListSession(
     workingFolder: session.workingFolder,
     loadedRangeStart: session.loadedRangeStart ?? 0,
     loadedRangeEnd: session.loadedRangeEnd ?? 0,
-    projectId: session.projectId
+    projectId: session.projectId,
+    workspaceId: session.workspaceId
   }
 }
 
@@ -1458,7 +1461,10 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       try {
         const locatorRows = await invokeMessagePackBinary<MessageLocatorIndexRow[] | null>(
           DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL,
-          activeSessionId
+          {
+            sessionId: activeSessionId,
+            workspaceId: sessionSelection?.workspaceId ?? 'local-personal'
+          }
         )
         if (!cancelled) {
           setMessageLocatorSnapshot({
@@ -1481,7 +1487,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [activeSessionId, activeSessionMessageCount])
+  }, [activeSessionId, activeSessionMessageCount, sessionSelection.workspaceId])
 
   const rows = React.useMemo<MessageListRow[]>(() => {
     return renderableMessages
@@ -1544,6 +1550,8 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   rowVirtualizer.shouldAdjustScrollPositionOnItemSizeChange =
     shouldAdjustScrollPositionOnItemSizeChange
   const virtualListTotalSize = rowVirtualizer.getTotalSize()
+  const virtualItems = rowVirtualizer.getVirtualItems()
+  const virtualItemsSignature = virtualItems.map((item) => `${item.index}:${item.key}`).join('|')
 
   const syncTurnSpacer = React.useCallback(() => {
     const viewport = listRef.current
@@ -1728,16 +1736,15 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       })
       if (scrollToTarget()) return
 
-      const targetIndex = useChatStore
-        .getState()
-        .getSessionMessages(activeSessionId)
-        .findIndex((message) => message.id === messageId)
-      if (targetIndex >= 0) {
+      // `rows` excludes tool-result and compact-summary messages. The session message index
+      // therefore cannot be passed to the virtualizer: it points at a different visible row.
+      const targetRowIndex = rows.findIndex((row) => row.data.messageId === messageId)
+      if (targetRowIndex >= 0) {
         const targetSession = useChatStore
           .getState()
           .sessions.find((session) => session.id === activeSessionId)
         rowVirtualizer.scrollToIndex(
-          targetIndex + ((targetSession?.loadedRangeStart ?? 0) > 0 ? 1 : 0),
+          targetRowIndex + ((targetSession?.loadedRangeStart ?? 0) > 0 ? 1 : 0),
           { align: 'center' }
         )
         await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()))
@@ -1749,6 +1756,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       markProgrammaticScroll,
       requestAssistantRailSync,
       rowVirtualizer,
+      rows,
       setActiveAssistantRailIds
     ]
   )
@@ -1912,25 +1920,79 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
     const scroller = listRef.current
     if (!scroller) return
 
-    const remeasure = (): void => {
+    const schedulePostMeasure = (): void => {
       if (scheduledExecutionResizeFrameRef.current !== null) return
       scheduledExecutionResizeFrameRef.current = window.requestAnimationFrame(() => {
         scheduledExecutionResizeFrameRef.current = null
-        rowVirtualizer.measure()
         syncTurnSpacer()
+        requestAssistantRailSync()
         if (canAutoScroll()) requestScrollToBottom({ maxFrames: 2 })
       })
     }
 
+    // TanStack's built-in observer intentionally skips some measurements during a smooth
+    // bottom-follow scroll. A streamed Markdown answer can therefore outgrow its cached
+    // virtual row while the next turn is already positioned from that stale height. Observe
+    // each mounted row ourselves and update its exact size regardless of scroll state.
+    const measuredHeights = new Map<HTMLElement, number>()
+    const measureRow = (element: HTMLElement, height: number): boolean => {
+      const index = Number(element.dataset.index)
+      if (!Number.isInteger(index) || index < 0) return false
+      const nextHeight = Math.ceil(height)
+      const previousHeight = measuredHeights.get(element)
+      if (
+        nextHeight <= 0 ||
+        (previousHeight !== undefined && Math.abs(previousHeight - nextHeight) <= 1)
+      ) {
+        return false
+      }
+      measuredHeights.set(element, nextHeight)
+      rowVirtualizer.resizeItem(index, nextHeight)
+      return true
+    }
+
+    const mountedRows = Array.from(scroller.querySelectorAll<HTMLElement>('[data-index]'))
+    let initiallyChanged = false
+    for (const row of mountedRows) {
+      if (measureRow(row, row.getBoundingClientRect().height)) initiallyChanged = true
+    }
+
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? null
+        : new ResizeObserver((entries) => {
+            let changed = false
+            for (const entry of entries) {
+              if (measureRow(entry.target as HTMLElement, entry.contentRect.height)) changed = true
+            }
+            if (changed) schedulePostMeasure()
+          })
+    for (const row of mountedRows) observer?.observe(row)
+    if (initiallyChanged) schedulePostMeasure()
+
+    const remeasure = (): void => {
+      for (const row of mountedRows) {
+        measureRow(row, row.getBoundingClientRect().height)
+      }
+      schedulePostMeasure()
+    }
     scroller.addEventListener(EXECUTION_RESIZE_EVENT, remeasure)
     return () => {
+      observer?.disconnect()
       scroller.removeEventListener(EXECUTION_RESIZE_EVENT, remeasure)
       if (scheduledExecutionResizeFrameRef.current !== null) {
         window.cancelAnimationFrame(scheduledExecutionResizeFrameRef.current)
         scheduledExecutionResizeFrameRef.current = null
       }
     }
-  }, [canAutoScroll, requestScrollToBottom, rowVirtualizer, syncTurnSpacer])
+  }, [
+    canAutoScroll,
+    requestAssistantRailSync,
+    requestScrollToBottom,
+    rowVirtualizer,
+    syncTurnSpacer,
+    virtualItemsSignature
+  ])
 
   const handleListScroll = React.useCallback(() => {
     viewport.syncScrollMode({
@@ -2263,7 +2325,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         onScroll={handleListScroll}
       >
         <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+          {virtualItems.map((virtualRow) => {
             const isLoadOlderRow = hasLoadOlderRow && virtualRow.index === 0
             const rowIndex = virtualRow.index - (hasLoadOlderRow ? 1 : 0)
 

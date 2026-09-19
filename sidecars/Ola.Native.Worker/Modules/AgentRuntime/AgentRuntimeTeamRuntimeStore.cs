@@ -1003,10 +1003,7 @@ internal static partial class AgentRuntimeTeamRuntimeStore
 
     private static string GetTeamsDir()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
-            "teams");
+        return Path.Combine(OlaDataRoot.DirectoryPath, "teams");
     }
 
     private static string GetTeamRuntimePath(string teamName)

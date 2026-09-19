@@ -125,6 +125,18 @@ const finalOutcomeCard = await readFile(
   path.join(root, 'src/renderer/src/components/chat/FinalOutcomeCard.tsx'),
   'utf8'
 )
+const chatActions = await readFile(
+  path.join(root, 'src/renderer/src/hooks/use-chat-actions.ts'),
+  'utf8'
+)
+const providerStore = await readFile(
+  path.join(root, 'src/renderer/src/stores/provider-store.ts'),
+  'utf8'
+)
+const imageAttachments = await readFile(
+  path.join(root, 'src/renderer/src/lib/image-attachments.ts'),
+  'utf8'
+)
 const presentationRegistry = await readFile(
   path.join(root, 'src/renderer/src/components/chat/tool-presentation-registry.ts'),
   'utf8'
@@ -233,9 +245,10 @@ assert(
   'result-first two-layer outcome rendering is missing'
 )
 assert(
-  executionTraceCard.includes('aria-expanded={expanded}') &&
-    executionTraceCard.includes('useState(false)'),
-  'completed execution trace must be keyboard-accessible and collapsed by default'
+  executionTraceCard.includes('type="button"') &&
+    executionTraceCard.includes('onClick={onViewProcess}') &&
+    assistantMessage.includes('onViewProcess={expandExecutionRuns}'),
+  'completed execution trace must provide a keyboard-accessible process navigation action'
 )
 assert(finalOutcomeCard.includes('React.useId()'), 'final outcome heading ids must be unique')
 assert(
@@ -243,6 +256,27 @@ assert(
     presentationRegistry.includes("adapter('project-intelligence'") &&
     presentationRegistry.includes("adapter('mcp-extension'"),
   'tool presentation registry adapters are incomplete'
+)
+assert(
+  chatActions.includes('modelExplicitlyRejectsVision(healthyProvider.modelConfig') &&
+    chatActions.includes('throw new VisionInputUnsupportedError()') &&
+    chatActions.includes('content: buildUserMessageContent(textForUserBlock, images, textBlocks)'),
+  'image input must be rejected before a text-only model receives it and preserved for vision models'
+)
+assert(
+  providerStore.includes('export function modelExplicitlyRejectsVision') &&
+    providerStore.includes('return model.supportsVision === false'),
+  'only explicitly text-only models may block image input'
+)
+assert(
+  inputArea.includes('shouldRejectSelectedModelVisionInput') &&
+    inputArea.includes('isVisionInputUnsupportedError(error)') &&
+    inputArea.includes('setAttachedImages(cloneImageAttachments(submittedDraft.images))'),
+  'rejected image sends must stay in the home composer or restore the attachment without a duplicate generic error'
+)
+assert(
+  imageAttachments.includes('export class VisionInputUnsupportedError'),
+  'vision input rejection needs a typed send error'
 )
 
 console.log('chat-experience verification passed')

@@ -986,7 +986,8 @@ internal static class OpenAIChatRuntime
             var requiresApproval = JsonHelpers.GetBool(parameters, "forceApproval", false) ||
                 (nativeTool &&
                     AgentRuntimeNativeToolExecutor.RequiresApproval(call.Name, call.Input, parameters) &&
-                    !permissionPolicy.SkipsApproval(call.Name, call.Input));
+                    (AgentRuntimeNativeToolExecutor.IsExternalChannelInvocation(parameters) ||
+                        !permissionPolicy.SkipsApproval(call.Name, call.Input)));
             var pendingCall = new AgentRuntimeToolCallState(
                 call.Id,
                 call.Name,
@@ -2813,7 +2814,7 @@ internal static class OpenAIChatRuntime
     {
         var apiKey = JsonHelpers.GetString(provider, "apiKey") ?? string.Empty;
         var model = JsonHelpers.GetString(provider, "model") ?? string.Empty;
-        if (string.IsNullOrWhiteSpace(apiKey))
+        if (string.IsNullOrWhiteSpace(apiKey) && JsonHelpers.GetBool(provider, "requiresApiKey", true))
         {
             throw new InvalidOperationException("OpenAI-compatible provider requires apiKey.");
         }

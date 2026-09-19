@@ -9,8 +9,10 @@ internal static class DbProjectTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
+            command.Parameters.AddWithValue("$workspaceId", WorkspaceId(parameters));
             command.CommandText = $"""
                 {ProjectSelectSql}
+                 WHERE workspace_id = $workspaceId
                  ORDER BY pinned DESC, CASE WHEN plugin_id IS NULL THEN 0 ELSE 1 END, updated_at DESC
                 """;
             return WorkerResponse.Json(
@@ -28,8 +30,9 @@ internal static class DbProjectTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var project = GetProject(connection, null, id);
+            var project = GetProject(connection, null, id, workspaceId);
             return WorkerResponse.Json(
                 new ProjectFindResult(true, project, null),
                 WorkerJsonContext.Default.ProjectFindResult);
@@ -47,15 +50,17 @@ internal static class DbProjectTools
         try
         {
             var pluginId = RequireString(parameters, "pluginId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
             command.CommandText = $"""
                 {ProjectSelectSql}
-                 WHERE plugin_id = $pluginId
+                 WHERE plugin_id = $pluginId AND workspace_id = $workspaceId
                  ORDER BY pinned DESC, updated_at DESC
                  LIMIT 1
                 """;
             command.Parameters.AddWithValue("$pluginId", pluginId);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             var rows = ReadProjectRows(command);
             return WorkerResponse.Json(
                 new ProjectFindResult(true, rows.FirstOrDefault(), null),
@@ -79,6 +84,7 @@ internal static class DbProjectTools
             var sshConnectionId = NormalizeOptional(JsonHelpers.GetString(parameters, "sshConnectionId"));
             var workingFolder = NormalizeOptional(JsonHelpers.GetString(parameters, "workingFolder"));
             var pluginId = NormalizeOptional(JsonHelpers.GetString(parameters, "pluginId"));
+            var workspaceId = NormalizeOptional(JsonHelpers.GetString(parameters, "workspaceId")) ?? "local-personal";
             var pinned = JsonHelpers.GetBool(parameters, "pinned", false) ? 1 : 0;
             var createdAt = JsonHelpers.GetLong(parameters, "createdAt", now);
             var updatedAt = JsonHelpers.GetLong(parameters, "updatedAt", now);
@@ -86,7 +92,7 @@ internal static class DbProjectTools
             if (workingFolder is null && sshConnectionId is null)
             {
                 var allocated = EnsureUniqueLocalProjectDirectory(
-                    JsonHelpers.GetString(parameters, "baseDirectory"),
+                    ProjectBaseDirectory(parameters),
                     name);
                 name = allocated.Name;
                 workingFolder = allocated.FolderPath;
@@ -107,7 +113,9 @@ internal static class DbProjectTools
                 PluginId = pluginId,
                 Pinned = pinned,
                 CreatedAt = createdAt,
-                UpdatedAt = updatedAt
+                UpdatedAt = updatedAt,
+                WorkspaceId = workspaceId,
+                ModelSource = NormalizeModelSource(JsonHelpers.GetString(parameters, "modelSource"), workspaceId)
             };
             InsertProject(connection, transaction, row);
             transaction.Commit();
@@ -125,6 +133,7 @@ internal static class DbProjectTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = WorkspaceId(parameters);
             if (!parameters.TryGetProperty("patch", out var patch) || patch.ValueKind != JsonValueKind.Object)
             {
                 return WorkerResponse.Json(
@@ -134,12 +143,12 @@ internal static class DbProjectTools
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
-            var current = GetProject(connection, transaction, id);
+            var current = GetProject(connection, transaction, id, workspaceId);
             if (current is null)
             {
                 transaction.Commit();
                 return WorkerResponse.Json(
-                    new ProjectFindResult(true, null, null),
+                    new ProjectFindResult(false, null, "Project was not found in the requested workspace"),
                     WorkerJsonContext.Default.ProjectFindResult);
             }
 
@@ -164,14 +173,15 @@ internal static class DbProjectTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
-            var project = GetProject(connection, transaction, id);
+            var project = GetProject(connection, transaction, id, workspaceId);
             if (project is null)
             {
                 transaction.Commit();
                 return WorkerResponse.Json(
-                    new ProjectDeleteResult(true, false, null, new List<string>(), null),
+                    new ProjectDeleteResult(false, false, null, new List<string>(), "Project was not found in the requested workspace"),
                     WorkerJsonContext.Default.ProjectDeleteResult);
             }
 
@@ -214,13 +224,14 @@ internal static class DbProjectTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
-            var existing = GetFirstNormalProject(connection, transaction);
+            var workspaceId = WorkspaceId(parameters);
+            var existing = GetFirstNormalProject(connection, transaction, workspaceId);
             if (existing is not null)
             {
                 if (existing.WorkingFolder is null && existing.SshConnectionId is null)
                 {
                     var allocated = EnsureUniqueLocalProjectDirectory(
-                        JsonHelpers.GetString(parameters, "baseDirectory"),
+                        ProjectBaseDirectory(parameters),
                         existing.Name);
                     existing.Name = allocated.Name;
                     existing.WorkingFolder = allocated.FolderPath;
@@ -235,7 +246,7 @@ internal static class DbProjectTools
 
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var allocatedNew = EnsureUniqueLocalProjectDirectory(
-                JsonHelpers.GetString(parameters, "baseDirectory"),
+                ProjectBaseDirectory(parameters),
                 "New Project");
             var project = new ProjectRow
             {
@@ -246,7 +257,8 @@ internal static class DbProjectTools
                 PluginId = null,
                 Pinned = 0,
                 CreatedAt = now,
-                UpdatedAt = now
+                UpdatedAt = now,
+                WorkspaceId = workspaceId
             };
             InsertProject(connection, transaction, project);
             transaction.Commit();
@@ -263,9 +275,10 @@ internal static class DbProjectTools
         try
         {
             var pluginId = RequireString(parameters, "pluginId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
-            var existing = GetProjectByPluginId(connection, transaction, pluginId);
+            var existing = GetProjectByPluginId(connection, transaction, pluginId, workspaceId);
             if (existing is not null)
             {
                 transaction.Commit();
@@ -276,7 +289,7 @@ internal static class DbProjectTools
             var name = SanitizeProjectName(
                 NormalizeOptional(JsonHelpers.GetString(parameters, "preferredName")) ?? $"Plugin {pluginId}");
             var allocated = EnsureUniqueLocalProjectDirectory(
-                JsonHelpers.GetString(parameters, "baseDirectory"),
+                ProjectBaseDirectory(parameters),
                 name);
             var project = new ProjectRow
             {
@@ -287,7 +300,8 @@ internal static class DbProjectTools
                 PluginId = pluginId,
                 Pinned = 0,
                 CreatedAt = now,
-                UpdatedAt = now
+                UpdatedAt = now,
+                WorkspaceId = workspaceId
             };
             InsertProject(connection, transaction, project);
             transaction.Commit();
@@ -300,55 +314,61 @@ internal static class DbProjectTools
     }
 
     private const string ProjectSelectSql = """
-        SELECT id, name, working_folder, ssh_connection_id, plugin_id, pinned, created_at, updated_at
+        SELECT id, name, working_folder, ssh_connection_id, plugin_id, pinned, created_at, updated_at, workspace_id, model_source
           FROM projects
         """;
 
     private static ProjectRow? GetProject(
         SqliteConnection connection,
         SqliteTransaction? transaction,
-        string id)
+        string id,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
             {ProjectSelectSql}
-             WHERE id = $id
+             WHERE id = $id AND workspace_id = $workspaceId
              LIMIT 1
             """;
         command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadProjectRows(command).FirstOrDefault();
     }
 
     private static ProjectRow? GetProjectByPluginId(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        string pluginId)
+        string pluginId,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
             {ProjectSelectSql}
-             WHERE plugin_id = $pluginId
+             WHERE plugin_id = $pluginId AND workspace_id = $workspaceId
              ORDER BY pinned DESC, updated_at DESC
              LIMIT 1
             """;
         command.Parameters.AddWithValue("$pluginId", pluginId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadProjectRows(command).FirstOrDefault();
     }
 
     private static ProjectRow? GetFirstNormalProject(
         SqliteConnection connection,
-        SqliteTransaction transaction)
+        SqliteTransaction transaction,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = $"""
             {ProjectSelectSql}
-             WHERE plugin_id IS NULL
+             WHERE plugin_id IS NULL AND workspace_id = $workspaceId
              ORDER BY pinned DESC, updated_at DESC
              LIMIT 1
             """;
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadProjectRows(command).FirstOrDefault();
     }
 
@@ -367,11 +387,18 @@ internal static class DbProjectTools
                 PluginId = GetNullableString(reader, 4),
                 Pinned = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
                 CreatedAt = reader.GetInt64(6),
-                UpdatedAt = reader.GetInt64(7)
+                UpdatedAt = reader.GetInt64(7),
+                WorkspaceId = reader.IsDBNull(8) ? "local-personal" : reader.GetString(8),
+                ModelSource = GetNullableString(reader, 9)
             });
         }
 
         return rows;
+    }
+
+    private static string WorkspaceId(JsonElement parameters)
+    {
+        return NormalizeOptional(JsonHelpers.GetString(parameters, "workspaceId")) ?? "local-personal";
     }
 
     private static void InsertProject(
@@ -384,9 +411,9 @@ internal static class DbProjectTools
             transaction,
             """
             INSERT INTO projects (
-              id, name, working_folder, ssh_connection_id, plugin_id, pinned, created_at, updated_at
+              id, name, working_folder, ssh_connection_id, plugin_id, pinned, created_at, updated_at, workspace_id, model_source
             ) VALUES (
-              $id, $name, $workingFolder, $sshConnectionId, $pluginId, $pinned, $createdAt, $updatedAt
+              $id, $name, $workingFolder, $sshConnectionId, $pluginId, $pinned, $createdAt, $updatedAt, $workspaceId, $modelSource
             )
             """,
             new DbSql.SqlParam("$id", row.Id),
@@ -396,7 +423,9 @@ internal static class DbProjectTools
             new DbSql.SqlParam("$pluginId", row.PluginId),
             new DbSql.SqlParam("$pinned", row.Pinned),
             new DbSql.SqlParam("$createdAt", row.CreatedAt),
-            new DbSql.SqlParam("$updatedAt", row.UpdatedAt));
+            new DbSql.SqlParam("$updatedAt", row.UpdatedAt),
+            new DbSql.SqlParam("$workspaceId", row.WorkspaceId),
+            new DbSql.SqlParam("$modelSource", row.ModelSource));
     }
 
     private static void UpdateProjectRow(
@@ -414,6 +443,7 @@ internal static class DbProjectTools
                    ssh_connection_id = $sshConnectionId,
                    plugin_id = $pluginId,
                    pinned = $pinned,
+                   model_source = $modelSource,
                    updated_at = $updatedAt
              WHERE id = $id
             """,
@@ -422,6 +452,7 @@ internal static class DbProjectTools
             new DbSql.SqlParam("$sshConnectionId", row.SshConnectionId),
             new DbSql.SqlParam("$pluginId", row.PluginId),
             new DbSql.SqlParam("$pinned", row.Pinned),
+            new DbSql.SqlParam("$modelSource", row.ModelSource),
             new DbSql.SqlParam("$updatedAt", row.UpdatedAt),
             new DbSql.SqlParam("$id", row.Id));
     }
@@ -476,6 +507,13 @@ internal static class DbProjectTools
             };
         }
 
+        if (patch.TryGetProperty("modelSource", out var modelSourceElement))
+        {
+            row.ModelSource = modelSourceElement.ValueKind == JsonValueKind.Null
+                ? null
+                : NormalizeModelSource(modelSourceElement.GetString(), row.WorkspaceId);
+        }
+
         if (JsonHelpers.GetLongNullable(patch, "updatedAt") is { } updatedAt)
         {
             row.UpdatedAt = updatedAt;
@@ -489,7 +527,7 @@ internal static class DbProjectTools
             JsonHelpers.GetBool(parameters, "allocateLocalFolderIfMissing", false))
         {
             var allocated = EnsureUniqueLocalProjectDirectory(
-                JsonHelpers.GetString(parameters, "baseDirectory"),
+                ProjectBaseDirectory(parameters),
                 row.Name);
             row.Name = allocated.Name;
             row.WorkingFolder = allocated.FolderPath;
@@ -527,13 +565,25 @@ internal static class DbProjectTools
         return cleaned.Length == 0 ? "New Project" : cleaned;
     }
 
+    private static string? ProjectBaseDirectory(JsonElement parameters)
+    {
+        if (Environment.GetEnvironmentVariable("OLA_E2E_DATA_ROOT") is not null)
+            return Path.Combine(OlaDataRoot.DirectoryPath, "projects");
+        var requested = NormalizeOptional(JsonHelpers.GetString(parameters, "baseDirectory"));
+        if (requested is not null) return requested;
+        var dbPath = NormalizeOptional(JsonHelpers.GetString(parameters, "dbPath"));
+        return dbPath is null
+            ? null
+            : Path.Combine(Path.GetDirectoryName(Path.GetFullPath(dbPath))!, "projects");
+    }
+
     private static ProjectDirectoryAllocation EnsureUniqueLocalProjectDirectory(
         string? requestedBaseDirectory,
         string baseName)
     {
         var baseDirectory = NormalizeOptional(requestedBaseDirectory) ??
             Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                OlaDataRoot.ExternalDataHome,
                 "Documents");
         Directory.CreateDirectory(baseDirectory);
 
@@ -569,6 +619,33 @@ internal static class DbProjectTools
         var trimmed = value?.Trim();
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
+
+    // Project bindings are public identifiers only. Provider credentials and account tickets
+    // must never be accepted by this database boundary.
+    private static string? NormalizeModelSource(string? value, string? workspaceId = null)
+    {
+        var trimmed = NormalizeOptional(value);
+        if (trimmed is null) return null;
+        if (trimmed.Length > 4096) throw new InvalidOperationException("Invalid model source.");
+        using var document = JsonDocument.Parse(trimmed);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Invalid model source.");
+        var kind = JsonHelpers.GetString(root, "kind");
+        var valid = kind == "local"
+            ? IsModelSourceIdentifier(JsonHelpers.GetString(root, "providerId")) &&
+              IsModelSourceIdentifier(JsonHelpers.GetString(root, "modelId")) &&
+              root.EnumerateObject().Count() == 3
+            : (kind == "ola-personal" || kind == "ola-team") &&
+              IsModelSourceIdentifier(JsonHelpers.GetString(root, "workspaceId")) &&
+              IsModelSourceIdentifier(JsonHelpers.GetString(root, "resourceId")) &&
+              (workspaceId is null || JsonHelpers.GetString(root, "workspaceId") == workspaceId) &&
+              root.EnumerateObject().Count() == 3;
+        if (!valid) throw new InvalidOperationException("Invalid model source.");
+        return root.GetRawText();
+    }
+
+    private static bool IsModelSourceIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= 1024 && !value.Any(char.IsControl);
 
     private static string? GetNullableString(SqliteDataReader reader, int ordinal)
     {

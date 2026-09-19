@@ -4,7 +4,7 @@ import type { ToolDefinition } from '../api/types'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useBackgroundSessionStore } from '@renderer/stores/background-session-store'
 import { isSessionForeground } from '@renderer/lib/agent/session-runtime-router'
-import { encodeToolError } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
 
 export interface AskUserOption {
@@ -239,12 +239,6 @@ export function clearPendingQuestions(): void {
   answerResolvers.clear()
 }
 
-function nativeOnlyAskUserResult(): string {
-  return encodeToolError(
-    'AskUserQuestion executes in the .NET Native Worker and is unavailable through the renderer boundary.'
-  )
-}
-
 export async function handleNativeAskUserRequest(params: unknown): Promise<AskUserResolvedPayload> {
   const record = isRecord(params) ? params : {}
   const toolUseId = typeof record.toolUseId === 'string' ? record.toolUseId.trim() : ''
@@ -426,7 +420,36 @@ const askUserQuestionHandler: ToolHandler = {
     name: 'AskUserQuestion',
     ...askUserToolDefinition
   },
-  execute: async () => nativeOnlyAskUserResult(),
+  execute: async (input, ctx) => {
+    const toolUseId = ctx.currentToolUseId?.trim()
+    if (!toolUseId) return encodeToolError('AskUserQuestion requires an active tool-use id')
+    const questions = normalizeQuestions(coerceAskUserQuestions(input.questions))
+    if (questions.length === 0) return encodeToolError('At least one question is required')
+    const resolved = await handleNativeAskUserRequest({
+      ...input,
+      questions,
+      toolUseId,
+      sessionId: ctx.sessionId
+    })
+    const answers = Object.fromEntries(
+      Object.entries(resolved.answers).map(([key, value]) => [
+        key,
+        Array.isArray(value) ? value.join(', ') : String(value)
+      ])
+    )
+    const summary = Object.entries(answers)
+      .map(([question, answer]) => `${question}: ${answer}`)
+      .join('\n')
+    return encodeStructuredToolResult({
+      questions,
+      answers,
+      ...(resolved.annotations ? { annotations: resolved.annotations } : {}),
+      summary,
+      ...(isRecord(input.metadata) && typeof input.metadata.source === 'string'
+        ? { source: input.metadata.source }
+        : {})
+    })
+  },
   requiresApproval: () => false
 }
 

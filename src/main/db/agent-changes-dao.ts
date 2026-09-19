@@ -1,4 +1,6 @@
 import { getNativeWorker } from '../lib/native-worker'
+import { canaryGetAgentChangeSet, canaryListAgentChangeSetsBySession } from './legacy-read-canary'
+import { businessWriteCanary } from './business-write-canary'
 
 export type StoredRunChangeStatus = 'open' | 'reverted'
 export type StoredFileChangeStatus = 'open' | 'reverted'
@@ -46,6 +48,7 @@ export interface StoredRunChangeSet {
 
 interface AppendFileChangeArgs {
   runId: string
+  workspaceId: string
   sessionId?: string
   assistantMessageId: string
   change: StoredTrackedFileChange
@@ -86,24 +89,42 @@ function assertMutation(result: AgentChangeMutationResult, operation: string): v
   }
 }
 
-export async function getStoredRunChangeSet(runId: string): Promise<StoredRunChangeSet | null> {
+export async function getStoredRunChangeSet(
+  runId: string,
+  workspaceId: string
+): Promise<StoredRunChangeSet | null> {
+  const migrated = await canaryGetAgentChangeSet(runId, workspaceId)
+  if (migrated !== undefined) return migrated
   const result = await getNativeWorker().request<AgentChangeSetFindResult>(
     'db/agent-changes-get',
-    { runId },
+    { runId, workspaceId },
     120_000
   )
   return unwrapChangeSetResult(result, 'get')
 }
 
-export function listStoredRunChangeSetsBySession(sessionId: string): Promise<StoredRunChangeSet[]> {
+export async function listStoredRunChangeSetsBySession(
+  sessionId: string,
+  workspaceId: string
+): Promise<StoredRunChangeSet[]> {
+  const migrated = await canaryListAgentChangeSetsBySession(sessionId, workspaceId)
+  if (migrated !== undefined) return migrated
   return getNativeWorker().request<StoredRunChangeSet[]>(
     'db/agent-changes-list-session',
-    { sessionId },
+    { sessionId, workspaceId },
     120_000
   )
 }
 
 export async function appendStoredFileChange(args: AppendFileChangeArgs): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.appendAgentFileChange({
+      ...args,
+      change: args.change as Parameters<typeof writer.appendAgentFileChange>[0]['change']
+    })
+    return
+  }
   const result = await getNativeWorker().request<AgentChangeMutationResult>(
     'db/agent-changes-append-file',
     args,
@@ -114,9 +135,15 @@ export async function appendStoredFileChange(args: AppendFileChangeArgs): Promis
 
 export async function markFileChangeReverted(args: {
   runId: string
+  workspaceId: string
   changeId: string
   revertedAt: number
 }): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.markAgentFileChangeReverted(args)
+    return
+  }
   const result = await getNativeWorker().request<AgentChangeMutationResult>(
     'db/agent-changes-mark-reverted',
     args,
@@ -125,16 +152,26 @@ export async function markFileChangeReverted(args: {
   assertMutation(result, 'mark-reverted')
 }
 
-export async function recomputeRunStatus(runId: string): Promise<void> {
+export async function recomputeRunStatus(runId: string, workspaceId: string): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.recomputeAgentChangeSet(runId, workspaceId, Date.now())
+    return
+  }
   const result = await getNativeWorker().request<AgentChangeMutationResult>(
     'db/agent-changes-recompute',
-    { runId, now: Date.now() },
+    { runId, workspaceId, now: Date.now() },
     120_000
   )
   assertMutation(result, 'recompute')
 }
 
 export async function deleteStoredFinalizedRunChangeSetsOlderThan(cutoff: number): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.pruneFinalizedAgentChangeSets(cutoff)
+    return
+  }
   const result = await getNativeWorker().request<AgentChangeDeleteResult>(
     'db/agent-changes-delete-finalized-before',
     { cutoff },

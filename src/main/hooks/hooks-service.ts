@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import type {
   HookEvent,
@@ -32,7 +33,7 @@ export class HooksService {
   readonly runner: HooksRunner
 
   constructor(
-    private readonly statePath = join(homedir(), '.ola', 'hooks-state-v1.json'),
+    private readonly statePath = join(olaDataRoot(), 'hooks-state-v1.json'),
     maxConcurrency = 4
   ) {
     this.runner = new HooksRunner(maxConcurrency)
@@ -88,7 +89,7 @@ export class HooksService {
     await this.initialize()
     if (projectPath && /^(ssh|sftp):\/\//i.test(projectPath)) return []
     const trusted = new Set(this.state.trustedKeys)
-    const paths = hooksConfigPaths(homedir(), projectPath)
+    const paths = hooksConfigPaths(homedir(), projectPath, olaDataRoot())
     const results = await Promise.all(
       paths.map(async (path, index) => {
         try {

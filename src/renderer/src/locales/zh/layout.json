@@ -1,10 +1,16 @@
-﻿{
+{
   "sidebar": {
     "ola": "Ola",
     "taskProfileSwitcher": "切换工作方式",
     "taskProfile": {
-      "work": { "title": "工作", "desc": "日常工作、研究和办公" },
-      "code": { "title": "编程", "desc": "项目、代码、终端和 Git" }
+      "work": {
+        "title": "工作",
+        "desc": "日常工作、研究和办公"
+      },
+      "code": {
+        "title": "编程",
+        "desc": "项目、代码、终端和 Git"
+      }
     },
     "conversations": "会话列表",
     "newConversation": "新建会话 (Ctrl+N)",
@@ -117,11 +123,76 @@
     "noChats": "暂无对话",
     "smartRename": "智能重命名",
     "smartRenaming": "智能命名中",
-    "extensionsLabel": "扩展功能"
+    "workspaceSwitcher": "切换工作空间",
+    "localWorkspace": "本地个人空间",
+    "workspaceBusy": "请等待当前任务完成或先停止任务，再切换工作空间。",
+    "localModelSource": "本地"
   },
   "layout": {
-    "copyResultReport": "复制结果报告",
-    "resultReportCopied": "结果报告已复制"
+    "newModeSession": "新建 {{mode}} 会话",
+    "clearConfirm": "清除 {{count}} 条消息？",
+    "clearConversation": "清空会话",
+    "conversationCleared": "对话已清除",
+    "openFolder": "打开文件夹",
+    "copyAll": "复制会话",
+    "exportImage": "复制为图片",
+    "useFullWidth": "使用全宽显示",
+    "useStandardWidth": "使用标准宽度",
+    "imageCopied": "图片已复制到剪贴板",
+    "exportImageFailed": "复制图片失败",
+    "deleteConversation": "删除会话",
+    "sessionDuplicated": "会话已复制",
+    "pinned": "已置顶",
+    "unpinned": "已取消置顶",
+    "conversationCopied": "对话已复制到剪贴板",
+    "autoApproveConfirm": "启用自动批准？所有工具调用将自动执行，无需确认。",
+    "autoApproveOff": "自动批准 已关闭",
+    "autoApproveOn": "自动批准 已开启（危险）",
+    "deleteAllConfirm": "删除全部 {{count}} 个会话？此操作不可撤销。",
+    "deleteConfirm": "确定要删除「{{title}}」吗？",
+    "deletedSessions": "已删除 {{count}} 个会话",
+    "importedSessions": "已导入 {{count}} 个会话",
+    "noNewSessions": "没有新会话可导入（全部已存在）",
+    "importFailed": "导入失败：{{error}}",
+    "noSessionsToBackup": "没有会话可备份",
+    "backedUpSessions": "已备份 {{count}} 个会话",
+    "exportedConversation": "对话已导出",
+    "theme": "主题",
+    "somethingWentWrong": "出了点问题",
+    "unexpectedError": "发生了意外错误。",
+    "tryAgain": "重试",
+    "reloadApp": "重新加载",
+    "copyError": "复制错误",
+    "errorDetails": "错误详情",
+    "modeTooltip": {
+      "solvesTitle": "适合解决",
+      "current": "当前模式",
+      "switchHint": "按 {{shortcut}} 可切换到{{mode}}模式",
+      "clarify": {
+        "summary": "适合需求还不够清晰的时候。它会更偏向先澄清目标、补齐上下文、提出关键追问，再决定怎么做。",
+        "solves": [
+          "需求模糊、上下文不足、存在多种理解路径的情况",
+          "把一个模糊想法整理成明确任务、规格或验收标准",
+          "希望 Agent 先帮你校准问题，而不是立刻开始改代码"
+        ]
+      },
+      "execute": {
+        "summary": "Agent 统一执行编码、研究、文档、DevOps 和跨应用任务；当前动作保持可见，结束后收拢为可审计调用链。",
+        "solves": [
+          "混合调研、文件改动、终端命令和外部工具的多步骤工作流",
+          "功能实现、问题排查、项目搭建、文档、DevOps 和分析任务",
+          "需要明确审批、实时进度、结果验证和结构化结论的工作"
+        ]
+      },
+      "acp": {
+        "summary": "Architecture Control Planning 适合复杂实现前的主控场景：先澄清目标与边界，再做架构设计、任务拆解和执行分派，主 Agent 不直接编码。",
+        "solves": [
+          "需要先明确背景、范围、约束、依赖与验收标准，再进入实现的复杂任务",
+          "希望主 Agent 专注架构设计、任务编排和过程控制，而不是直接下场写代码",
+          "希望子任务并行执行，并以结构化 Markdown 总结回收结果以便持续推进"
+        ]
+      }
+    }
   },
   "sidebar_toast": {
     "sessionDeleted": "会话已删除",
@@ -653,72 +724,6 @@
     "reportRetrying": "正在补生成总结报告…",
     "reportEmpty": "暂无总结报告"
   },
-  "layout": {
-    "newModeSession": "新建 {{mode}} 会话",
-    "clearConfirm": "清除 {{count}} 条消息？",
-    "clearConversation": "清空会话",
-    "conversationCleared": "对话已清除",
-    "openFolder": "打开文件夹",
-    "copyAll": "复制会话",
-    "exportImage": "复制为图片",
-    "useFullWidth": "使用全宽显示",
-    "useStandardWidth": "使用标准宽度",
-    "imageCopied": "图片已复制到剪贴板",
-    "exportImageFailed": "复制图片失败",
-    "deleteConversation": "删除会话",
-    "sessionDuplicated": "会话已复制",
-    "pinned": "已置顶",
-    "unpinned": "已取消置顶",
-    "conversationCopied": "对话已复制到剪贴板",
-    "autoApproveConfirm": "启用自动批准？所有工具调用将自动执行，无需确认。",
-    "autoApproveOff": "自动批准 已关闭",
-    "autoApproveOn": "自动批准 已开启（危险）",
-    "deleteAllConfirm": "删除全部 {{count}} 个会话？此操作不可撤销。",
-    "deleteConfirm": "确定要删除「{{title}}」吗？",
-    "deletedSessions": "已删除 {{count}} 个会话",
-    "importedSessions": "已导入 {{count}} 个会话",
-    "noNewSessions": "没有新会话可导入（全部已存在）",
-    "importFailed": "导入失败：{{error}}",
-    "noSessionsToBackup": "没有会话可备份",
-    "backedUpSessions": "已备份 {{count}} 个会话",
-    "exportedConversation": "对话已导出",
-    "theme": "主题",
-    "somethingWentWrong": "出了点问题",
-    "unexpectedError": "发生了意外错误。",
-    "tryAgain": "重试",
-    "reloadApp": "重新加载",
-    "copyError": "复制错误",
-    "errorDetails": "错误详情",
-    "modeTooltip": {
-      "solvesTitle": "适合解决",
-      "current": "当前模式",
-      "switchHint": "按 {{shortcut}} 可切换到{{mode}}模式",
-      "clarify": {
-        "summary": "适合需求还不够清晰的时候。它会更偏向先澄清目标、补齐上下文、提出关键追问，再决定怎么做。",
-        "solves": [
-          "需求模糊、上下文不足、存在多种理解路径的情况",
-          "把一个模糊想法整理成明确任务、规格或验收标准",
-          "希望 Agent 先帮你校准问题，而不是立刻开始改代码"
-        ]
-      },
-      "execute": {
-        "summary": "Agent 统一执行编码、研究、文档、DevOps 和跨应用任务；当前动作保持可见，结束后收拢为可审计调用链。",
-        "solves": [
-          "混合调研、文件改动、终端命令和外部工具的多步骤工作流",
-          "功能实现、问题排查、项目搭建、文档、DevOps 和分析任务",
-          "需要明确审批、实时进度、结果验证和结构化结论的工作"
-        ]
-      },
-      "acp": {
-        "summary": "Architecture Control Planning 适合复杂实现前的主控场景：先澄清目标与边界，再做架构设计、任务拆解和执行分派，主 Agent 不直接编码。",
-        "solves": [
-          "需要先明确背景、范围、约束、依赖与验收标准，再进入实现的复杂任务",
-          "希望主 Agent 专注架构设计、任务编排和过程控制，而不是直接下场写代码",
-          "希望子任务并行执行，并以结构化 Markdown 总结回收结果以便持续推进"
-        ]
-      }
-    }
-  },
   "navRail": {
     "primaryNavigation": "主导航",
     "newTask": "新建任务",
@@ -798,7 +803,10 @@
           "name": "代码审查专家",
           "description": "审查代码质量、安全风险、可维护性和潜在缺陷。"
         },
-        "debugger": { "name": "调试专家", "description": "定位问题根因，设计修复方案并验证结果。" },
+        "debugger": {
+          "name": "调试专家",
+          "description": "定位问题根因，设计修复方案并验证结果。"
+        },
         "frontend-developer": {
           "name": "前端开发工程师",
           "description": "实现界面、交互、组件和前端体验优化。"
@@ -873,35 +881,74 @@
         }
       },
       "commands": {
-        "agents": { "name": "管理 Agent", "description": "创建、查看和管理可供任务调用的 Agent。" },
+        "agents": {
+          "name": "管理 Agent",
+          "description": "创建、查看和管理可供任务调用的 Agent。"
+        },
         "analyze-project": {
           "name": "分析项目",
           "description": "扫描项目结构、关键模块和技术边界。"
         },
-        "build": { "name": "构建项目", "description": "执行项目构建并整理构建结果和错误。" },
+        "build": {
+          "name": "构建项目",
+          "description": "执行项目构建并整理构建结果和错误。"
+        },
         "codegraph": {
           "name": "查看 CodeGraph",
           "description": "分析项目文件、符号和代码关系图。"
         },
-        "commit": { "name": "提交代码", "description": "生成提交计划，确认后创建 Git 提交。" },
-        "debug": { "name": "调试问题", "description": "定位 Bug、实施修复并进行验证。" },
+        "commit": {
+          "name": "提交代码",
+          "description": "生成提交计划，确认后创建 Git 提交。"
+        },
+        "debug": {
+          "name": "调试问题",
+          "description": "定位 Bug、实施修复并进行验证。"
+        },
         "devops": {
           "name": "DevOps 操作",
           "description": "处理环境、流水线、部署和运行维护任务。"
         },
-        "init": { "name": "初始化项目", "description": "分析项目并初始化工作区规则和上下文。" },
-        "plan": { "name": "制定计划", "description": "澄清目标、拆分步骤并形成可执行计划。" },
-        "release-check": { "name": "发布检查", "description": "检查测试、构建、版本和发布风险。" },
-        "report": { "name": "生成报告", "description": "把资料和结论整理成结构化报告。" },
-        "research": { "name": "资料研究", "description": "搜索和综合资料，输出有依据的研究结论。" },
-        "review": { "name": "代码审查", "description": "检查代码缺陷、风险和可维护性问题。" },
+        "init": {
+          "name": "初始化项目",
+          "description": "分析项目并初始化工作区规则和上下文。"
+        },
+        "plan": {
+          "name": "制定计划",
+          "description": "澄清目标、拆分步骤并形成可执行计划。"
+        },
+        "release-check": {
+          "name": "发布检查",
+          "description": "检查测试、构建、版本和发布风险。"
+        },
+        "report": {
+          "name": "生成报告",
+          "description": "把资料和结论整理成结构化报告。"
+        },
+        "research": {
+          "name": "资料研究",
+          "description": "搜索和综合资料，输出有依据的研究结论。"
+        },
+        "review": {
+          "name": "代码审查",
+          "description": "检查代码缺陷、风险和可维护性问题。"
+        },
         "security-review": {
           "name": "安全审查",
           "description": "检查代码和配置中的安全漏洞与风险。"
         },
-        "summarize": { "name": "内容总结", "description": "提炼长文本、记录或对话中的重点信息。" },
-        "test": { "name": "运行测试", "description": "执行测试并整理失败原因和验证结果。" },
-        "wiki": { "name": "生成项目 Wiki", "description": "生成人类可读的项目说明和结构化文档。" }
+        "summarize": {
+          "name": "内容总结",
+          "description": "提炼长文本、记录或对话中的重点信息。"
+        },
+        "test": {
+          "name": "运行测试",
+          "description": "执行测试并整理失败原因和验证结果。"
+        },
+        "wiki": {
+          "name": "生成项目 Wiki",
+          "description": "生成人类可读的项目说明和结构化文档。"
+        }
       }
     },
     "templates": {
@@ -914,10 +961,18 @@
         "global-project": "全局 / 项目级"
       },
       "items": {
-        "AGENTS.md": { "description": "项目规则、技术约束、工作方式和验收要求。" },
-        "SOUL.md": { "description": "定义助手的长期人格、沟通风格和行为边界。" },
-        "USER.md": { "description": "记录用户偏好、目标和协作方式。" },
-        "MEMORY.md": { "description": "保存长期记忆、重要决策和持续上下文。" }
+        "AGENTS.md": {
+          "description": "项目规则、技术约束、工作方式和验收要求。"
+        },
+        "SOUL.md": {
+          "description": "定义助手的长期人格、沟通风格和行为边界。"
+        },
+        "USER.md": {
+          "description": "记录用户偏好、目标和协作方式。"
+        },
+        "MEMORY.md": {
+          "description": "保存长期记忆、重要决策和持续上下文。"
+        }
       }
     }
   },
@@ -1404,10 +1459,9 @@
     "websockify": "websockify",
     "embeddedNoVnc": "内嵌 noVNC",
     "noVncSecurityFailure": "VNC 服务器拒绝了安全握手。",
-    "noVncSecurityFailureMac": "无法连接到 macOS VNC 服务器。请在“系统设置 → 通用 → 共享 → 屏幕共享”中启用屏幕共享并允许 VNC 观看，确认主机端口（默认 5900）。macOS 自带屏幕共享仅支持 RFB over TCP，不支持 WebSocket；请通过 SSH 隧道 + websockify 桥接，或使用外部 VNC 客户端。",
+    "noVncSecurityFailureMac": "无法连接 macOS VNC 服务器。请在「系统设置 → 通用 → 共享」中打开「屏幕共享」，允许 VNC 查看器访问，并确认端口（默认 5900）。macOS 屏幕共享只支持 RFB over TCP，不支持 noVNC 所需的 WebSocket 协议，请改用 SSH 隧道 + websockify 桥接，或直接使用外部 VNC 客户端。",
     "noVncMacUnreachable": "无法访问 macOS VNC 桥接。请在“系统设置 → 通用 → 共享 → 屏幕共享”中启用屏幕共享并确认主机端口（默认 5900）。macOS 自带屏幕共享仅支持 RFB over TCP，不支持 WebSocket；请通过 SSH 隧道 + websockify 桥接，或使用外部 VNC 客户端。",
     "noVncMacRefused": "macOS VNC 服务器拒绝了连接。请在“系统设置 → 通用 → 共享”中启用屏幕共享并允许 VNC 观看，同时确认防火墙已放行入站 TCP 5900。",
-    "noVncSecurityFailureMac": "无法连接 macOS VNC 服务器。请在「系统设置 → 通用 → 共享」中打开「屏幕共享」，允许 VNC 查看器访问，并确认端口（默认 5900）。macOS 屏幕共享只支持 RFB over TCP，不支持 noVNC 所需的 WebSocket 协议，请改用 SSH 隧道 + websockify 桥接，或直接使用外部 VNC 客户端。",
     "noVncCredentialsRequired": "此 VNC 服务器需要凭据。嵌入式 noVNC 无法安全地拿到已保存的密码，请改用外部查看器。",
     "bytes": "字节",
     "statusIdle": "空闲",
@@ -1539,7 +1593,22 @@
       "bridge": "连接安全协议桥",
       "authentication": "验证 Windows 账号",
       "desktop": "加载远程桌面"
-    }
+    },
+    "connectionStatus": "当前连接状态：{{status}}",
+    "screenSharingStatus": "屏幕共享：{{status}}",
+    "screenSharingEnabled": "已开启；被控时将共享当前屏幕",
+    "screenSharingRequesting": "正在请求权限…",
+    "screenSharingDisabled": "未开启",
+    "stopScreenSharing": "停止共享",
+    "startScreenSharing": "开启屏幕共享",
+    "sameAccountDevices": "同账户设备",
+    "online": "在线",
+    "offline": "离线",
+    "connecting": "连接中…",
+    "connectWithoutPassword": "免密连接",
+    "disconnectSession": "断开连接",
+    "serviceEndpoint": "API 服务地址",
+    "cancel": "取消"
   },
   "terminalDock": {
     "sshContext": "SSH 工作区",

@@ -17,6 +17,7 @@ const instance = (id: string): ChannelInstance => ({
 
 let now = 1_000
 const received: ChannelEvent[] = []
+let notifyOne: ((event: ChannelEvent) => void) | undefined
 const manager = new ChannelManager({
   messageDedupTtlMs: 100,
   messageDedupMaxPerPlugin: 2,
@@ -24,6 +25,7 @@ const manager = new ChannelManager({
 })
 
 manager.registerFactory('test', (_instance, notify) => {
+  if (_instance.id === 'one') notifyOne = notify
   const service: MessagingChannelService = {
     pluginId: _instance.id,
     pluginType: _instance.type,
@@ -71,17 +73,32 @@ assert.equal(
   3,
   'duplicate non-empty message ids are suppressed; empty ids pass through'
 )
+const otherChat: ChannelEvent = {
+  type: 'incoming_message',
+  pluginId: 'one',
+  pluginType: 'test',
+  data: {
+    messageId: 'replayed',
+    chatId: 'other-chat',
+    senderId: 'sender',
+    senderName: 'Sender',
+    content: 'Different conversation'
+  }
+}
+notifyOne?.(otherChat)
+notifyOne?.(otherChat)
+assert.equal(received.length, 4, 'the same provider message ID in another chat is distinct')
 
 await manager.stopPlugin('one')
 await manager.startPlugin(instance('one'), (event) => received.push(event))
-assert.equal(received.length, 5, 'a restart does not replay an already-seen message id')
+assert.equal(received.length, 6, 'a restart does not replay an already-seen message id')
 
 now = 1_101
 await manager.stopPlugin('one')
 await manager.startPlugin(instance('one'), (event) => received.push(event))
-assert.equal(received.length, 8, 'an expired message id is accepted again')
+assert.equal(received.length, 9, 'an expired message id is accepted again')
 
 await manager.startPlugin(instance('two'), (event) => received.push(event))
-assert.equal(received.length, 11, 'deduplication is scoped to the channel instance')
+assert.equal(received.length, 12, 'deduplication is scoped to the channel instance')
 
 console.log('channel message dedup verification passed')

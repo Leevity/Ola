@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
@@ -233,10 +234,11 @@ internal static class AgentRuntimeMemoryExecutor
 
     private static List<MemoryRootDescriptor> EnsureCurrentRoots(JsonElement parameters, string scope)
     {
+        var workspaceId = JsonHelpers.GetString(parameters, "workspaceId")?.Trim();
+        if (string.IsNullOrEmpty(workspaceId) || workspaceId.Length > 1024)
+            throw new InvalidOperationException("Memory tools require a valid workspace.");
         var candidates = new List<MemoryRootCandidate>();
-        var globalHome = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola");
+        var globalHome = WorkspaceMemoryHome(workspaceId);
         if (!string.IsNullOrWhiteSpace(globalHome))
         {
             candidates.Add(new MemoryRootCandidate(
@@ -252,17 +254,40 @@ internal static class AgentRuntimeMemoryExecutor
         if (!string.IsNullOrWhiteSpace(workingFolder))
         {
             var sshConnectionId = JsonHelpers.GetString(parameters, "sshConnectionId")?.Trim();
+            var projectId = JsonHelpers.GetString(parameters, "projectId")?.Trim();
             candidates.Add(new MemoryRootCandidate(
                 "project",
-                null,
+                string.IsNullOrWhiteSpace(projectId) ? null : projectId,
                 workingFolder,
                 string.IsNullOrWhiteSpace(sshConnectionId) ? null : sshConnectionId,
-                JoinFsPath(workingFolder, ".agents"),
+                workspaceId == "local-personal"
+                    ? JoinFsPath(workingFolder, ".agents")
+                    : JoinFsPath(workingFolder, ".agents", "workspaces", WorkspaceMemoryKey(workspaceId)),
                 string.IsNullOrWhiteSpace(sshConnectionId) ? "local" : "ssh"));
         }
 
         using var connection = DbConnectionFactory.OpenReadWrite(parameters);
         using var transaction = connection.BeginTransaction();
+        if (JsonHelpers.GetString(parameters, "sessionId") is { Length: > 0 } sessionId)
+        {
+            using var session = connection.CreateCommand();
+            session.Transaction = transaction;
+            session.CommandText = "SELECT 1 FROM sessions WHERE id = $sessionId AND workspace_id = $workspaceId LIMIT 1";
+            session.Parameters.AddWithValue("$sessionId", sessionId);
+            session.Parameters.AddWithValue("$workspaceId", workspaceId);
+            if (session.ExecuteScalar() is null)
+                throw new InvalidOperationException("Memory tool session is not available in this workspace.");
+        }
+        if (JsonHelpers.GetString(parameters, "projectId") is { Length: > 0 } projectIdToCheck)
+        {
+            using var project = connection.CreateCommand();
+            project.Transaction = transaction;
+            project.CommandText = "SELECT 1 FROM projects WHERE id = $projectId AND workspace_id = $workspaceId LIMIT 1";
+            project.Parameters.AddWithValue("$projectId", projectIdToCheck);
+            project.Parameters.AddWithValue("$workspaceId", workspaceId);
+            if (project.ExecuteScalar() is null)
+                throw new InvalidOperationException("Memory tool project is not available in this workspace.");
+        }
         var roots = new List<MemoryRootDescriptor>();
         foreach (var candidate in candidates)
         {
@@ -270,7 +295,7 @@ internal static class AgentRuntimeMemoryExecutor
             {
                 continue;
             }
-            roots.Add(EnsureRoot(connection, transaction, candidate));
+            roots.Add(EnsureRoot(connection, transaction, candidate, workspaceId));
         }
         transaction.Commit();
         return roots;
@@ -279,10 +304,11 @@ internal static class AgentRuntimeMemoryExecutor
     private static MemoryRootDescriptor EnsureRoot(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        MemoryRootCandidate candidate)
+        MemoryRootCandidate candidate,
+        string workspaceId)
     {
-        var ownerKey = BuildOwnerKey(candidate);
-        var existing = GetRootByOwnerKey(connection, transaction, ownerKey);
+        var ownerKey = BuildOwnerKey(candidate, workspaceId);
+        var existing = GetRootByOwnerKey(connection, transaction, ownerKey, workspaceId);
         var now = Now();
         if (existing is not null)
         {
@@ -297,7 +323,7 @@ internal static class AgentRuntimeMemoryExecutor
                        root_path = $rootPath,
                        transport = $transport,
                        updated_at = $updatedAt
-                 WHERE id = $id
+                 WHERE id = $id AND workspace_id = $workspaceId
                 """,
                 new DbSql.SqlParam("$projectId", candidate.ProjectId),
                 new DbSql.SqlParam("$workingFolder", candidate.WorkingFolder),
@@ -305,8 +331,9 @@ internal static class AgentRuntimeMemoryExecutor
                 new DbSql.SqlParam("$rootPath", candidate.RootPath),
                 new DbSql.SqlParam("$transport", candidate.Transport),
                 new DbSql.SqlParam("$updatedAt", now),
-                new DbSql.SqlParam("$id", existing.Id));
-            return GetRoot(connection, transaction, existing.Id) ?? existing;
+                new DbSql.SqlParam("$id", existing.Id),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
+            return GetRoot(connection, transaction, existing.Id, workspaceId) ?? existing;
         }
 
         var id = $"oc_{Guid.NewGuid():N}";
@@ -316,9 +343,9 @@ internal static class AgentRuntimeMemoryExecutor
             """
             INSERT INTO memory_roots (
               id, scope, project_id, working_folder, ssh_connection_id, root_path, transport,
-              owner_key, created_at, updated_at
+              owner_key, created_at, updated_at, workspace_id
             )
-            VALUES ($id, $scope, $projectId, $workingFolder, $sshConnectionId, $rootPath, $transport, $ownerKey, $createdAt, $updatedAt)
+            VALUES ($id, $scope, $projectId, $workingFolder, $sshConnectionId, $rootPath, $transport, $ownerKey, $createdAt, $updatedAt, $workspaceId)
             """,
             new DbSql.SqlParam("$id", id),
             new DbSql.SqlParam("$scope", candidate.Scope),
@@ -329,32 +356,37 @@ internal static class AgentRuntimeMemoryExecutor
             new DbSql.SqlParam("$transport", candidate.Transport),
             new DbSql.SqlParam("$ownerKey", ownerKey),
             new DbSql.SqlParam("$createdAt", now),
-            new DbSql.SqlParam("$updatedAt", now));
-        return GetRoot(connection, transaction, id) ??
+            new DbSql.SqlParam("$updatedAt", now),
+            new DbSql.SqlParam("$workspaceId", workspaceId));
+        return GetRoot(connection, transaction, id, workspaceId) ??
             throw new InvalidOperationException("Failed to create memory root.");
     }
 
     private static MemoryRootDescriptor? GetRoot(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        string id)
+        string id,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{RootSelectSql()} WHERE id = $id LIMIT 1";
+        command.CommandText = $"{RootSelectSql()} WHERE id = $id AND workspace_id = $workspaceId LIMIT 1";
         command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadRoots(command).FirstOrDefault();
     }
 
     private static MemoryRootDescriptor? GetRootByOwnerKey(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        string ownerKey)
+        string ownerKey,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{RootSelectSql()} WHERE owner_key = $ownerKey LIMIT 1";
+        command.CommandText = $"{RootSelectSql()} WHERE owner_key = $ownerKey AND workspace_id = $workspaceId LIMIT 1";
         command.Parameters.AddWithValue("$ownerKey", ownerKey);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadRoots(command).FirstOrDefault();
     }
 
@@ -375,7 +407,8 @@ internal static class AgentRuntimeMemoryExecutor
                 Transport = reader.GetString(6),
                 OwnerKey = reader.GetString(7),
                 CreatedAt = reader.GetInt64(8),
-                UpdatedAt = reader.GetInt64(9)
+                UpdatedAt = reader.GetInt64(9),
+                WorkspaceId = reader.GetString(10)
             });
         }
         return rows;
@@ -589,9 +622,9 @@ internal static class AgentRuntimeMemoryExecutor
             : string.Join(separator, [trimmedBase, .. normalizedSegments]);
     }
 
-    private static string BuildOwnerKey(MemoryRootCandidate candidate)
+    private static string BuildOwnerKey(MemoryRootCandidate candidate, string workspaceId)
     {
-        return string.Join(
+        var key = string.Join(
             "::",
             candidate.Scope,
             candidate.Transport,
@@ -599,7 +632,18 @@ internal static class AgentRuntimeMemoryExecutor
             candidate.SshConnectionId ?? string.Empty,
             NormalizeOwnerPath(candidate.WorkingFolder ?? string.Empty, candidate.SshConnectionId),
             NormalizeOwnerPath(candidate.RootPath, candidate.SshConnectionId));
+        return workspaceId == "local-personal" ? key : $"{workspaceId.Length}:{workspaceId}::{key}";
     }
+
+    private static string WorkspaceMemoryHome(string workspaceId)
+    {
+        var personalHome = OlaDataRoot.DirectoryPath;
+        if (workspaceId == "local-personal") return personalHome;
+        return Path.Combine(personalHome, "workspaces", WorkspaceMemoryKey(workspaceId));
+    }
+
+    private static string WorkspaceMemoryKey(string workspaceId) =>
+        Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(workspaceId)));
 
     private static string NormalizeOwnerPath(string value, string? sshConnectionId)
     {
@@ -674,7 +718,8 @@ internal static class AgentRuntimeMemoryExecutor
                    transport,
                    owner_key,
                    created_at,
-                   updated_at
+                   updated_at,
+                   workspace_id
               FROM memory_roots
             """;
     }

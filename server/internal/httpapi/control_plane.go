@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
@@ -49,20 +50,19 @@ type teamApplicationRecord struct {
 }
 
 type modelConfigRecord struct {
-	ID            string    `json:"id"`
-	TeamID        string    `json:"teamId"`
-	Provider      string    `json:"provider"`
-	Model         string    `json:"model"`
-	BaseURL       string    `json:"baseUrl"`
-	Enabled       bool      `json:"enabled"`
-	IsDefault     bool      `json:"isDefault"`
-	CredentialSet bool      `json:"credentialSet"`
-	APIKey        string    `json:"-"`
-	UpdatedAt     time.Time `json:"updatedAt"`
+	ID         string    `json:"id"`
+	TeamID     string    `json:"teamId"`
+	ProviderID string    `json:"providerId"`
+	Model      string    `json:"model"`
+	Enabled    bool      `json:"enabled"`
+	IsDefault  bool      `json:"isDefault"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 type controlPlane struct {
 	mu           sync.RWMutex
+	repository   store.ControlPlaneRepository
+	migrationErr error
 	teams        map[string]teamRecord
 	members      map[string][]teamMemberRecord
 	applications map[string]teamApplicationRecord
@@ -75,9 +75,76 @@ type controlPlane struct {
 	// process-local so task payloads are never written to the state snapshot.
 	MeshNodes  map[string]meshNodeRecord    `json:"meshNodes"`
 	MeshEvents map[string][]meshEventRecord `json:"-"`
+	// Ticket nonces are intentionally memory-only while Mesh remains status-only.
+	// They expire with the signed ticket and prevent a live bearer ticket from
+	// publishing more than one event. The future persistent queue will move this
+	// replay ledger into the same encrypted transaction as event delivery.
+	UsedMeshTicketNonces map[string]int64 `json:"-"`
+}
+
+// The control plane intentionally keeps its maps private so callers cannot
+// mutate authorization state without the lock.  JSON does not serialize private
+// fields, therefore an explicit snapshot prevents a restart from silently
+// dropping teams, memberships, and model selections.
+func (p controlPlane) MarshalJSON() ([]byte, error) {
+	if p.repository != nil {
+		// Organizations, members, applications, and model configuration live in
+		// relational tables. The legacy snapshot remains only for mesh metadata.
+		return json.Marshal(struct {
+			MeshNodes map[string]meshNodeRecord `json:"meshNodes"`
+		}{p.MeshNodes})
+	}
+	return json.Marshal(struct {
+		Teams        map[string]teamRecord            `json:"teams"`
+		Members      map[string][]teamMemberRecord    `json:"members"`
+		Applications map[string]teamApplicationRecord `json:"applications"`
+		Models       map[string][]modelConfigRecord   `json:"models"`
+		MeshNodes    map[string]meshNodeRecord        `json:"meshNodes"`
+	}{p.teams, p.members, p.applications, p.models, p.MeshNodes})
+}
+
+func (p *controlPlane) UnmarshalJSON(data []byte) error {
+	var snapshot struct {
+		Teams        map[string]teamRecord            `json:"teams"`
+		Members      map[string][]teamMemberRecord    `json:"members"`
+		Applications map[string]teamApplicationRecord `json:"applications"`
+		Models       map[string][]modelConfigRecord   `json:"models"`
+		MeshNodes    map[string]meshNodeRecord        `json:"meshNodes"`
+	}
+	if err := json.Unmarshal(data, &snapshot); err != nil {
+		return err
+	}
+	if p.repository == nil {
+		// The in-memory test/file-store mode retains the legacy representation.
+		// Production skips these fields even if an old snapshot still contains
+		// them, preventing stale authorization data from being resurrected.
+		if snapshot.Teams != nil {
+			p.teams = snapshot.Teams
+		}
+		if snapshot.Members != nil {
+			p.members = snapshot.Members
+		}
+		if snapshot.Applications != nil {
+			p.applications = snapshot.Applications
+		}
+		if snapshot.Models != nil {
+			p.models = snapshot.Models
+		}
+	}
+	if snapshot.MeshNodes != nil {
+		p.MeshNodes = snapshot.MeshNodes
+	}
+	return nil
 }
 
 func (p *controlPlane) providerFor(accountID, teamID string) (modelConfigRecord, bool) {
+	if p.repository != nil {
+		config, ok, err := p.repository.ProviderForOrganization(accountID, teamID)
+		if err != nil || !ok {
+			return modelConfigRecord{}, false
+		}
+		return modelConfigRecord{ID: config.ID, TeamID: config.OrganizationID, ProviderID: config.Provider, Model: config.Model, Enabled: config.Enabled, IsDefault: config.IsDefault, UpdatedAt: config.UpdatedAt}, true
+	}
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	if teamID == "" {
@@ -112,10 +179,16 @@ type controlPlanePersistence interface {
 }
 
 func newControlPlane(source any) *controlPlane {
-	plane := &controlPlane{teams: map[string]teamRecord{}, members: map[string][]teamMemberRecord{}, applications: map[string]teamApplicationRecord{}, models: map[string][]modelConfigRecord{}, MeshNodes: map[string]meshNodeRecord{}, MeshEvents: map[string][]meshEventRecord{}, statePath: os.Getenv("OLA_CONTROL_PLANE_STATE_PATH")}
+	plane := &controlPlane{teams: map[string]teamRecord{}, members: map[string][]teamMemberRecord{}, applications: map[string]teamApplicationRecord{}, models: map[string][]modelConfigRecord{}, MeshNodes: map[string]meshNodeRecord{}, MeshEvents: map[string][]meshEventRecord{}, UsedMeshTicketNonces: map[string]int64{}, statePath: os.Getenv("OLA_CONTROL_PLANE_STATE_PATH")}
 	plane.persistence, _ = source.(controlPlanePersistence)
+	plane.repository, _ = source.(store.ControlPlaneRepository)
 	if plane.persistence != nil {
 		if bytes, err := plane.persistence.LoadControlPlaneState(); err == nil {
+			if plane.repository != nil {
+				if migrator, ok := source.(store.LegacyControlPlaneMigrator); ok {
+					plane.migrationErr = migrator.MigrateLegacyControlPlaneSnapshot(bytes)
+				}
+			}
 			_ = json.Unmarshal(bytes, plane)
 		}
 	} else if plane.statePath != "" {
@@ -128,6 +201,9 @@ func newControlPlane(source any) *controlPlane {
 	}
 	if plane.MeshEvents == nil {
 		plane.MeshEvents = map[string][]meshEventRecord{}
+	}
+	if plane.UsedMeshTicketNonces == nil {
+		plane.UsedMeshTicketNonces = map[string]int64{}
 	}
 	return plane
 }
@@ -151,11 +227,16 @@ func (p *controlPlane) persistLocked() {
 }
 
 func controlID(prefix string) string {
-	buf := make([]byte, 8)
+	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return prefix + "-" + time.Now().Format("20060102150405")
+		// Control-plane IDs are stored in PostgreSQL UUID columns. The prefix is
+		// intentionally not encoded in the persisted identifier.
+		return fmt.Sprintf("00000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 	}
-	return prefix + "-" + hex.EncodeToString(buf)
+	buf[6] = (buf[6] & 0x0f) | 0x40
+	buf[8] = (buf[8] & 0x3f) | 0x80
+	return hex.EncodeToString(buf[:4]) + "-" + hex.EncodeToString(buf[4:6]) + "-" +
+		hex.EncodeToString(buf[6:8]) + "-" + hex.EncodeToString(buf[8:10]) + "-" + hex.EncodeToString(buf[10:])
 }
 
 func systemAdminEmails() map[string]bool {
@@ -184,6 +265,14 @@ func (api *API) registerControlPlaneRoutes(mux *http.ServeMux) {
 }
 
 func (api *API) controlMe(w http.ResponseWriter, r *http.Request, account store.Account) {
+	if api.control.migrationErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "control-plane migration requires operator attention")
+		return
+	}
+	if api.control.repository != nil {
+		api.controlMeRelational(w, r, account)
+		return
+	}
 	if !requireMethod(w, r, http.MethodGet) {
 		return
 	}
@@ -212,6 +301,14 @@ func (api *API) controlMe(w http.ResponseWriter, r *http.Request, account store.
 }
 
 func (api *API) controlTeams(w http.ResponseWriter, r *http.Request, account store.Account) {
+	if api.control.migrationErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "control-plane migration requires operator attention")
+		return
+	}
+	if api.control.repository != nil {
+		api.controlTeamsRelational(w, r, account)
+		return
+	}
 	if r.Method == http.MethodGet {
 		api.control.mu.RLock()
 		defer api.control.mu.RUnlock()
@@ -257,6 +354,14 @@ func (api *API) controlTeams(w http.ResponseWriter, r *http.Request, account sto
 }
 
 func (api *API) controlApplications(w http.ResponseWriter, r *http.Request, account store.Account) {
+	if api.control.migrationErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "control-plane migration requires operator attention")
+		return
+	}
+	if api.control.repository != nil {
+		api.controlApplicationsRelational(w, r, account)
+		return
+	}
 	if controlRoleFor(account) != roleSystemAdmin {
 		writeError(w, http.StatusForbidden, "system administrator role required")
 		return
@@ -310,10 +415,26 @@ func (api *API) controlApplications(w http.ResponseWriter, r *http.Request, acco
 }
 
 func (api *API) controlModels(w http.ResponseWriter, r *http.Request, account store.Account) {
+	if api.control.migrationErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "control-plane migration requires operator attention")
+		return
+	}
+	if api.control.repository != nil {
+		api.controlModelsRelational(w, r, account)
+		return
+	}
+	teamID := r.URL.Query().Get("teamId")
+	if r.Method == http.MethodPost {
+		teamID = ""
+	}
 	if r.Method == http.MethodGet {
+		if !api.canAccessTeamModels(account, teamID) {
+			writeError(w, http.StatusForbidden, "team membership required")
+			return
+		}
 		api.control.mu.RLock()
 		defer api.control.mu.RUnlock()
-		models := api.control.models[r.URL.Query().Get("teamId")]
+		models := api.control.models[teamID]
 		if models == nil {
 			models = make([]modelConfigRecord, 0)
 		}
@@ -324,26 +445,21 @@ func (api *API) controlModels(w http.ResponseWriter, r *http.Request, account st
 		return
 	}
 	var req struct {
-		TeamID    string `json:"teamId"`
-		Provider  string `json:"provider"`
-		Model     string `json:"model"`
-		BaseURL   string `json:"baseUrl"`
-		IsDefault bool   `json:"isDefault"`
-		APIKey    string `json:"apiKey"`
+		TeamID     string `json:"teamId"`
+		ProviderID string `json:"providerId"`
+		Model      string `json:"model"`
+		IsDefault  bool   `json:"isDefault"`
 	}
-	if !readJSON(w, r, &req) || !validBoundedText(req.TeamID, 128) || !validBoundedText(req.Provider, 80) || !validBoundedText(req.Model, 160) {
+	if !readJSON(w, r, &req) {
+		return
+	}
+	if !validBoundedText(req.TeamID, 128) || !validBoundedText(req.Model, 160) || req.ProviderID != "platform-default" {
 		writeError(w, http.StatusBadRequest, "invalid model configuration")
 		return
 	}
 	api.control.mu.Lock()
 	defer api.control.mu.Unlock()
-	allowed := false
-	for _, member := range api.control.members[req.TeamID] {
-		if member.UserID == account.ID && (member.Role == roleTeamAdmin || controlRoleFor(account) == roleSystemAdmin) {
-			allowed = true
-		}
-	}
-	if !allowed {
+	if !api.isTeamAdmin(account, req.TeamID) {
 		writeError(w, http.StatusForbidden, "team administrator role required")
 		return
 	}
@@ -352,13 +468,61 @@ func (api *API) controlModels(w http.ResponseWriter, r *http.Request, account st
 			api.control.models[req.TeamID][i].IsDefault = false
 		}
 	}
-	model := modelConfigRecord{ID: controlID("model"), TeamID: req.TeamID, Provider: strings.TrimSpace(req.Provider), Model: strings.TrimSpace(req.Model), BaseURL: strings.TrimSpace(req.BaseURL), Enabled: true, IsDefault: req.IsDefault, CredentialSet: strings.TrimSpace(req.APIKey) != "", APIKey: strings.TrimSpace(req.APIKey), UpdatedAt: time.Now()}
+	model := modelConfigRecord{ID: controlID("model"), TeamID: req.TeamID, ProviderID: req.ProviderID, Model: strings.TrimSpace(req.Model), Enabled: true, IsDefault: req.IsDefault, UpdatedAt: time.Now()}
 	api.control.models[req.TeamID] = append(api.control.models[req.TeamID], model)
 	api.control.persistLocked()
 	writeJSON(w, http.StatusCreated, map[string]any{"model": model})
 }
 
+func (api *API) canAccessTeamModels(account store.Account, teamID string) bool {
+	if api.control.repository != nil {
+		if controlRoleFor(account) == roleSystemAdmin {
+			return true
+		}
+		allowed, err := api.control.repository.CanAccessOrganization(account.ID, teamID)
+		return err == nil && allowed
+	}
+	if controlRoleFor(account) == roleSystemAdmin {
+		return true
+	}
+	api.control.mu.RLock()
+	defer api.control.mu.RUnlock()
+	for _, member := range api.control.members[teamID] {
+		if member.UserID == account.ID {
+			return true
+		}
+	}
+	return false
+}
+
+func (api *API) isTeamAdmin(account store.Account, teamID string) bool {
+	if api.control.repository != nil {
+		if controlRoleFor(account) == roleSystemAdmin {
+			return true
+		}
+		allowed, err := api.control.repository.IsOrganizationAdmin(account.ID, teamID)
+		return err == nil && allowed
+	}
+	if controlRoleFor(account) == roleSystemAdmin {
+		return true
+	}
+	for _, member := range api.control.members[teamID] {
+		if member.UserID == account.ID && member.Role == roleTeamAdmin {
+			return true
+		}
+	}
+	return false
+}
+
 func (api *API) controlMembers(w http.ResponseWriter, r *http.Request, account store.Account) {
+	if api.control.migrationErr != nil {
+		writeError(w, http.StatusServiceUnavailable, "control-plane migration requires operator attention")
+		return
+	}
+	if api.control.repository != nil {
+		api.controlMembersRelational(w, r, account)
+		return
+	}
 	teamID := r.URL.Query().Get("teamId")
 	if !validRemoteIdentifier(teamID) {
 		writeError(w, http.StatusBadRequest, "invalid team ID")

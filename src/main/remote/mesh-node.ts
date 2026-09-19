@@ -1,3 +1,4 @@
+import { canPersistSecrets } from '../credentials/secure-storage-policy'
 import { app, safeStorage } from 'electron'
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { createHash, generateKeyPairSync, randomUUID } from 'crypto'
@@ -27,10 +28,7 @@ export function desktopMeshPlatform(): MeshNodePlatform {
 export function desktopMeshCapabilities(): MeshCapability[] {
   return [
     { id: 'mesh.event.receive', risk: 'low', version: '1' },
-    { id: 'task.execute', risk: 'high', version: '1' },
-    { id: 'terminal.execute', risk: 'high', version: '1' },
-    { id: 'file.read', risk: 'medium', version: '1' },
-    { id: 'file.write', risk: 'high', version: '1' }
+    { id: 'system.info', risk: 'low', version: '1' }
   ]
 }
 
@@ -55,7 +53,7 @@ function validateIdentity(value: StoredMeshIdentity): DesktopMeshIdentity {
 }
 
 export async function loadDesktopMeshIdentity(): Promise<DesktopMeshIdentity> {
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!canPersistSecrets(safeStorage)) {
     throw new Error('OS secure storage is required for Mesh node identity')
   }
   try {

@@ -2,6 +2,7 @@ import type { AIModelConfig, AIProvider } from '@renderer/lib/api/types'
 import type { Session, SessionModelSelectionMode } from '@renderer/stores/chat-store'
 import type { MainModelSelectionMode } from '@renderer/stores/settings-store'
 import type { TaskProfileConfig } from './task-profile'
+import { modelSourceSelection, type ModelSource } from '../../../shared/runtime/model-source'
 
 export type ResolvedSessionModelSource = 'plugin' | 'session' | 'profile' | 'global'
 
@@ -68,7 +69,12 @@ export function resolveSessionModelSelection({
 }: {
   session?: Pick<
     Session,
-    'pluginId' | 'providerId' | 'modelId' | 'modelSelectionMode' | 'profileConfigSnapshot'
+    | 'pluginId'
+    | 'providerId'
+    | 'modelId'
+    | 'modelSource'
+    | 'modelSelectionMode'
+    | 'profileConfigSnapshot'
   > | null
   providers: AIProvider[]
   activeProviderId: string | null
@@ -77,15 +83,20 @@ export function resolveSessionModelSelection({
   channelProviderId?: string | null
   channelModelId?: string | null
 }): ResolvedSessionModelSelection {
+  const typedSelection = session?.modelSource
+    ? modelSourceSelection(session.modelSource as ModelSource)
+    : null
+  const sessionProviderId = typedSelection?.providerId ?? session?.providerId
+  const sessionModelId = typedSelection?.modelId ?? session?.modelId
   const mode = normalizeSessionModelSelectionMode(
     session?.modelSelectionMode,
-    session?.providerId,
-    session?.modelId
+    sessionProviderId,
+    sessionModelId
   )
 
-  const pluginProviderId = channelProviderId ?? session?.providerId ?? null
+  const pluginProviderId = channelProviderId ?? sessionProviderId ?? null
   const pluginModelId =
-    channelModelId ?? session?.modelId ?? resolveProviderDefaultModelId(providers, pluginProviderId)
+    channelModelId ?? sessionModelId ?? resolveProviderDefaultModelId(providers, pluginProviderId)
   if (session?.pluginId && pluginProviderId && pluginModelId) {
     const { provider, model } = resolveProviderAndModel(providers, pluginProviderId, pluginModelId)
     return {
@@ -101,18 +112,18 @@ export function resolveSessionModelSelection({
     }
   }
 
-  if (!session?.pluginId && mode === 'manual' && session?.providerId && session.modelId) {
+  if (!session?.pluginId && mode === 'manual' && sessionProviderId && sessionModelId) {
     const { provider, model } = resolveProviderAndModel(
       providers,
-      session.providerId,
-      session.modelId
+      sessionProviderId,
+      sessionModelId
     )
     return {
       mode,
       effectiveMode: 'manual',
       source: 'session',
-      providerId: session.providerId,
-      modelId: session.modelId,
+      providerId: sessionProviderId,
+      modelId: sessionModelId,
       provider,
       model,
       isAutoModeActive: false,

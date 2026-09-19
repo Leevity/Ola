@@ -27,6 +27,7 @@ internal static class DbSchemaMigrator
         CreateCapabilityTables(connection);
         ApplyAdditiveMigrations(connection);
         BackfillUsageActivity(connection);
+        BackfillWorkspaceUsageActivity(connection);
         var elapsedMs = (long)Math.Round(Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
         WorkerLog.Info($"db schema initialize done elapsedMs={elapsedMs}");
     }
@@ -76,7 +77,8 @@ internal static class DbSchemaMigrator
               name TEXT NOT NULL,
               flow_json TEXT NOT NULL,
               created_at INTEGER NOT NULL,
-              updated_at INTEGER NOT NULL
+              updated_at INTEGER NOT NULL,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
 
             CREATE TABLE IF NOT EXISTS desktop_flow_steps (
@@ -140,7 +142,9 @@ internal static class DbSchemaMigrator
               external_chat_id TEXT,
               provider_id TEXT,
               model_id TEXT,
-              model_selection_mode TEXT NOT NULL DEFAULT 'inherit'
+              model_selection_mode TEXT NOT NULL DEFAULT 'inherit',
+              model_source TEXT,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
 
             CREATE TABLE IF NOT EXISTS messages (
@@ -172,6 +176,7 @@ internal static class DbSchemaMigrator
             CREATE TABLE IF NOT EXISTS agent_change_sets (
               run_id TEXT PRIMARY KEY,
               session_id TEXT,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal',
               assistant_message_id TEXT NOT NULL,
               status TEXT NOT NULL,
               created_at INTEGER NOT NULL,
@@ -272,7 +277,8 @@ internal static class DbSchemaMigrator
               ssh_connection_id TEXT,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL,
-              undone_at INTEGER
+              undone_at INTEGER,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
 
             CREATE INDEX IF NOT EXISTS idx_memory_automation_created
@@ -296,6 +302,17 @@ internal static class DbSchemaMigrator
               PRIMARY KEY (scope, target_path, source_date, content_hash)
             );
 
+            CREATE TABLE IF NOT EXISTS memory_automation_rollups_v2 (
+              workspace_id TEXT NOT NULL,
+              scope TEXT NOT NULL,
+              target TEXT NOT NULL,
+              target_path TEXT NOT NULL,
+              source_date TEXT NOT NULL,
+              content_hash TEXT NOT NULL,
+              processed_at INTEGER NOT NULL,
+              PRIMARY KEY (workspace_id, scope, target_path, source_date, content_hash)
+            );
+
             CREATE TABLE IF NOT EXISTS memory_roots (
               id TEXT PRIMARY KEY,
               scope TEXT NOT NULL CHECK(scope IN ('global', 'project')),
@@ -307,6 +324,7 @@ internal static class DbSchemaMigrator
               owner_key TEXT NOT NULL UNIQUE,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL
+              ,workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
 
             CREATE INDEX IF NOT EXISTS idx_memory_roots_scope
@@ -353,6 +371,7 @@ internal static class DbSchemaMigrator
               finished_at INTEGER,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal',
               FOREIGN KEY (memory_root_id) REFERENCES memory_roots(id) ON DELETE SET NULL
             );
 
@@ -480,7 +499,8 @@ internal static class DbSchemaMigrator
               is_generating INTEGER NOT NULL DEFAULT 0,
               images_json TEXT NOT NULL DEFAULT '[]',
               error_json TEXT,
-              updated_at INTEGER NOT NULL
+              updated_at INTEGER NOT NULL,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
 
             CREATE INDEX IF NOT EXISTS idx_draw_runs_created_at ON draw_runs(created_at DESC);
@@ -514,10 +534,9 @@ internal static class DbSchemaMigrator
               error_message TEXT,
               created_at INTEGER NOT NULL,
               updated_at INTEGER NOT NULL,
-              finished_at INTEGER
+              finished_at INTEGER,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
-            CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_jobs_idempotency
-              ON runtime_jobs(idempotency_key) WHERE idempotency_key IS NOT NULL;
             CREATE INDEX IF NOT EXISTS idx_runtime_jobs_session_created
               ON runtime_jobs(session_id, created_at DESC);
 
@@ -552,6 +571,29 @@ internal static class DbSchemaMigrator
             CREATE INDEX IF NOT EXISTS idx_qq_wakeup_windows_open_id
               ON qq_wakeup_windows(plugin_id, open_id, sent_at DESC);
 
+            CREATE TABLE IF NOT EXISTS qq_wakeup_windows_v2 (
+              workspace_id TEXT NOT NULL,
+              plugin_id TEXT NOT NULL,
+              open_id TEXT NOT NULL,
+              period_key TEXT NOT NULL,
+              source_message_id TEXT,
+              source_timestamp INTEGER NOT NULL,
+              sent_at INTEGER NOT NULL,
+              created_at INTEGER NOT NULL,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (workspace_id, plugin_id, open_id, period_key)
+            );
+
+            INSERT OR IGNORE INTO qq_wakeup_windows_v2
+              (workspace_id, plugin_id, open_id, period_key, source_message_id,
+               source_timestamp, sent_at, created_at, updated_at)
+            SELECT 'local-personal', plugin_id, open_id, period_key, source_message_id,
+                   source_timestamp, sent_at, created_at, updated_at
+              FROM qq_wakeup_windows;
+
+            CREATE INDEX IF NOT EXISTS idx_qq_wakeup_windows_v2_open_id
+              ON qq_wakeup_windows_v2(workspace_id, plugin_id, open_id, sent_at DESC);
+
             CREATE TABLE IF NOT EXISTS cron_jobs (
               id                   TEXT PRIMARY KEY,
               name                 TEXT NOT NULL,
@@ -563,6 +605,7 @@ internal static class DbSchemaMigrator
               prompt               TEXT NOT NULL,
               agent_id             TEXT,
               model                TEXT,
+              model_source         TEXT,
               working_folder       TEXT,
               ssh_connection_id    TEXT,
               session_id           TEXT,
@@ -603,6 +646,7 @@ internal static class DbSchemaMigrator
               source_project_name_snapshot  TEXT,
               source_provider_id_snapshot   TEXT,
               model_snapshot                TEXT,
+              model_source_snapshot         TEXT,
               working_folder_snapshot       TEXT,
               delivery_mode_snapshot        TEXT,
               delivery_target_snapshot      TEXT,
@@ -735,7 +779,8 @@ internal static class DbSchemaMigrator
               provider_response_id TEXT,
               request_debug_json TEXT,
               usage_raw_json TEXT,
-              meta_json TEXT
+              meta_json TEXT,
+              workspace_id TEXT NOT NULL DEFAULT 'local-personal'
             );
 
             CREATE INDEX IF NOT EXISTS idx_usage_events_created_at ON usage_events(created_at DESC);
@@ -796,6 +841,63 @@ internal static class DbSchemaMigrator
             CREATE INDEX IF NOT EXISTS idx_usage_activity_daily_day ON usage_activity_daily(day DESC);
             CREATE INDEX IF NOT EXISTS idx_usage_activity_models_day ON usage_activity_daily_models(day DESC);
             CREATE INDEX IF NOT EXISTS idx_usage_activity_providers_day ON usage_activity_daily_providers(day DESC);
+
+            CREATE TABLE IF NOT EXISTS usage_activity_daily_v2 (
+              workspace_id TEXT NOT NULL,
+              day TEXT NOT NULL,
+              first_at INTEGER NOT NULL,
+              last_at INTEGER NOT NULL,
+              request_count INTEGER NOT NULL DEFAULT 0,
+              input_tokens INTEGER NOT NULL DEFAULT 0,
+              output_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+              reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+              total_cost_usd REAL NOT NULL DEFAULT 0,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (workspace_id, day)
+            );
+            CREATE TABLE IF NOT EXISTS usage_activity_daily_models_v2 (
+              workspace_id TEXT NOT NULL,
+              day TEXT NOT NULL,
+              provider_id TEXT NOT NULL DEFAULT '',
+              provider_name TEXT,
+              model_id TEXT NOT NULL DEFAULT '',
+              model_name TEXT,
+              request_count INTEGER NOT NULL DEFAULT 0,
+              input_tokens INTEGER NOT NULL DEFAULT 0,
+              output_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+              reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+              total_cost_usd REAL NOT NULL DEFAULT 0,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (workspace_id, day, provider_id, model_id)
+            );
+            CREATE TABLE IF NOT EXISTS usage_activity_daily_providers_v2 (
+              workspace_id TEXT NOT NULL,
+              day TEXT NOT NULL,
+              provider_id TEXT NOT NULL DEFAULT '',
+              provider_name TEXT,
+              provider_type TEXT,
+              provider_builtin_id TEXT,
+              provider_base_url TEXT,
+              request_count INTEGER NOT NULL DEFAULT 0,
+              input_tokens INTEGER NOT NULL DEFAULT 0,
+              output_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_creation_tokens INTEGER NOT NULL DEFAULT 0,
+              cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+              reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+              total_cost_usd REAL NOT NULL DEFAULT 0,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY (workspace_id, day, provider_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_usage_activity_daily_v2_scope
+              ON usage_activity_daily_v2(workspace_id, day DESC);
+            CREATE INDEX IF NOT EXISTS idx_usage_activity_models_v2_scope
+              ON usage_activity_daily_models_v2(workspace_id, day DESC);
+            CREATE INDEX IF NOT EXISTS idx_usage_activity_providers_v2_scope
+              ON usage_activity_daily_providers_v2(workspace_id, day DESC);
             """);
     }
 
@@ -881,12 +983,29 @@ internal static class DbSchemaMigrator
         EnsureColumn(connection, "sessions", "provider_id", "TEXT");
         EnsureColumn(connection, "sessions", "model_id", "TEXT");
         EnsureColumn(connection, "sessions", "model_selection_mode", "TEXT NOT NULL DEFAULT 'inherit'");
+        EnsureColumn(connection, "sessions", "model_source", "TEXT");
         EnsureColumn(connection, "sessions", "task_profile", "TEXT");
         EnsureColumn(connection, "sessions", "task_profile_locked", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "sessions", "pinned", "INTEGER DEFAULT 0");
         EnsureColumn(connection, "sessions", "message_count", "INTEGER NOT NULL DEFAULT 0");
         EnsureColumn(connection, "sessions", "ssh_connection_id", "TEXT");
         EnsureColumn(connection, "sessions", "project_id", "TEXT");
+        EnsureColumn(connection, "sessions", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        var agentChangeSetsNeedWorkspaceBackfill = !HasColumn(connection, "agent_change_sets", "workspace_id");
+        EnsureColumn(connection, "agent_change_sets", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        if (agentChangeSetsNeedWorkspaceBackfill)
+        {
+            Execute(connection, "UPDATE agent_change_sets SET workspace_id = (SELECT s.workspace_id FROM sessions s WHERE s.id = agent_change_sets.session_id) WHERE session_id IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = agent_change_sets.session_id)");
+            Execute(connection, "UPDATE agent_change_sets SET workspace_id = (SELECT s.workspace_id FROM agent_file_changes c JOIN sessions s ON s.id = c.session_id WHERE c.run_id = agent_change_sets.run_id LIMIT 1) WHERE session_id IS NULL AND EXISTS (SELECT 1 FROM agent_file_changes c JOIN sessions s ON s.id = c.session_id WHERE c.run_id = agent_change_sets.run_id)");
+            Execute(connection, "UPDATE agent_change_sets SET workspace_id = 'legacy-ambiguous' WHERE EXISTS (SELECT 1 FROM agent_file_changes c JOIN sessions s ON s.id = c.session_id WHERE c.run_id = agent_change_sets.run_id AND s.workspace_id <> agent_change_sets.workspace_id)");
+        }
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_agent_change_sets_workspace_created ON agent_change_sets(workspace_id, created_at DESC)");
+        EnsureColumn(connection, "cron_jobs", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        EnsureColumn(connection, "memory_roots", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        EnsureColumn(connection, "memory_jobs", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        EnsureColumn(connection, "cron_jobs", "model_source", "TEXT");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_cron_jobs_workspace ON cron_jobs(workspace_id)");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_memory_jobs_workspace_updated ON memory_jobs(workspace_id, updated_at DESC)");
         EnsureColumn(connection, "messages", "meta", "TEXT");
 
         // Microsoft.Data.Sqlite can keep stale schema references on a single SqliteCommand
@@ -898,6 +1017,12 @@ internal static class DbSchemaMigrator
         Execute(
             connection,
             "UPDATE sessions SET message_count = (SELECT COUNT(*) FROM messages m WHERE m.session_id = sessions.id)");
+        Execute(
+            connection,
+            "UPDATE memory_jobs SET workspace_id = (SELECT r.workspace_id FROM memory_roots r WHERE r.id = memory_jobs.memory_root_id) WHERE memory_root_id IS NOT NULL AND EXISTS (SELECT 1 FROM memory_roots r WHERE r.id = memory_jobs.memory_root_id)");
+        Execute(
+            connection,
+            "UPDATE memory_jobs SET workspace_id = (SELECT s.workspace_id FROM sessions s WHERE s.id = memory_jobs.source_session_id) WHERE memory_root_id IS NULL AND source_session_id IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = memory_jobs.source_session_id)");
 
         EnsureColumn(connection, "memory_automation_entries", "root_scope", "TEXT");
         EnsureColumn(connection, "memory_automation_entries", "memory_root_id", "TEXT");
@@ -909,10 +1034,40 @@ internal static class DbSchemaMigrator
         EnsureColumn(connection, "memory_automation_entries", "appended_text", "TEXT");
         EnsureColumn(connection, "memory_automation_entries", "ssh_connection_id", "TEXT");
         EnsureColumn(connection, "memory_automation_entries", "undone_at", "INTEGER");
+        EnsureColumn(connection, "memory_automation_entries", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_memory_automation_entries_workspace_created ON memory_automation_entries(workspace_id, created_at DESC)");
+        Execute(connection, "INSERT OR IGNORE INTO memory_automation_rollups_v2 (workspace_id, scope, target, target_path, source_date, content_hash, processed_at) SELECT 'local-personal', scope, target, target_path, source_date, content_hash, processed_at FROM memory_automation_rollups");
+        Execute(connection, "UPDATE memory_automation_entries SET workspace_id = (SELECT r.workspace_id FROM memory_roots r WHERE r.id = memory_automation_entries.memory_root_id) WHERE memory_root_id IS NOT NULL AND EXISTS (SELECT 1 FROM memory_roots r WHERE r.id = memory_automation_entries.memory_root_id)");
+        Execute(connection, "UPDATE memory_automation_entries SET workspace_id = (SELECT j.workspace_id FROM memory_jobs j WHERE j.id = memory_automation_entries.job_id) WHERE memory_root_id IS NULL AND job_id IS NOT NULL AND EXISTS (SELECT 1 FROM memory_jobs j WHERE j.id = memory_automation_entries.job_id)");
+        Execute(connection, "UPDATE memory_automation_entries SET workspace_id = (SELECT s.workspace_id FROM sessions s WHERE s.id = memory_automation_entries.source_session_id) WHERE memory_root_id IS NULL AND job_id IS NULL AND source_session_id IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = memory_automation_entries.source_session_id)");
 
         EnsureColumn(connection, "draw_runs", "mode", "TEXT NOT NULL DEFAULT 'image'");
         EnsureColumn(connection, "draw_runs", "meta_json", "TEXT");
+        EnsureColumn(connection, "draw_runs", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        EnsureColumn(connection, "desktop_flows", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_desktop_flows_workspace_updated ON desktop_flows(workspace_id, updated_at DESC);");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_draw_runs_workspace_created ON draw_runs(workspace_id, created_at DESC)");
+        var runtimeJobsNeedWorkspaceBackfill = !HasColumn(connection, "runtime_jobs", "workspace_id");
+        EnsureColumn(connection, "runtime_jobs", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        if (runtimeJobsNeedWorkspaceBackfill)
+            Execute(connection, "UPDATE runtime_jobs SET workspace_id = (SELECT s.workspace_id FROM sessions s WHERE s.id = runtime_jobs.session_id) WHERE session_id IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = runtime_jobs.session_id)");
+        Execute(connection, "DROP INDEX IF EXISTS idx_runtime_jobs_idempotency");
+        Execute(connection, "CREATE UNIQUE INDEX IF NOT EXISTS idx_runtime_jobs_workspace_idempotency ON runtime_jobs(workspace_id, idempotency_key) WHERE idempotency_key IS NOT NULL");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_runtime_jobs_workspace_created ON runtime_jobs(workspace_id, created_at DESC)");
         EnsureColumn(connection, "projects", "pinned", "INTEGER DEFAULT 0");
+        EnsureColumn(connection, "projects", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        Execute(connection, "UPDATE memory_automation_entries SET workspace_id = (SELECT p.workspace_id FROM projects p WHERE p.id = memory_automation_entries.project_id) WHERE memory_root_id IS NULL AND job_id IS NULL AND source_session_id IS NULL AND project_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = memory_automation_entries.project_id)");
+        EnsureColumn(connection, "projects", "model_source", "TEXT");
+        var usageNeedsWorkspaceBackfill = !HasColumn(connection, "usage_events", "workspace_id");
+        EnsureColumn(connection, "usage_events", "workspace_id", "TEXT NOT NULL DEFAULT 'local-personal'");
+        if (usageNeedsWorkspaceBackfill)
+        {
+            Execute(connection, "UPDATE usage_events SET workspace_id = (SELECT s.workspace_id FROM sessions s WHERE s.id = usage_events.session_id) WHERE session_id IS NOT NULL AND EXISTS (SELECT 1 FROM sessions s WHERE s.id = usage_events.session_id)");
+            Execute(connection, "UPDATE usage_events SET workspace_id = (SELECT p.workspace_id FROM projects p WHERE p.id = usage_events.project_id) WHERE session_id IS NULL AND project_id IS NOT NULL AND EXISTS (SELECT 1 FROM projects p WHERE p.id = usage_events.project_id)");
+        }
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_usage_events_workspace_created ON usage_events(workspace_id, created_at DESC)");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_sessions_workspace_updated ON sessions(workspace_id, updated_at DESC)");
+        Execute(connection, "CREATE INDEX IF NOT EXISTS idx_projects_workspace_updated ON projects(workspace_id, updated_at DESC)");
 
         EnsureColumn(connection, "cron_jobs", "plugin_id", "TEXT");
         EnsureColumn(connection, "cron_jobs", "plugin_chat_id", "TEXT");
@@ -933,6 +1088,7 @@ internal static class DbSchemaMigrator
         EnsureColumn(connection, "cron_runs", "source_project_name_snapshot", "TEXT");
         EnsureColumn(connection, "cron_runs", "source_provider_id_snapshot", "TEXT");
         EnsureColumn(connection, "cron_runs", "model_snapshot", "TEXT");
+        EnsureColumn(connection, "cron_runs", "model_source_snapshot", "TEXT");
         EnsureColumn(connection, "cron_runs", "working_folder_snapshot", "TEXT");
         EnsureColumn(connection, "cron_runs", "delivery_mode_snapshot", "TEXT");
         EnsureColumn(connection, "cron_runs", "delivery_target_snapshot", "TEXT");
@@ -1013,6 +1169,61 @@ internal static class DbSchemaMigrator
             """);
     }
 
+    private static void BackfillWorkspaceUsageActivity(SqliteConnection connection)
+    {
+        if (ScalarLong(connection, "SELECT COUNT(*) FROM usage_activity_daily_v2") > 0)
+            return;
+
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        using var transaction = connection.BeginTransaction();
+        Execute(connection, transaction, $"""
+            INSERT INTO usage_activity_daily_v2 (
+              workspace_id, day, first_at, last_at, request_count, input_tokens,
+              output_tokens, cache_creation_tokens, cache_read_tokens, reasoning_tokens,
+              total_cost_usd, updated_at
+            )
+            SELECT workspace_id,
+              strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') AS day,
+              MIN(created_at), MAX(created_at), COUNT(*),
+              COALESCE(SUM({UsageEffectiveInputTokensExpr}), 0),
+              COALESCE(SUM(output_tokens), 0), COALESCE(SUM(cache_creation_tokens), 0),
+              COALESCE(SUM(cache_read_tokens), 0), COALESCE(SUM(reasoning_tokens), 0),
+              COALESCE(SUM(total_cost_usd), 0), {now}
+            FROM usage_events GROUP BY workspace_id, day;
+
+            INSERT INTO usage_activity_daily_models_v2 (
+              workspace_id, day, provider_id, provider_name, model_id, model_name,
+              request_count, input_tokens, output_tokens, cache_creation_tokens,
+              cache_read_tokens, reasoning_tokens, total_cost_usd, updated_at
+            )
+            SELECT workspace_id,
+              strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') AS day,
+              COALESCE(provider_id, ''), MAX(provider_name), COALESCE(model_id, ''),
+              MAX(model_name), COUNT(*), COALESCE(SUM({UsageEffectiveInputTokensExpr}), 0),
+              COALESCE(SUM(output_tokens), 0), COALESCE(SUM(cache_creation_tokens), 0),
+              COALESCE(SUM(cache_read_tokens), 0), COALESCE(SUM(reasoning_tokens), 0),
+              COALESCE(SUM(total_cost_usd), 0), {now}
+            FROM usage_events GROUP BY workspace_id, day, provider_id, model_id;
+
+            INSERT INTO usage_activity_daily_providers_v2 (
+              workspace_id, day, provider_id, provider_name, provider_type,
+              provider_builtin_id, provider_base_url, request_count, input_tokens,
+              output_tokens, cache_creation_tokens, cache_read_tokens, reasoning_tokens,
+              total_cost_usd, updated_at
+            )
+            SELECT workspace_id,
+              strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') AS day,
+              COALESCE(provider_id, ''), MAX(provider_name), MAX(provider_type),
+              MAX(provider_builtin_id), MAX(provider_base_url), COUNT(*),
+              COALESCE(SUM({UsageEffectiveInputTokensExpr}), 0),
+              COALESCE(SUM(output_tokens), 0), COALESCE(SUM(cache_creation_tokens), 0),
+              COALESCE(SUM(cache_read_tokens), 0), COALESCE(SUM(reasoning_tokens), 0),
+              COALESCE(SUM(total_cost_usd), 0), {now}
+            FROM usage_events GROUP BY workspace_id, day, provider_id;
+            """);
+        transaction.Commit();
+    }
+
     private static void MigrateSessionGoalsStatusSchema(SqliteConnection connection)
     {
         if (TableDefinitionIncludes(connection, "session_goals", "'usage_limited'"))
@@ -1020,7 +1231,8 @@ internal static class DbSchemaMigrator
             return;
         }
 
-        Execute(connection, """
+        using var transaction = connection.BeginTransaction();
+        Execute(connection, transaction, """
             ALTER TABLE session_goals RENAME TO session_goals_legacy;
 
             CREATE TABLE session_goals (
@@ -1073,6 +1285,7 @@ internal static class DbSchemaMigrator
             CREATE INDEX IF NOT EXISTS idx_session_goals_status
               ON session_goals(status);
             """);
+        transaction.Commit();
     }
 
     private static bool HasColumn(

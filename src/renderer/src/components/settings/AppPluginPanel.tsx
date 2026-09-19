@@ -1,3 +1,4 @@
+import { useWorkspaceProviders, useWorkspaceModelRoute } from '@renderer/hooks/use-workspace-models'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
@@ -33,6 +34,7 @@ import { useChatStore } from '@renderer/stores/chat-store'
 import { resolvePluginsForProject, useAppPluginStore } from '@renderer/stores/app-plugin-store'
 import { resolveEffectiveActiveMcpIds, useMcpStore } from '@renderer/stores/mcp-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
@@ -211,10 +213,11 @@ function ProductDesignDependencyRow({
   )
 }
 
-export function AppPluginPanel(): React.JSX.Element {
+export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): React.JSX.Element {
   const { t } = useTranslation('settings')
   const [selectedPluginId, setSelectedPluginId] = useState<AppPluginId>(IMAGE_PLUGIN_ID)
   const [clearingCookies, setClearingCookies] = useState(false)
+  const [exportingCookies, setExportingCookies] = useState(false)
   const [cookieProfiles, setCookieProfiles] = useState<BrowserCookieProfile[]>([])
   const [selectedCookieProfileId, setSelectedCookieProfileId] = useState('')
   const [cookiePrivacyConfirmed, setCookiePrivacyConfirmed] = useState(false)
@@ -235,9 +238,10 @@ export function AppPluginPanel(): React.JSX.Element {
   const browserUserDataSource = useSettingsStore((state) => state.browserUserDataSource)
   const webSearchEnabled = useSettingsStore((state) => state.webSearchEnabled)
   const updateSettings = useSettingsStore((state) => state.updateSettings)
-  const providers = useProviderStore((state) => state.providers)
-  const activeImageProviderId = useProviderStore((state) => state.activeImageProviderId)
-  const activeImageModelId = useProviderStore((state) => state.activeImageModelId)
+  const providers = useWorkspaceProviders()
+  const imageRoute = useWorkspaceModelRoute('image')
+  const activeImageProviderId = imageRoute.providerId
+  const activeImageModelId = imageRoute.modelId
   const mcpServers = useMcpStore((state) => state.servers)
   const mcpStatuses = useMcpStore((state) => state.serverStatuses)
   const activeMcpIdsByProject = useMcpStore((state) => state.activeMcpIdsByProject)
@@ -323,6 +327,7 @@ export function AppPluginPanel(): React.JSX.Element {
     'userContext'
   ]
   const productDesignPromptLabels = ['getStarted', 'threeDirections', 'cloneUrl']
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
 
   useEffect(() => {
     let cancelled = false
@@ -365,7 +370,7 @@ export function AppPluginPanel(): React.JSX.Element {
   const handleClearBrowserCookies = async (): Promise<void> => {
     setClearingCookies(true)
     try {
-      const result = (await ipcClient.invoke(IPC.BROWSER_CLEAR_COOKIES)) as
+      const result = (await ipcClient.invoke(IPC.BROWSER_CLEAR_COOKIES, { workspaceId })) as
         | { success: true }
         | { success: false; error?: string }
       if (result.success) {
@@ -381,12 +386,35 @@ export function AppPluginPanel(): React.JSX.Element {
     }
   }
 
+  const handleExportBrowserCookies = async (): Promise<void> => {
+    setExportingCookies(true)
+    try {
+      const result = (await ipcClient.invoke(IPC.BROWSER_EXPORT_COOKIES, { workspaceId })) as
+        | { success: true; exported: number }
+        | { success: false; exported?: number; errorKind?: string; error?: string }
+      if (result.success) {
+        toast.success(t('plugin.browser.cookieExportComplete', { exported: result.exported }))
+      } else if (result.errorKind !== 'cancelled') {
+        toast.error(t(`plugin.browser.cookieExportErrors.${result.errorKind ?? 'unknown'}`), {
+          description: result.error
+        })
+      }
+    } catch (error) {
+      toast.error(t('plugin.browser.cookieExportErrors.unknown'), {
+        description: error instanceof Error ? error.message : String(error)
+      })
+    } finally {
+      setExportingCookies(false)
+    }
+  }
+
   const handleImportBrowserCookies = async (): Promise<void> => {
     if (!selectedCookieProfileId || !cookiePrivacyConfirmed) return
     setImportingCookies(true)
     try {
       const result = (await ipcClient.invoke(IPC.BROWSER_IMPORT_COOKIES, {
         profileId: selectedCookieProfileId,
+        workspaceId,
         privacyConfirmed: true
       })) as {
         success: boolean
@@ -445,10 +473,12 @@ export function AppPluginPanel(): React.JSX.Element {
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div>
-        <h2 className="text-lg font-semibold">{t('plugin.title')}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t('plugin.subtitle')}</p>
-      </div>
+      {!embedded ? (
+        <div>
+          <h2 className="text-lg font-semibold">{t('plugin.title')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t('plugin.subtitle')}</p>
+        </div>
+      ) : null}
       <div
         className="flex min-h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60"
         role="tablist"
@@ -726,18 +756,32 @@ export function AppPluginPanel(): React.JSX.Element {
                     <p className="text-sm font-medium">{t('plugin.browser.title')}</p>
                     <p className="text-xs text-muted-foreground">{t('plugin.browser.desc')}</p>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0 gap-2"
-                    onClick={() => void handleClearBrowserCookies()}
-                    disabled={clearingCookies}
-                  >
-                    <Trash2 className="size-3.5" />
-                    {clearingCookies
-                      ? t('plugin.browser.clearingCookies')
-                      : t('plugin.browser.clearCookies')}
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => void handleExportBrowserCookies()}
+                      disabled={exportingCookies}
+                    >
+                      <Download className="size-3.5" />
+                      {exportingCookies
+                        ? t('plugin.browser.exportingCookies')
+                        : t('plugin.browser.exportCookies')}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2"
+                      onClick={() => void handleClearBrowserCookies()}
+                      disabled={clearingCookies}
+                    >
+                      <Trash2 className="size-3.5" />
+                      {clearingCookies
+                        ? t('plugin.browser.clearingCookies')
+                        : t('plugin.browser.clearCookies')}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="rounded-lg border bg-muted/10 p-3">

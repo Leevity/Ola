@@ -1,0 +1,342 @@
+import { ProtocolAdapter } from '../../runtime/providers/protocol-adapter'
+import {
+  AccountGatewayTransport,
+  LocalModelTransport,
+  type ModelTransport
+} from '../../runtime/providers/transport'
+import { createAgentExecutor } from '../../runtime/core/agent'
+import { ToolExecutor } from '../../runtime/tools/tool-executor'
+import { createLocalReadFileTool } from '../../runtime/tools/local-read-file'
+import { createLocalListDirectoryTool } from '../../runtime/tools/local-list-directory'
+import { createLocalGitStatusTool } from '../../runtime/tools/local-git-status'
+import { createLocalCreateFileTool } from '../../runtime/tools/local-create-file'
+import { createLocalWriteFileTool } from '../../runtime/tools/local-write-file'
+import { createLocalShellCommandTool } from '../../runtime/tools/local-shell-command'
+import {
+  createLegacyBashTool,
+  createLegacyEditTool,
+  createLegacyGlobTool,
+  createLegacyGrepTool,
+  createLegacyListDirectoryTool,
+  createLegacyReadTool,
+  createLegacyWriteTool
+} from '../../runtime/tools/legacy-local-tools'
+import { selectExplicitTools } from '../../runtime/tools/explicit-tools'
+import {
+  createLocalFindFilesTool,
+  createLocalGlobFilesTool
+} from '../../runtime/tools/local-find-files'
+import { createExtensionRuntimeTools } from '../extensions/extension-runtime-tools'
+import { getExtensionService } from '../extensions/extension-runtime'
+import {
+  createLegacyWebFetchRuntimeTool,
+  createLegacyWebSearchRuntimeTool,
+  createWebFetchRuntimeTool,
+  createWebSearchRuntimeTool
+} from './web-runtime-tools'
+import { createMcpRuntimeTools } from '../mcp/mcp-runtime-tools'
+import { getActiveMcpManager } from '../ipc/mcp-handlers'
+import { showSystemNotification } from '../ipc/notify-handlers'
+import { createDesktopNotificationTool } from './desktop-notification-runtime-tool'
+import {
+  createChannelProviderReadRuntimeTools,
+  createChannelProviderWriteRuntimeTools,
+  createChannelReadRuntimeTools,
+  createChannelWriteRuntimeTools
+} from './channel-runtime-tools'
+import { isAuthorizedDesktopRuntimeTool } from './runtime-tool-authorization'
+import { readPermissionPolicySnapshot } from '../ipc/settings-handlers'
+import { startStandaloneRuntime } from '../../runtime/host/standalone'
+import { RuntimeClient } from '../../runtime/host/runtime-client'
+import { RuntimeError, type RunSpec } from '../../shared/runtime/contracts'
+import type { ModelProtocol } from '../../shared/runtime/model'
+import { resolveMainProviderModel } from '../providers/provider-main-store'
+import { mainAccountGateway } from './account-gateway'
+import {
+  loadManagedModelResources,
+  loadManagedWorkspaceIds,
+  loadOfflineWorkspaceIds,
+  loadOfflineWorkspaceExpiresAt
+} from '../remote/account-client'
+import { onRemoteAccountCleared, onWorkspaceDirectoryChanged } from '../remote/account-lifecycle'
+import { resolveManagedResourceTarget } from './managed-resource-resolver'
+import { OfflineWorkspaceExpiryMonitor } from './offline-workspace-expiry-monitor'
+import { realpath, stat } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
+import {
+  clearDesktopRuntimeConnection,
+  desktopRuntimeDescriptorPath,
+  publishDesktopRuntimeConnection
+} from '../../runtime/host/desktop-connection'
+
+const protocols = new Set<ModelProtocol>([
+  'openai-chat',
+  'openai-responses',
+  'anthropic',
+  'gemini',
+  'vertex-ai'
+])
+
+function protocol(value: unknown): ModelProtocol {
+  if (typeof value === 'string' && protocols.has(value as ModelProtocol))
+    return value as ModelProtocol
+  throw new RuntimeError('MODEL_UNAVAILABLE')
+}
+
+async function approvedLocalWorkingDirectory(run: RunSpec): Promise<string> {
+  if (!run.workingDirectory || !isAbsolute(run.workingDirectory))
+    throw new RuntimeError('WORKING_DIRECTORY_REQUIRED')
+  const directory = await realpath(run.workingDirectory).catch(() => {
+    throw new RuntimeError('WORKING_DIRECTORY_UNAVAILABLE')
+  })
+  if (!(await stat(directory)).isDirectory())
+    throw new RuntimeError('WORKING_DIRECTORY_UNAVAILABLE')
+  return directory
+}
+
+/**
+ * Main owns this service and resolves credentials per request. The renderer
+ * receives neither provider keys nor the local runtime connection token.
+ * The simple plain-text desktop chat path already uses this host; richer
+ * legacy turns remain on the Worker until their capabilities are equivalent.
+ */
+export class DesktopRuntime {
+  private service: Awaited<ReturnType<typeof startStandaloneRuntime>> | null = null
+  private client: RuntimeClient | null = null
+  private starting: Promise<void> | null = null
+  private unsubscribeAccountEvents: Array<() => void> = []
+  private expiryMonitor: OfflineWorkspaceExpiryMonitor | null = null
+
+  constructor(private readonly connectionDescriptorPath = desktopRuntimeDescriptorPath()) {}
+
+  get isAvailable(): boolean {
+    return this.service !== null && this.client !== null
+  }
+
+  async start(dataDirectory: string): Promise<void> {
+    if (this.service) return
+    if (this.starting) return await this.starting
+    this.starting = (async () => {
+      const authorize = async (run: RunSpec): Promise<void> => {
+        // Recheck at submission and again when a queued run starts. The socket
+        // boundary alone cannot protect a team run after offline access expires.
+        if (
+          run.workspaceId !== 'local-personal' &&
+          !(await loadOfflineWorkspaceIds()).has(run.workspaceId)
+        )
+          throw new RuntimeError('WORKSPACE_FORBIDDEN')
+        if (run.environmentId !== 'local') throw new RuntimeError('MODEL_UNAVAILABLE')
+        if (run.modelSource.kind !== 'local') {
+          if (!(await loadManagedWorkspaceIds()).has(run.workspaceId))
+            throw new RuntimeError('MODEL_UNAVAILABLE')
+          return
+        }
+        if (!resolveMainProviderModel(run.modelSource.providerId, run.modelSource.modelId))
+          throw new RuntimeError('MODEL_UNAVAILABLE')
+      }
+      const local = new LocalModelTransport(async (run) => {
+        await authorize(run)
+        if (run.modelSource.kind !== 'local') throw new RuntimeError('MODEL_UNAVAILABLE')
+        const resolved = resolveMainProviderModel(
+          run.modelSource.providerId,
+          run.modelSource.modelId
+        )
+        if (!resolved) throw new RuntimeError('MODEL_UNAVAILABLE')
+        return {
+          protocol: protocol(resolved.model.type ?? resolved.provider.type),
+          model: run.modelSource.modelId,
+          baseUrl: resolved.provider.baseUrl,
+          apiKey: resolved.provider.apiKey,
+          options: run.modelOptions
+        }
+      })
+      const managed = new AccountGatewayTransport(async (run) => {
+        if (run.modelSource.kind === 'local') throw new RuntimeError('MANAGED_MODEL_REQUIRED')
+        const source = run.modelSource
+        return resolveManagedResourceTarget({
+          workspaceId: run.workspaceId,
+          resourceId: source.resourceId,
+          resources: await loadManagedModelResources(run.workspaceId)
+        })
+      }, mainAccountGateway)
+      const transport: ModelTransport = {
+        resolve: (run) =>
+          run.modelSource.kind === 'local' ? local.resolve(run) : managed.resolve(run),
+        request: (run, target, request, signal) =>
+          run.modelSource.kind === 'local'
+            ? local.request(run, target, request, signal)
+            : managed.request(run, target, request, signal)
+      }
+      const adapter = new ProtocolAdapter(transport)
+      const tools = async (run: RunSpec): Promise<ToolExecutor> => {
+        const extensionTools = await createExtensionRuntimeTools(
+          getExtensionService(),
+          run.extensionIds
+        )
+        const mcpTools = (() => {
+          try {
+            const manager = getActiveMcpManager()
+            return createMcpRuntimeTools(manager, manager.getConnectedServerIds())
+          } catch {
+            return []
+          }
+        })()
+        // A text-only run receives no filesystem capability unless its explicit
+        // local root has been validated by Main for this exact run. Declarative
+        // extensions are independent Main-owned capabilities and are selected
+        // only from the run's project activation snapshot.
+        const localTools = run.workingDirectory
+          ? (() => {
+              return approvedLocalWorkingDirectory(run).then((root) => [
+                createLocalReadFileTool(root),
+                createLocalListDirectoryTool(root),
+                createLocalFindFilesTool(root),
+                createLocalGlobFilesTool(root),
+                createLocalGitStatusTool(root),
+                createLocalCreateFileTool(root),
+                createLocalWriteFileTool(root),
+                createLocalShellCommandTool(root),
+                // Existing Agent/Cron prompts use these protocol names. Their
+                // implementations delegate to the same confined TS primitives.
+                createLegacyReadTool(root),
+                createLegacyListDirectoryTool(root),
+                createLegacyGlobTool(root),
+                createLegacyGrepTool(root),
+                createLegacyBashTool(root),
+                createLegacyWriteTool(root),
+                createLegacyEditTool(root)
+              ])
+            })()
+          : Promise.resolve([])
+        return new ToolExecutor(
+          selectExplicitTools(
+            [
+              createWebFetchRuntimeTool(),
+              createWebSearchRuntimeTool(),
+              createLegacyWebFetchRuntimeTool(),
+              createLegacyWebSearchRuntimeTool(),
+              createDesktopNotificationTool(showSystemNotification),
+              ...createChannelReadRuntimeTools(),
+              ...createChannelWriteRuntimeTools(),
+              ...createChannelProviderReadRuntimeTools(),
+              ...createChannelProviderWriteRuntimeTools(),
+              ...mcpTools,
+              ...(await localTools),
+              ...extensionTools
+            ],
+            run.toolNames
+          ),
+          async (tool, input, context, call) => {
+            if (
+              isAuthorizedDesktopRuntimeTool({
+                run,
+                tool,
+                input,
+                permissionPolicy: readPermissionPolicySnapshot()
+              })
+            )
+              return true
+            if (run.unattended || !context.requestInteraction) return false
+            const response = await context.requestInteraction({
+              interactionId: `tool-approval:${call.id}`,
+              kind: 'tool-approval',
+              payload: { id: call.id, name: tool.name, input },
+              version: '1'
+            })
+            return (
+              !!response &&
+              typeof response === 'object' &&
+              (response as Record<string, unknown>).approved === true
+            )
+          }
+        )
+      }
+      const service = await startStandaloneRuntime({
+        dataDirectory,
+        execute: createAgentExecutor(adapter, tools),
+        authorize,
+        authority: {
+          workspaceIds: async () =>
+            new Set(['local-personal', ...(await loadOfflineWorkspaceIds())])
+        }
+      })
+      const client = new RuntimeClient()
+      try {
+        await client.connect(service.endpoint, service.token)
+        await publishDesktopRuntimeConnection(
+          { endpoint: service.endpoint, token: service.token },
+          this.connectionDescriptorPath
+        )
+        const expiryMonitor = new OfflineWorkspaceExpiryMonitor(
+          loadOfflineWorkspaceExpiresAt,
+          loadOfflineWorkspaceIds,
+          service.revokeUnavailableWorkspaces
+        )
+        this.expiryMonitor = expiryMonitor
+        this.unsubscribeAccountEvents = [
+          onRemoteAccountCleared(() => {
+            expiryMonitor.stop()
+            service.revokeUnavailableWorkspaces(new Set())
+          }),
+          onWorkspaceDirectoryChanged((ids) => {
+            service.revokeUnavailableWorkspaces(ids)
+            expiryMonitor.refreshSchedule()
+          })
+        ]
+        service.revokeUnavailableWorkspaces(
+          await loadOfflineWorkspaceIds().catch(() => new Set<string>())
+        )
+        expiryMonitor.refreshSchedule()
+        this.service = service
+        this.client = client
+      } catch (error) {
+        this.expiryMonitor?.stop()
+        this.expiryMonitor = null
+        for (const unsubscribe of this.unsubscribeAccountEvents.splice(0)) unsubscribe()
+        client.close()
+        await clearDesktopRuntimeConnection(service.token, this.connectionDescriptorPath).catch(
+          (cleanupError) => {
+            console.warn(
+              '[TS Runtime] Failed to clear connection after startup failure',
+              cleanupError
+            )
+          }
+        )
+        await service.stop().catch((cleanupError) => {
+          console.warn('[TS Runtime] Failed to stop service after startup failure', cleanupError)
+        })
+        throw error
+      }
+    })()
+    try {
+      await this.starting
+    } finally {
+      this.starting = null
+    }
+  }
+
+  async stop(): Promise<void> {
+    const starting = this.starting
+    if (starting) await starting.catch(() => undefined)
+    const service = this.service
+    this.expiryMonitor?.stop()
+    this.expiryMonitor = null
+    for (const unsubscribe of this.unsubscribeAccountEvents.splice(0)) unsubscribe()
+    this.service = null
+    this.client?.close()
+    this.client = null
+    try {
+      if (service) await clearDesktopRuntimeConnection(service.token, this.connectionDescriptorPath)
+    } finally {
+      await service?.stop()
+    }
+  }
+
+  /** Routes Main-owned requests without exposing the socket endpoint or token. */
+  async request<T>(method: string, params: unknown = {}): Promise<T> {
+    if (!this.client) throw new RuntimeError('RUNTIME_DISCONNECTED')
+    return await this.client.request<T>(method, params)
+  }
+}
+
+export const desktopRuntime = new DesktopRuntime()

@@ -103,6 +103,9 @@ export const IPC = {
   // Settings
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
+  WEB_SEARCH_SECRET_STATUS: 'web:search-secret-status',
+  WEB_SEARCH_SECRET_SET: 'web:search-secret-set',
+  WEB_SEARCH_SECRET_DELETE: 'web:search-secret-delete',
 
   // Extensions
   EXTENSION_LIST: 'extension:list',
@@ -126,6 +129,8 @@ export const IPC = {
   // Migration
   MIGRATION_PREVIEW: 'migration:preview',
   MIGRATION_APPLY: 'migration:apply',
+  MIGRATION_BUSINESS_HANDOVER_STATUS: 'migration:business-handover-status',
+  MIGRATION_BUSINESS_HANDOVER: 'migration:business-handover',
 
   // Sync
   SYNC_CONFIG_GET: 'sync:config:get',
@@ -159,6 +164,7 @@ export const IPC = {
   PLUGIN_SESSIONS_RENAME: 'plugin:sessions:rename',
   PLUGIN_INCOMING_MESSAGE: 'plugin:incoming-message',
   PLUGIN_SESSION_TASK: 'plugin:session-task',
+  PLUGIN_SESSION_TASK_ACK: 'plugin:session-task:ack',
   PLUGIN_SESSIONS_FIND_BY_CHAT: 'plugin:sessions:find-by-chat',
   PLUGIN_STREAM_START: 'plugin:stream:start',
   PLUGIN_STREAM_UPDATE: 'plugin:stream:update',
@@ -335,9 +341,19 @@ export const IPC = {
 
   // Built-in Browser
   BROWSER_CLEAR_COOKIES: 'browser:clear-cookies',
+  BROWSER_EXPORT_COOKIES: 'browser:export-cookies',
   BROWSER_EMULATION_STATUS: 'browser:emulation-status',
   BROWSER_COOKIE_PROFILES: 'browser:cookie-profiles',
   BROWSER_IMPORT_COOKIES: 'browser:import-cookies',
+  BROWSER_REGISTER_TAB: 'browser:register-tab',
+  BROWSER_NAVIGATE: 'browser:navigate',
+  BROWSER_NAVIGATE_GUEST: 'browser:navigate-guest',
+  BROWSER_EXECUTE_SCRIPT: 'browser:execute-script',
+  BROWSER_CAPTURE_PAGE: 'browser:capture-page',
+  BROWSER_TAKE_CONTROL: 'browser:take-control',
+  BROWSER_TAKE_RUN_CONTROL: 'browser:take-run-control',
+  BROWSER_TAKE_GUEST_RUN_CONTROL: 'browser:take-guest-run-control',
+  BROWSER_UNREGISTER_TAB: 'browser:unregister-tab',
 
   // AI Coding
   AI_CODING_CONFIGS_LIST: 'ai-coding:configs-list',
@@ -399,6 +415,7 @@ export const IPC = {
   SSH_RESIZE: 'ssh:resize',
   SSH_STATUS: 'ssh:status',
   SSH_SESSION_LIST: 'ssh:session:list',
+  SSH_WORKSPACE_ACTIVITY: 'ssh:workspace-activity',
   SSH_DIAGNOSTICS_LIST: 'ssh:diagnostics:list',
 
   // SSH File Operations (SFTP)

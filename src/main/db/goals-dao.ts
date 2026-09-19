@@ -1,4 +1,7 @@
+import { randomUUID } from 'node:crypto'
 import { getNativeWorker } from '../lib/native-worker'
+import { canaryGetGoal, canaryListGoalEvents, canaryListGoals } from './legacy-read-canary'
+import { businessWriteCanary } from './business-write-canary'
 
 export type SessionGoalStatus =
   | 'active'
@@ -53,6 +56,7 @@ export interface SessionGoalUpdate {
 
 export interface AccountGoalUsageArgs {
   sessionId: string
+  workspaceId: string
   timeDeltaSeconds: number
   tokenDelta: number
   expectedGoalId?: string | null
@@ -60,6 +64,7 @@ export interface AccountGoalUsageArgs {
 
 export interface AddGoalEventArgs {
   sessionId: string
+  workspaceId: string
   goalId?: string | null
   eventType: SessionGoalEventType
   message?: string | null
@@ -86,26 +91,55 @@ function unwrapGoalResult(result: NativeGoalFindResult, operation: string): Sess
   return result.goal ?? null
 }
 
-export function addGoalEvent(args: AddGoalEventArgs): Promise<SessionGoalEventRow> {
+export async function addGoalEvent(args: AddGoalEventArgs): Promise<SessionGoalEventRow> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    const id = `oc_${randomUUID().replaceAll('-', '')}`
+    await writer.appendGoalEvent({
+      id,
+      sessionId: args.sessionId,
+      workspaceId: args.workspaceId,
+      goalId: args.goalId,
+      eventType: args.eventType,
+      message: args.message,
+      metadata: args.metadata,
+      createdAt: args.createdAt ?? Date.now()
+    })
+    const row = (
+      await writer.goalEvents<SessionGoalEventRow>(args.sessionId, args.workspaceId)
+    ).find((event) => event.id === id)
+    if (!row) throw new Error('TS_BUSINESS_GOAL_EVENT_NOT_FOUND_AFTER_WRITE')
+    return row
+  }
   return getNativeWorker().request<SessionGoalEventRow>('db/goal-events-add', args, 120_000)
 }
 
-export function listGoalEvents(args: {
+export async function listGoalEvents(args: {
   sessionId: string
+  workspaceId?: string
   goalId?: string | null
   limit?: number
 }): Promise<SessionGoalEventRow[]> {
+  const migrated = await canaryListGoalEvents(args)
+  if (migrated) return migrated as SessionGoalEventRow[]
   return getNativeWorker().request<SessionGoalEventRow[]>('db/goal-events-list', args, 120_000)
 }
 
-export function listGoals(): Promise<SessionGoalRow[]> {
-  return getNativeWorker().request<SessionGoalRow[]>('db/goals-list', {}, 120_000)
+export async function listGoals(workspaceId: string): Promise<SessionGoalRow[]> {
+  const migrated = await canaryListGoals(workspaceId)
+  if (migrated) return migrated as SessionGoalRow[]
+  return getNativeWorker().request<SessionGoalRow[]>('db/goals-list', { workspaceId }, 120_000)
 }
 
-export async function getGoal(sessionId: string): Promise<SessionGoalRow | undefined> {
+export async function getGoal(
+  sessionId: string,
+  workspaceId?: string
+): Promise<SessionGoalRow | undefined> {
+  const migrated = await canaryGetGoal(sessionId, workspaceId)
+  if (migrated !== undefined) return (migrated as SessionGoalRow | null) ?? undefined
   const result = await getNativeWorker().request<NativeGoalFindResult>(
     'db/goals-get',
-    { sessionId },
+    { sessionId, workspaceId },
     120_000
   )
   return unwrapGoalResult(result, 'get') ?? undefined
@@ -113,9 +147,12 @@ export async function getGoal(sessionId: string): Promise<SessionGoalRow | undef
 
 export async function createGoal(args: {
   sessionId: string
+  workspaceId: string
   objective: string
   tokenBudget?: number | null
 }): Promise<SessionGoalRow | null> {
+  const writer = businessWriteCanary()
+  if (writer) return writer.createGoal<SessionGoalRow>(args)
   const result = await getNativeWorker().request<NativeGoalFindResult>(
     'db/goals-create',
     args,
@@ -126,29 +163,43 @@ export async function createGoal(args: {
 
 export function replaceGoal(args: {
   sessionId: string
+  workspaceId: string
   objective: string
   status?: SessionGoalStatus
   tokenBudget?: number | null
 }): Promise<SessionGoalRow> {
+  const writer = businessWriteCanary()
+  if (writer) return writer.replaceGoal<SessionGoalRow>(args)
   return getNativeWorker().request<SessionGoalRow>('db/goals-replace', args, 120_000)
 }
 
 export async function updateGoal(
   sessionId: string,
-  patch: SessionGoalUpdate
+  patch: SessionGoalUpdate,
+  workspaceId: string
 ): Promise<SessionGoalRow | null> {
+  const writer = businessWriteCanary()
+  if (writer)
+    return writer.updateGoal<SessionGoalRow>({
+      sessionId,
+      workspaceId,
+      patch,
+      updatedAt: Date.now()
+    })
   const result = await getNativeWorker().request<NativeGoalFindResult>(
     'db/goals-update',
-    { sessionId, patch },
+    { sessionId, patch, workspaceId },
     120_000
   )
   return unwrapGoalResult(result, 'update')
 }
 
-export async function clearGoal(sessionId: string): Promise<boolean> {
+export async function clearGoal(sessionId: string, workspaceId: string): Promise<boolean> {
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.clearGoal({ sessionId, workspaceId })).cleared
   const result = await getNativeWorker().request<NativeGoalClearResult>(
     'db/goals-clear',
-    { sessionId },
+    { sessionId, workspaceId },
     120_000
   )
   if (!result.success) {
@@ -158,6 +209,8 @@ export async function clearGoal(sessionId: string): Promise<boolean> {
 }
 
 export async function accountGoalUsage(args: AccountGoalUsageArgs): Promise<SessionGoalRow | null> {
+  const writer = businessWriteCanary()
+  if (writer) return writer.accountGoalUsage<SessionGoalRow>(args)
   const result = await getNativeWorker().request<NativeGoalFindResult>(
     'db/goals-account',
     args,

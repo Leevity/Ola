@@ -12,6 +12,28 @@ export interface ImageAttachment {
   mediaType: string
 }
 
+/**
+ * A send was intentionally stopped before the transcript or provider request changed.
+ * The composer uses this to retain an image draft without showing a second generic error.
+ */
+export class VisionInputUnsupportedError extends Error {
+  readonly code = 'vision_input_unsupported'
+
+  constructor() {
+    super('The selected model does not support image input')
+    this.name = 'VisionInputUnsupportedError'
+  }
+}
+
+export function isVisionInputUnsupportedError(
+  error: unknown
+): error is VisionInputUnsupportedError {
+  return (
+    error instanceof VisionInputUnsupportedError ||
+    (error instanceof Error && error.name === 'VisionInputUnsupportedError')
+  )
+}
+
 export interface EditableUserMessageDraft {
   text: string
   images: ImageAttachment[]

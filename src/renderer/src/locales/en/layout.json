@@ -1,10 +1,16 @@
-﻿{
+{
   "sidebar": {
     "ola": "Ola",
     "taskProfileSwitcher": "Switch work mode",
     "taskProfile": {
-      "work": { "title": "Work", "desc": "Daily work, research and office tasks" },
-      "code": { "title": "Code", "desc": "Projects, code, terminal and Git" }
+      "work": {
+        "title": "Work",
+        "desc": "Daily work, research and office tasks"
+      },
+      "code": {
+        "title": "Code",
+        "desc": "Projects, code, terminal and Git"
+      }
     },
     "conversations": "Conversations",
     "newConversation": "New conversation (Ctrl+N)",
@@ -117,11 +123,76 @@
     "noChats": "No chats yet",
     "smartRename": "Smart Rename",
     "smartRenaming": "Smart renaming",
-    "extensionsLabel": "Extensions"
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "layout": {
-    "copyResultReport": "Copy result report",
-    "resultReportCopied": "Result report copied"
+    "newModeSession": "New {{mode}} session",
+    "clearConfirm": "Clear {{count}} messages?",
+    "clearConversation": "Clear conversation",
+    "conversationCleared": "Conversation cleared",
+    "openFolder": "Open folder",
+    "copyAll": "Copy conversation",
+    "exportImage": "Copy as image",
+    "useFullWidth": "Use full width",
+    "useStandardWidth": "Use standard width",
+    "imageCopied": "Image copied to clipboard",
+    "exportImageFailed": "Copy image failed",
+    "deleteConversation": "Delete conversation",
+    "sessionDuplicated": "Session duplicated",
+    "pinned": "Pinned",
+    "unpinned": "Unpinned",
+    "conversationCopied": "Conversation copied to clipboard",
+    "autoApproveConfirm": "Enable auto-approve? All tool calls will execute without confirmation.",
+    "autoApproveOff": "Auto-approve OFF",
+    "autoApproveOn": "Auto-approve ON (Dangerous)",
+    "deleteAllConfirm": "Delete all {{count}} sessions? This cannot be undone.",
+    "deleteConfirm": "Are you sure you want to delete \"{{title}}\"?",
+    "deletedSessions": "Deleted {{count}} sessions",
+    "importedSessions": "Imported {{count}} sessions",
+    "noNewSessions": "No new sessions to import (all already exist)",
+    "importFailed": "Import failed: {{error}}",
+    "noSessionsToBackup": "No sessions to backup",
+    "backedUpSessions": "Backed up {{count}} sessions",
+    "exportedConversation": "Exported conversation",
+    "theme": "Theme",
+    "somethingWentWrong": "Something went wrong",
+    "unexpectedError": "An unexpected error occurred.",
+    "tryAgain": "Try Again",
+    "reloadApp": "Reload App",
+    "copyError": "Copy Error",
+    "errorDetails": "Error details",
+    "modeTooltip": {
+      "solvesTitle": "Best for",
+      "current": "Current mode",
+      "switchHint": "Switch to {{mode}} with {{shortcut}}",
+      "clarify": {
+        "summary": "Use this when the request is still fuzzy and you want the agent to slow down, ask better follow-up questions, and align on the target before acting.",
+        "solves": [
+          "Unclear requirements, incomplete context, or multiple possible interpretations",
+          "Need help turning rough ideas into concrete tasks, specs, or acceptance criteria",
+          "Want the agent to challenge assumptions before it starts making changes"
+        ]
+      },
+      "execute": {
+        "summary": "The agent performs hands-on work across code, research, documents, DevOps, and connected applications. Current actions stay visible; completed actions collapse into an auditable call chain.",
+        "solves": [
+          "Multi-step workflows mixing research, file changes, terminal commands, and external tools",
+          "Precise implementation, debugging, project setup, documentation, DevOps, and analysis",
+          "Work that needs explicit approval, visible progress, verification, and a structured final result"
+        ]
+      },
+      "acp": {
+        "summary": "Architecture Control Planning is for complex work that needs control before implementation: clarify goals and boundaries first, then design the architecture, decompose execution, and delegate delivery. The main agent does not code directly.",
+        "solves": [
+          "Complex tasks that require background, scope, constraints, dependencies, and acceptance criteria to be clarified before implementation",
+          "Work where the main agent should focus on architecture, orchestration, and process control instead of coding directly",
+          "Cases where sub-tasks should run in parallel and return structured Markdown summaries for continued coordination"
+        ]
+      }
+    }
   },
   "sidebar_toast": {
     "sessionDeleted": "Session deleted",
@@ -653,72 +724,6 @@
     "reportRetrying": "Regenerating the final report…",
     "reportEmpty": "No final report available"
   },
-  "layout": {
-    "newModeSession": "New {{mode}} session",
-    "clearConfirm": "Clear {{count}} messages?",
-    "clearConversation": "Clear conversation",
-    "conversationCleared": "Conversation cleared",
-    "openFolder": "Open folder",
-    "copyAll": "Copy conversation",
-    "exportImage": "Copy as image",
-    "useFullWidth": "Use full width",
-    "useStandardWidth": "Use standard width",
-    "imageCopied": "Image copied to clipboard",
-    "exportImageFailed": "Copy image failed",
-    "deleteConversation": "Delete conversation",
-    "sessionDuplicated": "Session duplicated",
-    "pinned": "Pinned",
-    "unpinned": "Unpinned",
-    "conversationCopied": "Conversation copied to clipboard",
-    "autoApproveConfirm": "Enable auto-approve? All tool calls will execute without confirmation.",
-    "autoApproveOff": "Auto-approve OFF",
-    "autoApproveOn": "Auto-approve ON (Dangerous)",
-    "deleteAllConfirm": "Delete all {{count}} sessions? This cannot be undone.",
-    "deleteConfirm": "Are you sure you want to delete \"{{title}}\"?",
-    "deletedSessions": "Deleted {{count}} sessions",
-    "importedSessions": "Imported {{count}} sessions",
-    "noNewSessions": "No new sessions to import (all already exist)",
-    "importFailed": "Import failed: {{error}}",
-    "noSessionsToBackup": "No sessions to backup",
-    "backedUpSessions": "Backed up {{count}} sessions",
-    "exportedConversation": "Exported conversation",
-    "theme": "Theme",
-    "somethingWentWrong": "Something went wrong",
-    "unexpectedError": "An unexpected error occurred.",
-    "tryAgain": "Try Again",
-    "reloadApp": "Reload App",
-    "copyError": "Copy Error",
-    "errorDetails": "Error details",
-    "modeTooltip": {
-      "solvesTitle": "Best for",
-      "current": "Current mode",
-      "switchHint": "Switch to {{mode}} with {{shortcut}}",
-      "clarify": {
-        "summary": "Use this when the request is still fuzzy and you want the agent to slow down, ask better follow-up questions, and align on the target before acting.",
-        "solves": [
-          "Unclear requirements, incomplete context, or multiple possible interpretations",
-          "Need help turning rough ideas into concrete tasks, specs, or acceptance criteria",
-          "Want the agent to challenge assumptions before it starts making changes"
-        ]
-      },
-      "execute": {
-        "summary": "The agent performs hands-on work across code, research, documents, DevOps, and connected applications. Current actions stay visible; completed actions collapse into an auditable call chain.",
-        "solves": [
-          "Multi-step workflows mixing research, file changes, terminal commands, and external tools",
-          "Precise implementation, debugging, project setup, documentation, DevOps, and analysis",
-          "Work that needs explicit approval, visible progress, verification, and a structured final result"
-        ]
-      },
-      "acp": {
-        "summary": "Architecture Control Planning is for complex work that needs control before implementation: clarify goals and boundaries first, then design the architecture, decompose execution, and delegate delivery. The main agent does not code directly.",
-        "solves": [
-          "Complex tasks that require background, scope, constraints, dependencies, and acceptance criteria to be clarified before implementation",
-          "Work where the main agent should focus on architecture, orchestration, and process control instead of coding directly",
-          "Cases where sub-tasks should run in parallel and return structured Markdown summaries for continued coordination"
-        ]
-      }
-    }
-  },
   "navRail": {
     "primaryNavigation": "Primary navigation",
     "newTask": "New task",
@@ -1082,7 +1087,7 @@
     "agentReviewing": "Reviewing...",
     "downloading": "Downloading...",
     "noApiKeyTitle": "Ola Skills API key not configured",
-    "noApiKeyDesc": "Set your API key via the \u2699\ufe0f icon in the top bar to browse the skills.ola.shop marketplace.",
+    "noApiKeyDesc": "Set your API key via the ⚙️ icon in the top bar to browse the skills.ola.shop marketplace.",
     "getApiKey": "Get API Key"
   },
   "soulsPage": {
@@ -1252,10 +1257,9 @@
     "websockify": "websockify",
     "embeddedNoVnc": "Embedded noVNC",
     "noVncSecurityFailure": "The VNC server rejected the connection security handshake.",
-    "noVncSecurityFailureMac": "Cannot reach the macOS VNC server. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and verify the host port (5900 by default). The built-in macOS Screen Sharing service speaks RFB over TCP only — it does not speak the WebSocket protocol that noVNC requires, so connect over an SSH tunnel + websockify bridge, or use the external VNC client.",
+    "noVncSecurityFailureMac": "Cannot reach the macOS VNC server. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and verify the host port (5900 by default). macOS Screen Sharing speaks RFB over TCP, not the WebSocket protocol that noVNC requires, so connect through an SSH tunnel + websockify bridge, or use the external VNC client.",
     "noVncMacUnreachable": "Cannot reach the macOS VNC bridge. Enable Screen Sharing (System Settings → General → Sharing → Screen Sharing) and confirm the host port (5900 by default). macOS Screen Sharing speaks RFB over TCP only — it does not speak WebSocket. Connect over an SSH tunnel + websockify bridge, or use the external VNC client.",
     "noVncMacRefused": "The macOS VNC server refused the connection. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and check the firewall allows inbound TCP 5900.",
-    "noVncSecurityFailureMac": "Cannot reach the macOS VNC server. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and verify the host port (5900 by default). macOS Screen Sharing speaks RFB over TCP, not the WebSocket protocol that noVNC requires, so connect through an SSH tunnel + websockify bridge, or use the external VNC client.",
     "noVncCredentialsRequired": "This VNC server requires credentials. The embedded noVNC viewer cannot reach the stored password safely, so use the external VNC client.",
     "bytes": "bytes",
     "statusIdle": "Idle",
@@ -1387,7 +1391,22 @@
       "bridge": "Connecting the secure protocol bridge",
       "authentication": "Signing in to Windows",
       "desktop": "Loading the remote desktop"
-    }
+    },
+    "connectionStatus": "Connection status: {{status}}",
+    "screenSharingStatus": "Screen sharing: {{status}}",
+    "screenSharingEnabled": "Enabled; the current screen will be shared when a controller connects.",
+    "screenSharingRequesting": "Requesting permission…",
+    "screenSharingDisabled": "Disabled",
+    "stopScreenSharing": "Stop sharing",
+    "startScreenSharing": "Start screen sharing",
+    "sameAccountDevices": "Devices on this account",
+    "online": "Online",
+    "offline": "Offline",
+    "connecting": "Connecting…",
+    "connectWithoutPassword": "Connect without password",
+    "disconnectSession": "Disconnect session",
+    "serviceEndpoint": "Service endpoint",
+    "cancel": "Cancel"
   },
   "terminalDock": {
     "sshContext": "SSH workspace",

@@ -1,3 +1,5 @@
+import { useProviderStore } from '@renderer/stores/provider-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import * as React from 'react'
 import type { TFunction } from 'i18next'
 import {
@@ -41,6 +43,7 @@ import {
   type CronSchedule
 } from '@renderer/stores/cron-store'
 import type { UnifiedMessage } from '@renderer/lib/api/types'
+import type { ModelSource } from '../../../../shared/runtime/model-source'
 import {
   dateKeyFromDate,
   endOfLocalDay,
@@ -101,6 +104,7 @@ interface JobEditorFormState {
   expr: string
   tz: string
   model: string
+  modelSource: ModelSource | null
   workingFolder: string
   deliveryMode: 'desktop' | 'session' | 'none'
   deliveryTarget: string
@@ -116,6 +120,7 @@ interface TaskPageSessionSummary {
   sshConnectionId?: string
   providerId?: string
   modelId?: string
+  modelSource?: ModelSource
 }
 
 const taskPageSessionSummaryCache = new Map<string, TaskPageSessionSummary>()
@@ -130,6 +135,7 @@ function selectTaskPageSessionSummaries(state: {
     sshConnectionId?: string
     providerId?: string
     modelId?: string
+    modelSource?: ModelSource
   }>
 }): TaskPageSessionSummary[] {
   const nextIds = new Set(state.sessions.map((session) => session.id))
@@ -149,7 +155,8 @@ function selectTaskPageSessionSummaries(state: {
       cached.workingFolder === session.workingFolder &&
       cached.sshConnectionId === session.sshConnectionId &&
       cached.providerId === session.providerId &&
-      cached.modelId === session.modelId
+      cached.modelId === session.modelId &&
+      JSON.stringify(cached.modelSource) === JSON.stringify(session.modelSource)
     ) {
       if (!changed && lastTaskPageSessionSummaries[index] !== cached) {
         changed = true
@@ -164,7 +171,8 @@ function selectTaskPageSessionSummaries(state: {
       workingFolder: session.workingFolder,
       sshConnectionId: session.sshConnectionId,
       providerId: session.providerId,
-      modelId: session.modelId
+      modelId: session.modelId,
+      modelSource: session.modelSource
     }
     taskPageSessionSummaryCache.set(session.id, summary)
     if (!changed && lastTaskPageSessionSummaries[index] !== summary) {
@@ -222,6 +230,7 @@ function buildEditorState(job?: CronJobEntry | null): JobEditorFormState {
       expr: '0 9 * * *',
       tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       model: '',
+      modelSource: null,
       workingFolder: '',
       deliveryMode: 'desktop',
       deliveryTarget: '',
@@ -243,6 +252,7 @@ function buildEditorState(job?: CronJobEntry | null): JobEditorFormState {
     expr: job.schedule.expr ?? '0 9 * * *',
     tz: job.schedule.tz ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'),
     model: job.model ?? '',
+    modelSource: job.modelSource,
     workingFolder: job.workingFolder ?? '',
     deliveryMode: (job.deliveryMode as JobEditorFormState['deliveryMode']) ?? 'desktop',
     deliveryTarget: job.deliveryTarget ?? '',
@@ -349,11 +359,39 @@ function getLogTypeLabel(type: RunDetailResponse['logs'][number]['type'], t: TFu
 
 export function TasksPage(): React.JSX.Element {
   const { t, i18n } = useTranslation('layout')
-  const jobs = useCronStore((state) => state.jobs)
-  const runs = useCronStore((state) => state.runs)
+  const allJobs = useCronStore((state) => state.jobs)
+  const allRuns = useCronStore((state) => state.runs)
   const loadJobs = useCronStore((state) => state.loadJobs)
   const loadRuns = useCronStore((state) => state.loadRuns)
-  const sessionSummaries = useChatStore(selectTaskPageSessionSummaries)
+  const allSummaries = useChatStore(selectTaskPageSessionSummaries)
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
+  const allSessions = useChatStore((state) => state.sessions)
+  const visibleSessionIds = React.useMemo(
+    () =>
+      new Set(
+        allSessions
+          .filter((session) => (session.workspaceId ?? 'local-personal') === workspaceId)
+          .map((session) => session.id)
+      ),
+    [allSessions, workspaceId]
+  )
+  const sessionSummaries = React.useMemo(
+    () => allSummaries.filter((session) => visibleSessionIds.has(session.id)),
+    [allSummaries, visibleSessionIds]
+  )
+  const jobs = React.useMemo(
+    () => allJobs.filter((job) => (job.workspaceId ?? 'local-personal') === workspaceId),
+    [allJobs, workspaceId]
+  )
+  const runs = React.useMemo(
+    () =>
+      allRuns.filter((run) =>
+        run.sourceSessionIdSnapshot
+          ? visibleSessionIds.has(run.sourceSessionIdSnapshot)
+          : jobs.some((job) => job.id === run.jobId)
+      ),
+    [allRuns, visibleSessionIds, jobs]
+  )
   const projects = useChatStore((state) => state.projects)
   const language = i18n.resolvedLanguage ?? i18n.language
   const locale = React.useMemo(() => resolveIntlLocale(language), [language])
@@ -640,7 +678,7 @@ export function TasksPage(): React.JSX.Element {
     let disposed = false
     setDetailLoading(true)
     ipcClient
-      .invoke(IPC.CRON_RUN_DETAIL, { runId: selectedRunId })
+      .invoke(IPC.CRON_RUN_DETAIL, { runId: selectedRunId, workspaceId })
       .then((result) => {
         if (disposed) return
         if (!result || 'error' in (result as Record<string, unknown>)) {
@@ -660,7 +698,7 @@ export function TasksPage(): React.JSX.Element {
     return () => {
       disposed = true
     }
-  }, [selectedRunId])
+  }, [selectedRunId, workspaceId])
 
   const openCreateDialog = React.useCallback(() => {
     setEditorMode('create')
@@ -681,6 +719,7 @@ export function TasksPage(): React.JSX.Element {
         ...state,
         sessionId,
         model: session?.modelId ?? state.model,
+        modelSource: session?.modelSource ?? state.modelSource,
         workingFolder: session?.workingFolder ?? state.workingFolder
       }))
     },
@@ -702,12 +741,24 @@ export function TasksPage(): React.JSX.Element {
       ? projects.find((entry) => entry.id === session.projectId)
       : null
 
+    const workspaceModel = useWorkspaceStore.getState().modelSelections[workspaceId]
+    const workspaceModelSource = useWorkspaceStore.getState().modelSources[workspaceId]
+    const localModel = useProviderStore.getState()
     const payload = {
+      workspaceId,
       name: editorForm.name.trim(),
       sessionId: editorForm.sessionId || undefined,
       schedule: buildSchedulePayload(editorForm),
       prompt: editorForm.prompt.trim(),
-      model: editorForm.model.trim() || null,
+      model:
+        editorForm.model.trim() ||
+        session?.modelId ||
+        workspaceModel?.modelId ||
+        localModel.activeModelId ||
+        null,
+      modelSource:
+        editorForm.modelSource ??
+        (editorForm.model.trim() ? null : (session?.modelSource ?? workspaceModelSource ?? null)),
       workingFolder: editorForm.workingFolder.trim() || null,
       sshConnectionId: session?.sshConnectionId ?? null,
       deliveryMode: editorForm.deliveryMode,
@@ -717,7 +768,8 @@ export function TasksPage(): React.JSX.Element {
       sourceSessionTitle: session?.title ?? null,
       sourceProjectId: project?.id ?? null,
       sourceProjectName: project?.name ?? null,
-      sourceProviderId: session?.providerId ?? null
+      sourceProviderId:
+        session?.providerId ?? workspaceModel?.providerId ?? localModel.activeProviderId
     }
 
     setSubmitting(true)
@@ -727,6 +779,7 @@ export function TasksPage(): React.JSX.Element {
           ? await ipcClient.invoke(IPC.CRON_ADD, payload)
           : await ipcClient.invoke(IPC.CRON_UPDATE, {
               jobId: editorForm.id,
+              workspaceId,
               patch: payload
             })
 
@@ -748,11 +801,11 @@ export function TasksPage(): React.JSX.Element {
     } finally {
       setSubmitting(false)
     }
-  }, [editorForm, editorMode, projects, refreshAll, sessionSummaryById, t])
+  }, [editorForm, editorMode, projects, refreshAll, sessionSummaryById, t, workspaceId])
 
   const handleRunNow = React.useCallback(
     async (jobId: string) => {
-      const result = await ipcClient.invoke(IPC.CRON_RUN_NOW, { jobId })
+      const result = await ipcClient.invoke(IPC.CRON_RUN_NOW, { jobId, workspaceId })
       if (result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)) {
         toast.error(String((result as { error: string }).error))
         return
@@ -764,12 +817,12 @@ export function TasksPage(): React.JSX.Element {
       )
       await refreshAll()
     },
-    [refreshAll, t]
+    [refreshAll, t, workspaceId]
   )
 
   const handleAbortRun = React.useCallback(
     async (jobId: string) => {
-      const result = await ipcClient.invoke(IPC.CRON_ABORT_RUN, { jobId })
+      const result = await ipcClient.invoke(IPC.CRON_ABORT_RUN, { jobId, workspaceId })
       if (result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)) {
         toast.error(String((result as { error: string }).error))
         return
@@ -777,14 +830,15 @@ export function TasksPage(): React.JSX.Element {
       toast.success(t('tasksPage.toastRunAborted', { defaultValue: 'Run aborted' }))
       await refreshAll()
     },
-    [refreshAll, t]
+    [refreshAll, t, workspaceId]
   )
 
   const handleToggle = React.useCallback(
     async (job: CronJobEntry) => {
       const result = await ipcClient.invoke(IPC.CRON_TOGGLE, {
         jobId: job.id,
-        enabled: !job.enabled
+        enabled: !job.enabled,
+        workspaceId
       })
       if (result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)) {
         toast.error(String((result as { error: string }).error))
@@ -792,12 +846,12 @@ export function TasksPage(): React.JSX.Element {
       }
       await refreshAll()
     },
-    [refreshAll]
+    [refreshAll, workspaceId]
   )
 
   const handleDelete = React.useCallback(
     async (job: CronJobEntry) => {
-      const result = await ipcClient.invoke(IPC.CRON_REMOVE, { jobId: job.id })
+      const result = await ipcClient.invoke(IPC.CRON_REMOVE, { jobId: job.id, workspaceId })
       if (result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)) {
         toast.error(String((result as { error: string }).error))
         return
@@ -809,7 +863,7 @@ export function TasksPage(): React.JSX.Element {
       )
       await refreshAll()
     },
-    [refreshAll, t]
+    [refreshAll, t, workspaceId]
   )
 
   const selectedJob = selectedItem?.job ?? null
@@ -1499,7 +1553,12 @@ export function TasksPage(): React.JSX.Element {
                   className="h-8 text-xs"
                   value={editorForm.model}
                   onChange={(event) =>
-                    setEditorForm((state) => ({ ...state, model: event.target.value }))
+                    setEditorForm((state) => ({
+                      ...state,
+                      model: event.target.value,
+                      // A manually edited legacy ID must not silently retain a different typed binding.
+                      modelSource: null
+                    }))
                   }
                   placeholder={t('tasksPage.placeholderModelDefault', {
                     defaultValue: 'Default from session/global'

@@ -56,6 +56,7 @@ export type MemoryAutomationFilterReason =
 
 export interface MemoryAutomationEntry {
   id: string
+  workspaceId: string
   scope: MemoryAutomationScope
   rootScope?: MemoryRootScope | null
   memoryRootId?: string | null
@@ -83,6 +84,7 @@ export interface MemoryAutomationEntry {
 }
 
 export interface MemoryAutomationRecordInput {
+  workspaceId?: string
   scope: MemoryAutomationScope
   rootScope?: MemoryRootScope | null
   memoryRootId?: string | null
@@ -108,6 +110,7 @@ export interface MemoryAutomationRecordInput {
 }
 
 export interface MemoryAutomationListQuery {
+  workspaceId?: string
   id?: string
   memoryRootId?: string | null
   rootScope?: MemoryRootScope | null
@@ -135,6 +138,7 @@ export interface MemoryAutomationRecordResult {
 
 export interface MemoryAutomationUndoArgs {
   id: string
+  workspaceId?: string
   status?: 'undone' | 'error'
   error?: string | null
 }
@@ -157,6 +161,7 @@ export interface MemoryAutomationRunSessionResult {
 }
 
 export interface MemoryAutomationRunRollupArgs {
+  workspaceId?: string
   action?: 'get-watermark' | 'mark-watermark' | 'note-run'
   scope?: MemoryAutomationScope
   targetPath?: string | null
@@ -172,6 +177,7 @@ export interface MemoryAutomationRunRollupResult {
 
 export interface MemoryRootDescriptor {
   id: string
+  workspaceId: string
   scope: MemoryRootScope
   projectId?: string | null
   workingFolder?: string | null
@@ -185,6 +191,7 @@ export interface MemoryRootDescriptor {
 
 export interface MemoryRootInput {
   scope: MemoryRootScope
+  workspaceId?: string
   projectId?: string | null
   workingFolder?: string | null
   sshConnectionId?: string | null
@@ -211,6 +218,7 @@ export interface MemoryStage1Output {
 
 export interface MemoryStage1OutputInput {
   memoryRootId: string
+  workspaceId?: string
   scope: MemoryRootScope
   sourceSessionId: string
   sourceUpdatedAt?: number | null
@@ -223,6 +231,7 @@ export interface MemoryStage1OutputInput {
 
 export interface MemoryPipelineJob {
   id: string
+  workspaceId: string
   kind: MemoryJobKind
   status: MemoryJobStatus
   memoryRootId?: string | null
@@ -240,6 +249,7 @@ export interface MemoryPipelineJob {
 export interface MemoryCitationEntry {
   scope: MemoryRootScope
   memoryRootId: string
+  workspaceId?: string
   path: string
   line?: number | null
   sourceSessionId?: string | null
@@ -255,6 +265,7 @@ export interface MemoryPipelineRunArgs {
     | 'complete-phase2'
     | 'record-job'
   sessionId?: string
+  workspaceId?: string
   sourceUpdatedAt?: number | null
   roots?: MemoryRootInput[]
   jobId?: string | null
@@ -277,6 +288,7 @@ export interface MemoryPipelineRunResult {
 }
 
 export interface MemoryPipelineListRootsQuery {
+  workspaceId?: string
   scope?: MemoryRootScope | 'both'
   projectId?: string | null
   workingFolder?: string | null
@@ -289,6 +301,7 @@ export interface MemoryPipelineListRootsResult {
 }
 
 export interface MemoryPipelineListJobsQuery {
+  workspaceId?: string
   memoryRootId?: string | null
   sourceSessionId?: string | null
   statuses?: MemoryJobStatus[]
@@ -302,6 +315,7 @@ export interface MemoryPipelineListJobsResult {
 
 export interface MemoryPipelineClearRootArgs {
   memoryRootId: string
+  workspaceId?: string
   includeJobs?: boolean
 }
 

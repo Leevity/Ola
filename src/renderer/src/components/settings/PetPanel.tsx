@@ -14,7 +14,7 @@ import { usePetsStore } from '@renderer/stores/pets-store'
  * dialog with all five sub-sections (overview / skin / agent / exp /
  * settings) inside.
  */
-export function PetPanel(): React.JSX.Element {
+export function PetPanel({ embedded = false }: { embedded?: boolean }): React.JSX.Element {
   const { t } = useTranslation('pet')
 
   // Pull the legacy single-pet storage into the new pets collection the
@@ -38,10 +38,12 @@ export function PetPanel(): React.JSX.Element {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h2 className="text-lg font-semibold">{t('title')}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
-      </div>
+      {!embedded ? (
+        <div>
+          <h2 className="text-lg font-semibold">{t('title')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
+        </div>
+      ) : null}
       <PetListTab />
     </div>
   )

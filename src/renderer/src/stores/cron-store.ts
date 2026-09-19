@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { ipcClient } from '../lib/ipc/ipc-client'
 import { IPC } from '../lib/ipc/channels'
+import { useWorkspaceStore } from './workspace-store'
+import type { ModelSource } from '../../../shared/runtime/model-source'
 
 // ── Types ────────────────────────────────────────────────────────
 
@@ -13,6 +15,7 @@ export interface CronSchedule {
 }
 
 export interface CronJobEntry {
+  workspaceId?: string
   id: string
   sessionId: string | null
   name: string
@@ -20,6 +23,8 @@ export interface CronJobEntry {
   prompt: string
   agentId: string | null
   model: string | null
+  /** Explicit public binding when the job must not use a workspace default. */
+  modelSource: ModelSource | null
   workingFolder: string | null
   sshConnectionId: string | null
   deliveryMode: string
@@ -66,6 +71,8 @@ export interface CronRunEntry {
   sourceProjectNameSnapshot: string | null
   sourceProviderIdSnapshot: string | null
   modelSnapshot: string | null
+  /** Public ModelSource captured when this run began. */
+  modelSourceSnapshot: string | null
   workingFolderSnapshot: string | null
   deliveryModeSnapshot: string | null
   deliveryTargetSnapshot: string | null
@@ -93,6 +100,7 @@ interface CronStore {
   runs: CronRunEntry[]
   agentLogs: Record<string, CronAgentLogEntry[]>
 
+  clearWorkspace: () => void
   loadJobs: () => Promise<void>
   loadRuns: (jobIdOrOptions?: string | CronRunsLoadOptions) => Promise<void>
   addJob: (job: CronJobEntry) => void
@@ -114,16 +122,28 @@ interface CronStore {
 
 const MAX_RUNS = 1000
 const MAX_AGENT_LOG_ENTRIES = 100
+let cronWorkspaceGeneration = 0
 
 export const useCronStore = create<CronStore>((set) => ({
   jobs: [],
   runs: [],
   agentLogs: {},
 
+  clearWorkspace: () => {
+    cronWorkspaceGeneration++
+    set({ jobs: [], runs: [], agentLogs: {} })
+  },
+
   loadJobs: async () => {
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    const generation = cronWorkspaceGeneration
     try {
-      const result = await ipcClient.invoke(IPC.CRON_LIST, {})
-      if (Array.isArray(result)) {
+      const result = await ipcClient.invoke(IPC.CRON_LIST, { workspaceId })
+      if (
+        generation === cronWorkspaceGeneration &&
+        workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
+        Array.isArray(result)
+      ) {
         set({ jobs: result as CronJobEntry[] })
       }
     } catch (err) {
@@ -132,14 +152,21 @@ export const useCronStore = create<CronStore>((set) => ({
   },
 
   loadRuns: async (jobIdOrOptions?: string | CronRunsLoadOptions) => {
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    const generation = cronWorkspaceGeneration
     try {
       const options =
         typeof jobIdOrOptions === 'string' ? { jobId: jobIdOrOptions } : (jobIdOrOptions ?? {})
       const result = await ipcClient.invoke(IPC.CRON_RUNS, {
         ...options,
+        workspaceId,
         limit: options.limit ?? MAX_RUNS
       })
-      if (Array.isArray(result)) {
+      if (
+        generation === cronWorkspaceGeneration &&
+        workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
+        Array.isArray(result)
+      ) {
         set({ runs: result as CronRunEntry[] })
       }
     } catch (err) {
@@ -153,7 +180,10 @@ export const useCronStore = create<CronStore>((set) => ({
 
   deleteJob: async (id) => {
     try {
-      const result = (await ipcClient.invoke(IPC.CRON_DELETE, { jobId: id })) as {
+      const result = (await ipcClient.invoke(IPC.CRON_DELETE, {
+        jobId: id,
+        workspaceId: useWorkspaceStore.getState().activeWorkspaceId
+      })) as {
         error?: string
         success?: boolean
       }

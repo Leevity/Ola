@@ -27,6 +27,7 @@ import {
 } from '@renderer/components/ui/accordion'
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import {
   isProviderAvailableForModelSelection,
   useProviderStore
@@ -48,6 +49,7 @@ import {
 } from '@renderer/components/icons/plugin-icons'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
+import { modelSourceSelection, type ModelSource } from '../../../../shared/runtime/model-source'
 
 // ─── Channel Icon Helper ───
 
@@ -117,6 +119,8 @@ function ChannelConfigPanelContent({
   const projects = useChatStore((s) => s.projects)
   const activeProviderId = useProviderStore((s) => s.activeProviderId)
   const activeModelId = useProviderStore((s) => s.activeModelId)
+  const workspaces = useWorkspaceStore((s) => s.getWorkspaces())
+  const resourcesByWorkspace = useWorkspaceStore((s) => s.resourcesByWorkspace)
   const enabledProviders = useMemo(
     () => providers.filter((p) => isProviderAvailableForModelSelection(p)),
     [providers]
@@ -134,6 +138,12 @@ function ChannelConfigPanelContent({
   const [localConfig, setLocalConfig] = useState(plugin.config)
   const [localProviderId, setLocalProviderId] = useState(plugin.providerId ?? null)
   const [localModel, setLocalModel] = useState(plugin.model ?? '')
+  const [localModelSource, setLocalModelSource] = useState<ModelSource | null>(
+    plugin.modelSource ??
+      (plugin.providerId && plugin.model && !plugin.providerId.startsWith('ola-managed:')
+        ? { kind: 'local', providerId: plugin.providerId, modelId: plugin.model }
+        : null)
+  )
   const [localFeatures, setLocalFeatures] = useState<PluginFeatures>(
     plugin.features ?? { autoReply: true, streamingReply: true, autoStart: true }
   )
@@ -179,13 +189,31 @@ function ChannelConfigPanelContent({
     debouncedSave({ config: newConfig })
   }
 
-  const handleModelChange = (value: string, providerId?: string): void => {
-    const model = value === '__default__' ? null : value
-    const pid = value === '__default__' ? null : (providerId ?? null)
-    setLocalProviderId(pid)
-    setLocalModel(value === '__default__' ? '' : value)
-    debouncedSave({ model, providerId: pid })
+  const handleModelSourceChange = (source: ModelSource | null): void => {
+    const selection = source ? modelSourceSelection(source) : null
+    setLocalModelSource(source)
+    setLocalProviderId(selection?.providerId ?? null)
+    setLocalModel(selection?.modelId ?? '')
+    debouncedSave({
+      modelSource: source,
+      providerId: selection?.providerId ?? null,
+      model: selection?.modelId ?? null
+    })
   }
+
+  const channelWorkspace =
+    workspaces.find((workspace) => workspace.id === (plugin.workspaceId ?? 'local-personal')) ??
+    workspaces[0]
+  const channelManagedKind =
+    channelWorkspace?.kind === 'ola-personal' || channelWorkspace?.kind === 'ola-team'
+      ? channelWorkspace.kind
+      : null
+  const managedResources =
+    channelManagedKind && channelWorkspace
+      ? (resourcesByWorkspace[channelWorkspace.id] ?? []).filter(
+          (resource) => resource.enabled && (!resource.category || resource.category === 'chat')
+        )
+      : []
 
   const handleFeatureToggle = (key: keyof PluginFeatures, value: boolean): void => {
     const next = { ...localFeatures, [key]: value }
@@ -512,7 +540,7 @@ function ChannelConfigPanelContent({
                   !localModel && 'bg-muted/40 font-medium'
                 )}
                 onClick={() => {
-                  handleModelChange('__default__')
+                  handleModelSourceChange(null)
                   setModelPopoverOpen(false)
                 }}
               >
@@ -554,7 +582,11 @@ function ChannelConfigPanelContent({
                             isActive && 'bg-muted/40 font-medium'
                           )}
                           onClick={() => {
-                            handleModelChange(m.id, provider.id)
+                            handleModelSourceChange({
+                              kind: 'local',
+                              providerId: provider.id,
+                              modelId: m.id
+                            })
                             setModelPopoverOpen(false)
                           }}
                         >
@@ -576,6 +608,47 @@ function ChannelConfigPanelContent({
                   </div>
                 )
               })}
+              {managedResources.length > 0 && channelWorkspace && channelManagedKind && (
+                <div>
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                    {channelWorkspace.kind === 'ola-team'
+                      ? t('channel.olaTeamModels', 'Ola team models')
+                      : t('channel.olaPersonalModels', 'Ola personal models')}
+                  </div>
+                  {managedResources.map((resource) => {
+                    const source: ModelSource = {
+                      kind: channelManagedKind,
+                      workspaceId: channelWorkspace.id,
+                      resourceId: resource.id
+                    }
+                    const active =
+                      localModelSource?.kind !== 'local' &&
+                      localModelSource?.kind === source.kind &&
+                      localModelSource.workspaceId === source.workspaceId &&
+                      localModelSource.resourceId === source.resourceId
+                    return (
+                      <button
+                        key={resource.id}
+                        className={cn(
+                          'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs transition-colors hover:bg-muted/60',
+                          active && 'bg-muted/40 font-medium'
+                        )}
+                        onClick={() => {
+                          handleModelSourceChange(source)
+                          setModelPopoverOpen(false)
+                        }}
+                      >
+                        {active ? (
+                          <Check className="size-3 shrink-0 text-primary" />
+                        ) : (
+                          <span className="size-3" />
+                        )}
+                        <span className="truncate">{resource.displayName || resource.model}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </PopoverContent>
           </Popover>
           <p className="text-[10px] text-muted-foreground">

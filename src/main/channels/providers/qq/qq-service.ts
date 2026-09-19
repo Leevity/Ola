@@ -1,5 +1,11 @@
 import WebSocket from 'ws'
-import { markQqWakeupSent, resolveQqWakeupEligibility } from '../../../db/qq-wakeup-dao'
+import { authorizeChannelSessionWorkspace } from '../../channel-session-workspace'
+import { loadOfflineWorkspaceIds } from '../../../remote/account-client'
+import {
+  markQqWakeupSent,
+  recordQqWakeupSource,
+  resolveQqWakeupEligibility
+} from '../../../db/qq-wakeup-dao'
 import type {
   ChannelEvent,
   ChannelGroup,
@@ -10,6 +16,7 @@ import type {
 import { QQApi, parseQQChatId } from './qq-api'
 import { decodeQQReplyReference, parseQQWsMessage } from './parse-ws-message'
 import { clearSession, loadSession, saveSession } from './session-store'
+import { qqSessionAccountKey } from './session-file-store'
 
 interface QQGatewayPayload {
   op?: number
@@ -55,6 +62,7 @@ export class QQService implements MessagingChannelService {
   readonly pluginType = 'qq-bot'
 
   private readonly instance: ChannelInstance
+  private readonly sessionStoreKey: string
   private readonly notify: (event: ChannelEvent) => void
   private api!: QQApi
   private ws: WebSocket | null = null
@@ -74,10 +82,15 @@ export class QQService implements MessagingChannelService {
     this.instance = instance
     this.notify = notify
     this.pluginId = instance.id
+    this.sessionStoreKey = qqSessionAccountKey(
+      instance.workspaceId ?? 'local-personal',
+      instance.id
+    )
   }
 
   async start(): Promise<void> {
     if (this.running) return
+    await this.authorizeWorkspace()
 
     const { appId, clientSecret } = this.instance.config
     if (!appId || !clientSecret) {
@@ -126,6 +139,7 @@ export class QQService implements MessagingChannelService {
   }
 
   async replyMessage(messageId: string, content: string): Promise<{ messageId: string }> {
+    await this.authorizeWorkspace()
     const replyRef = decodeQQReplyReference(messageId)
     if (!replyRef) {
       throw new Error('QQ reply requires a valid QQ incoming message reference')
@@ -138,12 +152,14 @@ export class QQService implements MessagingChannelService {
     content: string,
     allowWakeup = false
   ): Promise<{ messageId: string }> {
+    await this.authorizeWorkspace()
     const target = parseQQChatId(chatId)
     if (target.type !== 'c2c' || !allowWakeup) {
       return this.api.sendMessage(target, content)
     }
 
-    const wakeup = await resolveQqWakeupEligibility(this.pluginId, target.id)
+    const workspaceId = this.instance.workspaceId ?? 'local-personal'
+    const wakeup = await resolveQqWakeupEligibility(this.pluginId, target.id, workspaceId)
     const result = await this.api.sendMessage(target, content, undefined, {
       isWakeup: wakeup.enabled
     })
@@ -151,6 +167,7 @@ export class QQService implements MessagingChannelService {
       await markQqWakeupSent({
         pluginId: this.pluginId,
         openId: target.id,
+        workspaceId,
         periodKey: wakeup.periodKey,
         sourceMessageId: wakeup.sourceMessageId,
         sourceTimestamp: wakeup.sourceTimestamp
@@ -185,7 +202,14 @@ export class QQService implements MessagingChannelService {
   }
 
   private getSessionStoreKey(): string {
-    return this.pluginId
+    return this.sessionStoreKey
+  }
+
+  private async authorizeWorkspace(): Promise<void> {
+    await authorizeChannelSessionWorkspace(
+      this.instance.workspaceId ?? 'local-personal',
+      loadOfflineWorkspaceIds
+    )
   }
 
   private async restoreSession(): Promise<void> {
@@ -344,7 +368,7 @@ export class QQService implements MessagingChannelService {
         if (!canResume) {
           this.sessionId = null
           this.lastSeq = null
-          clearSession(this.getSessionStoreKey())
+          await clearSession(this.getSessionStoreKey())
 
           if (this.intentLevelIndex < INTENT_LEVELS.length - 1) {
             this.intentLevelIndex += 1
@@ -403,6 +427,22 @@ export class QQService implements MessagingChannelService {
         console.warn(`[qq-bot:${this.pluginId}] Ignored dispatch event: ${payload.t}`)
       }
       return
+    }
+
+    await this.authorizeWorkspace()
+
+    if (payload.t === 'C2C_MESSAGE_CREATE') {
+      const source = decodeQQReplyReference(parsed.messageId)
+      const target = parseQQChatId(parsed.chatId)
+      if (source && target.type === 'c2c') {
+        await recordQqWakeupSource({
+          pluginId: this.pluginId,
+          openId: target.id,
+          workspaceId: this.instance.workspaceId ?? 'local-personal',
+          sourceMessageId: source.messageId,
+          sourceTimestamp: parsed.timestamp ?? Date.now()
+        })
+      }
     }
 
     this.emit('incoming_message', parsed)

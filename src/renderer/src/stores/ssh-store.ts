@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { toast } from 'sonner'
 import i18n from '@renderer/locales'
 import { ipcClient } from '../lib/ipc/ipc-client'
+import { useWorkspaceStore } from './workspace-store'
 import { IPC } from '../lib/ipc/channels'
 import type {
   SftpConflictPolicy,
@@ -90,6 +91,15 @@ function rowToConnection(row: SshConnectionRow): SshConnection {
     createdAt: row.created_at,
     updatedAt: row.updated_at
   }
+}
+
+async function invokeSshMutation(channel: string, args: Record<string, unknown>): Promise<void> {
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+  const result = await ipcClient.invoke(channel, args)
+  if (result && typeof result === 'object' && 'error' in result)
+    throw new Error(String((result as { error: unknown }).error))
+  if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId)
+    throw new Error('SSH_WORKSPACE_CHANGED')
 }
 
 function renameTabTitle(title: string, previousName: string, nextName: string): string {
@@ -462,6 +472,7 @@ export interface SshStore
 
   // Data loading
   loadAll: () => Promise<void>
+  resetForWorkspace: () => void
 
   // Group CRUD
   createGroup: (name: string) => Promise<string>
@@ -610,7 +621,39 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   inspectorMode: 'edit',
   setInspectorMode: (mode) => set({ inspectorMode: mode }),
 
+  resetForWorkspace: () =>
+    set({
+      groups: [],
+      connections: [],
+      sessions: {},
+      activeTerminalId: null,
+      selectedConnectionId: null,
+      _loaded: false,
+      openTabs: [],
+      activeTabId: null,
+      detailConnectionId: null,
+      fileExplorerPaths: {},
+      fileExplorerEntries: {},
+      fileExplorerPageInfo: {},
+      fileExplorerExpanded: {},
+      fileExplorerLoading: {},
+      fileExplorerErrors: {},
+      uploadTasks: {},
+      transferTasks: {},
+      sftpConnections: {},
+      sftpPaneStates: {
+        left: { connectionId: null, currentPath: null },
+        right: { connectionId: null, currentPath: null }
+      },
+      sftpEntries: {},
+      sftpPageInfo: {},
+      sftpLoading: {},
+      sftpErrors: {},
+      sftpSelections: { left: {}, right: {} }
+    }),
+
   loadAll: async () => {
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
     try {
       ensureUploadEventsSubscribed()
       ensureTransferEventsSubscribed()
@@ -639,6 +682,8 @@ export const useSshStore = create<SshStore>()((set, get) => ({
             return acc
           }, {})
         : {}
+
+      if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
 
       set((state) => ({
         groups,
@@ -675,7 +720,7 @@ export const useSshStore = create<SshStore>()((set, get) => ({
       }))
     } catch (err) {
       console.error('[SshStore] Failed to load:', err)
-      set({ _loaded: true })
+      if (useWorkspaceStore.getState().activeWorkspaceId === workspaceId) set({ _loaded: true })
     }
   },
 
@@ -1213,7 +1258,7 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   createGroup: async (name) => {
     const id = `sshg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const maxOrder = Math.max(0, ...get().groups.map((g) => g.sortOrder))
-    await ipcClient.invoke(IPC.SSH_GROUP_CREATE, { id, name, sortOrder: maxOrder + 1 })
+    await invokeSshMutation(IPC.SSH_GROUP_CREATE, { id, name, sortOrder: maxOrder + 1 })
     const now = Date.now()
     set((s) => ({
       groups: [...s.groups, { id, name, sortOrder: maxOrder + 1, createdAt: now, updatedAt: now }]
@@ -1222,14 +1267,14 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   },
 
   updateGroup: async (id, name) => {
-    await ipcClient.invoke(IPC.SSH_GROUP_UPDATE, { id, name })
+    await invokeSshMutation(IPC.SSH_GROUP_UPDATE, { id, name })
     set((s) => ({
       groups: s.groups.map((g) => (g.id === id ? { ...g, name, updatedAt: Date.now() } : g))
     }))
   },
 
   deleteGroup: async (id) => {
-    await ipcClient.invoke(IPC.SSH_GROUP_DELETE, { id })
+    await invokeSshMutation(IPC.SSH_GROUP_DELETE, { id })
     set((s) => ({
       groups: s.groups.filter((g) => g.id !== id),
       connections: s.connections.map((c) => (c.groupId === id ? { ...c, groupId: null } : c))
@@ -1241,7 +1286,7 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   createConnection: async (data) => {
     const id = `sshc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const maxOrder = Math.max(0, ...get().connections.map((c) => c.sortOrder))
-    await ipcClient.invoke(IPC.SSH_CONNECTION_CREATE, {
+    await invokeSshMutation(IPC.SSH_CONNECTION_CREATE, {
       id,
       ...data,
       sortOrder: maxOrder + 1
@@ -1274,7 +1319,7 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   },
 
   updateConnection: async (id, data) => {
-    await ipcClient.invoke(IPC.SSH_CONNECTION_UPDATE, { id, ...data })
+    await invokeSshMutation(IPC.SSH_CONNECTION_UPDATE, { id, ...data })
     set((s) => {
       const previousConnection = s.connections.find((connection) => connection.id === id)
       const nextName = typeof data.name === 'string' ? data.name : null
@@ -1315,7 +1360,7 @@ export const useSshStore = create<SshStore>()((set, get) => ({
   },
 
   deleteConnection: async (id) => {
-    await ipcClient.invoke(IPC.SSH_CONNECTION_DELETE, { id })
+    await invokeSshMutation(IPC.SSH_CONNECTION_DELETE, { id })
     set((s) => ({
       connections: s.connections.filter((c) => c.id !== id),
       selectedConnectionId: s.selectedConnectionId === id ? null : s.selectedConnectionId
@@ -1834,3 +1879,10 @@ export const useSshStore = create<SshStore>()((set, get) => ({
     })
   }
 }))
+
+// Account logout or directory revocation can change the active workspace
+// without going through the interactive switch path.
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.activeWorkspaceId !== previous.activeWorkspaceId)
+    useSshStore.getState().resetForWorkspace()
+})

@@ -104,7 +104,11 @@
     "chats": "Chats",
     "noChats": "Noch keine Chats",
     "smartRename": "Smart Rename",
-    "smartRenaming": "Smart Umbenennung"
+    "smartRenaming": "Smart Umbenennung",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sitzung gelöscht",

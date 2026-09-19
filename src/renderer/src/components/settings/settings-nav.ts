@@ -1,24 +1,11 @@
-import type { SettingsTab } from '@renderer/stores/ui-store'
+import {
+  getSettingsPage,
+  type SettingsNavigationTarget,
+  type SettingsPageId
+} from './settings-registry'
 
-export const settingsFullPanelTabs = new Set<SettingsTab>([
-  'provider',
-  'workModes',
-  'model',
-  'modelManagement',
-  'aiCoding',
-  'plugin',
-  'extension',
-  'mcp',
-  'credentials',
-  'wiki',
-  'desktopAutomation'
-])
+export type { SettingsNavigationTarget, SettingsPageId }
 
-export function normalizeSettingsTab(tab: SettingsTab): SettingsTab {
-  if (tab === 'wiki' || tab === 'extension') return 'plugin'
-  return tab
-}
-
-export function isSettingsFullPanelTab(tab: SettingsTab): boolean {
-  return settingsFullPanelTabs.has(tab)
+export function isSettingsFullPanelTab(tab: SettingsPageId): boolean {
+  return getSettingsPage(tab)?.layout === 'full'
 }

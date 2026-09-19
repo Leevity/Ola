@@ -6,12 +6,14 @@ import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { ContentBlock, ProviderConfig, UnifiedMessage } from '@renderer/lib/api/types'
 import {
   getProjectMemoryCandidatePaths,
   isMissingFileErrorMessage,
   joinFsPath,
   loadLayeredMemorySnapshot,
+  projectMemoryHomePath,
   readTextFile,
   resolveGlobalMemoryHomePath,
   resolveProjectMemoryTextFileForTarget,
@@ -98,6 +100,7 @@ interface RunSessionOptions {
 }
 
 interface DailyRollupOptions {
+  projectId?: string | null
   projectRootPath?: string | null
   sshConnectionId?: string | null
   global?: boolean
@@ -485,6 +488,7 @@ async function recordEntry(
 }
 
 async function recordSyntheticEntry(args: {
+  workspaceId?: string
   status: MemoryAutomationStatus
   reason?: MemoryAutomationFilterReason
   sourceSessionId?: string | null
@@ -499,6 +503,7 @@ async function recordSyntheticEntry(args: {
   error?: string | null
 }): Promise<void> {
   await recordEntry({
+    workspaceId: args.workspaceId,
     scope: 'main',
     rootScope: args.rootScope ?? null,
     memoryRootId: args.memoryRootId ?? null,
@@ -590,13 +595,13 @@ function buildMemoryRootInputs(args: {
       transport: 'local'
     })
   }
-  if (args.snapshot.projectRootPath) {
+  if (args.snapshot.projectRootPath && args.snapshot.projectMemoryHomePath) {
     roots.push({
       scope: 'project',
       projectId: args.projectId ?? null,
       workingFolder: args.snapshot.projectRootPath,
       sshConnectionId: args.sshConnectionId ?? null,
-      rootPath: getProjectMemoryCandidatePaths(args.snapshot.projectRootPath).preferredPath,
+      rootPath: args.snapshot.projectMemoryHomePath,
       transport: args.sshConnectionId ? 'ssh' : 'local'
     })
   }
@@ -616,11 +621,13 @@ async function pipelineRun(args: Record<string, unknown>): Promise<MemoryPipelin
 
 async function prepareSessionPipeline(args: {
   sessionId: string
+  workspaceId?: string
   roots: MemoryRootInput[]
 }): Promise<MemoryPipelineRunResult> {
   return pipelineRun({
     action: 'prepare-session',
     sessionId: args.sessionId,
+    workspaceId: args.workspaceId,
     roots: args.roots,
     leaseOwner: 'renderer'
   })
@@ -628,6 +635,7 @@ async function prepareSessionPipeline(args: {
 
 async function completeStage1(args: {
   sessionId: string
+  workspaceId?: string
   jobId?: string | null
   status?: MemoryJobStatus
   error?: string | null
@@ -636,6 +644,7 @@ async function completeStage1(args: {
   return pipelineRun({
     action: 'complete-stage1',
     sessionId: args.sessionId,
+    workspaceId: args.workspaceId,
     jobId: args.jobId,
     status: args.status,
     error: args.error,
@@ -652,6 +661,7 @@ async function createPhase2Job(
     jobKind: 'phase2',
     status: 'running',
     memoryRootId: root.id,
+    workspaceId: root.workspaceId,
     sessionId,
     leaseOwner: 'renderer'
   })
@@ -668,6 +678,7 @@ async function completePhase2Job(args: {
   await pipelineRun({
     action: 'complete-phase2',
     memoryRootId: args.root.id,
+    workspaceId: args.root.workspaceId,
     jobId: args.jobId,
     sessionId: args.sessionId,
     status: args.status,
@@ -680,6 +691,7 @@ async function listStage1Outputs(root: MemoryRootDescriptor): Promise<MemoryStag
   const result = await pipelineRun({
     action: 'list-stage1-outputs',
     memoryRootId: root.id,
+    workspaceId: root.workspaceId,
     limit: settings.memoryMaxRawMemoriesForConsolidation
   })
   return result.stage1Outputs ?? []
@@ -1012,6 +1024,7 @@ async function runPhase2ForRoot(args: {
     }
 
     await recordEntry({
+      workspaceId: args.root.workspaceId,
       scope: 'main',
       rootScope: args.root.scope,
       memoryRootId: args.root.id,
@@ -1134,6 +1147,7 @@ export async function runMemoryAutomationForSession(options: RunSessionOptions):
     const snapshot =
       options.memorySnapshot ??
       (await loadLayeredMemorySnapshot(ipcClient, {
+        workspaceId: session.workspaceId ?? 'local-personal',
         workingFolder: session.workingFolder,
         sshConnectionId: session.sshConnectionId,
         scope: 'main'
@@ -1155,6 +1169,7 @@ export async function runMemoryAutomationForSession(options: RunSessionOptions):
 
     const prepared = await prepareSessionPipeline({
       sessionId: options.sessionId,
+      workspaceId: session.workspaceId ?? 'local-personal',
       roots: rootInputs
     })
     if (!prepared.success) throw new Error(prepared.error ?? 'Failed to prepare memory pipeline')
@@ -1262,6 +1277,7 @@ async function runRollupForDescriptor(args: {
   const contentHash = fingerprintContent(args.descriptor.content)
   const watermark = (await ipcClient.invoke(IPC.MEMORY_AUTOMATION_RUN_ROLLUP, {
     action: 'get-watermark',
+    workspaceId: args.root.workspaceId,
     scope: 'main',
     targetPath: args.descriptor.path,
     sourceDate: args.sourceDate,
@@ -1271,6 +1287,7 @@ async function runRollupForDescriptor(args: {
     await recordSyntheticEntry({
       status: 'skipped',
       reason: 'rollup_already_processed',
+      workspaceId: args.root.workspaceId,
       sourceSessionId: `rollup:${args.sourceDate}`,
       rootScope: args.root.scope,
       memoryRootId: args.root.id,
@@ -1297,6 +1314,7 @@ async function runRollupForDescriptor(args: {
       await recordSyntheticEntry({
         status: 'filtered',
         reason: built.reason,
+        workspaceId: args.root.workspaceId,
         sourceSessionId: `rollup:${args.sourceDate}`,
         rootScope: args.root.scope,
         memoryRootId: args.root.id,
@@ -1310,6 +1328,7 @@ async function runRollupForDescriptor(args: {
 
   await completeStage1({
     sessionId: `rollup:${args.sourceDate}`,
+    workspaceId: args.root.workspaceId,
     status: 'succeeded',
     outputs: [built.input]
   })
@@ -1320,6 +1339,7 @@ async function runRollupForDescriptor(args: {
   })
   await ipcClient.invoke(IPC.MEMORY_AUTOMATION_RUN_ROLLUP, {
     action: 'mark-watermark',
+    workspaceId: args.root.workspaceId,
     scope: 'main',
     targetPath: args.descriptor.path,
     sourceDate: args.sourceDate,
@@ -1341,18 +1361,24 @@ export async function runDailyMemoryRollup(options: DailyRollupOptions = {}): Pr
   if (!hasUsableProvider(provider)) return
 
   const sourceDate = yesterdayString()
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   const rootInputs: MemoryRootInput[] = []
-  const globalHomePath = await resolveGlobalMemoryHomePath(ipcClient)
+  const globalHomePath = await resolveGlobalMemoryHomePath(ipcClient, workspaceId)
+  if (workspaceId !== 'local-personal' && !globalHomePath) return
   const includeGlobal = options.global ?? true
   if (includeGlobal && globalHomePath) {
     rootInputs.push({ scope: 'global', rootPath: globalHomePath, transport: 'local' })
   }
-  if (options.projectRootPath) {
+  const projectMemoryHome = options.projectRootPath
+    ? projectMemoryHomePath(options.projectRootPath, workspaceId, globalHomePath)
+    : undefined
+  if (options.projectRootPath && projectMemoryHome) {
     rootInputs.push({
       scope: 'project',
+      projectId: options.projectId ?? null,
       workingFolder: options.projectRootPath,
       sshConnectionId: options.sshConnectionId ?? null,
-      rootPath: getProjectMemoryCandidatePaths(options.projectRootPath).preferredPath,
+      rootPath: projectMemoryHome,
       transport: options.sshConnectionId ? 'ssh' : 'local'
     })
   }
@@ -1360,6 +1386,7 @@ export async function runDailyMemoryRollup(options: DailyRollupOptions = {}): Pr
 
   const prepared = await prepareSessionPipeline({
     sessionId: `rollup:${sourceDate}`,
+    workspaceId,
     roots: rootInputs
   })
   if (!prepared.success) return
@@ -1384,14 +1411,26 @@ export async function runDailyMemoryRollup(options: DailyRollupOptions = {}): Pr
   }
 
   const projectRoot = findRootForScope(prepared.roots, 'project')
-  if (projectRoot && options.projectRootPath) {
-    const resolved = await resolveProjectMemoryTextFileForTarget(
-      ipcClient,
-      options.projectRootPath,
-      options.sshConnectionId,
-      'memory',
-      `${sourceDate}.md`
-    )
+  if (projectRoot && options.projectRootPath && projectMemoryHome) {
+    const resolved =
+      workspaceId === 'local-personal'
+        ? await resolveProjectMemoryTextFileForTarget(
+            ipcClient,
+            options.projectRootPath,
+            options.sshConnectionId,
+            'memory',
+            `${sourceDate}.md`
+          )
+        : await readTextFile(
+            ipcClient,
+            joinFsPath(projectMemoryHome, 'memory', `${sourceDate}.md`),
+            options.sshConnectionId
+          ).then((read) => ({
+            path: joinFsPath(projectMemoryHome, 'memory', `${sourceDate}.md`),
+            content: read.content,
+            error: read.error,
+            missingFile: !read.content
+          }))
     if (!resolved.error && !resolved.missingFile && resolved.content?.trim()) {
       targets.push({
         root: projectRoot,
@@ -1423,6 +1462,7 @@ export function installMemoryAutomationDailyRollup(): void {
     const activeProjectId = useChatStore.getState().activeProjectId
     const project = useChatStore.getState().projects.find((item) => item.id === activeProjectId)
     void runDailyMemoryRollup({
+      projectId: project?.id,
       projectRootPath: project?.workingFolder,
       sshConnectionId: project?.sshConnectionId,
       global: true
@@ -1439,17 +1479,23 @@ export async function undoMemoryAutomationEntry(entry: MemoryAutomationEntry): P
   if (entry.status !== 'written' || !entry.targetPath) {
     return { success: false, error: 'Only written entries can be undone' }
   }
+  if (entry.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId)
+    return { success: false, error: 'Switch to the entry workspace before undoing it' }
 
   const result = (await ipcClient.invoke(IPC.MEMORY_AUTOMATION_LIST, {
     id: entry.id,
+    workspaceId: entry.workspaceId,
     includeContentSnapshots: true,
     limit: 1
   })) as MemoryAutomationListResult
-  const fullEntry = result.entries[0] ?? entry
+  const fullEntry = result.entries.find((candidate) => candidate.id === entry.id)
+  if (!fullEntry)
+    return { success: false, error: 'Memory entry is not available in this workspace' }
   const current = await readTextFile(ipcClient, fullEntry.targetPath!, fullEntry.sshConnectionId)
   if (current.error) {
     const undoResult = (await ipcClient.invoke(IPC.MEMORY_AUTOMATION_UNDO, {
       id: fullEntry.id,
+      workspaceId: fullEntry.workspaceId,
       status: 'error',
       error: current.error
     })) as MemoryAutomationUndoResult
@@ -1469,6 +1515,7 @@ export async function undoMemoryAutomationEntry(entry: MemoryAutomationEntry): P
   if (nextContent === null) {
     const undoResult = (await ipcClient.invoke(IPC.MEMORY_AUTOMATION_UNDO, {
       id: fullEntry.id,
+      workspaceId: fullEntry.workspaceId,
       status: 'error',
       error: 'Undo conflict: memory text was not found'
     })) as MemoryAutomationUndoResult
@@ -1486,6 +1533,7 @@ export async function undoMemoryAutomationEntry(entry: MemoryAutomationEntry): P
   if (writeError) {
     await ipcClient.invoke(IPC.MEMORY_AUTOMATION_UNDO, {
       id: fullEntry.id,
+      workspaceId: fullEntry.workspaceId,
       status: 'error',
       error: writeError
     })
@@ -1494,6 +1542,7 @@ export async function undoMemoryAutomationEntry(entry: MemoryAutomationEntry): P
 
   const undoResult = (await ipcClient.invoke(IPC.MEMORY_AUTOMATION_UNDO, {
     id: fullEntry.id,
+    workspaceId: fullEntry.workspaceId,
     status: 'undone'
   })) as MemoryAutomationUndoResult
   return undoResult.success ? { success: true } : { success: false, error: undoResult.error }
@@ -1506,7 +1555,10 @@ function escapeRegExp(value: string): string {
 export async function runManualMemoryAutomationForActiveSession(): Promise<void> {
   const sessionId = useChatStore.getState().activeSessionId
   if (!sessionId) return
-  await ipcClient.invoke(IPC.MEMORY_AUTOMATION_RUN_SESSION, { sessionId })
+  await ipcClient.invoke(IPC.MEMORY_AUTOMATION_RUN_SESSION, {
+    sessionId,
+    workspaceId: useWorkspaceStore.getState().activeWorkspaceId
+  })
   await runMemoryAutomationForSession({ sessionId, manual: true })
 }
 

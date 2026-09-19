@@ -1,4 +1,3 @@
-import { useRef, useEffect } from 'react'
 import { CodeEditor } from '@renderer/components/editor/CodeEditor'
 import type { ViewerProps } from '../viewer-registry'
 
@@ -12,20 +11,14 @@ export function HtmlViewer({
   initialColumn,
   initialPositionKey
 }: ViewerProps): React.JSX.Element {
-  const iframeRef = useRef<HTMLIFrameElement>(null)
-
-  useEffect(() => {
-    if (viewMode === 'preview' && iframeRef.current) {
-      iframeRef.current.srcdoc = content
-    }
-  }, [content, viewMode])
-
   if (viewMode === 'preview') {
     return (
       <iframe
-        ref={iframeRef}
         className="size-full border-0 bg-white"
-        sandbox="allow-scripts allow-same-origin"
+        // A preview is data, never application code.  An empty sandbox blocks
+        // scripts, same-origin access, navigation, forms, and downloads.
+        sandbox=""
+        srcDoc={content}
         title="HTML Preview"
       />
     )

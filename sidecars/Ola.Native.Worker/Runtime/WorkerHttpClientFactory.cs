@@ -17,7 +17,7 @@ internal static class WorkerHttpClientFactory
             UseProxy = true,
             AutomaticDecompression = DecompressionMethods.None
         };
-        var client = new HttpClient(handler, disposeHandler: true);
+        var client = new HttpClient(new ManagedModelHttpHandler(handler), disposeHandler: true);
         if (timeout.HasValue)
         {
             client.Timeout = timeout.Value;

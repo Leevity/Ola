@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "Введите сообщение...",
     "placeholderClarify": "Опишите вашу идею, и я буду продолжать исследовать, пока требования не будут ясны.",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "Последняя ошибка",
       "stackTrace": "След стека",
       "copy": "Копия",
-      "copied": "Копирован"
+      "copied": "Копирован",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

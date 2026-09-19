@@ -2,7 +2,15 @@ import { ipcMain, nativeImage } from 'electron'
 import { randomUUID } from 'crypto'
 import { join } from 'path'
 import { mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { homedir } from 'os'
+import { olaDataRoot } from '../lib/ola-data-root'
+import {
+  assertGeneratedImageSourcePath,
+  ensureGeneratedImagesDirectory,
+  validateGeneratedImageRunId
+} from '../lib/generated-image-path'
+import { authorizeGeneratedImageWorkspace } from './generated-image-workspace'
+import { getRegisteredWindowWorkspace, getTrustedWorkspaceRegistrationWindow } from '../window-ipc'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { encodeGif } from '../image/gif-encoder'
 import {
   decodeMessagePackPayload,
@@ -11,8 +19,6 @@ import {
 } from '../../shared/messagepack/binary-ipc'
 const IMAGE_CREATE_GIF_FROM_GRID = 'image:create-gif-from-grid'
 
-const GENERATED_IMAGES_DIR = 'ola'
-const GENERATED_IMAGES_SUBDIR = 'image'
 const GRID_SIZE = 768
 const GRID_COLUMNS = 3
 const GRID_ROWS = 3
@@ -56,10 +62,8 @@ interface ColorSwatch {
   blue: number
 }
 
-function getGeneratedImagesDir(): string {
-  const dir = join(homedir(), GENERATED_IMAGES_DIR, GENERATED_IMAGES_SUBDIR)
-  mkdirSync(dir, { recursive: true })
-  return dir
+function getGeneratedImagesDir(workspaceId: string): string {
+  return ensureGeneratedImagesDirectory(olaDataRoot(), workspaceId)
 }
 
 function toPersistedImageResult(
@@ -75,8 +79,12 @@ function toPersistedImageResult(
   }
 }
 
-function loadSourceBuffer(args: { filePath?: string; data?: string }): Buffer {
+function loadSourceBuffer(args: { filePath?: string; data?: string }, workspaceId: string): Buffer {
+  if (workspaceId !== 'local-personal' && typeof args.data === 'string' && args.data.trim()) {
+    return Buffer.from(args.data, 'base64')
+  }
   if (typeof args.filePath === 'string' && args.filePath.trim()) {
+    assertGeneratedImageSourcePath(workspaceId, getGeneratedImagesDir(workspaceId), args.filePath)
     return readFileSync(args.filePath)
   }
 
@@ -106,9 +114,9 @@ function normalizeGridImage(image: Electron.NativeImage): Electron.NativeImage {
   return image.resize({ width: GRID_SIZE, height: GRID_SIZE, quality: 'best' })
 }
 
-function buildOutputDir(runId?: string): string {
-  const segment = `${Date.now()}-${runId || randomUUID()}`
-  const dir = join(getGeneratedImagesDir(), `gif-grid-${segment}`)
+function buildOutputDir(workspaceId: string, runId?: string): string {
+  const segment = `${Date.now()}-${validateGeneratedImageRunId(runId) ?? randomUUID()}`
+  const dir = join(getGeneratedImagesDir(workspaceId), `gif-grid-${segment}`)
   mkdirSync(dir, { recursive: true })
   return dir
 }
@@ -516,6 +524,7 @@ function composeAlignedFrameBitmap(
 }
 
 type CreateGifFromGridArgs = {
+  workspaceId: string
   filePath?: string
   data?: string
   mediaType?: string
@@ -525,7 +534,7 @@ type CreateGifFromGridArgs = {
 
 async function handleCreateGifFromGrid(args: CreateGifFromGridArgs): Promise<unknown> {
   try {
-    const sourceBuffer = loadSourceBuffer(args)
+    const sourceBuffer = loadSourceBuffer(args, args.workspaceId)
     const sourceImage = nativeImage.createFromBuffer(sourceBuffer)
     if (sourceImage.isEmpty()) {
       return { success: false, error: 'Failed to decode generated image.' }
@@ -534,7 +543,7 @@ async function handleCreateGifFromGrid(args: CreateGifFromGridArgs): Promise<unk
     ensureSquareImage(sourceImage)
 
     const normalizedGrid = normalizeGridImage(sourceImage)
-    const outputDir = buildOutputDir(args.runId)
+    const outputDir = buildOutputDir(args.workspaceId, args.runId)
     const gridPng = normalizedGrid.toPNG()
     const grid = toPersistedImageResult(join(outputDir, 'grid.png'), gridPng, 'image/png')
 
@@ -633,8 +642,15 @@ async function handleCreateGifFromGrid(args: CreateGifFromGridArgs): Promise<unk
 export function registerImageGifHandlers(): void {
   ipcMain.handle(
     toMessagePackChannel(IMAGE_CREATE_GIF_FROM_GRID),
-    async (_event, bytes: Uint8Array) => {
+    async (event, bytes: Uint8Array) => {
       const args = decodeMessagePackPayload<CreateGifFromGridArgs>(bytes)
+      const window = getTrustedWorkspaceRegistrationWindow(event)
+      if (!window) throw new Error('GENERATED_IMAGE_SENDER_UNTRUSTED')
+      await authorizeGeneratedImageWorkspace(
+        args.workspaceId,
+        getRegisteredWindowWorkspace(window),
+        loadOfflineWorkspaceIds
+      )
       return encodeMessagePackPayload(await handleCreateGifFromGrid(args))
     }
   )

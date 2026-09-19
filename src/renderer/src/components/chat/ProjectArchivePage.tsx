@@ -7,6 +7,7 @@ import { Textarea } from '@renderer/components/ui/textarea'
 import { ChannelPanel } from '@renderer/components/settings/PluginPanel'
 import { AutoMemoryPanel } from '@renderer/components/memory/AutoMemoryPanel'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { cn } from '@renderer/lib/utils'
@@ -16,6 +17,8 @@ import {
   PROJECT_MEMORY_DIRNAME,
   getProjectMemoryCandidatePaths,
   joinFsPath,
+  projectMemoryHomePath,
+  resolveGlobalMemoryHomePath,
   resolveTextFileWithFallbackPaths,
   type ProjectMemoryPathSource
 } from '@renderer/lib/agent/memory-files'
@@ -202,9 +205,11 @@ export function ProjectArchivePage(): React.JSX.Element {
   const projects = useChatStore((state) => state.projects)
   const chatView = useUIStore((state) => state.chatView)
   const activeProject = projects.find((project) => project.id === activeProjectId) ?? null
+  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const viewMode = chatView === 'channels' ? 'channels' : 'archive'
   const loadChannels = useChannelStore((state) => state.loadChannels)
   const [memoryRootPath, setMemoryRootPath] = useState('')
+  const [loadedWorkspaceId, setLoadedWorkspaceId] = useState('')
   const [activeFileTab, setActiveFileTab] = useState<ProjectMemoryTabId>('agents')
   const [files, setFiles] = useState<Record<ProjectMemoryTabId, ProjectMemoryFileState>>(
     createInitialProjectMemoryFiles
@@ -266,6 +271,7 @@ export function ProjectArchivePage(): React.JSX.Element {
       setLoading(false)
       setError(null)
       setMemoryRootPath('')
+      setLoadedWorkspaceId('')
       setFiles(createInitialProjectMemoryFiles())
       return
     }
@@ -275,7 +281,14 @@ export function ProjectArchivePage(): React.JSX.Element {
 
     try {
       const today = new Date().toISOString().slice(0, 10)
-      const rootPath = joinFsPath(activeProject.workingFolder, PROJECT_MEMORY_DIRNAME)
+      const workspaceId = activeProject.workspaceId ?? activeWorkspaceId
+      const globalHomePath = await resolveGlobalMemoryHomePath(ipcClient, workspaceId)
+      const rootPath = projectMemoryHomePath(
+        activeProject.workingFolder,
+        workspaceId,
+        globalHomePath
+      )
+      if (!rootPath) throw new Error('Workspace memory home is unavailable')
       const descriptors = {
         agents: { filename: 'AGENTS.md', segments: ['AGENTS.md'] },
         soul: { filename: 'SOUL.md', segments: ['SOUL.md'] },
@@ -287,10 +300,13 @@ export function ProjectArchivePage(): React.JSX.Element {
       const nextEntries = await Promise.all(
         (Object.keys(descriptors) as ProjectMemoryTabId[]).map(async (id) => {
           const descriptor = descriptors[id]
-          const { preferredPath, fallbackPath } = getProjectMemoryCandidatePaths(
-            activeProject.workingFolder!,
-            ...descriptor.segments
-          )
+          const { preferredPath, fallbackPath } =
+            id === 'agents' || workspaceId === 'local-personal'
+              ? getProjectMemoryCandidatePaths(activeProject.workingFolder!, ...descriptor.segments)
+              : {
+                  preferredPath: joinFsPath(rootPath, ...descriptor.segments),
+                  fallbackPath: joinFsPath(rootPath, ...descriptor.segments)
+                }
           const resolved = await resolveTextFileWithFallbackPaths({
             readFile: readProjectTextFile,
             preferredPath,
@@ -322,6 +338,7 @@ export function ProjectArchivePage(): React.JSX.Element {
       )
 
       setMemoryRootPath(rootPath)
+      setLoadedWorkspaceId(workspaceId)
       setFiles((prev) => {
         const updated = { ...prev }
         for (const [id, entry] of nextEntries) {
@@ -344,7 +361,7 @@ export function ProjectArchivePage(): React.JSX.Element {
     } finally {
       setLoading(false)
     }
-  }, [activeProject, readProjectTextFile, t])
+  }, [activeProject, activeWorkspaceId, readProjectTextFile, t])
 
   useEffect(() => {
     if (viewMode !== 'archive') return
@@ -381,6 +398,7 @@ export function ProjectArchivePage(): React.JSX.Element {
 
   const handleSave = useCallback(async () => {
     if (!activeProject || !activeFile.path) return
+    if (loadedWorkspaceId !== (activeProject.workspaceId ?? activeWorkspaceId)) return
 
     setSaving(true)
     setError(null)
@@ -424,7 +442,15 @@ export function ProjectArchivePage(): React.JSX.Element {
     } finally {
       setSaving(false)
     }
-  }, [activeFile.draftContent, activeFile.path, activeFileTab, activeProject, t])
+  }, [
+    activeFile.draftContent,
+    activeFile.path,
+    activeFileTab,
+    activeProject,
+    activeWorkspaceId,
+    loadedWorkspaceId,
+    t
+  ])
 
   if (!activeProject) {
     return (
@@ -588,15 +614,21 @@ export function ProjectArchivePage(): React.JSX.Element {
                       </Button>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {t('projectArchive.effectiveHint', {
-                        defaultValue:
-                          'Prefers .agents in the working directory; if old files still exist at the working directory root, they will also be read and written back compatibly.'
-                      })}
+                      {activeWorkspaceId === 'local-personal'
+                        ? t('projectArchive.effectiveHint', {
+                            defaultValue:
+                              'Prefers .agents in the working directory; if old files still exist at the working directory root, they will also be read and written back compatibly.'
+                          })
+                        : t('projectArchive.teamMemoryHint', {
+                            defaultValue:
+                              'Team memory is stored in a workspace-specific folder. AGENTS.md remains shared by this project.'
+                          })}
                     </p>
                   </section>
 
                   <AutoMemoryPanel
                     variant="project"
+                    projectId={activeProject.id}
                     projectRootPath={activeProject.workingFolder}
                     sshConnectionId={activeProject.sshConnectionId}
                   />

@@ -1,15 +1,25 @@
+import { canPersistSecrets } from '../credentials/secure-storage-policy'
+import { publicWorkspaceDirectory, publicModelDirectory } from '../../shared/workspace-directory'
 import { app, safeStorage, shell } from 'electron'
-import { mkdir, readFile, rename, writeFile } from 'fs/promises'
+import { mkdir, readFile, rename, writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { createHash, createPrivateKey, randomBytes, randomUUID, sign } from 'crypto'
 import { setRemoteControlAllowed } from './authorization-state'
+import { notifyRemoteAccountCleared, notifyWorkspaceDirectoryChanged } from './account-lifecycle'
 import { desktopMeshCapabilities, desktopMeshPlatform, loadDesktopMeshIdentity } from './mesh-node'
+import {
+  cachedWorkspaceExpiresAt,
+  cachedWorkspaceDirectory,
+  isOfflineTransportError,
+  type OfflineWorkspaceSnapshot
+} from './offline-workspace-cache'
 
 type RemoteAuthState = {
   apiBaseUrl: string
   token: string
   account: Record<string, unknown>
   device: Record<string, unknown> | null
+  workspaceDirectoryCache?: OfflineWorkspaceSnapshot
 }
 
 export type RemoteAccountOperation =
@@ -29,7 +39,8 @@ export type RemoteAccountOperation =
   | 'mesh-capability-ticket'
   | 'mesh-event-publish'
   | 'mesh-event-list'
-  | 'model-config'
+  | 'workspace-list'
+  | 'workspace-model-resources'
   | 'device-signaling-token'
   | 'pairing-create'
   | 'pairing-revoke'
@@ -43,12 +54,60 @@ export type RemoteAccountRequest = {
 }
 
 let memoryState: RemoteAuthState | null = null
+let authStateLoaded = false
+let authStateRevision = 0
+let authStateWrite: Promise<void> = Promise.resolve()
+let modelAuthorization = new AbortController()
 let pendingOAuthState: {
   apiBaseUrl: string
   state: string
   verifier: string
   createdAt: number
 } | null = null
+
+const DEFAULT_REMOTE_ACCOUNT_API_BASE_URL = 'https://lbxai.cn'
+const LEGACY_DEFAULT_REMOTE_ACCOUNT_API_BASE_URL = 'http://100.64.0.6:7300'
+const MANAGED_MODEL_ENDPOINTS = new Set([
+  'chat/completions',
+  'responses',
+  'images/generations',
+  'images/edits',
+  'audio/speech',
+  'audio/transcriptions',
+  'embeddings'
+])
+
+class RemoteApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message)
+  }
+}
+
+async function revokeCachedWorkspaceDirectoryOnDenial(
+  state: RemoteAuthState,
+  error: unknown
+): Promise<void> {
+  if (
+    error instanceof RemoteApiError &&
+    (error.status === 401 || error.status === 403) &&
+    memoryState === state
+  ) {
+    if (state.workspaceDirectoryCache) {
+      delete state.workspaceDirectoryCache
+      await saveState(state, false)
+    }
+    await notifyWorkspaceDirectoryChanged(new Set())
+  }
+}
+
+function migrateLegacyRemoteApiBaseUrl(apiBaseUrl: string): string {
+  return apiBaseUrl.replace(/\/$/, '') === LEGACY_DEFAULT_REMOTE_ACCOUNT_API_BASE_URL
+    ? DEFAULT_REMOTE_ACCOUNT_API_BASE_URL
+    : apiBaseUrl
+}
 
 function vaultPath(): string {
   return join(app.getPath('userData'), 'remote-auth.bin')
@@ -60,7 +119,7 @@ function pendingOAuthPath(): string {
 
 async function loadPendingOAuthState(): Promise<typeof pendingOAuthState> {
   if (pendingOAuthState) return pendingOAuthState
-  if (!safeStorage.isEncryptionAvailable()) return null
+  if (!canPersistSecrets(safeStorage)) return null
   try {
     const encrypted = await readFile(pendingOAuthPath())
     pendingOAuthState = JSON.parse(safeStorage.decryptString(encrypted))
@@ -73,7 +132,12 @@ async function loadPendingOAuthState(): Promise<typeof pendingOAuthState> {
 
 async function savePendingOAuthState(state: typeof pendingOAuthState): Promise<void> {
   pendingOAuthState = state
-  if (!safeStorage.isEncryptionAvailable()) return
+  if (!state || !canPersistSecrets(safeStorage)) {
+    await unlink(pendingOAuthPath()).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+    return
+  }
   await mkdir(app.getPath('userData'), { recursive: true })
   const encrypted = safeStorage.encryptString(JSON.stringify(state))
   await writeFile(pendingOAuthPath(), encrypted, { mode: 0o600 })
@@ -86,6 +150,8 @@ function validateBaseUrl(value: string): string {
   const tailscaleDevHost =
     !app.isPackaged &&
     /^100\.(6[4-9]|[78]\d|9\d|1[01]\d|12[0-7])\.(?:\d{1,3})\.(?:\d{1,3})$/.test(url.hostname)
+  if (url.username || url.password || url.hash || url.search)
+    throw new Error('Invalid remote API URL')
   if (
     url.protocol !== 'https:' &&
     !(local && url.protocol === 'http:') &&
@@ -105,11 +171,18 @@ function oauthWebBaseUrl(apiBaseUrl: string): string {
 }
 
 async function loadState(): Promise<RemoteAuthState | null> {
-  if (memoryState) return memoryState
-  if (!safeStorage.isEncryptionAvailable()) return null
+  if (authStateLoaded) return memoryState
+  if (!canPersistSecrets(safeStorage)) return null
   try {
     const encrypted = await readFile(vaultPath())
-    memoryState = JSON.parse(safeStorage.decryptString(encrypted)) as RemoteAuthState
+    memoryState = JSON.parse(safeStorage.decryptString(encrypted)) as RemoteAuthState | null
+    authStateLoaded = true
+    if (!memoryState) return null
+    const migratedApiBaseUrl = migrateLegacyRemoteApiBaseUrl(memoryState.apiBaseUrl)
+    if (migratedApiBaseUrl !== memoryState.apiBaseUrl) {
+      memoryState.apiBaseUrl = migratedApiBaseUrl
+      await saveState(memoryState)
+    }
     return memoryState
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
@@ -117,30 +190,120 @@ async function loadState(): Promise<RemoteAuthState | null> {
   }
 }
 
-async function saveState(state: RemoteAuthState | null): Promise<void> {
+async function saveState(
+  state: RemoteAuthState | null,
+  revokeModelAuthorization = true
+): Promise<void> {
+  const previousAccess = memoryState
+  const accessChanged = Boolean(
+    previousAccess?.token &&
+    (!state ||
+      previousAccess.token !== state.token ||
+      previousAccess.apiBaseUrl !== state.apiBaseUrl)
+  )
+  if (revokeModelAuthorization) {
+    modelAuthorization.abort()
+    modelAuthorization = new AbortController()
+  }
   memoryState = state
-  if (!safeStorage.isEncryptionAvailable()) return
-  const target = vaultPath()
-  const temporary = `${target}.${randomUUID()}.tmp`
-  await mkdir(app.getPath('userData'), { recursive: true })
-  const encrypted = safeStorage.encryptString(JSON.stringify(state))
-  await writeFile(temporary, encrypted, { mode: 0o600 })
-  await rename(temporary, target)
+  authStateLoaded = true
+  const revision = ++authStateRevision
+  const write = authStateWrite
+    .catch(() => undefined)
+    .then(async () => {
+      if (revision !== authStateRevision) return
+      if (!state || !canPersistSecrets(safeStorage)) {
+        await unlink(vaultPath()).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== 'ENOENT') throw error
+        })
+        return
+      }
+      const target = vaultPath()
+      const temporary = `${target}.${randomUUID()}.tmp`
+      await mkdir(app.getPath('userData'), { recursive: true })
+      const encrypted = safeStorage.encryptString(JSON.stringify(state))
+      try {
+        await writeFile(temporary, encrypted, { mode: 0o600 })
+        if (revision === authStateRevision) await rename(temporary, target)
+      } finally {
+        await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== 'ENOENT') throw error
+        })
+      }
+    })
+  authStateWrite = write
+  await write
+  if (accessChanged) await notifyRemoteAccountCleared()
+}
+
+async function fetchWorkspaceDirectory(
+  state: RemoteAuthState
+): Promise<ReturnType<typeof publicWorkspaceDirectory>> {
+  let directory: ReturnType<typeof publicWorkspaceDirectory>
+  try {
+    directory = publicWorkspaceDirectory(
+      await apiRequest(
+        validateBaseUrl(state.apiBaseUrl),
+        '/api/account/workspaces',
+        undefined,
+        state.token,
+        undefined,
+        5_000
+      )
+    )
+  } catch (error) {
+    await revokeCachedWorkspaceDirectoryOnDenial(state, error)
+    throw error
+  }
+  if (memoryState !== state) throw new Error('Ola account changed while loading workspaces')
+  if (typeof state.account.id === 'string') {
+    state.workspaceDirectoryCache = {
+      accountId: state.account.id,
+      apiBaseUrl: state.apiBaseUrl,
+      fetchedAt: Date.now(),
+      directory
+    }
+    await saveState(state, false)
+  }
+  return directory
+}
+
+async function offlineCapableWorkspaceDirectory(
+  state: RemoteAuthState
+): Promise<ReturnType<typeof publicWorkspaceDirectory> & { offline?: boolean }> {
+  try {
+    return await fetchWorkspaceDirectory(state)
+  } catch (error) {
+    if (!isOfflineTransportError(error)) throw error
+    if (memoryState !== state) throw new Error('Ola account changed while loading workspaces')
+    const cached = cachedWorkspaceDirectory(
+      state.account.id,
+      state.apiBaseUrl,
+      state.workspaceDirectoryCache
+    )
+    if (!cached) throw error
+    return { ...cached, offline: true }
+  }
 }
 
 async function apiRequest<T>(
   baseUrl: string,
   path: string,
   body: Record<string, unknown> | undefined,
-  token?: string
+  token?: string,
+  deviceToken?: string,
+  timeoutMs = 30_000
 ): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
     method: body ? 'POST' : 'GET',
     headers: {
       'content-type': 'application/json',
-      ...(token ? { authorization: `Bearer ${token}` } : {})
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      ...(deviceToken ? { 'x-ola-device-token': deviceToken } : {})
     },
-    body: body ? JSON.stringify(body) : undefined
+    body: body ? JSON.stringify(body) : undefined,
+    redirect: 'error',
+    signal: AbortSignal.timeout(timeoutMs)
   })
   const text = await response.text()
   let result: Record<string, unknown> = {}
@@ -148,13 +311,14 @@ async function apiRequest<T>(
     try {
       result = JSON.parse(text) as Record<string, unknown>
     } catch {
-      throw new Error(
-        `Remote API returned invalid JSON (${response.status}) at ${path}: ${text.slice(0, 180)}`
-      )
+      throw new Error(`Remote API returned invalid JSON (${response.status}) at ${path}`)
     }
   }
   if (!response.ok)
-    throw new Error(String(result.error || response.statusText || 'Remote API failed'))
+    throw new RemoteApiError(
+      String(result.error || response.statusText || 'Remote API failed'),
+      response.status
+    )
   return result as T
 }
 
@@ -183,7 +347,8 @@ const REMOTE_ACCOUNT_OPERATIONS = new Set<RemoteAccountOperation>([
   'mesh-capability-ticket',
   'mesh-event-publish',
   'mesh-event-list',
-  'model-config',
+  'workspace-list',
+  'workspace-model-resources',
   'device-signaling-token',
   'pairing-create',
   'pairing-revoke',
@@ -243,7 +408,8 @@ function validateAccountRequest(request: RemoteAccountRequest): Record<string, u
       'payload'
     ],
     'mesh-event-list': ['targetNodeId', 'after'],
-    'model-config': [],
+    'workspace-list': [],
+    'workspace-model-resources': ['workspaceId'],
     'device-signaling-token': ['deviceId'],
     'pairing-create': ['deviceId'],
     'pairing-revoke': ['deviceId'],
@@ -324,16 +490,34 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
   }
 
   const state = await loadState()
-  if (request.operation === 'model-config') {
-    if (!state?.token) throw new Error('Login is required before syncing model configuration')
-    return apiRequest(apiBaseUrl, '/api/account/model-config', {}, state.token)
+  if (request.operation === 'workspace-list') {
+    if (!state?.token || state.apiBaseUrl !== apiBaseUrl)
+      throw new Error('Login is required before loading Ola workspaces')
+    const directory = await offlineCapableWorkspaceDirectory(state)
+    await notifyWorkspaceDirectoryChanged(
+      new Set(directory.workspaces.map((workspace) => workspace.id))
+    )
+    return directory
+  }
+  if (request.operation === 'workspace-model-resources') {
+    if (!state?.token || state.apiBaseUrl !== apiBaseUrl)
+      throw new Error('Login is required before loading Ola model resources')
+    const workspaceId = requiredString(payload, 'workspaceId')
+    return publicModelDirectory(
+      await apiRequest(
+        apiBaseUrl,
+        `/api/account/workspaces/${encodeURIComponent(workspaceId)}/model-resources`,
+        undefined,
+        state.token
+      )
+    )
   }
   if (request.operation === 'logout') {
     setRemoteControlAllowed(false)
+    await saveState(null)
     if (state?.token) {
       await apiRequest(apiBaseUrl, '/api/auth/logout', {}, state.token).catch(() => undefined)
     }
-    await saveState(null)
     return { success: true }
   }
   if (request.operation === 'hydrate' && (!state?.token || state.apiBaseUrl !== apiBaseUrl)) {
@@ -342,15 +526,26 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
   if (!state?.token || state.apiBaseUrl !== apiBaseUrl) throw new Error('Remote login is required')
 
   if (request.operation === 'hydrate') {
-    const result = await apiRequest<{ account: Record<string, unknown> }>(
-      apiBaseUrl,
-      '/api/auth/me',
-      undefined,
-      state.token
-    )
-    state.account = result.account
-    await saveState(state)
-    return { account: state.account, device: state.device }
+    try {
+      const result = await apiRequest<{ account: Record<string, unknown> }>(
+        apiBaseUrl,
+        '/api/auth/me',
+        undefined,
+        state.token
+      )
+      state.account = result.account
+      await saveState(state)
+      return { account: state.account, device: state.device }
+    } catch (error) {
+      await revokeCachedWorkspaceDirectoryOnDenial(state, error)
+      if (
+        !isOfflineTransportError(error) ||
+        memoryState !== state ||
+        !cachedWorkspaceDirectory(state.account.id, state.apiBaseUrl, state.workspaceDirectoryCache)
+      )
+        throw error
+      return { account: state.account, device: state.device, offline: true }
+    }
   }
   if (request.operation === 'device-register') {
     setRemoteControlAllowed(false)
@@ -369,6 +564,12 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     if (!state.device || state.device.id !== deviceID)
       throw new Error('Device registration is required')
     const identity = await loadDesktopMeshIdentity()
+    const deviceToken = await apiRequest<{ token: string }>(
+      apiBaseUrl,
+      `/api/devices/${encodeURIComponent(deviceID)}/signaling-token`,
+      {},
+      state.token
+    )
     const registration = {
       deviceId: deviceID,
       platform: desktopMeshPlatform(),
@@ -391,7 +592,8 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
       apiBaseUrl,
       '/api/mesh/v1/nodes/register',
       { ...registration, proof },
-      state.token
+      state.token,
+      deviceToken.token
     )
   }
   if (request.operation === 'mesh-node-list') {
@@ -440,18 +642,44 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     if (!payload.payload || typeof payload.payload !== 'object' || Array.isArray(payload.payload)) {
       throw new Error('event payload must be an object')
     }
+    const identity = await loadDesktopMeshIdentity()
+    const signedEvent = {
+      eventId: eventID,
+      subjectNodeId: subjectNodeID,
+      targetNodeId: targetNodeID,
+      sessionId: sessionID,
+      sequence,
+      type,
+      payload: payload.payload
+    }
+    const payloadDigest = createHash('sha256').update(JSON.stringify(payload.payload)).digest('hex')
+    const signingInput = [
+      'v0alpha1',
+      eventID,
+      subjectNodeID,
+      targetNodeID,
+      sessionID,
+      String(sequence),
+      type,
+      payloadDigest
+    ].join('\n')
+    const digest = createHash('sha256').update(signingInput).digest()
+    const signature = sign(
+      null,
+      digest,
+      createPrivateKey({
+        key: Buffer.from(identity.privateKey, 'base64url'),
+        format: 'der',
+        type: 'pkcs8'
+      })
+    ).toString('base64url')
     return apiRequest(
       apiBaseUrl,
       '/api/mesh/v1/events',
       {
         ticket,
-        eventId: eventID,
-        subjectNodeId: subjectNodeID,
-        targetNodeId: targetNodeID,
-        sessionId: sessionID,
-        sequence,
-        type,
-        payload: payload.payload
+        ...signedEvent,
+        signature
       },
       state.token
     )
@@ -460,11 +688,21 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     const targetNodeID = requiredString(payload, 'targetNodeId')
     const after = payload.after == null ? 0 : payload.after
     if (!Number.isInteger(after) || Number(after) < 0) throw new Error('invalid event cursor')
+    if (!state.device?.id || targetNodeID !== `node-${state.device.id}`) {
+      throw new Error('Mesh events can only be read by their target device')
+    }
+    const deviceToken = await apiRequest<{ token: string }>(
+      apiBaseUrl,
+      `/api/devices/${encodeURIComponent(String(state.device.id))}/signaling-token`,
+      {},
+      state.token
+    )
     return apiRequest(
       apiBaseUrl,
       `/api/mesh/v1/events?targetNodeId=${encodeURIComponent(targetNodeID)}&after=${Number(after)}`,
       undefined,
-      state.token
+      state.token,
+      deviceToken.token
     )
   }
   if (request.operation === 'device-list')
@@ -528,4 +766,107 @@ export async function handleRemoteOAuthCallback(callbackUrl: string): Promise<un
     operation: 'oauth-callback',
     payload: { callbackUrl }
   })
+}
+
+// This is deliberately main-only: account tokens and model tickets never cross IPC.
+export async function openManagedModelRequest(input: {
+  workspaceId: string
+  resourceId: string
+  sessionId: string
+  endpoint: string
+  body: Uint8Array
+  contentType: string
+  signal: AbortSignal
+}): Promise<Response> {
+  // This function is the last capability boundary before a short-lived
+  // account ticket is attached. Do not rely on a renderer, sidecar, or future
+  // TS runtime adapter to have already constrained the endpoint or payload.
+  if (!MANAGED_MODEL_ENDPOINTS.has(input.endpoint))
+    throw new Error('Unsupported Ola model endpoint')
+  if (input.body.byteLength > 32 * 1024 * 1024)
+    throw new Error('Ola model request exceeds the size limit')
+  const state = await loadState()
+  if (!state?.token || !state.device?.id)
+    throw new Error('Sign in to Ola and register this device, or select a local model.')
+  const baseUrl = validateBaseUrl(state.apiBaseUrl)
+  const signal = AbortSignal.any([
+    input.signal,
+    modelAuthorization.signal,
+    AbortSignal.timeout(10 * 60_000)
+  ])
+  const ticketResponse = await fetch(`${baseUrl}/api/account/model-access-ticket`, {
+    method: 'POST',
+    redirect: 'error',
+    signal,
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${state.token}` },
+    body: JSON.stringify({
+      workspaceId: input.workspaceId,
+      resourceId: input.resourceId,
+      sessionId: input.sessionId,
+      deviceId: state.device.id
+    })
+  })
+  if (!ticketResponse.ok)
+    throw new Error(
+      `Ola model authorization unavailable (${ticketResponse.status}). Refresh your workspace or select a local model.`
+    )
+  const ticket = (await ticketResponse.json()) as { ticket?: unknown }
+  if (typeof ticket.ticket !== 'string' || !ticket.ticket || ticket.ticket.length > 16384)
+    throw new Error('Ola returned an invalid model ticket')
+  signal.throwIfAborted()
+  const response = await fetch(`${baseUrl}/v1/${input.endpoint}`, {
+    method: 'POST',
+    redirect: 'error',
+    signal,
+    headers: { 'content-type': input.contentType, authorization: `Bearer ${ticket.ticket}` },
+    body: Buffer.from(input.body)
+  })
+  if (!response.ok) {
+    await response.body?.cancel()
+    throw new Error(
+      `Ola model unavailable (${response.status}). Refresh your workspace or select a local model.`
+    )
+  }
+  return response
+}
+
+/** Main-only public metadata lookup; it never returns account credentials or tickets. */
+export async function loadManagedModelResources(workspaceId: string): Promise<unknown[]> {
+  if (!workspaceId || workspaceId.length > 1024) throw new Error('Invalid Ola workspace')
+  const state = await loadState()
+  if (!state?.token) throw new Error('Sign in to Ola and select a local model.')
+  const directory = publicModelDirectory(
+    await apiRequest(
+      validateBaseUrl(state.apiBaseUrl),
+      `/api/account/workspaces/${encodeURIComponent(workspaceId)}/model-resources`,
+      undefined,
+      state.token
+    )
+  )
+  return directory.resources
+}
+
+/** Main-only workspace authorization directory for runtime hosts. */
+export async function loadManagedWorkspaceIds(): Promise<Set<string>> {
+  const state = await loadState()
+  if (!state?.token) return new Set()
+  const directory = await fetchWorkspaceDirectory(state)
+  return new Set(directory.workspaces.map((workspace) => workspace.id))
+}
+
+/** Local-only workspace data may use a recent encrypted, account-bound directory while offline. */
+export async function loadOfflineWorkspaceIds(): Promise<Set<string>> {
+  const state = await loadState()
+  if (!state?.token) return new Set()
+  const directory = await offlineCapableWorkspaceDirectory(state)
+  const ids = new Set(directory.workspaces.map((workspace) => workspace.id))
+  await notifyWorkspaceDirectoryChanged(ids)
+  return ids
+}
+
+/** Main-only timestamp for proactively expiring offline team authorization. */
+export async function loadOfflineWorkspaceExpiresAt(): Promise<number | null> {
+  const state = await loadState()
+  if (!state?.token) return null
+  return cachedWorkspaceExpiresAt(state.account.id, state.apiBaseUrl, state.workspaceDirectoryCache)
 }

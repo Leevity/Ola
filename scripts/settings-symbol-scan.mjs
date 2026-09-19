@@ -1,25 +1,47 @@
+import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const root = path.resolve(import.meta.dirname, '..')
-const uiStore = await readFile(path.join(root, 'src/renderer/src/stores/ui-store.ts'), 'utf8')
-const settingsPage = await readFile(
-  path.join(root, 'src/renderer/src/components/settings/SettingsPage.tsx'),
-  'utf8'
-)
-const union = uiStore.match(/export type SettingsTab =([\s\S]*?)\n\nexport type/)
-const ids = [...(union?.[1]?.matchAll(/'([^']+)'/g) ?? [])].map((match) => match[1])
-const panelMap = settingsPage.match(/const panelMap:[\s\S]*?\n}\n/)?.[0] ?? ''
-const missingPanels = ids.filter((id) => !panelMap.includes(`\n  ${id}:`))
-const menuIds = [...settingsPage.matchAll(/\bid:\s*'([^']+)'/g)].map((match) => match[1])
-const redirectedTabs = new Set(['wiki', 'extension'])
-const missingRoutes = ids.filter((id) => !menuIds.includes(id) && !redirectedTabs.has(id))
+const [registry, resolver, settingsPage] = await Promise.all([
+  readFile(path.join(root, 'src/renderer/src/components/settings/settings-registry.ts'), 'utf8'),
+  readFile(
+    path.join(root, 'src/renderer/src/components/settings/settings-panel-resolver.tsx'),
+    'utf8'
+  ),
+  readFile(path.join(root, 'src/renderer/src/components/settings/SettingsPage.tsx'), 'utf8')
+])
 
-console.log(
-  JSON.stringify(
-    { ids, menuIds, redirectedTabs: [...redirectedTabs], missingPanels, missingRoutes },
-    null,
-    2
-  )
+assert.ok(registry.includes('SETTINGS_REGISTRY'), 'settings registry is missing')
+assert.ok(registry.includes('SETTINGS_SECTIONS'), 'settings sections are missing')
+assert.ok(
+  !settingsPage.includes('const menuGroupDefs'),
+  'SettingsPage must not own menu definitions'
 )
-if (missingPanels.length > 0 || missingRoutes.length > 0) process.exitCode = 1
+assert.ok(
+  !settingsPage.includes('normalizeSettingsTab'),
+  'SettingsPage must not own legacy aliases'
+)
+assert.ok(!settingsPage.includes('const panelMap'), 'SettingsPage must not own panel dispatch')
+assert.ok(settingsPage.includes('getPagesForSection'), 'menu must be registry-driven')
+assert.ok(
+  settingsPage.includes('renderSettingsPanel'),
+  'panel dispatch must use the shared resolver'
+)
+assert.ok(
+  resolver.includes('EXTERNAL_PANEL_BINDINGS'),
+  'settings panel resolver is missing bindings'
+)
+assert.ok(!registry.includes("id: 'aiCoding'"), 'disabled AI Coding cannot be visible')
+assert.ok(!registry.includes("id: 'hooks'"), 'disabled Hooks cannot be visible')
+for (const section of [
+  'common',
+  'models',
+  'execution',
+  'integrations',
+  'personalization',
+  'advanced'
+]) {
+  assert.ok(registry.includes(`id: '${section}'`), `missing settings section: ${section}`)
+}
+console.log('settings registry verification passed')

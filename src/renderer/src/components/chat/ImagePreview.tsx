@@ -2,6 +2,7 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { X, Download, Copy, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import {
@@ -91,6 +92,7 @@ export function ImagePreview({
   filePath,
   actions = []
 }: ImagePreviewProps): React.JSX.Element {
+  const { t } = useTranslation('chat')
   const [isOpen, setIsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const displaySrc = useImageDisplaySrc(src, filePath)
@@ -178,10 +180,10 @@ export function ImagePreview({
         document.body.removeChild(a)
       }
 
-      toast.success('Image downloaded')
+      toast.success(t('input.imageDownloaded'))
     } catch (error) {
       console.error('Download failed:', error)
-      toast.error('Failed to download image')
+      toast.error(t('input.imageDownloadFailed'))
     }
   }
 
@@ -213,11 +215,11 @@ export function ImagePreview({
       if (result.error) throw new Error(result.error)
 
       setCopied(true)
-      toast.success('Image copied to clipboard')
+      toast.success(t('input.imageCopied'))
       setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       console.error('Copy failed:', error)
-      toast.error('Failed to copy image. Please try downloading instead.')
+      toast.error(t('input.imageCopyFailed'))
     }
   }
 

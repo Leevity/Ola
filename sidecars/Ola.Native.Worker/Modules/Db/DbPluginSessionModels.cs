@@ -25,6 +25,9 @@ internal sealed class PluginProjectRow
 
     [JsonPropertyName("updated_at")]
     public long UpdatedAt { get; set; }
+
+    [JsonPropertyName("workspace_id")]
+    public string WorkspaceId { get; set; } = "local-personal";
 }
 
 internal sealed class PluginSessionRow

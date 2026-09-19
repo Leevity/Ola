@@ -1,3 +1,6 @@
+import { useWorkspaceModelRoute } from '@renderer/hooks/use-workspace-models'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { workspaceModelProviders } from '@renderer/lib/workspace-models'
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useShallow } from 'zustand/react/shallow'
 import {
@@ -303,9 +306,8 @@ function selectModel(
         .updateChannel(session.pluginId, { providerId: pid, model: modelId })
     }
   } else {
-    const providerStore = useProviderStore.getState()
-    if (pid !== providerStore.activeProviderId) providerStore.setActiveProvider(pid)
-    providerStore.setActiveModel(modelId)
+    const workspace = useWorkspaceStore.getState()
+    workspace.setModelSelection(workspace.activeWorkspaceId, { providerId: pid, modelId })
     useSettingsStore.getState().updateSettings({ mainModelSelectionMode: 'manual' })
   }
   setOpen(false)
@@ -695,23 +697,33 @@ export function ModelSwitcher({
   const autoModelRef = useRef<HTMLButtonElement>(null)
   const activeModelRef = useRef<HTMLButtonElement>(null)
   const hasAutoScrolledToSelectionRef = useRef(false)
-  const activeProviderId = useProviderStore((s) => s.activeProviderId)
-  const activeModelId = useProviderStore((s) => s.activeModelId)
-  const activeFastProviderId = useProviderStore((s) => s.activeFastProviderId)
-  const activeFastModelId = useProviderStore((s) => s.activeFastModelId)
-  const providers = useProviderStore((s) => s.providers)
-  const setActiveFastProvider = useProviderStore((s) => s.setActiveFastProvider)
-  const setActiveFastModel = useProviderStore((s) => s.setActiveFastModel)
-  const fastSelection = useProviderStore(
-    useShallow((s) => {
-      if (!isFastRoute) return { providerId: null as string | null, modelId: '' }
-      const config = s.getFastProviderConfig()
-      return {
-        providerId: config?.providerId ?? null,
-        modelId: config?.model ?? ''
-      }
-    })
+  const localActiveProviderId = useProviderStore((s) => s.activeProviderId)
+  const localActiveModelId = useProviderStore((s) => s.activeModelId)
+  const fastRoute = useWorkspaceModelRoute('fast')
+  const activeFastProviderId = fastRoute.providerId
+  const activeFastModelId = fastRoute.modelId
+  const localProviders = useProviderStore((s) => s.providers)
+  const workspaceState = useWorkspaceStore()
+  const selection = workspaceState.getModelSelection(workspaceState.activeWorkspaceId)
+  const activeProviderId = selection?.providerId ?? localActiveProviderId
+  const activeModelId = selection?.modelId ?? localActiveModelId
+  const providers = useMemo(
+    () => [
+      ...localProviders.map((provider) => ({
+        ...provider,
+        name: `${t('sidebar.localModelSource')} · ${provider.name}`
+      })),
+      ...workspaceModelProviders(workspaceState)
+    ],
+    [localProviders, workspaceState, t]
   )
+  const setActiveFastProvider = fastRoute.setProvider
+  const setActiveFastModel = fastRoute.setModel
+  const fastConfig = isFastRoute ? useProviderStore.getState().getFastProviderConfig() : null
+  const fastSelection = {
+    providerId: fastConfig?.providerId ?? null,
+    modelId: fastConfig?.model ?? ''
+  }
   const quotaByKey = useQuotaStore((s) => s.quotaByKey)
   const fallbackActiveSessionId = useChatStore((s) => s.activeSessionId)
   const activeSessionId = sessionId !== undefined ? sessionId : fallbackActiveSessionId

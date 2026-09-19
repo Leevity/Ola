@@ -3,6 +3,11 @@ import { readFile } from 'node:fs/promises'
 
 const filesystem = await readFile('src/main/ipc/fs-handlers.ts', 'utf8')
 const shell = await readFile('src/main/ipc/shell-handlers.ts', 'utf8')
+const sidecarManager = await readFile('src/main/ipc/sidecar-manager.ts', 'utf8')
+const codeCompatibleExecutor = await readFile(
+  'sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeCodeCompatibleExecutor.cs',
+  'utf8'
+)
 const packageJson = await readFile('package.json', 'utf8')
 
 assert.match(
@@ -39,8 +44,12 @@ assert.match(shell, /function registerTrustedShellMessagePackHandler<TArgs>/)
 assert.match(shell, /Unauthorized shell IPC sender/)
 assert.match(shell, /registerTrustedShellMessagePackHandler<ShellExecArgs>\('shell:exec'/)
 assert.match(shell, /registerTrustedShellMessagePackHandler<string>\('shell:trashPath'/)
-assert.match(shell, /runningShellProcesses\.get\(execId\)\?\.ownerWindowId/)
-assert.match(shell, /BrowserWindow\.fromId\(ownerWindowId\)/)
+// Shell is now Main-owned. Validate the same ownership boundary at the
+// direct forwarding and abort-registration points instead of requiring the
+// removed Native Worker event relay.
+assert.match(shell, /safeSendMessagePackToWindow\(ownerWindow, 'shell:output'/)
+assert.match(shell, /registerAbort: \(abort\) =>/)
+assert.match(shell, /ownerWindowId: ownerWindow\.id/)
 assert.doesNotMatch(shell, /for \(const targetWindow of BrowserWindow\.getAllWindows\(\)\)/)
 assert.doesNotMatch(
   shell,
@@ -49,6 +58,11 @@ assert.doesNotMatch(
 assert.match(shell, /running\.ownerWindowId !== ownerWindow\.id/)
 assert.match(shell, /if \(execId && runningShellProcesses\.has\(execId\)\)/)
 assert.match(shell, /if \(!isTrustedShellIpcSender\(event\)\) return/)
+assert.match(sidecarManager, /function nativeCommandApproval/)
+assert.match(sidecarManager, /confirmNativeCommandApproval/)
+assert.match(sidecarManager, /Native command confirmation was declined/)
+assert.match(sidecarManager, /buttons: \['Cancel', 'Run command'\]/)
+assert.doesNotMatch(codeCompatibleExecutor, /-ExecutionPolicy[\s\S]{0,80}Bypass/)
 
 assert.match(packageJson, /"verify:fs-shell-ipc-authorization"/)
 assert.match(packageJson, /npm run verify:fs-shell-ipc-authorization/)

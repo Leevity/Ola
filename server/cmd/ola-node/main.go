@@ -1,13 +1,11 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -33,7 +31,6 @@ func (value *capabilitiesFlag) Set(raw string) error {
 func main() {
 	var apiURL, token, deviceID, statePath, version string
 	var watch bool
-	var enableShell bool
 	var capabilities capabilitiesFlag
 	defaultState := filepath.Join(userHome(), ".ola", "node-identity.json")
 	flag.StringVar(&apiURL, "api", envOr("OLA_API_URL", "https://localhost:7300"), "Ola control plane URL")
@@ -43,7 +40,6 @@ func main() {
 	flag.StringVar(&version, "version", "0.1.0", "ola-node runtime version")
 	flag.Var(&capabilities, "capability", "capability id:risk; repeatable")
 	flag.BoolVar(&watch, "watch", false, "poll target events until interrupted")
-	flag.BoolVar(&enableShell, "enable-shell", false, "enable explicitly declared terminal.execute events")
 	flag.Parse()
 	if token == "" || deviceID == "" {
 		fatal("-token/OLA_TOKEN and -device-id/OLA_DEVICE_ID are required")
@@ -78,13 +74,9 @@ func main() {
 			fmt.Fprintln(os.Stderr, err)
 		} else {
 			for _, event := range events {
-				if enableShell && event.Type == "task.command" {
-					if err := handleCommand(ctx, client, node, event); err != nil {
-						fmt.Fprintln(os.Stderr, err)
-					}
-				} else {
-					printJSON(event)
-				}
+				// Remote shell execution is intentionally unavailable until the
+				// signed, target-confirmed task protocol is implemented.
+				printJSON(event)
 				if event.Sequence > after {
 					after = event.Sequence
 				}
@@ -96,64 +88,6 @@ func main() {
 		case <-ticker.C:
 		}
 	}
-}
-
-func handleCommand(ctx context.Context, client meshclient.Client, node meshclient.Node, event meshclient.Event) error {
-	if err := client.VerifyDeliveryTicket(ctx, event.Ticket, event.SubjectNodeID, node.NodeID, event.SessionID, "terminal.execute"); err != nil {
-		return err
-	}
-	var command struct {
-		Command string `json:"command"`
-	}
-	if err := json.Unmarshal(event.Payload, &command); err != nil || strings.TrimSpace(command.Command) == "" || len(command.Command) > 4096 {
-		return fmt.Errorf("invalid task.command payload")
-	}
-	ticket, err := client.IssueTicket(ctx, node.NodeID, event.SubjectNodeID, event.SessionID, []string{"mesh.event.receive"})
-	if err != nil {
-		return err
-	}
-	sequence := nextResponseSequence(ctx, client, event.SubjectNodeID, event.SessionID)
-	if _, err := client.PublishEvent(ctx, ticket, meshclient.Event{EventID: "event-started-" + event.EventID, SubjectNodeID: node.NodeID, TargetNodeID: event.SubjectNodeID, SessionID: event.SessionID, Sequence: sequence, Type: "task.started", Payload: json.RawMessage(`{"node":"ola-node"}`)}); err != nil {
-		return err
-	}
-	runCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-	commandRun := exec.CommandContext(runCtx, "/bin/sh", "-c", command.Command)
-	var output bytes.Buffer
-	commandRun.Stdout = &output
-	commandRun.Stderr = &output
-	runErr := commandRun.Run()
-	text := output.String()
-	if len(text) > 16<<10 {
-		text = text[:16<<10]
-	}
-	payload, _ := json.Marshal(map[string]string{"output": text})
-	eventType := "task.completed"
-	if runErr != nil {
-		eventType = "task.failed"
-	}
-	_, publishErr := client.PublishEvent(ctx, ticket, meshclient.Event{EventID: "event-result-" + event.EventID, SubjectNodeID: node.NodeID, TargetNodeID: event.SubjectNodeID, SessionID: event.SessionID, Sequence: sequence + 1, Type: eventType, Payload: payload})
-	if publishErr != nil {
-		return publishErr
-	}
-	if runErr != nil {
-		return fmt.Errorf("command failed: %w", runErr)
-	}
-	return nil
-}
-
-func nextResponseSequence(ctx context.Context, client meshclient.Client, targetNodeID, sessionID string) int64 {
-	events, err := client.ListEvents(ctx, targetNodeID, 0)
-	if err != nil {
-		return 1
-	}
-	var highest int64
-	for _, event := range events {
-		if event.SessionID == sessionID && event.Sequence > highest {
-			highest = event.Sequence
-		}
-	}
-	return highest + 1
 }
 
 func userHome() string {

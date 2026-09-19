@@ -11,13 +11,34 @@ import {
   clampWorkingFolderPanelWidth
 } from '@renderer/components/layout/right-panel-defs'
 import { ipcStorage } from '@renderer/lib/ipc/ipc-storage'
+import {
+  captureWorkspaceLayout,
+  restoreWorkspaceLayout,
+  workspaceLayoutStorageKey,
+  type WorkspaceLayoutSnapshot
+} from '@renderer/lib/workbench/workspace-layout'
+import {
+  closeSessionTab,
+  normalizeSessionTabScopes,
+  openSessionTab,
+  pruneSessionTabs,
+  reorderSessionTab
+} from '@renderer/lib/workbench/session-tabs'
 import { parseChatRoute, replaceChatRoute } from '@renderer/lib/chat-route'
 import { useChatStore } from '@renderer/stores/chat-store'
 import {
   DEFAULT_SETTINGS_TAB,
+  buildPetStudioRoute,
+  buildUsageRoute,
+  parseSettingsDestination,
   parseSettingsRoute,
   replaceSettingsRoute
 } from '@renderer/lib/settings-route'
+import {
+  resolveSettingsNavigationTarget,
+  type SettingsNavigationTarget,
+  type SettingsPageId
+} from '@renderer/components/settings/settings-registry'
 
 export type AppMode = 'chat' | 'clarify' | 'execute' | 'acp'
 export type LegacyAppMode = 'cowork' | 'code'
@@ -40,6 +61,8 @@ export type ActiveSurface =
   | 'resources'
   | 'draw'
   | 'translate'
+  | 'usage'
+  | 'petStudio'
 
 export type NavItem =
   | 'chat'
@@ -227,29 +250,8 @@ export interface BrowserPanelSessionState {
   errorInfo: BrowserErrorInfo | null
 }
 
-export type SettingsTab =
-  | 'general'
-  | 'workModes'
-  | 'system'
-  | 'permission'
-  | 'hooks'
-  | 'memory'
-  | 'analytics'
-  | 'provider'
-  | 'modelManagement'
-  | 'model'
-  | 'aiCoding'
-  | 'plugin'
-  | 'extension'
-  | 'channel'
-  | 'mcp'
-  | 'websearch'
-  | 'skillsmarket'
-  | 'credentials'
-  | 'wiki'
-  | 'desktopAutomation'
-  | 'pet'
-  | 'about'
+export type SettingsTab = SettingsPageId
+export type { SettingsNavigationTarget }
 
 export type DetailPanelContent =
   | { type: 'team' }
@@ -333,6 +335,22 @@ function rightPanelPreviewTabId(previewTabId: string): string {
 }
 
 interface UIStore {
+  workspaceLayouts: Record<string, WorkspaceLayoutSnapshot>
+  sessionTabsByWorkspace: Record<string, string[]>
+  openWorkspaceSessionTab: (workspaceId: string, sessionId: string) => void
+  reorderWorkspaceSessionTab: (
+    workspaceId: string,
+    sessionId: string,
+    targetSessionId: string
+  ) => void
+  closeWorkspaceSessionTab: (
+    workspaceId: string,
+    sessionId: string,
+    activeSessionId: string | null
+  ) => string | null
+  pruneWorkspaceSessionTabs: (workspaceId: string, validSessionIds: ReadonlySet<string>) => void
+  saveWorkspaceLayout: (workspaceId: string) => void
+  restoreWorkspaceLayout: (workspaceId: string) => void
   mode: AppMode
   setMode: (mode: AppMode) => void
   activeNavItem: NavItem
@@ -396,7 +414,9 @@ interface UIStore {
   setActiveSurface: (surface: ActiveSurface) => void
   settingsPageOpen: boolean
   settingsTab: SettingsTab
-  openSettingsPage: (tab?: SettingsTab) => void
+  openSettingsPage: (tab?: SettingsNavigationTarget) => void
+  openUsagePage: () => void
+  openPetStudioPage: () => void
   closeSettingsPage: () => void
   accountAuthPageOpen: boolean
   openAccountAuthPage: () => void
@@ -974,6 +994,68 @@ function activatePreviewTab(
 export const useUIStore = create<UIStore>()(
   persist(
     (set, get) => ({
+      workspaceLayouts: {},
+      sessionTabsByWorkspace: {},
+      openWorkspaceSessionTab: (workspaceId, sessionId) =>
+        set((state) => {
+          const key = workspaceLayoutStorageKey(workspaceId)
+          const current = state.sessionTabsByWorkspace[key]
+          const next = openSessionTab(current, sessionId)
+          if (JSON.stringify(current ?? []) === JSON.stringify(next)) return state
+          return {
+            sessionTabsByWorkspace: {
+              ...state.sessionTabsByWorkspace,
+              [key]: next
+            }
+          }
+        }),
+      reorderWorkspaceSessionTab: (workspaceId, sessionId, targetSessionId) =>
+        set((state) => {
+          const key = workspaceLayoutStorageKey(workspaceId)
+          const current = state.sessionTabsByWorkspace[key]
+          const next = reorderSessionTab(current, sessionId, targetSessionId)
+          if (JSON.stringify(current ?? []) === JSON.stringify(next)) return state
+          return { sessionTabsByWorkspace: { ...state.sessionTabsByWorkspace, [key]: next } }
+        }),
+      closeWorkspaceSessionTab: (workspaceId, sessionId, activeSessionId) => {
+        const key = workspaceLayoutStorageKey(workspaceId)
+        const result = closeSessionTab(
+          get().sessionTabsByWorkspace[key],
+          sessionId,
+          activeSessionId
+        )
+        set((state) => ({
+          sessionTabsByWorkspace: { ...state.sessionTabsByWorkspace, [key]: result.tabs }
+        }))
+        return result.nextSessionId
+      },
+      pruneWorkspaceSessionTabs: (workspaceId, validSessionIds) =>
+        set((state) => {
+          const key = workspaceLayoutStorageKey(workspaceId)
+          const current = state.sessionTabsByWorkspace[key]
+          const next = pruneSessionTabs(current, validSessionIds)
+          if (JSON.stringify(current ?? []) === JSON.stringify(next)) return state
+          return { sessionTabsByWorkspace: { ...state.sessionTabsByWorkspace, [key]: next } }
+        }),
+      saveWorkspaceLayout: (workspaceId) =>
+        set((state) => ({
+          workspaceLayouts: {
+            ...state.workspaceLayouts,
+            [workspaceLayoutStorageKey(workspaceId)]: captureWorkspaceLayout(state)
+          }
+        })),
+      restoreWorkspaceLayout: (workspaceId) =>
+        set((state) => {
+          // The workspace-id fallback keeps layouts written before window scoping.
+          const layout = restoreWorkspaceLayout(
+            state.workspaceLayouts[workspaceLayoutStorageKey(workspaceId)] ??
+              state.workspaceLayouts[workspaceId]
+          )
+          // A malformed persisted layout is ignored; default current layout
+          // remains usable and users never lose workspace data to reset it.
+          if (!layout) return {}
+          return layout
+        }),
       mode: 'execute',
       setMode: (mode) => set({ mode: normalizeAppMode(mode) }),
       activeNavItem: 'chat',
@@ -1320,14 +1402,34 @@ export const useUIStore = create<UIStore>()(
       settingsPageOpen: false,
       settingsTab: DEFAULT_SETTINGS_TAB,
       openSettingsPage: (tab) => {
-        const nextTab = tab ?? DEFAULT_SETTINGS_TAB
+        const target = resolveSettingsNavigationTarget(tab)
+        if (target === 'usage') {
+          get().openUsagePage()
+          return
+        }
+        if (target === 'petStudio') {
+          get().openPetStudioPage()
+          return
+        }
         set({
           ...activeSurfacePatch('settings'),
           settingsOpen: false,
-          settingsTab: nextTab,
+          settingsTab: target,
           ...closeRightSidePanels()
         })
-        replaceSettingsRoute(nextTab)
+        replaceSettingsRoute(target)
+      },
+      openUsagePage: () => {
+        set({ ...activeSurfacePatch('usage'), settingsOpen: false, ...closeRightSidePanels() })
+        if (window.location.hash !== buildUsageRoute()) {
+          window.history.replaceState(null, '', buildUsageRoute())
+        }
+      },
+      openPetStudioPage: () => {
+        set({ ...activeSurfacePatch('petStudio'), settingsOpen: false, ...closeRightSidePanels() })
+        if (window.location.hash !== buildPetStudioRoute()) {
+          window.history.replaceState(null, '', buildPetStudioRoute())
+        }
       },
       closeSettingsPage: () => {
         if (get().activeSurface === 'settings') set(activeSurfacePatch('workspace'))
@@ -1985,6 +2087,27 @@ export const useUIStore = create<UIStore>()(
         })
       },
       applyRouteFromLocation: () => {
+        if (window.location.hash === buildUsageRoute()) {
+          set({ ...activeSurfacePatch('usage'), settingsOpen: false, ...closeRightSidePanels() })
+          return
+        }
+        if (window.location.hash === buildPetStudioRoute()) {
+          set({
+            ...activeSurfacePatch('petStudio'),
+            settingsOpen: false,
+            ...closeRightSidePanels()
+          })
+          return
+        }
+        const settingsDestination = parseSettingsDestination(window.location.hash)
+        if (settingsDestination === 'usage') {
+          get().openUsagePage()
+          return
+        }
+        if (settingsDestination === 'petStudio') {
+          get().openPetStudioPage()
+          return
+        }
         const settingsRoute = parseSettingsRoute(window.location.hash)
         if (settingsRoute) {
           set({
@@ -2053,6 +2176,8 @@ export const useUIStore = create<UIStore>()(
       version: 1,
       storage: createJSONStorage(() => ipcStorage),
       partialize: (state) => ({
+        workspaceLayouts: state.workspaceLayouts,
+        sessionTabsByWorkspace: state.sessionTabsByWorkspace,
         leftSidebarOpen: state.leftSidebarOpen,
         leftSidebarWidth: clampLeftSidebarWidth(state.leftSidebarWidth),
         conversationPanelFullWidth: state.conversationPanelFullWidth,
@@ -2072,6 +2197,11 @@ export const useUIStore = create<UIStore>()(
         return {
           ...current,
           ...state,
+          workspaceLayouts:
+            state.workspaceLayouts && typeof state.workspaceLayouts === 'object'
+              ? state.workspaceLayouts
+              : current.workspaceLayouts,
+          sessionTabsByWorkspace: normalizeSessionTabScopes(state.sessionTabsByWorkspace),
           toolbarCollapsedByDefault: undefined,
           leftSidebarOpen:
             typeof state.leftSidebarOpen === 'boolean'

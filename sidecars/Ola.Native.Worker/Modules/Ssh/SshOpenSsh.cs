@@ -865,7 +865,10 @@ internal static class SshOpenSsh
             startInfo.ArgumentList.Add("NumberOfPasswordPrompts=1");
         }
         startInfo.ArgumentList.Add("-o");
-        startInfo.ArgumentList.Add("StrictHostKeyChecking=accept-new");
+        // Do not silently trust a first-seen host from an agent-triggered connection.
+        // The user must add the verified fingerprint to known_hosts through the SSH setup flow.
+        // OpenSSH will also reject a changed fingerprint before any credentials are offered.
+        startInfo.ArgumentList.Add("StrictHostKeyChecking=yes");
         startInfo.ArgumentList.Add("-o");
         startInfo.ArgumentList.Add("ServerAliveInterval=15");
         startInfo.ArgumentList.Add("-o");
@@ -996,6 +999,19 @@ internal static class SshOpenSsh
         try
         {
             Directory.CreateDirectory(ControlSocketDirUnix);
+            var socketDirectory = new DirectoryInfo(ControlSocketDirUnix);
+            if (socketDirectory.LinkTarget is not null ||
+                (socketDirectory.Attributes & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException("SSH multiplex directory cannot be a link");
+            }
+            // A fixed /tmp directory is safe only when no other local user can
+            // create or replace control sockets inside it. If mode repair fails
+            // (for example, a directory pre-created by another user), the catch
+            // below disables multiplexing for this connection.
+            File.SetUnixFileMode(
+                ControlSocketDirUnix,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
             var keyMaterial = string.Join(
                 "\n",
                 launch.Host,
@@ -1099,12 +1115,12 @@ internal static class SshOpenSsh
     {
         if (filePath == "~")
         {
-            return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            return OlaDataRoot.ExternalDataHome;
         }
 
         if (filePath.StartsWith("~/", StringComparison.Ordinal))
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), filePath[2..]);
+            return Path.Combine(OlaDataRoot.ExternalDataHome, filePath[2..]);
         }
 
         return filePath;

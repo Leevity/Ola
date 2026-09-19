@@ -15,6 +15,11 @@ import {
 } from '@renderer/components/ui/select'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import {
+  SETTINGS_CARD_CLASS,
+  SETTINGS_PANEL_CLASS,
+  SettingsPageHeader
+} from './settings-primitives'
+import {
   createPermissionRuleId,
   isCommandRuleTool,
   validatePermissionRulePattern,
@@ -61,16 +66,13 @@ export function PermissionPanel(): React.JSX.Element {
   )
 
   return (
-    <div className="flex w-full flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold">{t('permission.title')}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t('permission.subtitle')}</p>
-      </div>
+    <div className={SETTINGS_PANEL_CLASS}>
+      <SettingsPageHeader title={t('permission.title')} description={t('permission.subtitle')} />
 
-      <section className="rounded-xl border border-border/60 bg-muted/10 p-4">
+      <section className={SETTINGS_CARD_CLASS}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <h2 className="font-medium">{t('permission.master.title')}</h2>
+            <h3 className="text-sm font-semibold">{t('permission.master.title')}</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {t('permission.master.description')}
             </p>
@@ -82,15 +84,15 @@ export function PermissionPanel(): React.JSX.Element {
         </div>
       </section>
 
-      <div className="rounded-xl border border-border/60 bg-muted/10 p-4 text-sm text-muted-foreground">
+      <div className={`${SETTINGS_CARD_CLASS} text-sm text-muted-foreground`}>
         <p>{t('permission.precedence.description')}</p>
         <p className="mt-2">{t('permission.wildcardHelp')}</p>
       </div>
 
-      <section className="rounded-xl border border-border/60 bg-muted/10 p-4">
+      <section className={SETTINGS_CARD_CLASS}>
         <div className="flex items-center gap-2">
           <ShieldCheck className="size-4 text-emerald-600 dark:text-emerald-400" />
-          <h2 className="font-medium">{t('permission.tools.title')}</h2>
+          <h3 className="text-sm font-semibold">{t('permission.tools.title')}</h3>
           <Badge variant="secondary">{policy.whitelistedTools.length}</Badge>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">{t('permission.tools.description')}</p>
@@ -189,11 +191,11 @@ function RuleListSection(props: {
   }
 
   return (
-    <section className="rounded-xl border border-border/60 bg-muted/10 p-4">
+    <section className={SETTINGS_CARD_CLASS}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           {props.icon}
-          <h2 className="font-medium">{props.title}</h2>
+          <h3 className="text-sm font-semibold">{props.title}</h3>
           <Badge variant="secondary">{props.rules.length}</Badge>
         </div>
         <Button variant="outline" size="sm" onClick={addRule}>

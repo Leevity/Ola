@@ -10,6 +10,7 @@ import { Badge } from '@renderer/components/ui/badge'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { SETTINGS_PANEL_CLASS, SettingsEmptyState, SettingsPageHeader } from './settings-primitives'
 
 export function SkillsMarketPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
@@ -54,30 +55,28 @@ export function SkillsMarketPanel(): React.JSX.Element {
   const handleDeleteSkill = useCallback(
     async (name: string) => {
       const confirmed = await confirm({
-        title: t('skillsmarket.deleteTitle', { name, defaultValue: `删除 ${name}` }),
-        description: t('skillsmarket.deleteDescription', {
-          defaultValue: '删除后将从 Ola 的已安装 Skill 目录中移除。'
-        }),
+        title: t('skillsmarket.deleteTitle', { name }),
+        description: t('skillsmarket.deleteDescription'),
         variant: 'destructive'
       })
       if (!confirmed) return
 
       const deleted = await deleteSkill(name)
       if (deleted) {
-        toast.success(t('skillsmarket.deleteSuccess', { name, defaultValue: `已删除 ${name}` }))
+        toast.success(t('skillsmarket.deleteSuccess', { name }))
       } else {
-        toast.error(t('skillsmarket.deleteFailed', { name, defaultValue: `删除 ${name} 失败` }))
+        toast.error(t('skillsmarket.deleteFailed', { name }))
       }
     },
     [deleteSkill, t]
   )
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold">{t('skillsmarket.title')}</h2>
-        <p className="text-sm text-muted-foreground">{t('skillsmarket.subtitle')}</p>
-      </div>
+    <div className={SETTINGS_PANEL_CLASS}>
+      <SettingsPageHeader
+        title={t('skillsmarket.title')}
+        description={t('skillsmarket.subtitle')}
+      />
 
       <div className="flex items-center gap-1 border-b border-border/60" role="tablist">
         <button
@@ -91,7 +90,7 @@ export function SkillsMarketPanel(): React.JSX.Element {
           }`}
           onClick={() => setActiveTab('market')}
         >
-          {t('skillsmarket.marketTab', { defaultValue: '技能市场' })}
+          {t('skillsmarket.marketTab')}
         </button>
         <button
           type="button"
@@ -104,7 +103,7 @@ export function SkillsMarketPanel(): React.JSX.Element {
           }`}
           onClick={() => setActiveTab('installed')}
         >
-          {t('skillsmarket.installedTab', { defaultValue: '已安装' })}
+          {t('skillsmarket.installedTab')}
           <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1.5 text-[11px]">
             {skills.length}
           </Badge>
@@ -115,13 +114,9 @@ export function SkillsMarketPanel(): React.JSX.Element {
         <section className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h3 className="text-sm font-medium">
-                {t('skillsmarket.installedTitle', { defaultValue: '已安装的 Skill' })}
-              </h3>
+              <h3 className="text-sm font-medium">{t('skillsmarket.installedTitle')}</h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                {t('skillsmarket.installedDescription', {
-                  defaultValue: '这里展示当前已安装并可被 Ola 动态加载的 Skill。'
-                })}
+                {t('skillsmarket.installedDescription')}
               </p>
             </div>
             <Button
@@ -132,26 +127,22 @@ export function SkillsMarketPanel(): React.JSX.Element {
               disabled={loading}
             >
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
-              {t('skillsmarket.refreshInstalled', { defaultValue: '刷新' })}
+              {t('skillsmarket.refreshInstalled')}
             </Button>
           </div>
 
           {loading ? (
             <div className="rounded-lg border border-border/60 p-6 text-center text-sm text-muted-foreground">
-              {t('skillsmarket.loadingInstalled', { defaultValue: '正在加载已安装 Skill…' })}
+              {t('skillsmarket.loadingInstalled')}
             </div>
           ) : skills.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-border p-8 text-center">
+            <SettingsEmptyState>
               <Wand2 className="mx-auto mb-3 size-6 text-muted-foreground" />
-              <p className="text-sm font-medium">
-                {t('skillsmarket.emptyInstalled', { defaultValue: '暂无已安装 Skill' })}
-              </p>
+              <p className="text-sm font-medium">{t('skillsmarket.emptyInstalled')}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {t('skillsmarket.emptyInstalledDescription', {
-                  defaultValue: '可以从技能页面安装 Skill，安装后会自动显示在这里。'
-                })}
+                {t('skillsmarket.emptyInstalledDescription')}
               </p>
-            </div>
+            </SettingsEmptyState>
           ) : (
             <div className="space-y-2">
               {skills.map((skill) => (
@@ -164,12 +155,11 @@ export function SkillsMarketPanel(): React.JSX.Element {
                       <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
                       <p className="truncate text-sm font-medium">{skill.name}</p>
                       <Badge variant="outline" className="shrink-0 text-[11px]">
-                        {t('skillsmarket.installedBadge', { defaultValue: '已安装' })}
+                        {t('skillsmarket.installedBadge')}
                       </Badge>
                     </div>
                     <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                      {skill.description ||
-                        t('skillsmarket.noDescription', { defaultValue: '暂无描述' })}
+                      {skill.description || t('skillsmarket.noDescription')}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
@@ -180,7 +170,7 @@ export function SkillsMarketPanel(): React.JSX.Element {
                       onClick={() => void openSkillFolder(skill.name)}
                     >
                       <FolderOpen className="size-3.5" />
-                      {t('skillsmarket.openFolder', { defaultValue: '打开目录' })}
+                      {t('skillsmarket.openFolder')}
                     </Button>
                     <Button
                       variant="ghost"
@@ -189,7 +179,7 @@ export function SkillsMarketPanel(): React.JSX.Element {
                       onClick={() => void handleDeleteSkill(skill.name)}
                     >
                       <Trash2 className="size-3.5" />
-                      {t('skillsmarket.delete', { defaultValue: '删除' })}
+                      {t('skillsmarket.delete')}
                     </Button>
                   </div>
                 </div>

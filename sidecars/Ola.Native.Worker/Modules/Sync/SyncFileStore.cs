@@ -7,20 +7,12 @@ using System.Text.Json.Nodes;
 internal static class SyncFileStore
 {
     private const string FileDomain = "file";
-    private const string DataDirectoryName = ".ola";
     private const string PromptCacheInstallIdConfigKey = "ola-prompt-cache-install-id";
 
-    private static readonly string[] DataFileIncludes =
-    [
-        "settings.json",
-        "config.json",
-        "plugins.json",
-        "SOUL.md",
-        "USER.md",
-        "MEMORY.md"
-    ];
-
-    private static readonly string[] DataDirectoryIncludes = ["agents", "commands", "prompts", "memory"];
+    // Configuration, channel plugins, prompts, and memory can carry credentials or user-provided
+    // secrets. The sync transport intentionally carries only sanitized UI/settings state.
+    private static readonly string[] DataFileIncludes = ["settings.json"];
+    private static readonly string[] DataDirectoryIncludes = [];
     private static readonly string[] LocalOnlyConfigKeys = [PromptCacheInstallIdConfigKey];
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -211,6 +203,8 @@ internal static class SyncFileStore
                 throw new InvalidOperationException("Invalid settings sync file");
             }
 
+            RemoveSensitiveValues(settingsRoot);
+            PreserveLocalSensitiveValues(settingsRoot, SettingsStore.ReadRootSnapshot());
             SettingsStore.ReplaceRootFromSync(settingsRoot);
             return;
         }
@@ -247,18 +241,18 @@ internal static class SyncFileStore
     private static async Task<byte[]> ReadFileBytesForSyncAsync(string relativePath, string filePath)
     {
         var bytes = await File.ReadAllBytesAsync(filePath);
-        if (!string.Equals(relativePath, "config.json", StringComparison.Ordinal))
+        if (!string.Equals(relativePath, "settings.json", StringComparison.Ordinal))
         {
             return bytes;
         }
 
-        if (JsonNode.Parse(Encoding.UTF8.GetString(bytes)) is not JsonObject configRoot)
+        if (JsonNode.Parse(Encoding.UTF8.GetString(bytes)) is not JsonObject settingsRoot)
         {
-            throw new InvalidOperationException("Invalid config sync file");
+            throw new InvalidOperationException("Invalid settings sync file");
         }
 
-        RemoveLocalOnlyConfigValues(configRoot);
-        return Encoding.UTF8.GetBytes(configRoot.ToJsonString(JsonOptions));
+        RemoveSensitiveValues(settingsRoot);
+        return Encoding.UTF8.GetBytes(settingsRoot.ToJsonString(JsonOptions));
     }
 
     private static void PreserveLocalConfigValues(JsonObject nextConfig)
@@ -305,6 +299,87 @@ internal static class SyncFileStore
             if (source.TryGetPropertyValue(key, out var value) && value is not null)
             {
                 target[key] = value.DeepClone();
+            }
+        }
+    }
+
+    private static void RemoveSensitiveValues(JsonNode node)
+    {
+        if (node is JsonObject obj)
+        {
+            foreach (var property in obj.ToList())
+            {
+                if (IsSensitivePropertyName(property.Key))
+                {
+                    obj.Remove(property.Key);
+                    continue;
+                }
+
+                if (property.Value is not null)
+                {
+                    RemoveSensitiveValues(property.Value);
+                }
+            }
+            return;
+        }
+
+        if (node is JsonArray array)
+        {
+            foreach (var item in array)
+            {
+                if (item is not null)
+                {
+                    RemoveSensitiveValues(item);
+                }
+            }
+        }
+    }
+
+    private static bool IsSensitivePropertyName(string propertyName)
+    {
+        return propertyName.ToLowerInvariant() switch
+        {
+            "apikey" or "api_key" or "password" or "passphrase" or "secret" or
+            "clientsecret" or "client_secret" or "token" or "accesstoken" or
+            "access_token" or "refreshtoken" or "refresh_token" or "bearertoken" or
+            "bearer_token" or "sessiontoken" or "session_token" or "idtoken" or
+            "id_token" or "authorization" or
+            "privatekey" or "private_key" or "credentials" or "encryptedpassword" or
+            "encrypted_password" or "webdavpassword" or "webdav_password" => true,
+            _ => false
+        };
+    }
+
+    private static void PreserveLocalSensitiveValues(JsonNode next, JsonNode local)
+    {
+        if (next is JsonObject nextObject && local is JsonObject localObject)
+        {
+            foreach (var property in localObject)
+            {
+                if (IsSensitivePropertyName(property.Key))
+                {
+                    nextObject[property.Key] = property.Value?.DeepClone();
+                    continue;
+                }
+
+                if (property.Value is not null &&
+                    nextObject[property.Key] is { } nextValue)
+                {
+                    PreserveLocalSensitiveValues(nextValue, property.Value);
+                }
+            }
+            return;
+        }
+
+        if (next is JsonArray nextArray && local is JsonArray localArray)
+        {
+            var length = Math.Min(nextArray.Count, localArray.Count);
+            for (var index = 0; index < length; index += 1)
+            {
+                if (nextArray[index] is { } nextItem && localArray[index] is { } localItem)
+                {
+                    PreserveLocalSensitiveValues(nextItem, localItem);
+                }
             }
         }
     }
@@ -451,9 +526,7 @@ internal static class SyncFileStore
 
     private static string GetDataDir()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            DataDirectoryName);
+        return OlaDataRoot.DirectoryPath;
     }
 
     private static string HashValue(JsonNode? value)

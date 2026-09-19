@@ -5,6 +5,7 @@ internal static class DbDrawRunTools
 {
     private const string DrawRunSelectSql = """
         SELECT id,
+               workspace_id,
                prompt,
                provider_name,
                model_name,
@@ -22,9 +23,11 @@ internal static class DbDrawRunTools
     {
         try
         {
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{DrawRunSelectSql} ORDER BY created_at DESC";
+            command.CommandText = $"{DrawRunSelectSql} WHERE workspace_id = $workspaceId ORDER BY created_at DESC";
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             return WorkerResponse.Json(ReadRows(command), WorkerJsonContext.Default.ListDrawRunRow);
         }
         catch (Exception ex)
@@ -37,14 +40,24 @@ internal static class DbDrawRunTools
     {
         try
         {
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            using (var owner = connection.CreateCommand())
+            {
+                owner.Transaction = transaction;
+                owner.CommandText = "SELECT workspace_id FROM draw_runs WHERE id = $id";
+                owner.Parameters.AddWithValue("$id", RequireString(parameters, "id"));
+                if (owner.ExecuteScalar() is string existing && existing != workspaceId)
+                    throw new InvalidOperationException("Draw run belongs to another workspace.");
+            }
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
                 """
-                INSERT OR REPLACE INTO draw_runs (
+                INSERT INTO draw_runs (
                   id,
+                  workspace_id,
                   prompt,
                   provider_name,
                   model_name,
@@ -57,6 +70,7 @@ internal static class DbDrawRunTools
                   updated_at
                 ) VALUES (
                   $id,
+                  $workspaceId,
                   $prompt,
                   $providerName,
                   $modelName,
@@ -67,9 +81,19 @@ internal static class DbDrawRunTools
                   $imagesJson,
                   $errorJson,
                   $updatedAt
-                )
+                ) ON CONFLICT(id) DO UPDATE SET
+                  prompt = excluded.prompt,
+                  provider_name = excluded.provider_name,
+                  model_name = excluded.model_name,
+                  mode = excluded.mode,
+                  meta_json = excluded.meta_json,
+                  is_generating = excluded.is_generating,
+                  images_json = excluded.images_json,
+                  error_json = excluded.error_json,
+                  updated_at = excluded.updated_at
                 """,
                 new DbSql.SqlParam("$id", RequireString(parameters, "id")),
+                new DbSql.SqlParam("$workspaceId", workspaceId),
                 new DbSql.SqlParam("$prompt", RequireString(parameters, "prompt")),
                 new DbSql.SqlParam("$providerName", RequireString(parameters, "providerName")),
                 new DbSql.SqlParam("$modelName", RequireString(parameters, "modelName")),
@@ -94,13 +118,15 @@ internal static class DbDrawRunTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM draw_runs WHERE id = $id",
-                new DbSql.SqlParam("$id", id));
+                "DELETE FROM draw_runs WHERE id = $id AND workspace_id = $workspaceId",
+                new DbSql.SqlParam("$id", id),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed);
         }
@@ -114,9 +140,14 @@ internal static class DbDrawRunTools
     {
         try
         {
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
-            var changed = DbSql.ExecuteNonQuery(connection, transaction, "DELETE FROM draw_runs");
+            var changed = DbSql.ExecuteNonQuery(
+                connection,
+                transaction,
+                "DELETE FROM draw_runs WHERE workspace_id = $workspaceId",
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed);
         }
@@ -135,16 +166,17 @@ internal static class DbDrawRunTools
             rows.Add(new DrawRunRow
             {
                 Id = reader.GetString(0),
-                Prompt = reader.GetString(1),
-                ProviderName = reader.GetString(2),
-                ModelName = reader.GetString(3),
-                Mode = reader.GetString(4),
-                MetaJson = reader.IsDBNull(5) ? null : reader.GetString(5),
-                CreatedAt = reader.GetInt64(6),
-                IsGenerating = reader.GetInt32(7),
-                ImagesJson = reader.GetString(8),
-                ErrorJson = reader.IsDBNull(9) ? null : reader.GetString(9),
-                UpdatedAt = reader.GetInt64(10)
+                WorkspaceId = reader.GetString(1),
+                Prompt = reader.GetString(2),
+                ProviderName = reader.GetString(3),
+                ModelName = reader.GetString(4),
+                Mode = reader.GetString(5),
+                MetaJson = reader.IsDBNull(6) ? null : reader.GetString(6),
+                CreatedAt = reader.GetInt64(7),
+                IsGenerating = reader.GetInt32(8),
+                ImagesJson = reader.GetString(9),
+                ErrorJson = reader.IsDBNull(10) ? null : reader.GetString(10),
+                UpdatedAt = reader.GetInt64(11)
             });
         }
 

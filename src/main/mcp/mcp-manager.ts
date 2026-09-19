@@ -144,6 +144,14 @@ export class McpManager {
     return client?.status === 'connected'
   }
 
+  /** Stable snapshot used when a Runtime run is created. */
+  getConnectedServerIds(): string[] {
+    return [...this.clients.entries()]
+      .filter(([, client]) => client.status === 'connected')
+      .map(([id]) => id)
+      .sort()
+  }
+
   /** Disconnect all servers (app shutdown) */
   async disconnectAll(): Promise<void> {
     const ids = Array.from(this.clients.keys())

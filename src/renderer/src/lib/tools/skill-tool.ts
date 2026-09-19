@@ -1,7 +1,7 @@
 import type { ToolHandler } from './tool-types'
 import { toolRegistry } from '../agent/tool-registry'
 import { ipcClient } from '../ipc/ipc-client'
-import { encodeToolError } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 
 type SkillMeta = { name: string; description: string }
 
@@ -103,9 +103,25 @@ function createSkillHandler(): ToolHandler {
       if (!skillName) {
         return encodeToolError('SkillName is required')
       }
-      return encodeToolError(
-        'Skill executes in the .NET Native Worker and is unavailable through the renderer boundary.'
-      )
+      try {
+        const result = await ipcClient.invoke('skills:load', { name: skillName })
+        if (!result || typeof result !== 'object')
+          return encodeToolError('Skill load returned no content')
+        const record = result as { content?: unknown; workingDirectory?: unknown; error?: unknown }
+        if (typeof record.error === 'string' && record.error.trim())
+          return encodeToolError(record.error)
+        if (typeof record.content !== 'string')
+          return encodeToolError('Skill load returned no content')
+        return encodeStructuredToolResult({
+          skillName,
+          content: record.content,
+          ...(typeof record.workingDirectory === 'string'
+            ? { workingDirectory: record.workingDirectory }
+            : {})
+        })
+      } catch (error) {
+        return encodeToolError(error instanceof Error ? error.message : String(error))
+      }
     },
     requiresApproval: () => false
   }

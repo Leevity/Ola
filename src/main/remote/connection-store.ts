@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readFile, rename, unlink, writeFile } from 'fs/promises'
-import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { randomUUID } from 'crypto'
+import { olaDataRoot } from '../lib/ola-data-root'
 import type {
   RemoteConnection,
   RemoteConnectionCreateInput,
@@ -45,7 +45,7 @@ function runMutation<T>(operation: () => Promise<T>): Promise<T> {
 
 function getConfigPath(): string {
   if (process.env.OLA_REMOTE_CONNECTIONS_PATH) return process.env.OLA_REMOTE_CONNECTIONS_PATH
-  return join(homedir(), '.ola', 'remote-connections.json')
+  return join(olaDataRoot(), 'remote-connections.json')
 }
 
 function now(): number {

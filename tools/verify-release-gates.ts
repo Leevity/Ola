@@ -15,7 +15,15 @@ assert.match(workflow, /if: inputs\.publish == true/)
 assert.match(workflow, /Publish verified draft Release/)
 assert.match(workflow, /run: npm run build/)
 assert.match(workflow, /Refusing to modify an already published Release/)
-assert.match(workflow, /Release signing credentials are required/)
+assert.match(workflow, /Release signing credentials are required for public Windows packages/)
+assert.match(workflow, /npm audit --omit=dev --audit-level=high/)
+for (const match of workflow.matchAll(/^\s*uses:\s*[^\s@]+@([^\s#]+).*$/gm)) {
+  assert.match(
+    match[1],
+    /^[0-9a-f]{40}$/i,
+    `GitHub Action must be pinned to a full commit SHA: ${match[0]}`
+  )
+}
 assert.match(workflow, /Smoke install Windows release artifact/)
 assert.match(workflow, /Smoke extract Linux release artifact/)
 assert.match(workflow, /Smoke mount macOS release artifact/)

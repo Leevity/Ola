@@ -1,10 +1,47 @@
 import { toolRegistry } from '../agent/tool-registry'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import { ipcClient } from '../ipc/ipc-client'
+import { IPC } from '../ipc/channels'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 
-function nativeOnlyCronResult(toolName: string): string {
-  return JSON.stringify({
-    error: `${toolName} execution has migrated to .NET Native Worker.`
-  })
+function workspaceId(): string {
+  return useWorkspaceStore.getState().activeWorkspaceId
+}
+
+async function addCron(input: Record<string, unknown>, ctx: Parameters<ToolHandler['execute']>[1]) {
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+  const prompt = typeof input.prompt === 'string' ? input.prompt.trim() : ''
+  if (!name || !prompt || !input.schedule || typeof input.schedule !== 'object')
+    return encodeToolError('name, schedule, and prompt are required')
+  try {
+    const result = await ipcClient.invoke(IPC.CRON_ADD, {
+      ...input,
+      name,
+      prompt,
+      schedule: input.schedule,
+      sessionId: ctx.sessionId ?? undefined,
+      workspaceId: workspaceId()
+    })
+    return encodeStructuredToolResult(
+      result && typeof result === 'object' ? { ...(result as Record<string, unknown>) } : { result }
+    )
+  } catch (error) {
+    return encodeToolError(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function removeCron(input: Record<string, unknown>) {
+  const jobId = typeof input.jobId === 'string' ? input.jobId.trim() : ''
+  if (!jobId) return encodeToolError('jobId is required')
+  try {
+    const result = await ipcClient.invoke(IPC.CRON_REMOVE, { jobId, workspaceId: workspaceId() })
+    return encodeStructuredToolResult(
+      result && typeof result === 'object' ? { ...(result as Record<string, unknown>) } : { result }
+    )
+  } catch (error) {
+    return encodeToolError(error instanceof Error ? error.message : String(error))
+  }
 }
 
 // ── CronAdd ──────────────────────────────────────────────────────
@@ -127,7 +164,7 @@ const cronAddHandler: ToolHandler = {
       required: ['name', 'schedule', 'prompt']
     }
   },
-  execute: async () => nativeOnlyCronResult('CronAdd'),
+  execute: addCron,
   requiresApproval: () => true
 }
 
@@ -174,7 +211,25 @@ const cronUpdateHandler: ToolHandler = {
       required: ['jobId', 'patch']
     }
   },
-  execute: async () => nativeOnlyCronResult('CronUpdate'),
+  execute: async (input) => {
+    const jobId = typeof input.jobId === 'string' ? input.jobId.trim() : ''
+    if (!jobId || !input.patch || typeof input.patch !== 'object')
+      return encodeToolError('jobId and patch are required')
+    try {
+      const result = await ipcClient.invoke(IPC.CRON_UPDATE, {
+        jobId,
+        patch: input.patch,
+        workspaceId: workspaceId()
+      })
+      return encodeStructuredToolResult(
+        result && typeof result === 'object'
+          ? { ...(result as Record<string, unknown>) }
+          : { result }
+      )
+    } catch (error) {
+      return encodeToolError(error instanceof Error ? error.message : String(error))
+    }
+  },
   requiresApproval: () => true
 }
 
@@ -195,7 +250,7 @@ const cronRemoveHandler: ToolHandler = {
       required: ['jobId']
     }
   },
-  execute: async () => nativeOnlyCronResult('CronRemove'),
+  execute: removeCron,
   requiresApproval: () => false
 }
 
@@ -210,7 +265,17 @@ const cronListHandler: ToolHandler = {
       properties: {}
     }
   },
-  execute: async () => nativeOnlyCronResult('CronList'),
+  execute: async (_input, ctx) => {
+    try {
+      const result = await ipcClient.invoke(IPC.CRON_LIST, {
+        workspaceId: workspaceId(),
+        sessionId: ctx.sessionId ?? undefined
+      })
+      return encodeStructuredToolResult({ jobs: Array.isArray(result) ? result : [] })
+    } catch (error) {
+      return encodeToolError(error instanceof Error ? error.message : String(error))
+    }
+  },
   requiresApproval: () => false
 }
 
@@ -223,7 +288,7 @@ const cronCreateHandler: ToolHandler = {
     name: 'CronCreate',
     description: 'Code-agent-compatible alias for CronAdd. Schedule a background agent task.'
   },
-  execute: async () => nativeOnlyCronResult('CronCreate')
+  execute: addCron
 }
 
 const cronDeleteHandler: ToolHandler = {
@@ -238,7 +303,8 @@ const cronDeleteHandler: ToolHandler = {
       }
     }
   },
-  execute: async () => nativeOnlyCronResult('CronDelete'),
+  execute: async (input) =>
+    removeCron({ jobId: typeof input.id === 'string' ? input.id : input.jobId }),
   requiresApproval: () => false
 }
 

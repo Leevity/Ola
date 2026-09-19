@@ -1,11 +1,18 @@
 import type {
   SyncBundle,
   SyncConnectionTestResult,
-  WebDavSyncConfig
+  WebDavSyncConfig,
+  WorkspaceSyncBundle,
+  WorkspaceSyncScope
 } from '../../shared/sync-types'
+import {
+  verifyLegacySyncBundle,
+  verifyWorkspaceSyncBundle,
+  workspaceSyncScopeHash
+} from '../../shared/sync-bundle-contract'
 
-export interface RemoteBundleState {
-  bundle: SyncBundle | null
+export interface RemoteBundleState<TBundle extends SyncBundle = SyncBundle> {
+  bundle: TBundle | null
   etag: string | null
   lastModified: string | null
   updatedAt: number | null
@@ -32,9 +39,33 @@ interface RemoteFileStat {
 }
 
 const STATE_FILE_NAME = 'state.json.gz'
+const MAX_COMPRESSED_BUNDLE_BYTES = 256 * 1024 * 1024
+const MAX_EXPANDED_BUNDLE_BYTES = 512 * 1024 * 1024
 
 function ensureArrayBuffer(value: ArrayBuffer | SharedArrayBuffer): Buffer {
   return Buffer.from(value as ArrayBuffer)
+}
+
+export async function readBoundedBody(response: Response, limit: number): Promise<Buffer> {
+  if (!response.body) return Buffer.alloc(0)
+  const reader = response.body.getReader()
+  const chunks: Buffer[] = []
+  let size = 0
+  try {
+    while (true) {
+      const next = await reader.read()
+      if (next.done) break
+      size += next.value.byteLength
+      if (size > limit) throw new Error('SYNC_BUNDLE_TOO_LARGE')
+      chunks.push(Buffer.from(next.value))
+    }
+    return Buffer.concat(chunks, size)
+  } catch (error) {
+    await reader.cancel().catch(() => undefined)
+    throw error
+  } finally {
+    reader.releaseLock()
+  }
 }
 
 function bufferToBody(buffer: Buffer): BodyInit {
@@ -46,6 +77,17 @@ function bufferToBody(buffer: Buffer): BodyInit {
 
 function trimSlashes(value: string): string {
   return value.replace(/^\/+|\/+$/g, '')
+}
+
+export function workspaceWebDavConfig(
+  config: WebDavSyncConfig,
+  scope: WorkspaceSyncScope
+): WebDavSyncConfig {
+  const scopeHash = workspaceSyncScopeHash(scope)
+  const segments = splitRemotePath(config.remoteDir)
+  if (segments.length === 0 || segments.some((segment) => segment === '.' || segment === '..'))
+    throw new Error('SYNC_REMOTE_PATH_INVALID')
+  return { ...config, remoteDir: `${segments.join('/')}/workspaces-v2/${scopeHash}` }
 }
 
 function splitRemotePath(remotePath: string): string[] {
@@ -261,6 +303,22 @@ export class WebDavProvider {
   }
 
   async download(config: WebDavSyncConfig): Promise<RemoteBundleState> {
+    return this.downloadValidated(config, verifyLegacySyncBundle)
+  }
+
+  async downloadWorkspace(
+    config: WebDavSyncConfig,
+    scope: WorkspaceSyncScope
+  ): Promise<RemoteBundleState<WorkspaceSyncBundle>> {
+    return this.downloadValidated(workspaceWebDavConfig(config, scope), (value) =>
+      verifyWorkspaceSyncBundle(value, scope)
+    )
+  }
+
+  private async downloadValidated<TBundle extends SyncBundle>(
+    config: WebDavSyncConfig,
+    verify: (value: unknown) => TBundle
+  ): Promise<RemoteBundleState<TBundle>> {
     await ensureCollection(config, config.remoteDir)
     await ensureCollection(config, `${config.remoteDir}/backups`)
 
@@ -286,9 +344,13 @@ export class WebDavProvider {
     }
     if (!response.ok) throw new Error(`WebDAV download failed: HTTP ${response.status}`)
 
-    const buffer = ensureArrayBuffer(await response.arrayBuffer())
+    const buffer = await readBoundedBody(response, MAX_COMPRESSED_BUNDLE_BYTES)
     const { gunzipSync } = await import('zlib')
-    const bundle = JSON.parse(gunzipSync(buffer).toString('utf-8')) as SyncBundle
+    const bundle = verify(
+      JSON.parse(
+        gunzipSync(buffer, { maxOutputLength: MAX_EXPANDED_BUNDLE_BYTES }).toString('utf-8')
+      )
+    )
     return {
       bundle,
       etag: response.headers.get('etag')?.replace(/^"|"$/g, '') ?? stat.etag,
@@ -302,11 +364,53 @@ export class WebDavProvider {
     bundle: SyncBundle,
     options: UploadRemoteBundleOptions = {}
   ): Promise<RemoteBundleState> {
+    verifyLegacySyncBundle(bundle)
+    return this.uploadValidated(config, bundle, options, () => this.download(config))
+  }
+
+  async uploadWorkspace(
+    config: WebDavSyncConfig,
+    scope: WorkspaceSyncScope,
+    bundle: WorkspaceSyncBundle,
+    options: UploadRemoteBundleOptions = {}
+  ): Promise<RemoteBundleState<WorkspaceSyncBundle>> {
+    verifyWorkspaceSyncBundle(bundle, scope)
+    if (
+      typeof options.previousExists !== 'boolean' ||
+      (options.previousExists &&
+        (!options.previousEtag ||
+          options.previousEtag.startsWith('W/') ||
+          /["\r\n]/.test(options.previousEtag))) ||
+      (!options.previousExists && options.previousEtag)
+    )
+      throw new Error('SYNC_REMOTE_CONDITIONAL_WRITE_UNAVAILABLE')
+    return this.uploadValidated(
+      workspaceWebDavConfig(config, scope),
+      bundle,
+      options,
+      () => this.downloadWorkspace(config, scope),
+      true
+    )
+  }
+
+  private async uploadValidated<TBundle extends SyncBundle>(
+    config: WebDavSyncConfig,
+    bundle: TBundle,
+    options: UploadRemoteBundleOptions,
+    reload: () => Promise<RemoteBundleState<TBundle>>,
+    requireStrongEtag = false
+  ): Promise<RemoteBundleState<TBundle>> {
     await ensureCollection(config, config.remoteDir)
     await ensureCollection(config, `${config.remoteDir}/backups`)
 
     const stateUrl = buildStateUrl(config)
     const current = await statFile(config, stateUrl)
+    if (
+      requireStrongEtag &&
+      options.previousExists &&
+      (!current.etag || current.etag.startsWith('W/') || current.etag !== options.previousEtag)
+    )
+      throw new RemoteStateChangedError()
     if (
       hasRemoteChanged(
         current,
@@ -347,6 +451,6 @@ export class WebDavProvider {
     if (!response.ok) throw new Error(`WebDAV upload failed: HTTP ${response.status}`)
 
     await pruneBackups(config)
-    return this.download(config)
+    return reload()
   }
 }

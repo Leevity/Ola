@@ -1,47 +1,31 @@
 import { getDefaultApiUserAgent } from '../lib/api-user-agent'
+import { homedir } from 'node:os'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { registerMessagePackHandler } from './messagepack-handler'
-import { getBundledResourceDirCandidates, nativeUserContentRequest } from './user-content-native'
+import { getBundledResourceDirCandidates } from '../resources/bundled-resources'
 import {
   BUILTIN_SOUL_TEMPLATES,
   type BuiltinSoulTemplateWithContent
 } from '../../shared/builtin-souls'
+import { SoulLocalCatalog } from '../user-content/soul-local-catalog'
+import { SoulMarketClient } from '../user-content/soul-market-client'
+import type { SoulCategory, SoulMarketItem } from '../user-content/soul-market-contract'
 
-export interface SoulMarketInfo {
-  id: string
-  slug: string
-  name: string
-  description: string
-  category?: string
-  downloads: number
-  updatedAt?: string
-  filePath?: string
-  url: string
-  downloadUrl: string
-}
-
-export interface SoulCategoryInfo {
-  value: string
-  label: string
-}
-
-function soulParams(args: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    ...args,
-    bundledDirCandidates: getBundledResourceDirCandidates('souls'),
-    builtinTemplates: BUILTIN_SOUL_TEMPLATES,
-    userAgent: getDefaultApiUserAgent()
-  }
-}
+export type SoulMarketInfo = SoulMarketItem
+export type SoulCategoryInfo = SoulCategory
 
 export function registerSoulsHandlers(): void {
+  const localCatalog = new SoulLocalCatalog({
+    homeDirectory: homedir(),
+    olaDataRoot: olaDataRoot(),
+    bundledDirectoryCandidates: getBundledResourceDirCandidates('souls')
+  })
+  const marketClient = new SoulMarketClient({ userAgent: getDefaultApiUserAgent() })
   registerMessagePackHandler<
     undefined,
     { templates: BuiltinSoulTemplateWithContent[]; error?: string }
   >('souls:builtin-list', async () => {
-    return nativeUserContentRequest<{
-      templates: BuiltinSoulTemplateWithContent[]
-      error?: string
-    }>('souls/builtin-list', soulParams())
+    return await localCatalog.builtinList(BUILTIN_SOUL_TEMPLATES)
   })
 
   registerMessagePackHandler<
@@ -55,19 +39,17 @@ export function registerSoulsHandlers(): void {
     },
     { total: number; souls: SoulMarketInfo[]; error?: string }
   >('souls:market-list', async (args) => {
-    return nativeUserContentRequest<{ total: number; souls: SoulMarketInfo[]; error?: string }>(
-      'souls/market-list',
-      soulParams(args)
-    )
+    try {
+      return await marketClient.list(args)
+    } catch (error) {
+      return { total: 0, souls: [], error: errorMessage(error) }
+    }
   })
 
   registerMessagePackHandler<{ apiKey?: string } | undefined, { categories: SoulCategoryInfo[] }>(
     'souls:categories',
     async (args = {}) => {
-      return nativeUserContentRequest<{ categories: SoulCategoryInfo[] }>(
-        'souls/categories',
-        soulParams(args)
-      )
+      return { categories: await marketClient.categories(args.apiKey) }
     }
   )
 
@@ -75,16 +57,17 @@ export function registerSoulsHandlers(): void {
     { slug?: string; downloadUrl?: string; apiKey?: string },
     { content?: string; error?: string }
   >('souls:download-remote', async (args) => {
-    return nativeUserContentRequest<{ content?: string; error?: string }>(
-      'souls/download-remote',
-      soulParams(args)
-    )
+    try {
+      return { content: await marketClient.download(args) }
+    } catch (error) {
+      return { error: errorMessage(error) }
+    }
   })
 
   registerMessagePackHandler<{ projectRootPath?: string } | undefined>(
     'souls:get-target-paths',
     async (args = {}) => {
-      return nativeUserContentRequest('souls/get-target-paths', soulParams(args))
+      return localCatalog.targetPaths(args.projectRootPath)
     }
   )
 
@@ -92,9 +75,10 @@ export function registerSoulsHandlers(): void {
     { content?: string; target?: 'global' | 'project'; projectRootPath?: string },
     { success: boolean; path?: string; error?: string }
   >('souls:install', async (args) => {
-    return nativeUserContentRequest<{ success: boolean; path?: string; error?: string }>(
-      'souls/install',
-      soulParams(args)
-    )
+    return await localCatalog.install(args)
   })
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }

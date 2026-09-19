@@ -1,4 +1,4 @@
-﻿{
+{
   "workspaceHome": {
     "projectNavigation": "项目导航",
     "overview": "项目概览",
@@ -11,6 +11,9 @@
   },
   "input": {
     "sendFailedDraftRetained": "发送失败，草稿已保留。",
+    "visionUnsupportedTitle": "当前模型不支持图片识别",
+    "visionUnsupportedDescription": "“{{model}}”不支持图像输入。请切换到支持视觉识别的模型后重试。",
+    "openModelSettings": "打开模型设置",
     "draftRestored": "已恢复未发送的草稿。",
     "placeholder": "输入消息...",
     "placeholderClarify": "描述你的想法，我会先不断追问把需求问透...",
@@ -75,8 +78,6 @@
     "clearConversation": "清空对话",
     "clearConfirmTitle": "清空所有消息？",
     "clearConfirmDesc": "这将删除此对话中的所有消息，此操作不可撤销。",
-    "compressionBudget": "压缩预算",
-    "remaining": "剩余",
     "compressionBudget": "压缩预算",
     "remaining": "剩余",
     "runtimeMetrics": {
@@ -144,7 +145,6 @@
     "queueEditing": "编辑排队消息",
     "queueQuote": "引用",
     "queueQuoted": "已插入会话",
-    "queueQuoted": "已插入会话",
     "queueImageCount": "{{count}} 张图片",
     "queueImageOnly": "[仅图片]",
     "slashSuggestions": "命令、插件与技能建议",
@@ -162,7 +162,25 @@
     "startAcp": "开始 ACP 会话",
     "startAcpDesc": "先澄清目标、背景、约束和验收标准，再做架构设计与任务分派，最后再进入实现。",
     "homeTitleAcp": "ACP 模式",
-    "homeDescAcp": "ACP 模式下先把目标、背景、约束和验收标准问清楚，再进行架构设计与任务拆分，最后才进入编码。"
+    "homeDescAcp": "ACP 模式下先把目标、背景、约束和验收标准问清楚，再进行架构设计与任务拆分，最后才进入编码。",
+    "noProvider": "没有可用的 AI 供应商",
+    "noProviderDescription": "请在设置中配置或启用 AI 供应商。",
+    "noModel": "没有可用的 AI 模型",
+    "noModelDescription": "请在设置中启用模型。",
+    "optimizationFailed": "提示词优化失败",
+    "optimizationFailedDescription": "请检查供应商连接后重试。",
+    "terminalCreateFailed": "无法创建终端",
+    "terminalCloseFailed": "无法关闭终端",
+    "fileReadFailed": "无法读取文件",
+    "translationAuthenticationRequired": "需要供应商认证",
+    "translationAuthenticationDescription": "请在设置中完成供应商登录后重试。",
+    "translationApiKeyRequired": "需要供应商 API Key",
+    "translationApiKeyDescription": "请在设置中配置 AI 供应商后重试。",
+    "translationFailed": "翻译失败",
+    "imageDownloaded": "图片已下载",
+    "imageDownloadFailed": "图片下载失败。请检查图片来源后重试。",
+    "imageCopied": "图片已复制到剪贴板",
+    "imageCopyFailed": "图片复制失败。请改为下载图片。"
   },
   "planReview": {
     "awaitingReview": "待审阅",
@@ -1036,7 +1054,26 @@
       "lastErrorLabel": "最近一次错误",
       "stackTrace": "堆栈",
       "copy": "复制",
-      "copied": "已复制"
+      "copied": "已复制",
+      "messageStreamRecovery": "此任务的连接已中断，但任务本身可能仍在运行。请先刷新状态，再决定是否重新发送。",
+      "messageRuntimeUnavailable": "本地运行时暂时不可用。请打开“终端与网络”检查连接状态。",
+      "messageAuthentication": "供应商认证被拒绝。请检查所选供应商的账户或 API Key。",
+      "messageProviderMissing": "尚未配置可用的 AI 供应商。请添加或启用供应商后继续。",
+      "messageModelMissing": "尚未启用可用模型。请启用模型后继续。",
+      "messageNetwork": "Ola 无法连接服务。请检查网络、代理和供应商地址。",
+      "action": {
+        "openProvider": "打开供应商设置",
+        "openModel": "打开模型设置",
+        "openSystem": "打开终端与网络设置",
+        "refreshStatus": "刷新任务状态"
+      },
+      "messageBalance": "供应商账户的余额或额度不足。请检查账户与计费信息后再尝试。",
+      "messageRateLimit": "供应商暂时限制了请求频率。请稍等后再尝试。",
+      "messageTimeout": "请求已超时。请先刷新任务状态，再决定是否重新发送。",
+      "messageUpstream": "供应商服务暂时不可用。请稍后再尝试。",
+      "messageRequestInvalid": "请求因配置或参数不正确被拒绝。请检查当前模型设置。",
+      "messageToolFailed": "某个工具未能完成操作。请查看技术详情，并修正其中指出的问题。",
+      "messageOlaUnavailable": "Ola 模型暂不可用。请登录并刷新工作空间，或手动选择本地模型。当前会话不会自动更换模型。"
     }
   },
   "messageActions": {
@@ -1285,8 +1322,14 @@
     "aiCommitFailed": "生成失败，请检查 API / 模型配置后重试",
     "taskProfile": {
       "ariaLabel": "任务类型",
-      "work": { "label": "Work", "desc": "日常工作" },
-      "code": { "label": "Code", "desc": "项目与编程" }
+      "work": {
+        "label": "Work",
+        "desc": "日常工作"
+      },
+      "code": {
+        "label": "Code",
+        "desc": "项目与编程"
+      }
     }
   }
 }

@@ -4,6 +4,7 @@ import type { IPCClient } from '../../tools/tool-types'
 
 export async function resolveSubAgentWorkspaceProtocolPrompt(options: {
   ipc: IPCClient
+  workspaceId?: string
   workingFolder?: string
   sshConnectionId?: string | null
   scope?: SessionMemoryScope
@@ -11,6 +12,7 @@ export async function resolveSubAgentWorkspaceProtocolPrompt(options: {
   if (!options.workingFolder?.trim()) return null
   try {
     const snapshot = await loadLayeredMemorySnapshot(options.ipc, {
+      workspaceId: options.workspaceId,
       workingFolder: options.workingFolder,
       sshConnectionId: options.sshConnectionId ?? undefined,
       scope: options.scope ?? 'main'

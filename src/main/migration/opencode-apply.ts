@@ -1,6 +1,6 @@
 import * as fs from 'fs'
-import * as os from 'os'
 import * as path from 'path'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { randomUUID } from 'crypto'
 import type {
   MigrationAction,
@@ -23,7 +23,7 @@ import type {
   ProviderPreviewPayload
 } from './types'
 
-const DATA_DIR = path.join(os.homedir(), '.ola')
+const DATA_DIR = olaDataRoot()
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json')
 const COMMANDS_DIR = path.join(DATA_DIR, 'commands')
 const AGENTS_DIR = path.join(DATA_DIR, 'agents')

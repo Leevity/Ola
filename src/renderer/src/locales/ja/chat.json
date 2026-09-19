@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "メッセージを入力してください...",
     "placeholderClarify": "アイデアを書いてください。要件が明確になるまで、こちらから確認を続けます...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "最後のエラー",
       "stackTrace": "スタックトレース",
       "copy": "コピー",
-      "copied": "コピッド"
+      "copied": "コピッド",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

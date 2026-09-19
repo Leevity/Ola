@@ -1,11 +1,27 @@
 import { toolRegistry } from '../agent/tool-registry'
 import { encodeStructuredToolResult } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import { ipcClient } from '../ipc/ipc-client'
+import { IPC } from '../ipc/channels'
 
-function nativeOnlyResult(toolName: string): string {
-  return encodeStructuredToolResult({
-    error: `${toolName} execution has migrated to .NET Native Worker.`
-  })
+async function invokeSearch(
+  channel: string,
+  input: Record<string, unknown>,
+  ctx: Parameters<ToolHandler['execute']>[1]
+): Promise<string> {
+  try {
+    const result = await ipcClient.invoke(channel, {
+      ...input,
+      path: typeof input.path === 'string' ? input.path : ctx.workingFolder
+    })
+    return encodeStructuredToolResult(
+      result && typeof result === 'object' ? { ...(result as Record<string, unknown>) } : { result }
+    )
+  } catch (error) {
+    return encodeStructuredToolResult({
+      error: error instanceof Error ? error.message : String(error)
+    })
+  }
 }
 
 const globHandler: ToolHandler = {
@@ -32,7 +48,7 @@ const globHandler: ToolHandler = {
       required: ['pattern']
     }
   },
-  execute: async () => nativeOnlyResult('Glob'),
+  execute: async (input, ctx) => invokeSearch(IPC.FS_GLOB, input, ctx),
   requiresApproval: () => false,
   capability: {
     readOnly: true,
@@ -186,7 +202,7 @@ const grepHandler: ToolHandler = {
       required: ['pattern']
     }
   },
-  execute: async () => nativeOnlyResult('Grep'),
+  execute: async (input, ctx) => invokeSearch(IPC.FS_GREP, input, ctx),
   requiresApproval: () => false,
   capability: {
     readOnly: true,

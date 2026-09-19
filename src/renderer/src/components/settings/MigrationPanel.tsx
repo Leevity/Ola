@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import { Separator } from '@renderer/components/ui/separator'
+import { confirm } from '@renderer/components/ui/confirm-dialog'
 import {
   Select,
   SelectContent,
@@ -59,6 +60,43 @@ const KIND_LABEL_KEYS: Record<MigrationItemKind, string> = {
   instructions: 'migration.kinds.instructions'
 }
 
+type BusinessHandoverStatus = {
+  promoted: boolean
+  inFlight: boolean
+  runtimeAvailable?: boolean
+  enabled?: boolean
+  handoverReady?: boolean
+  handoverBlocker?: string
+  manifestPath?: string
+  backupPath?: string
+}
+
+function describeBusinessHandoverBlocker(
+  reason: string,
+  t: (key: string, options?: Record<string, unknown>) => string
+): string {
+  if (reason.includes('SCHEMA_UNSUPPORTED'))
+    return t('migration.businessHandoverSchemaUnsupported', {
+      defaultValue: 'The legacy database schema is missing a required business field.'
+    })
+  if (reason.includes('BACKUP_SPACE'))
+    return t('migration.businessHandoverBackupSpace', {
+      defaultValue: 'There is not enough free space for a rollback snapshot.'
+    })
+  if (reason.includes('BACKUP_DIRECTORY'))
+    return t('migration.businessHandoverBackupDirectory', {
+      defaultValue: 'The rollback directory is unavailable or unsafe.'
+    })
+  if (reason.includes('DATABASE_UNAVAILABLE') || reason.includes('DATABASE_PATH'))
+    return t('migration.businessHandoverSourceUnavailable', {
+      defaultValue: 'The legacy business database is not available yet.'
+    })
+  return t('migration.businessHandoverPreflightUnknown', {
+    defaultValue: 'Preflight could not complete: {{reason}}',
+    reason
+  })
+}
+
 function statusBadgeVariant(
   status: MigrationApplyResult['results'][number]['status']
 ): 'default' | 'secondary' | 'destructive' | 'outline' {
@@ -75,6 +113,55 @@ export function MigrationPanel(): React.JSX.Element {
   const [result, setResult] = useState<MigrationApplyResult | null>(null)
   const [loadingPreview, setLoadingPreview] = useState(false)
   const [applying, setApplying] = useState(false)
+  const [businessHandover, setBusinessHandover] = useState<BusinessHandoverStatus | null>(null)
+  const [businessHandoverLoading, setBusinessHandoverLoading] = useState(false)
+
+  const loadBusinessHandoverStatus = useCallback(async () => {
+    try {
+      const status = (await ipcClient.invoke(
+        IPC.MIGRATION_BUSINESS_HANDOVER_STATUS
+      )) as BusinessHandoverStatus
+      setBusinessHandover(status)
+    } catch (error) {
+      console.warn('[MigrationPanel] Failed to load business handover status', error)
+    }
+  }, [])
+
+  const executeBusinessHandover = useCallback(async () => {
+    if (
+      !(await confirm({
+        title: t('migration.businessHandoverConfirm', {
+          defaultValue:
+            'Create a rollback snapshot and switch business writes to the TS runtime now?'
+        })
+      }))
+    )
+      return
+    setBusinessHandoverLoading(true)
+    try {
+      const status = (await ipcClient.invoke(IPC.MIGRATION_BUSINESS_HANDOVER, {
+        confirm: true
+      })) as BusinessHandoverStatus
+      setBusinessHandover(status)
+      toast.success(
+        t('migration.businessHandoverSuccess', {
+          defaultValue: 'Business data is now owned by the TS runtime.'
+        })
+      )
+    } catch (error) {
+      toast.error(
+        t('migration.businessHandoverFailed', {
+          defaultValue: `Business handover failed: ${error instanceof Error ? error.message : String(error)}`
+        })
+      )
+    } finally {
+      setBusinessHandoverLoading(false)
+    }
+  }, [t])
+
+  useEffect(() => {
+    void loadBusinessHandoverStatus()
+  }, [loadBusinessHandoverStatus])
 
   const loadPreview = useCallback(async () => {
     setLoadingPreview(true)
@@ -180,6 +267,77 @@ export function MigrationPanel(): React.JSX.Element {
         <h2 className="text-lg font-semibold">{t('migration.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('migration.subtitle')}</p>
       </div>
+
+      <section className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">
+              {t('migration.businessHandoverTitle', {
+                defaultValue: 'TS business runtime ownership'
+              })}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {t('migration.businessHandoverDescription', {
+                defaultValue:
+                  'Create a verified rollback snapshot, stop legacy writers, and route business data through the offline-first TS runtime.'
+              })}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={businessHandover?.promoted ? 'default' : 'outline'}>
+              {businessHandover?.promoted
+                ? t('migration.businessHandoverActive', { defaultValue: 'TS active' })
+                : t('migration.businessHandoverPending', { defaultValue: 'Not promoted' })}
+            </Badge>
+            <Button
+              size="sm"
+              variant={businessHandover?.promoted ? 'outline' : 'default'}
+              onClick={() => void executeBusinessHandover()}
+              disabled={
+                businessHandoverLoading ||
+                businessHandover?.promoted ||
+                businessHandover?.inFlight ||
+                businessHandover?.runtimeAvailable === false ||
+                businessHandover?.enabled === false ||
+                businessHandover?.handoverReady === false
+              }
+            >
+              {businessHandoverLoading
+                ? t('migration.businessHandoverRunning', { defaultValue: 'Preparing…' })
+                : businessHandover?.promoted
+                  ? t('migration.businessHandoverDone', { defaultValue: 'Completed' })
+                  : t('migration.businessHandoverAction', { defaultValue: 'Promote to TS' })}
+            </Button>
+          </div>
+        </div>
+        {businessHandover &&
+          !businessHandover.promoted &&
+          (businessHandover.runtimeAvailable === false || businessHandover.enabled === false) && (
+            <p className="text-[11px] text-muted-foreground">
+              {t('migration.businessHandoverUnavailable', {
+                defaultValue:
+                  'Promotion is unavailable until the TS runtime is ready and the handover safety flag is enabled.'
+              })}
+            </p>
+          )}
+        {businessHandover &&
+          !businessHandover.promoted &&
+          businessHandover.handoverReady === false &&
+          businessHandover.handoverBlocker && (
+            <p className="text-[11px] text-muted-foreground">
+              {t('migration.businessHandoverPreflight', {
+                defaultValue: 'Preflight check: {{reason}}',
+                reason: describeBusinessHandoverBlocker(businessHandover.handoverBlocker, t)
+              })}
+            </p>
+          )}
+        {businessHandover?.backupPath && (
+          <p className="break-all text-[11px] text-muted-foreground">
+            {t('migration.businessHandoverBackup', { defaultValue: 'Rollback snapshot' })}:{' '}
+            {businessHandover.backupPath}
+          </p>
+        )}
+      </section>
 
       <section className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">

@@ -1,13 +1,15 @@
 import { app, session, type Session } from 'electron'
-import { existsSync, readFileSync, readdirSync } from 'fs'
-import { join } from 'path'
-import { homedir, platform } from 'os'
+import { existsSync, readFileSync, readdirSync, realpathSync } from 'fs'
+import { isAbsolute, join, relative, sep } from 'path'
+import { platform } from 'os'
 import { readSettings } from '../ipc/settings-handlers'
+import { olaExternalDataHome } from '../lib/ola-data-root'
 import {
   BROWSER_SETTINGS_STORAGE_KEY,
   BROWSER_USER_DATA_SOURCE_SETTING_KEY,
   BROWSER_USER_DATA_REUSE_SETTING_KEY,
   BUILTIN_BROWSER_PARTITION,
+  browserPartitionForWorkspace,
   isBrowserUserDataReuseEnabled,
   normalizeBrowserUserDataSource,
   type BrowserUserDataSource,
@@ -104,23 +106,38 @@ function listProfileDirs(dataRoot: string): string[] {
   }
 }
 
+function isIsolatedBrowserPath(path: string): boolean {
+  if (process.env.OLA_E2E_DATA_ROOT === undefined) return true
+  try {
+    const root = realpathSync(olaExternalDataHome())
+    const actual = realpathSync(path)
+    const inside = relative(root, actual)
+    return inside !== '' && inside !== '..' && !inside.startsWith(`..${sep}`) && !isAbsolute(inside)
+  } catch {
+    return false
+  }
+}
+
 export function listDetectedBrowserProfiles(): BrowserProfileCandidate[] {
-  return getBrowserInstallLocations().flatMap((location) =>
-    listProfileDirs(location.dataRoot).flatMap((profileDirName) => {
-      const profilePath = join(location.dataRoot, profileDirName)
-      const cookiesPath = existsSync(join(profilePath, 'Network', 'Cookies'))
-        ? join(profilePath, 'Network', 'Cookies')
-        : join(profilePath, 'Cookies')
-      if (!existsSync(cookiesPath)) return []
-      return [
-        {
-          ...location,
-          profilePath,
-          profileDisplayName: getProfileDisplayName(profileDirName)
-        }
-      ]
-    })
-  )
+  return getBrowserInstallLocations()
+    .filter((location) => isIsolatedBrowserPath(location.dataRoot))
+    .flatMap((location) =>
+      listProfileDirs(location.dataRoot).flatMap((profileDirName) => {
+        const profilePath = join(location.dataRoot, profileDirName)
+        if (!isIsolatedBrowserPath(profilePath)) return []
+        const cookiesPath = existsSync(join(profilePath, 'Network', 'Cookies'))
+          ? join(profilePath, 'Network', 'Cookies')
+          : join(profilePath, 'Cookies')
+        if (!existsSync(cookiesPath)) return []
+        return [
+          {
+            ...location,
+            profilePath,
+            profileDisplayName: getProfileDisplayName(profileDirName)
+          }
+        ]
+      })
+    )
 }
 
 function resolveProfileDirName(dataRoot: string): string | null {
@@ -133,13 +150,13 @@ function resolveProfileDirName(dataRoot: string): string | null {
 }
 
 function toProfileCandidate(location: BrowserInstallLocation): BrowserProfileCandidate | null {
-  if (!existsSync(location.dataRoot)) return null
+  if (!existsSync(location.dataRoot) || !isIsolatedBrowserPath(location.dataRoot)) return null
 
   const profileDirName = resolveProfileDirName(location.dataRoot)
   if (!profileDirName) return null
 
   const profilePath = join(location.dataRoot, profileDirName)
-  if (!existsSync(profilePath)) return null
+  if (!existsSync(profilePath) || !isIsolatedBrowserPath(profilePath)) return null
 
   return {
     ...location,
@@ -149,7 +166,7 @@ function toProfileCandidate(location: BrowserInstallLocation): BrowserProfileCan
 }
 
 function getBrowserInstallLocations(): BrowserInstallLocation[] {
-  const home = homedir()
+  const home = olaExternalDataHome()
 
   if (platform() === 'darwin') {
     return [
@@ -177,7 +194,10 @@ function getBrowserInstallLocations(): BrowserInstallLocation[] {
   }
 
   if (platform() === 'win32') {
-    const localAppData = process.env.LOCALAPPDATA || join(home, 'AppData/Local')
+    const localAppData =
+      process.env.OLA_E2E_DATA_ROOT === undefined
+        ? process.env.LOCALAPPDATA || join(home, 'AppData/Local')
+        : join(home, 'AppData/Local')
     return [
       {
         browserId: 'chrome',
@@ -272,16 +292,21 @@ export function shouldUseDefaultBrowserSession(): boolean {
   return mode.reuseEnabled
 }
 
-export function getBuiltInBrowserSession(): Session {
+export function getBuiltInBrowserSession(workspaceId = 'local-personal'): Session {
   return shouldUseDefaultBrowserSession()
     ? session.defaultSession
-    : session.fromPartition(BUILTIN_BROWSER_PARTITION)
+    : session.fromPartition(browserPartitionForWorkspace(workspaceId))
 }
 
-export function getBuiltInBrowserStorageSessions(): Session[] {
+export function getBuiltInBrowserStorageSessions(
+  workspaceIds: Iterable<string> = ['local-personal']
+): Session[] {
+  const ids = [...workspaceIds]
   const sessions = new Set<Session>()
-  sessions.add(getBuiltInBrowserSession())
-  sessions.add(session.fromPartition(BUILTIN_BROWSER_PARTITION))
+  for (const workspaceId of ids) sessions.add(getBuiltInBrowserSession(workspaceId))
+  // The legacy partition belongs to local-personal only. Adding it while
+  // clearing a team workspace would silently cross the isolation boundary.
+  if (ids.includes('local-personal')) sessions.add(session.fromPartition(BUILTIN_BROWSER_PARTITION))
   return [...sessions]
 }
 

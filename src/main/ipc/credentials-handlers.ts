@@ -48,6 +48,7 @@ import {
   SHARED_BUILTIN_SITE_TEMPLATES
 } from '../../shared/site-profiles-shared'
 import { listCredentialAudit, recordCredentialAudit } from '../credentials/credential-audit'
+import { getRegisteredBrowserGuest } from '../browser/browser-service'
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -91,6 +92,14 @@ function isCredentialInjectionTargetAllowed(args: {
   }
   if (target.hostWebContents?.id !== ownerWindow.webContents.id) {
     return { allowed: false, error: 'webContents is not owned by the requesting window' }
+  }
+  if (
+    !getRegisteredBrowserGuest({
+      hostWebContentsId: sender.id,
+      guestWebContentsId: target.id
+    })
+  ) {
+    return { allowed: false, error: 'browser tab is not registered with the Main browser service' }
   }
 
   try {

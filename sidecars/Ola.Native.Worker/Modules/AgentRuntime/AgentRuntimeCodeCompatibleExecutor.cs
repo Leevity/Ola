@@ -75,7 +75,7 @@ internal static class AgentRuntimeCodeCompatibleExecutor
         var startedAt = Stopwatch.GetTimestamp();
         using var process = CreateShellProcess(
             "powershell.exe",
-            ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", command],
+            ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
             cwd);
 
         try

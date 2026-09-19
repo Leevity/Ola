@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipes;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 internal sealed class LocalIpcWorkerServer
@@ -40,7 +42,7 @@ internal sealed class LocalIpcWorkerServer
                 PipeDirection.InOut,
                 maxNumberOfServerInstances: 1,
                 PipeTransmissionMode.Byte,
-                PipeOptions.Asynchronous);
+                PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
 
             await pipe.WaitForConnectionAsync(cancellationToken);
             WorkerLog.Debug("client connected transport=named-pipe");
@@ -51,6 +53,7 @@ internal sealed class LocalIpcWorkerServer
 
     private async Task RunUnixSocketAsync(CancellationToken cancellationToken)
     {
+        ValidateUnixSocketEndpoint(endpoint.Address);
         TryDeleteSocketFile(endpoint.Address);
 
         using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
@@ -86,6 +89,11 @@ internal sealed class LocalIpcWorkerServer
 
         try
         {
+            if (!await AuthenticateClientAsync(stream, clientCts.Token))
+            {
+                WorkerLog.Warn("client rejected: native worker IPC authentication failed");
+                return;
+            }
             while (!clientCts.IsCancellationRequested)
             {
                 var frame = await MessagePackFrameProtocol.ReadFrameAsync(stream, clientCts.Token);
@@ -130,6 +138,38 @@ internal sealed class LocalIpcWorkerServer
             {
                 WorkerLog.Warn($"request task stopped after client disconnect error={ex.GetType().Name}: {ex.Message}");
             }
+        }
+    }
+
+    private async Task<bool> AuthenticateClientAsync(Stream stream, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(endpoint.AuthenticationToken))
+        {
+            return true;
+        }
+
+        var frame = await MessagePackFrameProtocol.ReadFrameAsync(stream, cancellationToken);
+        if (frame is null)
+        {
+            return false;
+        }
+        try
+        {
+            using var document = JsonDocument.Parse(MessagePackFrameProtocol.ConvertRequestToJson(frame));
+            var root = document.RootElement;
+            var method = JsonHelpers.GetString(root, "method");
+            var supplied = root.TryGetProperty("params", out var parameters)
+                ? JsonHelpers.GetString(parameters, "token")
+                : null;
+            return string.Equals(method, "__ola_handshake", StringComparison.Ordinal) &&
+                !string.IsNullOrEmpty(supplied) &&
+                CryptographicOperations.FixedTimeEquals(
+                    Encoding.UTF8.GetBytes(supplied),
+                    Encoding.UTF8.GetBytes(endpoint.AuthenticationToken));
+        }
+        catch
+        {
+            return false;
         }
     }
 
@@ -281,14 +321,39 @@ internal sealed class LocalIpcWorkerServer
     {
         try
         {
-            if (File.Exists(path))
+            var attributes = File.GetAttributes(path);
+            if ((attributes & FileAttributes.ReparsePoint) != 0 ||
+                new FileInfo(path).LinkTarget is not null)
             {
-                File.Delete(path);
+                WorkerLog.Warn("refusing to delete IPC socket link");
+                return;
             }
+            File.Delete(path);
         }
+        catch (FileNotFoundException) { }
+        catch (DirectoryNotFoundException) { }
         catch
         {
             // Best effort cleanup; bind will surface any real failure.
+        }
+    }
+
+    private static void ValidateUnixSocketEndpoint(string path)
+    {
+        if (!Path.IsPathFullyQualified(path))
+        {
+            throw new ArgumentException("Unix IPC endpoint must be an absolute path.");
+        }
+        var parent = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(parent))
+        {
+            throw new ArgumentException("Unix IPC endpoint must have a parent directory.");
+        }
+        var directory = new DirectoryInfo(parent);
+        if (!directory.Exists || directory.LinkTarget is not null ||
+            (directory.Attributes & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException("Unix IPC endpoint directory must exist and cannot be a link.");
         }
     }
 

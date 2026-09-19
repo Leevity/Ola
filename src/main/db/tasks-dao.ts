@@ -1,4 +1,6 @@
 import { getNativeWorker } from '../lib/native-worker'
+import { canaryGetTask, canaryListTasks, canaryListTasksBySession } from './legacy-read-canary'
+import { businessWriteCanary } from './business-write-canary'
 
 export interface TaskRow {
   id: string
@@ -37,16 +39,36 @@ async function requestMutation(method: string, params: object): Promise<TaskMuta
   return result
 }
 
-export function listTasksBySession(sessionId: string): Promise<TaskRow[]> {
-  return getNativeWorker().request<TaskRow[]>('db/tasks-list-by-session', { sessionId }, 120_000)
+export async function listTasksBySession(
+  sessionId: string,
+  workspaceId = 'local-personal'
+): Promise<TaskRow[]> {
+  const migrated = await canaryListTasksBySession(sessionId, workspaceId)
+  if (migrated !== undefined) return migrated
+  return getNativeWorker().request<TaskRow[]>(
+    'db/tasks-list-by-session',
+    { sessionId, workspaceId },
+    120_000
+  )
 }
 
-export function listAllTasks(): Promise<TaskRow[]> {
-  return getNativeWorker().request<TaskRow[]>('db/tasks-list-all', {}, 120_000)
+export async function listAllTasks(workspaceId = 'local-personal'): Promise<TaskRow[]> {
+  const migrated = await canaryListTasks(workspaceId)
+  if (migrated !== undefined) return migrated
+  return getNativeWorker().request<TaskRow[]>('db/tasks-list-all', { workspaceId }, 120_000)
 }
 
-export async function getTask(id: string): Promise<TaskRow | undefined> {
-  const result = await getNativeWorker().request<TaskFindResult>('db/tasks-get', { id }, 120_000)
+export async function getTask(
+  id: string,
+  workspaceId = 'local-personal'
+): Promise<TaskRow | undefined> {
+  const migrated = await canaryGetTask(id, workspaceId)
+  if (migrated !== undefined) return migrated ?? undefined
+  const result = await getNativeWorker().request<TaskFindResult>(
+    'db/tasks-get',
+    { id, workspaceId },
+    120_000
+  )
   if (!result.success) {
     throw new Error(result.error || 'Native task get failed')
   }
@@ -56,6 +78,7 @@ export async function getTask(id: string): Promise<TaskRow | undefined> {
 export async function createTask(task: {
   id: string
   sessionId: string
+  workspaceId: string
   planId?: string
   subject: string
   description: string
@@ -69,11 +92,25 @@ export async function createTask(task: {
   createdAt: number
   updatedAt: number
 }): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.createTask({
+      ...task,
+      planId: task.planId ?? null,
+      activeForm: task.activeForm ?? null,
+      owner: task.owner ?? null,
+      blocks: task.blocks ?? [],
+      blockedBy: task.blockedBy ?? [],
+      metadata: task.metadata ?? null
+    })
+    return
+  }
   await requestMutation('db/tasks-create', task)
 }
 
 export async function updateTask(
   id: string,
+  workspaceId: string,
   patch: Partial<{
     subject: string
     description: string
@@ -87,13 +124,33 @@ export async function updateTask(
     updatedAt: number
   }>
 ): Promise<void> {
-  await requestMutation('db/tasks-update', { id, patch })
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.updateTask({
+      id,
+      workspaceId,
+      ...patch,
+      updatedAt: patch.updatedAt ?? Date.now()
+    })
+    return
+  }
+  await requestMutation('db/tasks-update', { id, workspaceId, patch })
 }
 
-export async function deleteTask(id: string): Promise<void> {
-  await requestMutation('db/tasks-delete', { id })
+export async function deleteTask(id: string, workspaceId: string): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.deleteTask({ id, workspaceId })
+    return
+  }
+  await requestMutation('db/tasks-delete', { id, workspaceId })
 }
 
-export async function deleteTasksBySession(sessionId: string): Promise<void> {
-  await requestMutation('db/tasks-delete-by-session', { sessionId })
+export async function deleteTasksBySession(sessionId: string, workspaceId: string): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.deleteTasksBySession({ sessionId, workspaceId })
+    return
+  }
+  await requestMutation('db/tasks-delete-by-session', { sessionId, workspaceId })
 }

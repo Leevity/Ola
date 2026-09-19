@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "Gõ tin nhắn...",
     "placeholderClarify": "Mô tả ý tưởng của anh và tôi sẽ tiếp tục điều tra cho đến khi các yêu cầu rõ ràng...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "Lỗi cuối",
       "stackTrace": "Vết chồng",
       "copy": "Chép",
-      "copied": "Sao chép"
+      "copied": "Sao chép",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

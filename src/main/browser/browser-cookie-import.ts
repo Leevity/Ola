@@ -1,17 +1,18 @@
 import { execFile } from 'node:child_process'
-import { copyFile, mkdtemp, rm } from 'node:fs/promises'
+import { copyFile, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { existsSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { promisify } from 'node:util'
 import Database from 'better-sqlite3'
-import { safeStorage } from 'electron'
+import { BrowserWindow, dialog, safeStorage } from 'electron'
 import {
   getBuiltInBrowserSession,
   listDetectedBrowserProfiles,
   type BrowserProfileCandidate
 } from './browser-emulation'
 import type { ConcreteBrowserUserDataSource } from '../../shared/browser-plugin'
+import { canPersistSecrets } from '../credentials/secure-storage-policy'
 import { decryptChromiumCbcCookie, decryptChromiumGcmCookie } from './chromium-cookie-crypto'
 
 const execFileAsync = promisify(execFile)
@@ -33,6 +34,22 @@ export interface BrowserCookieImportResult {
   error?: string
 }
 
+export interface BrowserCookieExportResult {
+  success: boolean
+  exported: number
+  errorKind?: 'secure_storage_unavailable' | 'cancelled' | 'write_failed'
+  error?: string
+}
+
+type EncryptedBrowserCookieArchive = {
+  schemaVersion: 1
+  kind: 'ola-browser-cookie-archive'
+  encryption: 'electron-safe-storage'
+  workspaceId: string
+  exportedAt: number
+  ciphertext: string
+}
+
 interface ChromiumCookieRow {
   host_key: string
   name: string
@@ -42,6 +59,61 @@ interface ChromiumCookieRow {
   is_secure: number
   is_httponly: number
   samesite: number
+}
+
+function browserCookieArchiveFileName(workspaceId: string): string {
+  const safeWorkspace = workspaceId.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '')
+  return `ola-browser-cookies-${safeWorkspace || 'workspace'}.ola-cookies`
+}
+
+/**
+ * Exports only an Electron-safe-storage ciphertext. Cookie values are never
+ * serialised into the archive envelope and cannot be restored by another OS
+ * user or a system without the originating secure-storage key.
+ */
+export async function exportBuiltInBrowserCookies(
+  sender: Electron.WebContents,
+  workspaceId: string
+): Promise<BrowserCookieExportResult> {
+  if (!canPersistSecrets(safeStorage)) {
+    return { success: false, exported: 0, errorKind: 'secure_storage_unavailable' }
+  }
+  try {
+    const cookies = await getBuiltInBrowserSession(workspaceId).cookies.get({})
+    const exportedAt = Date.now()
+    const archive: EncryptedBrowserCookieArchive = {
+      schemaVersion: 1,
+      kind: 'ola-browser-cookie-archive',
+      encryption: 'electron-safe-storage',
+      workspaceId,
+      exportedAt,
+      ciphertext: safeStorage
+        .encryptString(JSON.stringify({ schemaVersion: 1, workspaceId, exportedAt, cookies }))
+        .toString('base64')
+    }
+    const ownerWindow = BrowserWindow.fromWebContents(sender)
+    const result =
+      ownerWindow && !ownerWindow.isDestroyed()
+        ? await dialog.showSaveDialog(ownerWindow, {
+            defaultPath: browserCookieArchiveFileName(workspaceId),
+            filters: [{ name: 'Ola encrypted browser cookies', extensions: ['ola-cookies'] }]
+          })
+        : await dialog.showSaveDialog({
+            defaultPath: browserCookieArchiveFileName(workspaceId),
+            filters: [{ name: 'Ola encrypted browser cookies', extensions: ['ola-cookies'] }]
+          })
+    if (result.canceled || !result.filePath)
+      return { success: false, exported: 0, errorKind: 'cancelled' }
+    await writeFile(result.filePath, JSON.stringify(archive), { encoding: 'utf8', mode: 0o600 })
+    return { success: true, exported: cookies.length }
+  } catch (error) {
+    return {
+      success: false,
+      exported: 0,
+      errorKind: 'write_failed',
+      error: error instanceof Error ? error.message : String(error)
+    }
+  }
 }
 
 function profileId(profile: BrowserProfileCandidate): string {
@@ -140,7 +212,8 @@ function sameSite(value: number): 'unspecified' | 'no_restriction' | 'lax' | 'st
 }
 
 export async function importBrowserCookies(
-  profileIdValue: string
+  profileIdValue: string,
+  workspaceId = 'local-personal'
 ): Promise<BrowserCookieImportResult> {
   const profile = listDetectedBrowserProfiles().find(
     (candidate) => profileId(candidate) === profileIdValue
@@ -167,7 +240,7 @@ export async function importBrowserCookies(
       .all() as ChromiumCookieRow[]
     const macKey = process.platform === 'darwin' ? await macPassword(profile.browserId) : null
     const winKey = process.platform === 'win32' ? await windowsKey(profile) : null
-    const targetSession = getBuiltInBrowserSession()
+    const targetSession = getBuiltInBrowserSession(workspaceId)
     let imported = 0
     let skipped = 0
     let failed = 0

@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "Escribe un mensaje...",
     "placeholderClarify": "Describe tu idea y seguiré probando hasta que los requisitos estén claros...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "Último error",
       "stackTrace": "Rastreo de escaleras",
       "copy": "Copiado",
-      "copied": "Copiado"
+      "copied": "Copiado",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

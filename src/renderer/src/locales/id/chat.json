@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "Ketik pesan...",
     "placeholderClarify": "Jelaskan ide Anda dan saya akan terus menyelidiki sampai persyaratan jelas...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "Galat terakhir",
       "stackTrace": "Pelacakan stack",
       "copy": "Salin",
-      "copied": "Disalin"
+      "copied": "Disalin",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

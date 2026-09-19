@@ -1,3 +1,4 @@
+import { LOCAL_PERSONAL_WORKSPACE } from '@renderer/lib/workspace-context'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import packageJson from '../../../../../package.json'
@@ -88,6 +89,8 @@ import type { TaskProfile } from '@renderer/lib/task-profile'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore } from '@renderer/stores/team-store'
 import { useRemoteAccountStore } from '@renderer/stores/remote-account-store'
+import { switchWorkspace } from '@renderer/lib/switch-workspace'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useBackgroundSessionStore } from '@renderer/stores/background-session-store'
 import {
   abortSession,
@@ -434,6 +437,9 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const persistedLeftSidebarWidth = useSettingsStore((state) => state.leftSidebarWidth)
   const updateSettings = useSettingsStore((state) => state.updateSettings)
   const account = useRemoteAccountStore((state) => state.account)
+  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
+  const olaWorkspaces = useWorkspaceStore((state) => state.olaWorkspaces)
+  const workspaces = useMemo(() => [LOCAL_PERSONAL_WORKSPACE, ...olaWorkspaces], [olaWorkspaces])
   const openAccountAuthPage = useUIStore((state) => state.openAccountAuthPage)
   const projectsRaw = useStoreWithEqualityFn(
     useChatStore,
@@ -445,8 +451,20 @@ export function WorkspaceSidebar(): React.JSX.Element {
     (state) => state.sessions,
     areSessionListsEqual
   )
-  const projects = useMemo(() => projectsRaw.map(mapProject), [projectsRaw])
-  const sessions = useMemo(() => sessionsRaw.map(mapSession), [sessionsRaw])
+  const projects = useMemo(
+    () =>
+      projectsRaw
+        .filter((project) => (project.workspaceId ?? 'local-personal') === activeWorkspaceId)
+        .map(mapProject),
+    [activeWorkspaceId, projectsRaw]
+  )
+  const sessions = useMemo(
+    () =>
+      sessionsRaw
+        .filter((session) => (session.workspaceId ?? 'local-personal') === activeWorkspaceId)
+        .map(mapSession),
+    [activeWorkspaceId, sessionsRaw]
+  )
   const activeProjectId = useChatStore((state) => state.activeProjectId)
   const activeSessionId = useChatStore((state) => state.activeSessionId)
   const updateSessionTaskProfile = useChatStore((state) => state.updateSessionTaskProfile)
@@ -661,6 +679,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
       })
     )
   }, [])
+
+  const handleWorkspaceChange = useCallback(
+    async (workspaceId: string) => {
+      if (!(await switchWorkspace(workspaceId))) toast.error(t('sidebar.workspaceBusy'))
+    },
+    [t]
+  )
 
   const openRemoteWindow = useCallback(() => {
     void ipcClient.invoke(IPC.SSH_WINDOW_OPEN)
@@ -1378,6 +1403,24 @@ export function WorkspaceSidebar(): React.JSX.Element {
           <div className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-foreground/90">
             Ola
           </div>
+        </div>
+
+        <div className="shrink-0 px-2 pb-1.5">
+          <label className="sr-only" htmlFor="ola-workspace-switcher">
+            {t('sidebar.workspaceSwitcher')}
+          </label>
+          <select
+            id="ola-workspace-switcher"
+            value={activeWorkspaceId}
+            onChange={(event) => handleWorkspaceChange(event.target.value)}
+            className="h-8 w-full rounded-lg border border-border/70 bg-muted/35 px-2 text-xs font-medium text-sidebar-foreground outline-none transition-colors hover:bg-muted/60 focus:ring-2 focus:ring-primary/30"
+          >
+            {workspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>
+                {workspace.kind === 'local-personal' ? t('sidebar.localWorkspace') : workspace.name}
+              </option>
+            ))}
+          </select>
         </div>
 
         <div className="relative shrink-0 px-2 pb-1.5" ref={taskProfileMenuRef}>

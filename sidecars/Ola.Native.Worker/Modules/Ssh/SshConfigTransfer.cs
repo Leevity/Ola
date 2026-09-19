@@ -462,7 +462,7 @@ internal static partial class SshConfigTransfer
         var paths = new[]
         {
             Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath)) ?? string.Empty, "known_hosts"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".ssh", "known_hosts")
+            Path.Combine(OlaDataRoot.ExternalDataHome, ".ssh", "known_hosts")
         };
 
         foreach (var knownHostsPath in paths)

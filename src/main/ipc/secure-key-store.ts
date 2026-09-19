@@ -1,25 +1,16 @@
-import { getNativeWorker } from '../lib/native-worker'
 import { registerMessagePackHandler } from './messagepack-handler'
+import { ConfigStore, type ConfigMutationResult } from '../config/config-store'
 import {
   getProviderMainMirrorSnapshot,
   hydrateProviderMainMirror,
   updateProviderMainMirror
 } from '../providers/provider-main-store'
 
-const CONFIG_TIMEOUT_MS = 60_000
-
-type MutationResult = {
-  success: boolean
-  error?: string
-}
+const configStore = new ConfigStore()
 
 export async function readConfig(): Promise<Record<string, unknown>> {
   try {
-    const config = await getNativeWorker().request<Record<string, unknown>>(
-      'config/read',
-      {},
-      CONFIG_TIMEOUT_MS
-    )
+    const config = await configStore.read()
     hydrateProviderMainMirror(config)
     return config
   } catch (err) {
@@ -29,32 +20,24 @@ export async function readConfig(): Promise<Record<string, unknown>> {
 }
 
 export async function writeConfig(config: Record<string, unknown>): Promise<void> {
-  const result = await getNativeWorker().request<MutationResult>(
-    'config/write',
-    config,
-    CONFIG_TIMEOUT_MS
-  )
+  const result = await configStore.write(config)
   if (!result.success) {
     throw new Error(result.error ?? 'Config write failed')
   }
 }
 
 export async function getConfigValue(key?: string): Promise<unknown> {
-  return await getNativeWorker().request('config/get', key ?? {}, CONFIG_TIMEOUT_MS)
+  return await configStore.get(key)
 }
 
-export async function setConfigValue(key: string, value: unknown): Promise<MutationResult> {
-  const result = await getNativeWorker().request<MutationResult>(
-    'config/set',
-    { key, value },
-    CONFIG_TIMEOUT_MS
-  )
+export async function setConfigValue(key: string, value: unknown): Promise<ConfigMutationResult> {
+  const result = await configStore.set(key, value)
   if (result.success) updateProviderMainMirror(key, value)
   return result
 }
 
-export async function deleteConfigValue(key: string): Promise<MutationResult> {
-  return await getNativeWorker().request('config/delete', key, CONFIG_TIMEOUT_MS)
+export async function deleteConfigValue(key: string): Promise<ConfigMutationResult> {
+  return await configStore.delete(key)
 }
 
 export function registerConfigHandlers(): void {

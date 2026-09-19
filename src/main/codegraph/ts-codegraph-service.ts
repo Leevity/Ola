@@ -1,0 +1,509 @@
+import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { join, resolve, sep } from 'node:path'
+import { olaDataRoot } from '../lib/ola-data-root'
+import { WasmCodeGraphStore } from '../../runtime/codegraph/graph-store'
+import { indexWorkspaceWithWasm } from '../../runtime/codegraph/workspace-indexer'
+
+type CodeGraphErrorKind = 'not_indexed' | 'path_refusal' | 'invalid_args' | 'internal'
+
+type ProjectMetadata = {
+  root: string
+  lastIndexedAt: number
+}
+
+type Project = {
+  root: string
+  hash: string
+  store: WasmCodeGraphStore
+  metadataPath: string
+  lastIndexedAt: number
+  indexing: boolean
+}
+
+export type TsCodeGraphProgress = {
+  indexId: string
+  phase: 'scan' | 'index' | 'complete'
+  filesDone: number
+  filesTotal: number
+  nodeCount: number
+  edgeCount: number
+  message?: string
+}
+
+const MAX_QUERY_LIMIT = 500
+
+function error(
+  kind: CodeGraphErrorKind,
+  message: string
+): { success: false; error: string; errorKind: CodeGraphErrorKind } {
+  return { success: false, error: message, errorKind: kind }
+}
+
+function notIndexed<T extends object>(value: T): T & { success: true; errorKind: 'not_indexed' } {
+  return { ...value, success: true, errorKind: 'not_indexed' }
+}
+
+function projectHash(root: string): string {
+  return createHash('sha256').update(root).digest('hex')
+}
+
+function isSafeProjectRoot(root: string): boolean {
+  const normalized = resolve(root)
+  const home = resolve(homedir())
+  return normalized !== sep && normalized !== home && !home.startsWith(`${normalized}${sep}`)
+}
+
+function asRoot(params: unknown): string | null {
+  if (!params || typeof params !== 'object') return null
+  const value = (params as Record<string, unknown>).workingFolder
+  if (typeof value !== 'string' || !value.trim()) return null
+  return resolve(value)
+}
+
+function asString(params: unknown, key: string): string | null {
+  if (!params || typeof params !== 'object') return null
+  const value = (params as Record<string, unknown>)[key]
+  return typeof value === 'string' && value.trim() ? value.trim() : null
+}
+
+function asLimit(params: unknown, fallback: number): number {
+  if (!params || typeof params !== 'object') return fallback
+  const value = (params as Record<string, unknown>).limit
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(1, Math.min(MAX_QUERY_LIMIT, Math.floor(value)))
+    : fallback
+}
+
+/**
+ * Main-owned TS/WASM CodeGraph adapter. It deliberately uses a separate data root
+ * from the legacy .NET graph database, so an opt-in migration cannot corrupt or
+ * race the current production index.
+ */
+export class TsCodeGraphService {
+  private readonly projects = new Map<string, Project>()
+
+  constructor(
+    private readonly dataRoot = join(olaDataRoot(), 'codegraph-ts'),
+    private readonly onProgress: (progress: TsCodeGraphProgress) => void = () => undefined
+  ) {}
+
+  async request(method: string, params: unknown = {}): Promise<unknown> {
+    const root = asRoot(params)
+    if (method === 'worker/ping') return { ok: true, runtime: 'ts-wasm' }
+    if (method === 'codegraph/list-projects') return await this.listProjects()
+    if (method === 'codegraph/remove-project') return await this.removeProject(params)
+    if (!root) return error('invalid_args', 'workingFolder is required.')
+    if (!isSafeProjectRoot(root))
+      return error('path_refusal', `Refused to operate on a sensitive path: ${root}`)
+    if (!existsSync(root)) return error('invalid_args', `Project path does not exist: ${root}`)
+
+    switch (method) {
+      case 'codegraph/index':
+      case 'codegraph/sync':
+        return await this.index(root, method === 'codegraph/sync')
+      case 'codegraph/index-status':
+        return await this.indexStatus(root)
+      case 'codegraph/stats':
+        return await this.stats(root)
+      case 'codegraph/files-tree':
+        return await this.filesTree(root, params)
+      case 'codegraph/file-symbols':
+        return await this.fileSymbols(root, params)
+      case 'codegraph/search':
+      case 'codegraph/explore':
+      case 'codegraph/callers':
+      case 'codegraph/callees':
+      case 'codegraph/impact':
+        return await this.search(root, method, params)
+      case 'codegraph/query-neighbors':
+        return await this.neighbors(root, params)
+      case 'codegraph/analytics':
+        return await this.analytics(root)
+      case 'codegraph/status':
+        return await this.statusTool(root)
+      case 'codegraph/files':
+        return await this.filesTool(root)
+      default:
+        return error('invalid_args', `Unsupported TS CodeGraph method: ${method}`)
+    }
+  }
+
+  async close(): Promise<void> {
+    const projects = [...this.projects.values()]
+    this.projects.clear()
+    await Promise.all(projects.map((project) => project.store.close()))
+  }
+
+  private async open(root: string, requireIndexed = true): Promise<Project | null> {
+    const hash = projectHash(root)
+    const active = this.projects.get(hash)
+    if (active) return active
+    const directory = join(this.dataRoot, hash)
+    const metadataPath = join(directory, 'workspace.json')
+    if (requireIndexed && !existsSync(metadataPath)) return null
+    await mkdir(directory, { recursive: true })
+    let metadata: ProjectMetadata | null = null
+    try {
+      metadata = JSON.parse(await readFile(metadataPath, 'utf8')) as ProjectMetadata
+    } catch {
+      // A missing or corrupt metadata file is treated as an unindexed project. The
+      // graph database is not reused until a successful explicit index replaces it.
+    }
+    if (requireIndexed && metadata?.root !== root) return null
+    const project: Project = {
+      root,
+      hash,
+      store: new WasmCodeGraphStore(join(directory, 'graph.db')),
+      metadataPath,
+      lastIndexedAt: metadata?.lastIndexedAt ?? 0,
+      indexing: false
+    }
+    this.projects.set(hash, project)
+    return project
+  }
+
+  private async index(root: string, sync: boolean): Promise<unknown> {
+    const project = await this.open(root, false)
+    if (!project) return error('internal', 'Unable to open the TS CodeGraph store.')
+    if (project.indexing)
+      return { success: false, error: 'This project is already indexing.', errorKind: 'internal' }
+    project.indexing = true
+    const indexId = `ts-${Date.now().toString(36)}-${project.hash.slice(0, 8)}`
+    const before = await project.store.listPaths()
+    this.onProgress({
+      indexId,
+      phase: 'scan',
+      filesDone: 0,
+      filesTotal: 0,
+      nodeCount: 0,
+      edgeCount: 0
+    })
+    try {
+      const result = await indexWorkspaceWithWasm({ root, store: project.store })
+      const files = await project.store.listPaths()
+      let nodeCount = 0
+      let edgeCount = 0
+      for (const path of files) {
+        const file = await project.store.getFile(path)
+        nodeCount += file?.symbols.length ?? 0
+        edgeCount += file?.imports.length ?? 0
+      }
+      project.lastIndexedAt = Date.now()
+      await writeFile(
+        project.metadataPath,
+        `${JSON.stringify({ root, lastIndexedAt: project.lastIndexedAt } satisfies ProjectMetadata)}\n`,
+        { mode: 0o600 }
+      )
+      this.onProgress({
+        indexId,
+        phase: 'complete',
+        filesDone: files.length,
+        filesTotal: files.length,
+        nodeCount,
+        edgeCount,
+        message: result.errors.length
+          ? `${result.errors.length} file(s) failed to index.`
+          : undefined
+      })
+      if (sync) {
+        return {
+          success: true,
+          filesChanged: result.indexed,
+          filesAdded: Math.max(0, files.length - before.length),
+          filesRemoved: result.removed,
+          nodesUpdated: nodeCount,
+          edgesUpdated: edgeCount,
+          durationMs: 0
+        }
+      }
+      return {
+        success: true,
+        indexId,
+        state: result.errors.length ? 'partial' : 'complete',
+        filesIndexed: result.indexed,
+        nodeCount,
+        edgeCount,
+        unresolvedCount: 0,
+        durationMs: 0,
+        indexedWithVersion: 'ts-wasm-v1',
+        errors: result.errors,
+        unsupportedFiles: result.unsupported
+      }
+    } catch (cause) {
+      return error('internal', cause instanceof Error ? cause.message : String(cause))
+    } finally {
+      project.indexing = false
+    }
+  }
+
+  private async indexed(root: string): Promise<Project | null> {
+    return await this.open(root, true)
+  }
+
+  private async snapshot(project: Project): Promise<{
+    files: Awaited<ReturnType<WasmCodeGraphStore['getFile']>>[]
+    nodeCount: number
+    edgeCount: number
+  }> {
+    const files = await Promise.all(
+      (await project.store.listPaths()).map((path) => project.store.getFile(path))
+    )
+    return {
+      files,
+      nodeCount: files.reduce((count, file) => count + (file?.symbols.length ?? 0), 0),
+      edgeCount: files.reduce((count, file) => count + (file?.imports.length ?? 0), 0)
+    }
+  }
+
+  private async indexStatus(root: string): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project) {
+      return notIndexed({
+        indexed: false,
+        indexing: false,
+        state: null,
+        fileCount: 0,
+        nodeCount: 0,
+        edgeCount: 0,
+        stale: false
+      })
+    }
+    const snapshot = await this.snapshot(project)
+    return {
+      success: true,
+      indexed: true,
+      indexing: project.indexing,
+      state: project.indexing ? 'indexing' : 'complete',
+      lastIndexedAt: project.lastIndexedAt || null,
+      fileCount: snapshot.files.length,
+      nodeCount: snapshot.nodeCount,
+      edgeCount: snapshot.edgeCount,
+      pendingReferenceCount: 0,
+      dbSizeBytes: 0,
+      backend: 'node:sqlite',
+      journalMode: 'wal',
+      stale: false,
+      indexedWithVersion: 'ts-wasm-v1'
+    }
+  }
+
+  private async stats(root: string): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project)
+      return notIndexed({ nodeCount: 0, edgeCount: 0, fileCount: 0, filesByLanguage: [] })
+    const snapshot = await this.snapshot(project)
+    const languages = new Map<string, number>()
+    const kinds = new Map<string, number>()
+    for (const file of snapshot.files) {
+      if (!file) continue
+      languages.set(file.language, (languages.get(file.language) ?? 0) + 1)
+      for (const symbol of file.symbols) kinds.set(symbol.kind, (kinds.get(symbol.kind) ?? 0) + 1)
+    }
+    const buckets = (input: Map<string, number>) =>
+      [...input]
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+    return {
+      success: true,
+      nodeCount: snapshot.nodeCount,
+      edgeCount: snapshot.edgeCount,
+      fileCount: snapshot.files.length,
+      nodesByKind: buckets(kinds),
+      edgesByKind: [{ key: 'import', count: snapshot.edgeCount }],
+      filesByLanguage: buckets(languages),
+      dbSizeBytes: 0,
+      lastUpdated: project.lastIndexedAt
+    }
+  }
+
+  private async filesTree(root: string, params: unknown): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project) return notIndexed({ files: [] })
+    const filter = asString(params, 'path')?.replaceAll('\\', '/')
+    const files = await Promise.all(
+      (await project.store.listPaths()).map(async (path) => {
+        const file = await project.store.getFile(path)
+        const disk = await stat(join(root, path)).catch(() => null)
+        return file
+          ? { path, language: file.language, nodeCount: file.symbols.length, size: disk?.size ?? 0 }
+          : null
+      })
+    )
+    return {
+      success: true,
+      files: files.filter(
+        (file): file is NonNullable<typeof file> =>
+          Boolean(file) && (!filter || file!.path.startsWith(filter))
+      )
+    }
+  }
+
+  private async fileSymbols(root: string, params: unknown): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project) return notIndexed({ symbols: [] })
+    const path = asString(params, 'path')
+    if (!path) return error('invalid_args', 'path is required.')
+    const file = await project.store.getFile(path)
+    return { success: true, symbols: file?.symbols ?? [] }
+  }
+
+  private async search(root: string, method: string, params: unknown): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project)
+      return {
+        success: true,
+        text: 'Project is not indexed; run codegraph/index first.',
+        isError: false,
+        errorKind: 'not_indexed'
+      }
+    const query =
+      asString(params, method === 'codegraph/explore' ? 'query' : 'symbol') ??
+      asString(params, 'query')
+    if (!query) return error('invalid_args', 'query or symbol is required.')
+    const symbols = await (method === 'codegraph/search' || method === 'codegraph/explore'
+      ? project.store.searchSymbols(query, asLimit(params, 30))
+      : project.store.findSymbols(query, asLimit(params, 30)))
+    const references = await project.store.findReferences(query, asLimit(params, 30))
+    const lines = [
+      ...symbols.map(
+        (symbol) => `${symbol.kind} ${symbol.name} — ${symbol.path}:${symbol.startLine + 1}`
+      ),
+      ...references.map(
+        (reference) => `reference ${reference.name} — ${reference.path}:${reference.startLine + 1}`
+      )
+    ]
+    const text = lines.length
+      ? lines.join('\n')
+      : `No indexed symbols or references match “${query}”.`
+    return { success: true, text, isError: false }
+  }
+
+  private async neighbors(root: string, params: unknown): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project) return notIndexed({ nodes: [], edges: [], roots: [], confidence: null })
+    const symbol = asString(params, 'symbol')
+    if (!symbol) return { success: true, nodes: [], edges: [], roots: [], confidence: null }
+    const symbols = await project.store.findSymbols(symbol, asLimit(params, 100))
+    const nodes = symbols.map((item) => ({
+      id: item.id,
+      name: item.name,
+      kind: item.kind,
+      filePath: item.path,
+      startLine: item.startLine
+    }))
+    const edges: Array<{ source: string; target: string; kind: string }> = []
+    for (const item of symbols) {
+      for (const imported of await project.store.resolveImports(item.path)) {
+        if (imported.targetPath)
+          edges.push({ source: item.id, target: imported.targetPath, kind: 'import' })
+      }
+    }
+    return { success: true, nodes, edges, roots: nodes.map((node) => node.id), confidence: null }
+  }
+
+  private async analytics(root: string): Promise<unknown> {
+    const project = await this.indexed(root)
+    if (!project)
+      return notIndexed({
+        circularDependencies: [],
+        circularTotal: 0,
+        deadCode: [],
+        deadCodeTotal: 0
+      })
+    const snapshot = await this.snapshot(project)
+    const deadCode = snapshot.files.flatMap((file) =>
+      (file?.symbols ?? []).map((symbol) => ({
+        id: symbol.id,
+        name: symbol.name,
+        kind: symbol.kind,
+        filePath: file?.path ?? '',
+        startLine: symbol.startLine
+      }))
+    )
+    return {
+      success: true,
+      circularDependencies: [],
+      circularTotal: 0,
+      deadCode,
+      deadCodeTotal: deadCode.length
+    }
+  }
+
+  private async statusTool(root: string): Promise<unknown> {
+    const status = await this.indexStatus(root)
+    const snapshot = status as {
+      indexed?: boolean
+      fileCount?: number
+      nodeCount?: number
+      edgeCount?: number
+    }
+    return {
+      success: true,
+      text: snapshot.indexed
+        ? `TS/WASM CodeGraph: ${snapshot.fileCount} files, ${snapshot.nodeCount} symbols, ${snapshot.edgeCount} import edges.`
+        : 'Project is not indexed; run codegraph/index first.',
+      isError: false,
+      ...(snapshot.indexed ? {} : { errorKind: 'not_indexed' })
+    }
+  }
+
+  private async filesTool(root: string): Promise<unknown> {
+    const result = (await this.filesTree(root, {})) as { files?: Array<{ path: string }> }
+    return {
+      success: true,
+      text: result.files?.map((file) => file.path).join('\n') || 'No indexed files.',
+      isError: false
+    }
+  }
+
+  private async listProjects(): Promise<unknown> {
+    if (!existsSync(this.dataRoot)) return { success: true, projects: [] }
+    const directories = await (
+      await import('node:fs/promises')
+    ).readdir(this.dataRoot, { withFileTypes: true })
+    const projects = await Promise.all(
+      directories
+        .filter((entry) => entry.isDirectory())
+        .map(async (entry) => {
+          try {
+            const metadata = JSON.parse(
+              await readFile(join(this.dataRoot, entry.name, 'workspace.json'), 'utf8')
+            ) as ProjectMetadata
+            const project = await this.open(metadata.root, true)
+            const snapshot = project
+              ? await this.snapshot(project)
+              : { files: [], nodeCount: 0, edgeCount: 0 }
+            return {
+              root: metadata.root,
+              hash: entry.name,
+              state: 'complete',
+              files: snapshot.files.length,
+              nodes: snapshot.nodeCount,
+              edges: snapshot.edgeCount,
+              dbSizeBytes: 0,
+              lastIndexedAt: metadata.lastIndexedAt
+            }
+          } catch {
+            return null
+          }
+        })
+    )
+    return { success: true, projects: projects.filter(Boolean) }
+  }
+
+  private async removeProject(params: unknown): Promise<unknown> {
+    const root = asRoot(params)
+    if (!root) return error('invalid_args', 'workingFolder is required.')
+    const project = this.projects.get(projectHash(root))
+    if (project) {
+      this.projects.delete(project.hash)
+      await project.store.close()
+    }
+    const { rm } = await import('node:fs/promises')
+    await rm(join(this.dataRoot, projectHash(root)), { recursive: true, force: true })
+    return { success: true }
+  }
+}

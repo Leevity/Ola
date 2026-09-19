@@ -5,7 +5,7 @@
 
 import { existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import process from 'node:process'
 
@@ -17,6 +17,18 @@ if (!process.env.DOTNET_ROOT && isPosix) {
     process.env.DOTNET_ROOT = userDotnet
     console.log(`[launch-dev] DOTNET_ROOT=${userDotnet}`)
   }
+}
+
+// The Main bundle resolves SQLite workers by sibling URL at runtime. Vite does
+// not discover those dynamic Worker URLs, so build their explicit assets before
+// Electron starts rather than leaving development mode without the TS runtime.
+const runtimeBuild = spawnSync(process.execPath, ['scripts/build-ts-runtime.mjs'], {
+  cwd: process.cwd(),
+  stdio: 'inherit'
+})
+if (runtimeBuild.status !== 0) {
+  console.error('[launch-dev] Failed to prepare TS runtime worker assets.')
+  process.exit(runtimeBuild.status ?? 1)
 }
 
 const isWin = process.platform === 'win32'

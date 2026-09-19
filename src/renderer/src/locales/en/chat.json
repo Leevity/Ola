@@ -1,4 +1,4 @@
-﻿{
+{
   "workspaceHome": {
     "projectNavigation": "Project navigation",
     "overview": "Overview",
@@ -11,6 +11,9 @@
   },
   "input": {
     "sendFailedDraftRetained": "Send failed. Your draft was kept.",
+    "visionUnsupportedTitle": "This model does not support image input",
+    "visionUnsupportedDescription": "{{model}} does not support image input. Switch to a vision-capable model and try again.",
+    "openModelSettings": "Open model settings",
     "draftRestored": "Your unsent draft was restored.",
     "placeholder": "Type a message...",
     "placeholderClarify": "Describe your idea and I will keep probing until the requirements are clear...",
@@ -75,8 +78,6 @@
     "clearConversation": "Clear conversation",
     "clearConfirmTitle": "Clear all messages?",
     "clearConfirmDesc": "This will remove all messages in this conversation. This action cannot be undone.",
-    "compressionBudget": "Compression Budget",
-    "remaining": "remaining",
     "compressionBudget": "Compression Budget",
     "remaining": "remaining",
     "runtimeMetrics": {
@@ -144,7 +145,6 @@
     "queueEditing": "Edit queued message",
     "queueQuote": "Quote",
     "queueQuoted": "Inserted into conversation",
-    "queueQuoted": "Inserted into conversation",
     "queueImageCount": "{{count}} images",
     "queueImageOnly": "[Images only]",
     "slashSuggestions": "Command, plugin & skill suggestions",
@@ -162,7 +162,25 @@
     "startAcp": "Start an ACP session",
     "startAcpDesc": "First clarify the goal, background, constraints, and acceptance criteria. Then design the architecture and delegate tasks before writing code.",
     "homeTitleAcp": "ACP mode",
-    "homeDescAcp": "In ACP mode, begin by clarifying goals, background, constraints, and acceptance criteria. Then propose an architecture and task breakdown before implementation."
+    "homeDescAcp": "In ACP mode, begin by clarifying goals, background, constraints, and acceptance criteria. Then propose an architecture and task breakdown before implementation.",
+    "noProvider": "No AI provider available",
+    "noProviderDescription": "Configure or enable an AI provider in Settings.",
+    "noModel": "No AI model available",
+    "noModelDescription": "Enable a model in Settings.",
+    "optimizationFailed": "Prompt optimization failed",
+    "optimizationFailedDescription": "Check the provider connection and try again.",
+    "terminalCreateFailed": "Could not create terminal",
+    "terminalCloseFailed": "Could not close terminal",
+    "fileReadFailed": "Could not read file",
+    "translationAuthenticationRequired": "Provider authentication required",
+    "translationAuthenticationDescription": "Complete provider login in Settings and try again.",
+    "translationApiKeyRequired": "Provider API key required",
+    "translationApiKeyDescription": "Configure an AI provider in Settings and try again.",
+    "translationFailed": "Translation failed",
+    "imageDownloaded": "Image downloaded",
+    "imageDownloadFailed": "Could not download the image. Check the source and try again.",
+    "imageCopied": "Image copied to clipboard",
+    "imageCopyFailed": "Could not copy the image. Try downloading it instead."
   },
   "planReview": {
     "awaitingReview": "Awaiting Review",
@@ -1036,7 +1054,26 @@
       "lastErrorLabel": "Last error",
       "stackTrace": "Stack trace",
       "copy": "Copy",
-      "copied": "Copied"
+      "copied": "Copied",
+      "messageStreamRecovery": "The connection to this task was interrupted. The task may still be running; refresh the status before sending it again.",
+      "messageRuntimeUnavailable": "The local runtime is unavailable. Open terminal and network settings to check its connection.",
+      "messageAuthentication": "The provider rejected authentication. Check the selected provider account or API key.",
+      "messageProviderMissing": "No available AI provider is configured. Add or enable a provider to continue.",
+      "messageModelMissing": "No available model is enabled. Enable a model to continue.",
+      "messageNetwork": "Ola cannot reach the service. Check the network, proxy, and provider address.",
+      "action": {
+        "openProvider": "Open provider settings",
+        "openModel": "Open model settings",
+        "openSystem": "Open terminal and network settings",
+        "refreshStatus": "Refresh task status"
+      },
+      "messageBalance": "The provider account has no available balance or quota. Check the account and billing before trying again.",
+      "messageRateLimit": "The provider is temporarily rate limiting requests. Wait briefly before trying again.",
+      "messageTimeout": "The request timed out. Refresh the task status before deciding whether to send it again.",
+      "messageUpstream": "The provider service is temporarily unavailable. Wait and try again later.",
+      "messageRequestInvalid": "The request was rejected because its configuration or parameters are invalid. Check the selected model settings.",
+      "messageToolFailed": "A tool could not complete its operation. Review its technical details and correct the reported issue.",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {
@@ -1285,8 +1322,14 @@
     "aiCommitFailed": "Generation failed. Check API / model settings and try again",
     "taskProfile": {
       "ariaLabel": "Task type",
-      "work": { "label": "Work", "desc": "Daily work" },
-      "code": { "label": "Code", "desc": "Projects and programming" }
+      "work": {
+        "label": "Work",
+        "desc": "Daily work"
+      },
+      "code": {
+        "label": "Code",
+        "desc": "Projects and programming"
+      }
     }
   }
 }

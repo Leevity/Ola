@@ -23,7 +23,12 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore, modelSupportsVision } from '@renderer/stores/provider-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
-import { useChannelStore } from '@renderer/stores/channel-store'
+import {
+  markChannelTaskAccepted,
+  releaseUnacceptedChannelTask,
+  useChannelStore
+} from '@renderer/stores/channel-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
@@ -51,7 +56,7 @@ import type {
   ToolUseBlock,
   RunOutcomeMeta
 } from '@renderer/lib/api/types'
-import type { LoopEndReason, ToolCallState } from '@renderer/lib/agent/types'
+import type { AgentEvent, LoopEndReason, ToolCallState } from '@renderer/lib/agent/types'
 import { generateFinalOutcome } from '@renderer/lib/agent/final-outcome'
 import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
 import { hasPendingSessionMessagesForSession } from '@renderer/hooks/use-chat-actions'
@@ -67,6 +72,14 @@ import {
   summarizeToolInputForLiveCard
 } from '@renderer/lib/tools/tool-input-sanitizer'
 import { filterTeamToolDefinitions } from '@renderer/lib/agent/teams/register'
+import {
+  completeDurableChannelTask,
+  hasChannelDeliveryReceipt
+} from '@renderer/lib/channel/durable-channel-task'
+import { beginChannelTaskActivity } from '@renderer/lib/channel/channel-task-activity'
+import { assessTsRuntimeAgentEligibility } from '@renderer/lib/ipc/ts-runtime-agent-eligibility'
+import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
 
 interface PluginSessionSummaryRow {
   id: string
@@ -89,6 +102,7 @@ interface PluginSessionSummaryRow {
 
 interface PluginAutoReplyTask {
   sessionId: string
+  workspaceId: string
   pluginId: string
   pluginType: string
   chatId: string
@@ -99,6 +113,7 @@ interface PluginAutoReplyTask {
   sessionTitle?: string
   content: string
   messageId: string
+  deliveryId?: string
   supportsStreaming: boolean
   projectId?: string
   workingFolder?: string
@@ -304,10 +319,26 @@ function updatePluginRuntimeToolUseInput(
 }
 
 async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
+  if (task.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
   const { sessionId, pluginId, pluginType, chatId, supportsStreaming } = task
 
   // ── Check feature toggles ──
-  const channelMeta = useChannelStore.getState().channels.find((p) => p.id === pluginId)
+  let channelMeta = useChannelStore
+    .getState()
+    .channels.find(
+      (channel) =>
+        channel.id === pluginId && (channel.workspaceId || 'local-personal') === task.workspaceId
+    )
+  if (!channelMeta) {
+    await useChannelStore.getState().loadChannels()
+    channelMeta = useChannelStore
+      .getState()
+      .channels.find(
+        (channel) =>
+          channel.id === pluginId && (channel.workspaceId || 'local-personal') === task.workspaceId
+      )
+  }
+  if (!channelMeta || task.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
   const features = channelMeta?.features ?? {
     autoReply: true,
     streamingReply: true,
@@ -332,13 +363,18 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
 
   const sendPluginMessage = async (message: string): Promise<boolean> => {
     try {
-      await ipcClient.invoke(IPC.PLUGIN_EXEC, {
+      const receipt = await ipcClient.invoke(IPC.PLUGIN_EXEC, {
         pluginId,
+        workspaceId: task.workspaceId,
         action: shouldReplyToIncomingMessage ? 'replyMessage' : 'sendMessage',
         params: shouldReplyToIncomingMessage
           ? { messageId: task.messageId, content: message }
           : { chatId, content: message }
       })
+      if (!hasChannelDeliveryReceipt(receipt)) {
+        console.error('[PluginAutoReply] Channel send returned no delivery receipt')
+        return false
+      }
       return true
     } catch (err) {
       console.error('[PluginAutoReply] Failed to send plugin message:', err)
@@ -347,7 +383,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
   }
 
   const sendChannelNotice = async (message: string): Promise<void> => {
-    await sendPluginMessage(message)
+    if (!(await sendPluginMessage(message))) throw new Error('CHANNEL_NOTICE_DELIVERY_FAILED')
   }
 
   // ── Provider config (with per-channel model override) ──
@@ -455,6 +491,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     try {
       const res = (await ipcClient.invoke('plugin:stream:start', {
         pluginId,
+        workspaceId: task.workspaceId,
         chatId,
         streamId,
         initialContent: '',
@@ -500,7 +537,10 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
           working_folder?: string | null
           ssh_connection_id?: string | null
           plugin_id?: string | null
-        } | null>(DB_PROJECTS_GET_MSGPACK_CHANNEL, channelProjectId)
+        } | null>(DB_PROJECTS_GET_MSGPACK_CHANNEL, {
+          id: channelProjectId,
+          workspaceId: task.workspaceId
+        })
         if (row) {
           useChatStore.setState((state) => {
             const projectExists = state.projects.some((project) => project.id === row.id)
@@ -556,7 +596,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     try {
       const row = await invokeMessagePackBinary<{
         session?: Partial<PluginSessionSummaryRow>
-      } | null>(DB_SESSIONS_GET_MSGPACK_CHANNEL, sessionId)
+      } | null>(DB_SESSIONS_GET_MSGPACK_CHANNEL, { id: sessionId, workspaceId: task.workspaceId })
       const dbSession = row?.session
       if (dbSession) {
         const sessionRow = buildPluginSessionSummaryRow({
@@ -689,6 +729,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
 
   const sessionScope: SessionMemoryScope = 'channel'
   const memorySnapshot = await loadLayeredMemorySnapshot(ipcClient, {
+    workspaceId: session.workspaceId ?? 'local-personal',
     workingFolder: session.workingFolder,
     sshConnectionId: session.sshConnectionId,
     scope: sessionScope
@@ -844,6 +885,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     pluginStreamUpdateInFlight = ipcClient
       .invoke(IPC.PLUGIN_STREAM_APPEND, {
         pluginId,
+        workspaceId: task.workspaceId,
         chatId,
         streamId,
         delta
@@ -981,6 +1023,51 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
       return false
     })
 
+    const tsModelSource = explicitTsRuntimeModelSource({
+      providerId: agentProviderConfig.providerId,
+      modelId: agentProviderConfig.model
+    })
+    const tsChannelToolNames = effectiveToolDefs
+      .map((tool) => tool.name)
+      .filter((name) =>
+        [
+          'PluginGetGroupMessages',
+          'PluginGetCurrentChatMessages',
+          'PluginListGroups',
+          'PluginSendMessage',
+          'PluginReplyMessage',
+          'FeishuListChatMembers',
+          'FeishuSendImage'
+        ].includes(name)
+      )
+    const tsEligibility = tsModelSource
+      ? assessTsRuntimeAgentEligibility({
+          mode: 'execute',
+          messages: historyMessages,
+          provider: agentProviderConfig,
+          modelSource: tsModelSource,
+          workspaceId: task.workspaceId,
+          toolNames: tsChannelToolNames,
+          hasPlan: false,
+          hasGoal: false,
+          hasSsh: Boolean(session.sshConnectionId),
+          // Channel delivery is handled by this hook after the run; the TS
+          // path intentionally exposes no plugin tools in this first safe
+          // slice, so a model cannot bypass the channel send boundary.
+          hasPlugin: false,
+          hasChannels: false,
+          hasTeam: false,
+          hasImages: false
+        })
+      : { eligible: false as const, reason: 'MODEL_SOURCE_NOT_MIGRATED' }
+    const useTsChannelRuntime =
+      !task.images?.length &&
+      !task.audio &&
+      !session.sshConnectionId &&
+      Boolean(tsModelSource) &&
+      tsEligibility.eligible &&
+      (await isTsRuntimeAvailable().catch(() => false))
+
     const sidecarRequest = buildSidecarAgentRunRequest({
       messages: historyMessages,
       provider: agentProviderConfig,
@@ -996,10 +1083,30 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
       pluginSenderName: task.senderName,
       sshConnectionId: session.sshConnectionId
     })
-    if (!sidecarRequest) {
+    if (!sidecarRequest && !useTsChannelRuntime) {
       throw new Error('Failed to build sidecar agent request for plugin auto-reply')
     }
-    const loop = runAgentViaSidecar(sidecarRequest, { signal: ac.signal })
+    // Both paths project into the existing agent event vocabulary. The TS
+    // projection is intentionally consumed at this boundary as an event
+    // stream so legacy tool-specific event refinements remain unchanged.
+    const tsLoop = streamTsRuntimeTextTurn({
+      workspaceId: task.workspaceId,
+      sessionId,
+      assistantMessageId: assistantMsgId,
+      modelSource: tsModelSource!,
+      modelOptions: tsEligibility.eligible ? tsEligibility.modelOptions : undefined,
+      prompt: tsEligibility.eligible ? tsEligibility.prompt : effectiveContent,
+      history: tsEligibility.eligible ? tsEligibility.history : undefined,
+      toolNames: tsChannelToolNames,
+      channelContext: { pluginId, chatId, messageId: task.messageId },
+      maxTurns: 15,
+      unattended: true,
+      signal: ac.signal
+    }) as unknown as AsyncIterable<AgentEvent>
+    const loop: AsyncIterable<AgentEvent> =
+      useTsChannelRuntime && tsModelSource && tsEligibility.eligible
+        ? tsLoop
+        : runAgentViaSidecar(sidecarRequest!, { signal: ac.signal })
 
     for await (const event of loop) {
       if (ac.signal.aborted) break
@@ -1406,6 +1513,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
       }
       const finishRes = (await ipcClient.invoke('plugin:stream:finish', {
         pluginId,
+        workspaceId: task.workspaceId,
         chatId,
         streamId,
         content: finalText
@@ -1421,6 +1529,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
       console.log(
         `[PluginAutoReply] Streaming fallback send ${fallbackSent ? 'succeeded' : 'failed'} for ${pluginId}:${chatId}:${streamId}`
       )
+      if (!fallbackSent) throw new Error('CHANNEL_REPLY_DELIVERY_FAILED')
     }
   }
 
@@ -1431,6 +1540,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
         `[PluginAutoReply] Sent non-streaming ${shouldReplyToIncomingMessage ? 'reply' : 'message'} for ${pluginId}:${chatId}`
       )
     }
+    if (!sent) throw new Error('CHANNEL_REPLY_DELIVERY_FAILED')
   }
 
   console.log(`[PluginAutoReply] Completed for session=${sessionId}, ${fullText.length} chars`)
@@ -1560,6 +1670,11 @@ function hasQueuedPluginTasks(sessionId: string): boolean {
 }
 
 async function handlePluginAutoReply(task: PluginAutoReplyTask): Promise<void> {
+  const releaseActivity = beginChannelTaskActivity()
+  if (!releaseActivity) {
+    releaseUnacceptedChannelTask(task)
+    return
+  }
   const scopeKey = buildPluginTaskScopeKey(task.pluginId, task.chatId)
   const previous = pluginTaskChains.get(scopeKey) ?? Promise.resolve()
 
@@ -1571,7 +1686,10 @@ async function handlePluginAutoReply(task: PluginAutoReplyTask): Promise<void> {
     .then(async () => {
       adjustQueuedPluginTaskCount(queuedPluginTasksByScope, scopeKey, -1)
       adjustQueuedPluginTaskCount(queuedPluginTasksBySession, task.sessionId, -1)
-      await _runPluginAgent(task)
+      await completeDurableChannelTask(
+        () => _runPluginAgent(task),
+        () => markChannelTaskAccepted(task)
+      )
     })
     .catch((err) => {
       console.error('[PluginAutoReply] Error handling plugin auto-reply:', err)
@@ -1582,6 +1700,8 @@ async function handlePluginAutoReply(task: PluginAutoReplyTask): Promise<void> {
   try {
     await run
   } finally {
+    releaseActivity()
+    releaseUnacceptedChannelTask(task)
     if (pluginTaskChains.get(scopeKey) === run) {
       pluginTaskChains.delete(scopeKey)
     }

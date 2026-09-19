@@ -1,4 +1,12 @@
 import { getNativeWorker } from '../lib/native-worker'
+import { businessWriteCanary } from './business-write-canary'
+import {
+  canaryGetMemoryRoot,
+  canaryListMemoryRoots,
+  canaryGetMemoryJob,
+  canaryListMemoryJobs,
+  canaryListMemoryStage1Outputs
+} from './legacy-read-canary'
 import type {
   MemoryCitationEntry,
   MemoryJobKind,
@@ -55,6 +63,18 @@ function assertMutation(result: NativeMutationResult, label: string): void {
 }
 
 export async function ensureMemoryRoot(input: MemoryRootInput): Promise<MemoryRootDescriptor> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.ensureMemoryRoot<MemoryRootDescriptor>({
+      workspaceId: input.workspaceId ?? 'local-personal',
+      scope: input.scope,
+      rootPath: input.rootPath,
+      transport: input.transport ?? 'local',
+      projectId: input.projectId ?? null,
+      workingFolder: input.workingFolder ?? null,
+      sshConnectionId: input.sshConnectionId ?? null
+    })
+  }
   const result = await getNativeWorker().request<MemoryRootDescriptor>(
     'db/memory-roots-ensure',
     input,
@@ -63,10 +83,15 @@ export async function ensureMemoryRoot(input: MemoryRootInput): Promise<MemoryRo
   return assertNativeObject(result, 'Native memory root ensure failed')
 }
 
-export async function getMemoryRoot(id: string): Promise<MemoryRootDescriptor | null> {
+export async function getMemoryRoot(
+  id: string,
+  workspaceId = 'local-personal'
+): Promise<MemoryRootDescriptor | null> {
+  const canary = await canaryGetMemoryRoot(id, workspaceId)
+  if (canary !== undefined) return canary
   const result = await getNativeWorker().request<NativeFindRootResult>(
     'db/memory-roots-get',
-    { id },
+    { id, workspaceId },
     120_000
   )
   if (!result.success) {
@@ -75,19 +100,35 @@ export async function getMemoryRoot(id: string): Promise<MemoryRootDescriptor | 
   return result.root ?? null
 }
 
-export function listMemoryRoots(
+export async function listMemoryRoots(
   query: MemoryPipelineListRootsQuery = {}
 ): Promise<MemoryRootDescriptor[]> {
+  if (query.workspaceId?.trim()) {
+    const canary = await canaryListMemoryRoots({ ...query, workspaceId: query.workspaceId })
+    if (canary !== undefined) return canary
+  }
   return getNativeWorker().request<MemoryRootDescriptor[]>('db/memory-roots-list', query, 120_000)
 }
 
 export async function createMemoryJob(input: {
   kind: MemoryJobKind
+  workspaceId?: string
   status?: MemoryJobStatus
   memoryRootId?: string | null
   sourceSessionId?: string | null
   leaseOwner?: string | null
 }): Promise<MemoryPipelineJob> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.createMemoryJob<MemoryPipelineJob>({
+      kind: input.kind,
+      workspaceId: input.workspaceId ?? 'local-personal',
+      status: input.status ?? 'pending',
+      memoryRootId: input.memoryRootId ?? null,
+      sourceSessionId: input.sourceSessionId ?? null,
+      leaseOwner: input.leaseOwner ?? null
+    })
+  }
   const result = await getNativeWorker().request<MemoryPipelineJob>(
     'db/memory-jobs-create',
     input,
@@ -96,10 +137,15 @@ export async function createMemoryJob(input: {
   return assertNativeObject(result, 'Native memory job create failed')
 }
 
-export async function getMemoryJob(id: string): Promise<MemoryPipelineJob | null> {
+export async function getMemoryJob(
+  id: string,
+  workspaceId = 'local-personal'
+): Promise<MemoryPipelineJob | null> {
+  const canary = await canaryGetMemoryJob(id, workspaceId)
+  if (canary !== undefined) return canary
   const result = await getNativeWorker().request<NativeFindJobResult>(
     'db/memory-jobs-get',
-    { id },
+    { id, workspaceId },
     120_000
   )
   if (!result.success) {
@@ -110,9 +156,19 @@ export async function getMemoryJob(id: string): Promise<MemoryPipelineJob | null
 
 export async function finishMemoryJob(args: {
   id: string
+  workspaceId?: string
   status: MemoryJobStatus
   error?: string | null
 }): Promise<MemoryPipelineJob | null> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.finishMemoryJob<MemoryPipelineJob>({
+      id: args.id,
+      workspaceId: args.workspaceId ?? 'local-personal',
+      status: args.status as 'succeeded' | 'succeeded_no_output' | 'skipped' | 'failed',
+      error: args.error ?? null
+    })
+  }
   const result = await getNativeWorker().request<NativeFindJobResult>(
     'db/memory-jobs-finish',
     args,
@@ -124,13 +180,26 @@ export async function finishMemoryJob(args: {
   return result.job ?? null
 }
 
-export function listMemoryJobs(
+export async function listMemoryJobs(
   query: MemoryPipelineListJobsQuery = {}
 ): Promise<MemoryPipelineJob[]> {
+  if (query.workspaceId?.trim()) {
+    const canary = await canaryListMemoryJobs({ ...query, workspaceId: query.workspaceId })
+    if (canary !== undefined) return canary
+  }
   return getNativeWorker().request<MemoryPipelineJob[]>('db/memory-jobs-list', query, 120_000)
 }
 
 export async function addStage1Output(input: MemoryStage1OutputInput): Promise<MemoryStage1Output> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.addMemoryStage1Output<MemoryStage1Output>({
+      ...input,
+      workspaceId: input.workspaceId ?? 'local-personal',
+      sourceUpdatedAt: input.sourceUpdatedAt ?? null,
+      status: input.status ?? 'active'
+    })
+  }
   const result = await getNativeWorker().request<MemoryStage1Output>(
     'db/memory-stage1-add',
     input,
@@ -139,14 +208,35 @@ export async function addStage1Output(input: MemoryStage1OutputInput): Promise<M
   return assertNativeObject(result, 'Native memory stage1 add failed')
 }
 
-export function listStage1Outputs(args: {
+export async function listStage1Outputs(args: {
   memoryRootId: string
+  workspaceId?: string
   limit?: number
 }): Promise<MemoryStage1Output[]> {
+  if (args.workspaceId?.trim()) {
+    const canary = await canaryListMemoryStage1Outputs({
+      ...args,
+      workspaceId: args.workspaceId
+    })
+    if (canary !== undefined) return canary
+  }
   return getNativeWorker().request<MemoryStage1Output[]>('db/memory-stage1-list', args, 120_000)
 }
 
 export async function recordCitationUsage(entry: MemoryCitationEntry): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.recordMemoryCitationUsage({
+      workspaceId: entry.workspaceId ?? 'local-personal',
+      memoryRootId: entry.memoryRootId,
+      scope: entry.scope,
+      path: entry.path,
+      sourceSessionId: entry.sourceSessionId ?? null,
+      line: entry.line ?? null,
+      citationJson: entry.citationJson ?? null
+    })
+    return
+  }
   const result = await getNativeWorker().request<NativeMutationResult>(
     'db/memory-citation-record',
     entry,
@@ -157,8 +247,17 @@ export async function recordCitationUsage(entry: MemoryCitationEntry): Promise<v
 
 export async function clearMemoryRoot(args: {
   memoryRootId: string
+  workspaceId?: string
   includeJobs?: boolean
 }): Promise<{ deletedStage1Outputs: number; deletedJobs: number }> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.clearMemoryRoot({
+      memoryRootId: args.memoryRootId,
+      workspaceId: args.workspaceId ?? 'local-personal',
+      includeJobs: args.includeJobs ?? false
+    })
+  }
   const result = await getNativeWorker().request<NativeClearRootResult>(
     'db/memory-root-clear',
     args,

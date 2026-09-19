@@ -13,6 +13,41 @@ export const whalecloudPreset: BuiltinProviderPreset = {
   defaultModel: 'gpt-4o',
   defaultModels: [
     {
+      id: 'b-gpt-5.6-luna',
+      name: 'GPT-5.6 Luna',
+      icon: 'openai',
+      enabled: false,
+      type: 'openai-responses',
+      category: 'chat',
+      contextLength: 1_000_000,
+      maxOutputTokens: 128_000,
+      requestTimeoutSeconds: 100,
+      contextCompressionThreshold: 0.8,
+      supportsVision: true,
+      supportsFunctionCall: true,
+      supportsComputerUse: false,
+      enableComputerUse: false,
+      enableSystemPromptCache: true,
+      cacheTtl: '5m',
+      websocketMode: 'auto',
+      responsesImageGeneration: { enabled: true }
+    },
+    {
+      id: 'local-deepseek-v4-flash',
+      name: 'Local DeepSeek V4 Flash',
+      icon: 'deepseek',
+      enabled: false,
+      contextLength: 1_000_000,
+      maxOutputTokens: 384_000,
+      supportsVision: false,
+      supportsFunctionCall: true,
+      supportsThinking: true,
+      thinkingConfig: {
+        bodyParams: { thinking: { type: 'enabled' }, reasoning_effort: 'high' },
+        disabledBodyParams: { thinking: { type: 'disabled' } }
+      }
+    },
+    {
       id: 'gpt-4o',
       name: 'GPT-4o',
       icon: 'openai',

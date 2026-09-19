@@ -9,6 +9,7 @@ import {
 import { IPC } from '../ipc/channels'
 import { ipcClient } from '../ipc/ipc-client'
 import { useUIStore } from '../../stores/ui-store'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolContext } from './tool-types'
 
@@ -76,31 +77,51 @@ async function runWebviewCommand<T>(
   return isPromiseLike<T>(result) ? await result : result
 }
 
-async function waitForLoad(webview: Electron.WebviewTag, timeoutMs = 30000): Promise<void> {
-  return new Promise<void>((resolve) => {
-    if (!isWebviewConnected(webview)) {
-      resolve()
-      return
-    }
+async function navigateRegisteredWebview(
+  webview: Electron.WebviewTag,
+  action: 'back' | 'forward' | 'reload' | 'stop' | 'goto',
+  url?: string,
+  runId?: string
+): Promise<{ url: string; title: string; canGoBack: boolean; canGoForward: boolean }> {
+  const result = (await ipcClient.invoke(IPC.BROWSER_NAVIGATE_GUEST, {
+    guestWebContentsId: webview.getWebContentsId(),
+    action,
+    ...(url === undefined ? {} : { url }),
+    ...(runId ? { runId } : {})
+  })) as
+    | {
+        success: true
+        state: { url: string; title: string; canGoBack: boolean; canGoForward: boolean }
+      }
+    | { success: false; error?: string }
+  if (!result.success) throw new Error(result.error ?? 'Browser navigation was rejected')
+  return result.state
+}
 
-    let resolved = false
-    const timers: { timeout?: number; detach?: number } = {}
-    const done = (): void => {
-      if (resolved) return
-      resolved = true
-      if (timers.timeout !== undefined) window.clearTimeout(timers.timeout)
-      if (timers.detach !== undefined) window.clearInterval(timers.detach)
-      webview.removeEventListener('did-stop-loading', done)
-      webview.removeEventListener('did-fail-load', done)
-      resolve()
-    }
-    webview.addEventListener('did-stop-loading', done)
-    webview.addEventListener('did-fail-load', done)
-    timers.timeout = window.setTimeout(done, timeoutMs)
-    timers.detach = window.setInterval(() => {
-      if (!isWebviewConnected(webview)) done()
-    }, 100)
-  })
+async function executeRegisteredWebviewScript(
+  webview: Electron.WebviewTag,
+  script: string,
+  runId?: string
+): Promise<unknown> {
+  const result = (await ipcClient.invoke(IPC.BROWSER_EXECUTE_SCRIPT, {
+    guestWebContentsId: webview.getWebContentsId(),
+    script,
+    ...(runId ? { runId } : {})
+  })) as { success: true; result: unknown } | { success: false; error?: string }
+  if (!result.success) throw new Error(result.error ?? 'Browser script execution was rejected')
+  return result.result
+}
+
+async function claimBrowserRunControl(
+  webview: Electron.WebviewTag,
+  ctx: ToolContext
+): Promise<void> {
+  if (!ctx.agentRunId) return
+  const result = (await ipcClient.invoke(IPC.BROWSER_TAKE_GUEST_RUN_CONTROL, {
+    guestWebContentsId: webview.getWebContentsId(),
+    runId: ctx.agentRunId
+  })) as { success: true } | { success: false; error?: string }
+  if (!result.success) throw new Error(result.error ?? 'Browser is controlled by the user.')
 }
 
 async function waitForWebview(
@@ -124,19 +145,6 @@ function getBrowserAccessError(url: string): ToolResultContent | null {
 function getCurrentBrowserAccessError(ctx?: ToolContext): ToolResultContent | null {
   const url = useUIStore.getState().getBrowserState(ctx?.sessionId, ctx?.projectId).url
   return url ? getBrowserAccessError(url) : null
-}
-
-function extractBase64ImageData(dataUrl: string): { data: string; mediaType: string } | null {
-  const commaIndex = dataUrl.indexOf(',')
-  if (!dataUrl.startsWith('data:') || commaIndex === -1) return null
-
-  const metadata = dataUrl.slice(5, commaIndex)
-  if (!metadata.includes(';base64')) return null
-
-  return {
-    data: dataUrl.slice(commaIndex + 1),
-    mediaType: metadata.split(';')[0] || 'image/png'
-  }
 }
 
 function parseWebviewJson<T>(raw: unknown): T {
@@ -165,16 +173,12 @@ async function executeBrowserNavigate(
     if (!webview) {
       return encodeToolError('Browser view did not attach. Reopen the browser tab and try again.')
     }
-    const loadPromise = waitForLoad(webview)
-    await runWebviewCommand(webview, 'navigate', (target) => {
-      target.src = url
-    })
-    await loadPromise
-    const browserState = useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId)
+    await claimBrowserRunControl(webview, ctx)
+    const browserState = await navigateRegisteredWebview(webview, 'goto', url, ctx.agentRunId)
     return encodeStructuredToolResult({
       success: true,
-      url,
-      title: browserState.pageTitle
+      url: browserState.url,
+      title: browserState.title
     })
   }
 
@@ -200,20 +204,16 @@ async function executeBrowserNavigate(
     if (accessError) return accessError
   }
 
-  const loadPromise = waitForLoad(webview)
-  if (action === 'back') {
-    await runWebviewCommand(webview, 'go back', (target) => target.goBack())
-  } else if (action === 'forward') {
-    await runWebviewCommand(webview, 'go forward', (target) => target.goForward())
-  } else {
-    await runWebviewCommand(webview, 'refresh', (target) => target.reload())
-  }
-  await loadPromise
-  const browserState = useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId)
+  const browserState = await navigateRegisteredWebview(
+    webview,
+    action === 'refresh' ? 'reload' : action,
+    undefined,
+    ctx.agentRunId
+  )
   return encodeStructuredToolResult({
     success: true,
     url: browserState.url,
-    title: browserState.pageTitle
+    title: browserState.title
   })
 }
 
@@ -305,14 +305,14 @@ async function executeBrowserGetContent(
   const outputType = (input.type as string) || 'markdown'
 
   if (outputType === 'html') {
-    const raw = await runWebviewCommand(webview, 'read page HTML', (target) =>
-      target.executeJavaScript(
-        `(function(sel) {
-          var root = sel ? document.querySelector(sel) : document.body
-          if (!root) return JSON.stringify({ error: 'Element not found: ' + sel })
-          return JSON.stringify({ title: document.title, content: root.innerHTML })
-        })(${selector ? JSON.stringify(selector) : 'null'})`
-      )
+    const raw = await executeRegisteredWebviewScript(
+      webview,
+      `(function(sel) {
+        var root = sel ? document.querySelector(sel) : document.body
+        if (!root) return JSON.stringify({ error: 'Element not found: ' + sel })
+        return JSON.stringify({ title: document.title, content: root.innerHTML })
+      })(${selector ? JSON.stringify(selector) : 'null'})`,
+      ctx.agentRunId
     )
     const parsed = parseWebviewJson<{ error?: string; title?: string; content?: string }>(raw)
     if (parsed.error) return encodeToolError(parsed.error)
@@ -325,10 +325,10 @@ async function executeBrowserGetContent(
     })
   }
 
-  const raw = await runWebviewCommand(webview, 'read page Markdown', (target) =>
-    target.executeJavaScript(
-      `${HTML_TO_MD_SCRIPT}(${selector ? JSON.stringify(selector) : 'null'})`
-    )
+  const raw = await executeRegisteredWebviewScript(
+    webview,
+    `${HTML_TO_MD_SCRIPT}(${selector ? JSON.stringify(selector) : 'null'})`,
+    ctx.agentRunId
   )
   const parsed = parseWebviewJson<{ error?: string; title?: string; content?: string }>(raw)
   if (parsed.error) return encodeToolError(parsed.error)
@@ -348,27 +348,28 @@ async function executeBrowserScreenshot(
   const accessError = getCurrentBrowserAccessError(ctx)
   if (accessError) return accessError
   const webview = requireWebview(ctx)
-  const nativeImage = await runWebviewCommand(webview, 'capture screenshot', (target) =>
-    target.capturePage()
-  )
-  if (nativeImage.isEmpty()) {
-    return encodeToolError('Failed to capture screenshot; page may still be loading.')
-  }
-  const encodedImage = extractBase64ImageData(nativeImage.toDataURL())
-  if (!encodedImage?.data) {
-    return encodeToolError('Failed to encode screenshot image.')
-  }
-  const size = nativeImage.getSize()
+  const captured = (await ipcClient.invoke(IPC.BROWSER_CAPTURE_PAGE, {
+    guestWebContentsId: webview.getWebContentsId(),
+    ...(ctx.agentRunId ? { runId: ctx.agentRunId } : {})
+  })) as
+    | {
+        success: true
+        screenshot: { data: string; mediaType: 'image/png'; width: number; height: number }
+      }
+    | { success: false; error?: string }
+  if (!captured.success)
+    return encodeToolError(captured.error ?? 'Failed to capture browser screenshot.')
   const persisted = (await ctx.ipc.invoke(IPC.IMAGE_PERSIST_GENERATED, {
-    data: encodedImage.data,
-    mediaType: encodedImage.mediaType
+    workspaceId: useWorkspaceStore.getState().activeWorkspaceId,
+    data: captured.screenshot.data,
+    mediaType: captured.screenshot.mediaType
   })) as { filePath?: string; mediaType?: string; data?: string; error?: string }
   const image: ImageBlock = {
     type: 'image',
     source: {
       type: 'base64',
-      mediaType: persisted?.mediaType || encodedImage.mediaType,
-      data: persisted?.data || encodedImage.data,
+      mediaType: persisted?.mediaType || captured.screenshot.mediaType,
+      data: persisted?.data || captured.screenshot.data,
       ...(persisted?.filePath ? { filePath: persisted.filePath } : {})
     }
   }
@@ -376,7 +377,7 @@ async function executeBrowserScreenshot(
     image,
     {
       type: 'text',
-      text: `Screenshot captured: ${size.width}x${size.height}px - ${useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId).url}`
+      text: `Screenshot captured: ${captured.screenshot.width}x${captured.screenshot.height}px - ${useUIStore.getState().getBrowserState(ctx.sessionId, ctx.projectId).url}`
     }
   ]
 }
@@ -446,9 +447,7 @@ async function executeBrowserSnapshot(
   const accessError = getCurrentBrowserAccessError(ctx)
   if (accessError) return accessError
   const webview = requireWebview(ctx)
-  const raw = await runWebviewCommand(webview, 'read interactive elements', (target) =>
-    target.executeJavaScript(SNAPSHOT_SCRIPT)
-  )
+  const raw = await executeRegisteredWebviewScript(webview, SNAPSHOT_SCRIPT, ctx.agentRunId)
   const parsed = parseWebviewJson<{
     title?: string
     count?: number
@@ -502,8 +501,10 @@ async function executeBrowserClick(
   const webview = requireWebview(ctx)
   const selector = input.selector as string
   if (!selector) return encodeToolError('"selector" is required')
-  const raw = await runWebviewCommand(webview, 'click page element', (target) =>
-    target.executeJavaScript(`${CLICK_SCRIPT}(${JSON.stringify(selector)})`)
+  const raw = await executeRegisteredWebviewScript(
+    webview,
+    `${CLICK_SCRIPT}(${JSON.stringify(selector)})`,
+    ctx.agentRunId
   )
   const parsed = parseWebviewJson<{ error?: string; tag?: string; text?: string }>(raw)
   if (parsed.error) return encodeToolError(parsed.error)
@@ -558,10 +559,10 @@ async function executeBrowserType(
   const submit = input.submit === true
   if (!selector) return encodeToolError('"selector" is required')
   if (text == null) return encodeToolError('"text" is required')
-  const raw = await runWebviewCommand(webview, 'type into page element', (target) =>
-    target.executeJavaScript(
-      `${TYPE_SCRIPT}(${JSON.stringify(selector)}, ${JSON.stringify(text)}, ${clear}, ${submit})`
-    )
+  const raw = await executeRegisteredWebviewScript(
+    webview,
+    `${TYPE_SCRIPT}(${JSON.stringify(selector)}, ${JSON.stringify(text)}, ${clear}, ${submit})`,
+    ctx.agentRunId
   )
   const parsed = parseWebviewJson<{ error?: string; tag?: string; value?: string }>(raw)
   if (parsed.error) return encodeToolError(parsed.error)
@@ -581,8 +582,9 @@ async function executeBrowserScroll(
   const webview = requireWebview(ctx)
   const direction = (input.direction as string) || 'down'
   const amount = typeof input.amount === 'number' ? input.amount : 0
-  const raw = await runWebviewCommand(webview, 'scroll page', (target) =>
-    target.executeJavaScript(`
+  const raw = await executeRegisteredWebviewScript(
+    webview,
+    `
       (function() {
         var amt = ${amount} || window.innerHeight
         window.scrollBy(0, ${direction === 'up' ? '-' : ''}amt)
@@ -592,7 +594,8 @@ async function executeBrowserScroll(
           viewportHeight: window.innerHeight
         })
       })()
-    `)
+    `,
+    ctx.agentRunId
   )
   const parsed = parseWebviewJson<{
     scrollY?: number
@@ -612,6 +615,8 @@ async function runBrowserTool(
   input: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<ToolResultContent> {
+  const attached = getWebview(ctx)
+  if (attached) await claimBrowserRunControl(attached, ctx)
   switch (toolName) {
     case 'BrowserNavigate':
       return await executeBrowserNavigate(input, ctx)

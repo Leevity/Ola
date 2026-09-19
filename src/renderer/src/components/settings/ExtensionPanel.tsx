@@ -59,7 +59,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
   const handleToggle = async (enabled: boolean): Promise<void> => {
     const result = await updateExtension(extension.id, { enabled })
     if (!result.success) {
-      toast.error(t('extension.updateFailed', { defaultValue: 'Failed to update extension' }), {
+      toast.error(t('extension.updateFailed'), {
         description: result.error
       })
       return
@@ -72,13 +72,13 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
     try {
       const result = await updateExtension(extension.id, { config })
       if (!result.success) {
-        toast.error(t('extension.saveFailed', { defaultValue: 'Failed to save configuration' }), {
+        toast.error(t('extension.saveFailed'), {
           description: result.error
         })
         return
       }
       await refreshExtensionTools()
-      toast.success(t('extension.saved', { defaultValue: 'Extension configuration saved' }))
+      toast.success(t('extension.saved'))
     } finally {
       setSaving(false)
     }
@@ -86,16 +86,14 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
 
   const handleRemove = async (): Promise<void> => {
     const ok = await confirm({
-      title: t('extension.removeConfirm', {
-        defaultValue: 'Remove this extension?'
-      }),
+      title: t('extension.removeConfirm'),
       description: extension.manifest.name,
       variant: 'destructive'
     })
     if (!ok) return
     const result = await removeExtension(extension.id)
     if (!result.success) {
-      toast.error(t('extension.removeFailed', { defaultValue: 'Failed to remove extension' }), {
+      toast.error(t('extension.removeFailed'), {
         description: result.error
       })
       return
@@ -106,7 +104,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
   const handleOpenFolder = async (): Promise<void> => {
     const result = await openExtensionFolder(extension.id)
     if (!result.success) {
-      toast.error(t('extension.openFolderFailed', { defaultValue: 'Failed to open folder' }), {
+      toast.error(t('extension.openFolderFailed'), {
         description: result.error
       })
     }
@@ -134,11 +132,9 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                   </Badge>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {extension.id} · {extension.manifest.tools.length}{' '}
-                  {t('extension.tools', { defaultValue: 'Tools' })} ·{' '}
-                  {extension.manifest.renderers?.length ?? 0}{' '}
-                  {t('extension.renderers', { defaultValue: 'Renderers' })} · {components.length}{' '}
-                  {t('extension.components', { defaultValue: 'Components' })}
+                  {extension.id} · {extension.manifest.tools.length} {t('extension.tools')} ·{' '}
+                  {extension.manifest.renderers?.length ?? 0} {t('extension.renderers')} ·{' '}
+                  {components.length} {t('extension.components')}
                 </p>
               </div>
               <ChevronDown
@@ -148,9 +144,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
           </CollapsibleTrigger>
           <div className="flex shrink-0 items-center gap-2">
             <Badge variant={extension.enabled ? 'secondary' : 'outline'}>
-              {extension.enabled
-                ? t('extension.enabled', { defaultValue: 'Enabled' })
-                : t('extension.disabled', { defaultValue: 'Disabled' })}
+              {extension.enabled ? t('extension.enabled') : t('extension.disabled')}
             </Badge>
             <Switch
               checked={extension.enabled}
@@ -170,19 +164,16 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
             <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-lg border border-border/50 bg-muted/15 p-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {t('extension.tools', { defaultValue: 'Tools' })}
+                  {t('extension.tools')}
                 </div>
                 <div className="mt-1 text-lg font-semibold">{extension.manifest.tools.length}</div>
                 <div className="mt-1 text-[11px] text-muted-foreground">
-                  {t('extension.readOnlyCount', {
-                    defaultValue: '{{count}} read-only',
-                    count: readOnlyTools
-                  })}
+                  {t('extension.readOnlyCount', { count: readOnlyTools })}
                 </div>
               </div>
               <div className="rounded-lg border border-border/50 bg-muted/15 p-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {t('extension.renderers', { defaultValue: 'Renderers' })}
+                  {t('extension.renderers')}
                 </div>
                 <div className="mt-1 text-lg font-semibold">
                   {extension.manifest.renderers?.length ?? 0}
@@ -190,22 +181,20 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
               </div>
               <div className="rounded-lg border border-border/50 bg-muted/15 p-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {t('extension.components', { defaultValue: 'Components' })}
+                  {t('extension.components')}
                 </div>
                 <div className="mt-1 text-lg font-semibold">{components.length}</div>
                 <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                   <Shapes className="size-3" />
-                  {t('extension.hostRendered', { defaultValue: 'host-rendered' })}
+                  {t('extension.hostRendered')}
                 </div>
               </div>
               <div className="rounded-lg border border-border/50 bg-muted/15 p-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {t('extension.network', { defaultValue: 'Network' })}
+                  {t('extension.network')}
                 </div>
                 <div className="mt-1 truncate text-xs text-foreground/80">
-                  {network.length > 0
-                    ? network.join(', ')
-                    : t('extension.noNetwork', { defaultValue: 'No network access' })}
+                  {network.length > 0 ? network.join(', ') : t('extension.noNetwork')}
                 </div>
               </div>
             </div>
@@ -228,7 +217,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                           </span>
                           {missing ? (
                             <Badge variant="outline" className="text-[10px] text-destructive">
-                              {t('extension.required', { defaultValue: 'Required' })}
+                              {t('extension.required')}
                             </Badge>
                           ) : null}
                         </span>
@@ -258,9 +247,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                                 }))
                               }
                               aria-label={
-                                visible
-                                  ? t('extension.hideSecret', { defaultValue: 'Hide secret' })
-                                  : t('extension.showSecret', { defaultValue: 'Show secret' })
+                                visible ? t('extension.hideSecret') : t('extension.showSecret')
                               }
                             >
                               {visible ? (
@@ -288,7 +275,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                     disabled={saving}
                   >
                     <Save className="size-3.5" />
-                    {t('extension.saveConfig', { defaultValue: 'Save config' })}
+                    {t('extension.saveConfig')}
                   </Button>
                 </div>
               </>
@@ -298,7 +285,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
             <div className="grid gap-3 lg:grid-cols-2">
               <div>
                 <div className="mb-2 text-xs font-medium text-muted-foreground">
-                  {t('extension.tools', { defaultValue: 'Tools' })}
+                  {t('extension.tools')}
                 </div>
                 <div className="extension-scroll-area max-h-72 space-y-1.5 overflow-y-scroll overscroll-contain pr-1">
                   {extension.manifest.tools.map((tool) => (
@@ -317,7 +304,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
               </div>
               <div>
                 <div className="mb-2 text-xs font-medium text-muted-foreground">
-                  {t('extension.renderers', { defaultValue: 'Renderers' })}
+                  {t('extension.renderers')}
                 </div>
                 <div className="extension-scroll-area max-h-72 space-y-1.5 overflow-y-scroll overscroll-contain pr-1">
                   {(extension.manifest.renderers ?? []).length > 0 ? (
@@ -332,7 +319,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                     ))
                   ) : (
                     <div className="rounded-md border border-dashed border-border/60 px-2.5 py-2 text-xs text-muted-foreground">
-                      {t('extension.noRenderers', { defaultValue: 'No custom renderers' })}
+                      {t('extension.noRenderers')}
                     </div>
                   )}
                 </div>
@@ -340,7 +327,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
               {components.length > 0 ? (
                 <div className="lg:col-span-2">
                   <div className="mb-2 text-xs font-medium text-muted-foreground">
-                    {t('extension.components', { defaultValue: 'Components' })}
+                    {t('extension.components')}
                   </div>
                   <div className="extension-scroll-area grid max-h-72 gap-1.5 overflow-y-scroll overscroll-contain pr-1 md:grid-cols-2">
                     {components.map((component) => (
@@ -377,7 +364,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                 onClick={() => void handleOpenFolder()}
               >
                 <FolderOpen className="size-3.5" />
-                {t('extension.openFolder', { defaultValue: 'Open folder' })}
+                {t('extension.openFolder')}
               </Button>
               <Button
                 size="sm"
@@ -386,7 +373,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                 onClick={() => void handleRemove()}
               >
                 <Trash2 className="size-3.5" />
-                {t('extension.remove', { defaultValue: 'Remove' })}
+                {t('extension.remove')}
               </Button>
             </div>
           </div>
@@ -396,7 +383,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
   )
 }
 
-export function ExtensionPanel(): React.JSX.Element {
+export function ExtensionPanel({ embedded = false }: { embedded?: boolean }): React.JSX.Element {
   const { t } = useTranslation('settings')
   const extensions = useExtensionStore((state) => state.extensions)
   const loaded = useExtensionStore((state) => state.loaded)
@@ -415,49 +402,44 @@ export function ExtensionPanel(): React.JSX.Element {
     if (selected.canceled || !selected.path) return
     const result = await installFromFolder(selected.path)
     if (!result.success) {
-      toast.error(t('extension.installFailed', { defaultValue: 'Failed to install extension' }), {
+      toast.error(t('extension.installFailed'), {
         description: result.error
       })
       return
     }
     await refreshExtensionTools()
-    toast.success(t('extension.installed', { defaultValue: 'Extension installed' }))
+    toast.success(t('extension.installed'))
   }
 
   return (
     <div className="flex w-full flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold">
-            {t('extension.title', { defaultValue: 'Extensions' })}
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-            {t('extension.subtitle', {
-              defaultValue:
-                'Install local extensions that add custom Agent tools and response UI components.'
-            })}
-          </p>
-        </div>
+        {!embedded ? (
+          <div>
+            <h2 className="text-lg font-semibold">{t('extension.title')}</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              {t('extension.subtitle')}
+            </p>
+          </div>
+        ) : null}
         <Button className="gap-2" onClick={() => void handleInstall()}>
           <FolderPlus className="size-4" />
-          {t('extension.installFolder', { defaultValue: 'Install folder' })}
+          {t('extension.installFolder')}
         </Button>
       </div>
 
       {!loaded ? (
         <div className="rounded-xl border border-border/60 bg-background p-6 text-sm text-muted-foreground">
-          {t('extension.loading', { defaultValue: 'Loading extensions...' })}
+          {t('extension.loading')}
         </div>
       ) : extensions.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border/70 bg-background p-8 text-center">
           <Puzzle className="mx-auto size-8 text-muted-foreground/60" />
           <div className="mt-3 text-sm font-medium text-foreground">
-            {t('extension.emptyTitle', { defaultValue: 'No extensions installed' })}
+            {t('extension.emptyTitle')}
           </div>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            {t('extension.emptyDesc', {
-              defaultValue: 'Choose a folder containing extension.json to add custom tools to Ola.'
-            })}
+            {t('extension.emptyDesc')}
           </p>
         </div>
       ) : (

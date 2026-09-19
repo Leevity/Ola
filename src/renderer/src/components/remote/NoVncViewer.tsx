@@ -60,12 +60,7 @@ export function NoVncViewer({
       onStatusChange?.('error')
       const detail =
         event && typeof event === 'object' && 'detail' in event ? String(event.detail ?? '') : ''
-      setError(
-        t('remote.noVncSecurityFailure', {
-          detail,
-          defaultValue: 'The VNC server rejected the connection security handshake.{{detail}}'
-        })
-      )
+      setError(t('remote.noVncSecurityFailure', { detail }))
     }
 
     const connect = async (): Promise<void> => {
@@ -77,11 +72,7 @@ export function NoVncViewer({
         setPhase('credential unavailable')
         setStatus('error')
         onStatusChange?.('error')
-        setError(
-          t('remote.noVncCredentialsRequired', {
-            defaultValue: 'The saved VNC password is unavailable.'
-          })
-        )
+        setError(t('remote.noVncCredentialsRequired'))
         return
       }
 
@@ -237,12 +228,7 @@ export function NoVncViewer({
         setPhase('handshake timeout')
         setStatus('error')
         onStatusChange?.('error')
-        setError(
-          t('remote.noVncConnectionTimeout', {
-            defaultValue:
-              'The VNC server did not complete the handshake within 12 seconds. Check the Mac Screen Sharing permission, VNC password, and port 5900.'
-          })
-        )
+        setError(t('remote.noVncConnectionTimeout'))
         rfb?.disconnect()
       }, 12_000)
       rfb.focus()
@@ -285,26 +271,26 @@ export function NoVncViewer({
 
   const scaleLabel =
     scaleMode === 'fill'
-      ? t('remote.scaleFill', { defaultValue: 'Fill' })
+      ? t('remote.scaleFill')
       : scaleMode === 'original'
-        ? t('remote.scaleOriginal', { defaultValue: '100%' })
-        : t('remote.scaleFit', { defaultValue: 'Fit' })
+        ? t('remote.scaleOriginal')
+        : t('remote.scaleFit')
 
   return (
-    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border bg-black shadow-sm">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--remote-border)] bg-[color:var(--remote-surface)] shadow-sm">
       <div className="flex items-center justify-between border-b border-[color:var(--border)] bg-[color:var(--remote-panel)] px-4 py-2 text-xs text-[color:var(--muted-foreground)]">
-        <span>{t('remote.embeddedNoVnc', { defaultValue: 'Embedded noVNC' })}</span>
+        <span>{t('remote.embeddedNoVnc')}</span>
         <span className="flex items-center gap-3">
           {framebufferSize ? (
-            <span className="font-mono text-white/45">
+            <span className="font-mono text-[color:var(--muted-foreground)]">
               {framebufferSize.width}×{framebufferSize.height}
             </span>
           ) : null}
           <button
             type="button"
             onClick={cycleScaleMode}
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-white/70 transition-colors hover:bg-white/10 hover:text-white"
-            title={t('remote.cycleScaleMode', { defaultValue: 'Switch scale mode' })}
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[color:var(--foreground)] transition-colors hover:bg-[color:var(--accent)]"
+            title={t('remote.cycleScaleMode')}
           >
             {scaleMode === 'original' ? (
               <Maximize2 className="size-3" />
@@ -316,15 +302,15 @@ export function NoVncViewer({
             <span>{scaleLabel}</span>
           </button>
           <span>
-            {t(`remote.status${status.charAt(0).toUpperCase()}${status.slice(1)}`, {
-              defaultValue: status
-            })}{' '}
-            <span className="text-white/45">({phase})</span>
+            {t(`remote.status${status.charAt(0).toUpperCase()}${status.slice(1)}`)}{' '}
+            <span className="text-[color:var(--muted-foreground)]">({phase})</span>
           </span>
         </span>
       </div>
       {error ? (
-        <div className="bg-destructive/15 px-4 py-3 text-xs text-red-200">{error}</div>
+        <div className="bg-destructive/15 px-4 py-3 text-xs text-[color:var(--foreground)]">
+          {error}
+        </div>
       ) : null}
       <div ref={targetRef} className="flex min-h-0 min-w-0 flex-1 overflow-hidden" />
     </div>

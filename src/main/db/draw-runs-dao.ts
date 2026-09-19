@@ -1,7 +1,11 @@
 import { getNativeWorker } from '../lib/native-worker'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { canaryListDrawRuns } from './legacy-read-canary'
+import { businessWriteCanary } from './business-write-canary'
 
 export interface DrawRunRow {
   id: string
+  workspace_id: string
   prompt: string
   provider_name: string
   model_name: string
@@ -12,6 +16,14 @@ export interface DrawRunRow {
   images_json: string
   error_json: string | null
   updated_at: number
+}
+
+async function requireDrawWorkspace(workspaceId: string): Promise<string> {
+  if (!workspaceId || workspaceId !== workspaceId.trim())
+    throw new Error('Draw workspace is invalid')
+  if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
+    throw new Error('Draw workspace is not available')
+  return workspaceId
 }
 
 interface DrawRunMutationResult {
@@ -26,12 +38,20 @@ function assertMutation(result: DrawRunMutationResult, operation: string): void 
   }
 }
 
-export function listDrawRuns(): Promise<DrawRunRow[]> {
-  return getNativeWorker().request<DrawRunRow[]>('db/draw-runs-list', {}, 120_000)
+export async function listDrawRuns(workspaceId: string): Promise<DrawRunRow[]> {
+  const scopedWorkspaceId = await requireDrawWorkspace(workspaceId)
+  const canary = await canaryListDrawRuns(scopedWorkspaceId)
+  if (canary !== undefined) return canary
+  return getNativeWorker().request<DrawRunRow[]>(
+    'db/draw-runs-list',
+    { workspaceId: scopedWorkspaceId },
+    120_000
+  )
 }
 
 export async function saveDrawRun(run: {
   id: string
+  workspaceId: string
   prompt: string
   providerName: string
   modelName: string
@@ -43,27 +63,58 @@ export async function saveDrawRun(run: {
   errorJson?: string | null
   updatedAt: number
 }): Promise<void> {
+  const workspaceId = await requireDrawWorkspace(run.workspaceId)
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.saveDrawRun({
+      id: run.id,
+      workspaceId,
+      prompt: run.prompt,
+      providerName: run.providerName,
+      modelName: run.modelName,
+      mode: run.mode ?? 'image',
+      metaJson: run.metaJson ?? null,
+      createdAt: run.createdAt,
+      isGenerating: run.isGenerating,
+      imagesJson: run.imagesJson,
+      errorJson: run.errorJson ?? null,
+      updatedAt: run.updatedAt
+    })
+    return
+  }
   const result = await getNativeWorker().request<DrawRunMutationResult>(
     'db/draw-runs-save',
-    run,
+    { ...run, workspaceId },
     120_000
   )
   assertMutation(result, 'save')
 }
 
-export async function deleteDrawRun(id: string): Promise<void> {
+export async function deleteDrawRun(id: string, workspaceId: string): Promise<void> {
+  const scopedWorkspaceId = await requireDrawWorkspace(workspaceId)
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.deleteDrawRun(id, scopedWorkspaceId)
+    return
+  }
   const result = await getNativeWorker().request<DrawRunMutationResult>(
     'db/draw-runs-delete',
-    { id },
+    { id, workspaceId: scopedWorkspaceId },
     120_000
   )
   assertMutation(result, 'delete')
 }
 
-export async function clearDrawRuns(): Promise<void> {
+export async function clearDrawRuns(workspaceId: string): Promise<void> {
+  const scopedWorkspaceId = await requireDrawWorkspace(workspaceId)
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.clearDrawRuns(scopedWorkspaceId)
+    return
+  }
   const result = await getNativeWorker().request<DrawRunMutationResult>(
     'db/draw-runs-clear',
-    {},
+    { workspaceId: scopedWorkspaceId },
     120_000
   )
   assertMutation(result, 'clear')

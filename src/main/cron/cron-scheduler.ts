@@ -1,7 +1,6 @@
 import cron from 'node-cron'
 import { nanoid } from 'nanoid'
-import { BrowserWindow } from 'electron'
-import { safeSendMessagePackToAllWindows, safeSendMessagePackToWindow } from '../window-ipc'
+import { sendCronWorkspaceEvent } from './cron-workspace-events'
 import {
   createCronRun,
   getCronRun,
@@ -13,6 +12,11 @@ import {
   type CronRunRecord
 } from '../db/cron-dao'
 import { runCronAgentInBackground } from './cron-agent-background'
+import { runTsCronAgentInBackground } from './ts-cron-agent-background'
+import { canRunCronInTsRuntime } from './ts-cron-selection'
+import { desktopRuntime } from '../runtime/desktop-runtime'
+import { parseCronModelBinding } from '../../shared/runtime/cron-model-binding'
+import { quiesceCronWritesForHandover } from './cron-write-gate'
 
 export type { CronJobRecord, CronRunRecord }
 
@@ -28,8 +32,11 @@ const scheduledHandles = new Map<string, ScheduledHandle>()
 
 let maxConcurrentRuns = 2
 const activeRunJobIds = new Set<string>()
+const finishingRuns = new Set<Promise<void>>()
+let quiescingForHandover = false
+let workspaceSwitchPending = false
 /** Jobs with delete_after_run that are waiting for the agent run to finish before DB deletion */
-const pendingDeleteAfterRun = new Set<string>()
+const pendingDeleteAfterRun = new Map<string, string>()
 
 export function setMaxConcurrentRuns(n: number): void {
   maxConcurrentRuns = Math.max(1, n)
@@ -40,6 +47,7 @@ export function isRunning(jobId: string): boolean {
 }
 
 export function markRunning(jobId: string): boolean {
+  if (quiescingForHandover || workspaceSwitchPending) return false
   if (activeRunJobIds.has(jobId)) return false
   if (activeRunJobIds.size >= maxConcurrentRuns) {
     console.warn(
@@ -75,6 +83,7 @@ function toRunApi(run: CronRunRecord): Record<string, unknown> {
     sourceProjectNameSnapshot: run.source_project_name_snapshot,
     sourceProviderIdSnapshot: run.source_provider_id_snapshot,
     modelSnapshot: run.model_snapshot,
+    modelSourceSnapshot: run.model_source_snapshot,
     workingFolderSnapshot: run.working_folder_snapshot,
     deliveryModeSnapshot: run.delivery_mode_snapshot,
     deliveryTargetSnapshot: run.delivery_target_snapshot
@@ -85,6 +94,8 @@ export async function recordSkippedCronRun(
   job: CronJobRecord,
   scheduledFor = Date.now()
 ): Promise<string> {
+  if (quiescingForHandover) throw new Error('CRON_SCHEDULER_QUIESCING')
+  if (workspaceSwitchPending) throw new Error('WORKSPACE_BUSY_CRON')
   const reason = getSkipReason(job.id)
 
   try {
@@ -92,6 +103,7 @@ export async function recordSkippedCronRun(
     await createCronRun({
       runId,
       jobId: job.id,
+      workspaceId: job.workspace_id ?? 'local-personal',
       startedAt: scheduledFor,
       scheduledFor,
       jobNameSnapshot: job.name,
@@ -102,12 +114,14 @@ export async function recordSkippedCronRun(
       sourceProjectNameSnapshot: job.source_project_name,
       sourceProviderIdSnapshot: job.source_provider_id,
       modelSnapshot: job.model,
+      modelSourceSnapshot: job.model_source,
       workingFolderSnapshot: job.working_folder,
       deliveryModeSnapshot: job.delivery_mode,
       deliveryTargetSnapshot: job.delivery_target
     })
     await updateCronRun({
       runId,
+      workspaceId: job.workspace_id ?? 'local-personal',
       patch: {
         finishedAt: Date.now(),
         status: 'skipped',
@@ -116,8 +130,8 @@ export async function recordSkippedCronRun(
         error: reason
       }
     })
-    const run = await getCronRun(runId)
-    safeSendMessagePackToAllWindows('cron:run-finished', {
+    const run = await getCronRun(runId, job.workspace_id ?? 'local-personal')
+    sendCronWorkspaceEvent(job.workspace_id ?? 'local-personal', 'cron:run-finished', {
       jobId: job.id,
       runId,
       status: 'skipped',
@@ -137,34 +151,40 @@ export async function recordSkippedCronRun(
 }
 
 export async function markFinished(jobId: string): Promise<void> {
-  activeRunJobIds.delete(jobId)
-
-  // Deferred delete_after_run: now that the agent run is done, soft-delete the job
-  if (pendingDeleteAfterRun.has(jobId)) {
-    pendingDeleteAfterRun.delete(jobId)
-    try {
-      const now = Date.now()
-      await softDeleteCronJob(jobId, now)
-      sendToRenderer('cron:job-removed', { jobId, reason: 'delete_after_run' })
-      console.log(`[CronScheduler] Deferred delete_after_run: soft-deleted job ${jobId}`)
-    } catch (err) {
-      console.error(`[CronScheduler] Failed to soft-delete job ${jobId} after run:`, err)
+  const finishing = (async () => {
+    // Deferred delete_after_run remains a legacy DB write until it settles.
+    const workspaceId = pendingDeleteAfterRun.get(jobId)
+    if (workspaceId) {
+      pendingDeleteAfterRun.delete(jobId)
+      try {
+        const now = Date.now()
+        await softDeleteCronJob(jobId, now, workspaceId)
+        sendToRenderer(workspaceId, 'cron:job-removed', { jobId, reason: 'delete_after_run' })
+        console.log(`[CronScheduler] Deferred delete_after_run: soft-deleted job ${jobId}`)
+      } catch (err) {
+        console.error(`[CronScheduler] Failed to soft-delete job ${jobId} after run:`, err)
+      }
     }
+  })()
+  finishingRuns.add(finishing)
+  try {
+    await finishing
+  } finally {
+    finishingRuns.delete(finishing)
+    activeRunJobIds.delete(jobId)
   }
 }
 
 // ── Renderer communication ───────────────────────────────────────
 
-function sendToRenderer(channel: string, data: unknown): void {
-  const win = BrowserWindow.getAllWindows()[0]
-  if (win) {
-    safeSendMessagePackToWindow(win, channel, data)
-  }
+function sendToRenderer(workspaceId: string, channel: string, data: Record<string, unknown>): void {
+  sendCronWorkspaceEvent(workspaceId, channel, data)
 }
 
 // ── Job fired handler ────────────────────────────────────────────
 
 async function onJobFired(job: CronJobRecord): Promise<void> {
+  if (quiescingForHandover || workspaceSwitchPending) return
   const firedAt = Date.now()
 
   // Concurrency guard — prevent firing if this job is already running or limit reached
@@ -175,10 +195,8 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
   }
 
   try {
-    await markCronJobFired(job.id, firedAt)
-
     // Forward to renderer for UI updates only.
-    sendToRenderer('cron:fired', {
+    sendToRenderer(job.workspace_id ?? 'local-personal', 'cron:fired', {
       jobId: job.id,
       name: job.name,
       prompt: job.prompt,
@@ -196,29 +214,48 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
       pluginChatId: job.plugin_chat_id
     })
 
-    runCronAgentInBackground(
-      {
-        jobId: job.id,
-        name: job.name,
-        sessionId: job.session_id,
-        prompt: job.prompt,
-        agentId: job.agent_id,
-        model: job.model,
-        sourceProviderId: job.source_provider_id,
-        workingFolder: job.working_folder,
-        sshConnectionId: job.ssh_connection_id,
-        firedAt,
-        deliveryMode: job.delivery_mode,
-        deliveryTarget: job.delivery_target,
-        maxIterations: job.max_iterations,
-        pluginId: job.plugin_id,
-        pluginChatId: job.plugin_chat_id,
-        getScheduledState: () => scheduledHandles.has(job.id)
-      },
-      () => {
-        void markFinished(job.id)
-      }
-    )
+    let modelSource
+    try {
+      modelSource = parseCronModelBinding(job.model_source, job.workspace_id)
+    } catch (error) {
+      throw new Error(
+        `Cron model binding is invalid: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+    const runOptions = {
+      jobId: job.id,
+      name: job.name,
+      sessionId: job.session_id,
+      prompt: job.prompt,
+      agentId: job.agent_id,
+      model: job.model,
+      modelSource,
+      workspaceId: job.workspace_id ?? 'local-personal',
+      sourceProviderId: job.source_provider_id,
+      workingFolder: job.working_folder,
+      sshConnectionId: job.ssh_connection_id,
+      firedAt,
+      deliveryMode: job.delivery_mode,
+      deliveryTarget: job.delivery_target,
+      maxIterations: job.max_iterations,
+      pluginId: job.plugin_id,
+      pluginChatId: job.plugin_chat_id,
+      getScheduledState: () => scheduledHandles.has(job.id)
+    }
+    const finished = () => {
+      void markFinished(job.id)
+    }
+    const useTsRuntime = canRunCronInTsRuntime(runOptions, desktopRuntime.isAvailable)
+    // TS cron atomically creates the run snapshot and advances fire_count. Native
+    // keeps the legacy two-step path until its runtime is retired.
+    if (!useTsRuntime) {
+      await markCronJobFired(job.id, firedAt, job.workspace_id ?? 'local-personal')
+    }
+    if (useTsRuntime) {
+      runTsCronAgentInBackground(runOptions, finished)
+    } else {
+      runCronAgentInBackground(runOptions, finished)
+    }
 
     // Handle delete_after_run: stop the schedule handle now (prevent re-fire),
     // but defer DB deletion + UI removal until the agent run finishes (cron:run-finished).
@@ -229,12 +266,12 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
         handle.stop()
         scheduledHandles.delete(job.id)
       }
-      pendingDeleteAfterRun.add(job.id)
+      pendingDeleteAfterRun.set(job.id, job.workspace_id ?? 'local-personal')
     }
   } catch (err) {
     console.error('[CronScheduler] Job fire error:', err)
     await markFinished(job.id)
-    sendToRenderer('cron:fired', {
+    sendToRenderer(job.workspace_id ?? 'local-personal', 'cron:fired', {
       jobId: job.id,
       error: err instanceof Error ? err.message : String(err)
     })
@@ -244,6 +281,7 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
 // ── Schedule a job ───────────────────────────────────────────────
 
 export function scheduleJob(record: CronJobRecord): boolean {
+  if (quiescingForHandover) return false
   // Stop any existing handle
   const existing = scheduledHandles.get(record.id)
   if (existing) {
@@ -354,8 +392,16 @@ export function cancelAllJobs(): void {
     handle.stop()
   }
   scheduledHandles.clear()
-  activeRunJobIds.clear()
-  pendingDeleteAfterRun.clear()
+}
+
+/** Stops future fires and refuses a handover while a legacy run can still write. */
+export function quiesceCronSchedulerForHandover(): void {
+  quiescingForHandover = true
+  for (const handle of scheduledHandles.values()) handle.stop()
+  scheduledHandles.clear()
+  if (activeRunJobIds.size > 0 || finishingRuns.size > 0)
+    throw new Error('CRON_RUNS_ACTIVE_DURING_HANDOVER')
+  quiesceCronWritesForHandover()
 }
 
 // ── Query helpers ────────────────────────────────────────────────
@@ -366,4 +412,25 @@ export function getScheduledJobIds(): string[] {
 
 export function getActiveRunJobIds(): string[] {
   return Array.from(activeRunJobIds)
+}
+
+export function hasActiveOrFinishingCronRuns(): boolean {
+  return activeRunJobIds.size > 0 || finishingRuns.size > 0
+}
+
+/** Blocks new Cron runs while Main checks and switches the active workspace. */
+export function beginCronWorkspaceSwitch(): () => void {
+  if (workspaceSwitchPending || hasActiveOrFinishingCronRuns())
+    throw new Error('WORKSPACE_BUSY_CRON')
+  workspaceSwitchPending = true
+  let released = false
+  return () => {
+    if (released) return
+    released = true
+    workspaceSwitchPending = false
+  }
+}
+
+export function isCronWorkspaceSwitchPending(): boolean {
+  return workspaceSwitchPending
 }

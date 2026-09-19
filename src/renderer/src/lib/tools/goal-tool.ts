@@ -1,11 +1,11 @@
 import { toolRegistry } from '../agent/tool-registry'
-import { encodeStructuredToolResult } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import { useGoalStore } from '@renderer/stores/goal-store'
 
-function encodeNativeOnlyGoalResult(toolName: string): string {
-  return encodeStructuredToolResult({
-    error: `${toolName} execution has migrated to .NET Native Worker.`
-  })
+function requireSessionId(ctx: Parameters<ToolHandler['execute']>[1]): string | null {
+  const sessionId = ctx.sessionId?.trim()
+  return sessionId || null
 }
 
 const getGoalHandler: ToolHandler = {
@@ -18,7 +18,17 @@ const getGoalHandler: ToolHandler = {
       properties: {}
     }
   },
-  execute: async () => encodeNativeOnlyGoalResult('get_goal'),
+  execute: async (_input, ctx) => {
+    const sessionId = requireSessionId(ctx)
+    if (!sessionId) return encodeToolError('A session is required to read the current goal')
+    const goal =
+      useGoalStore.getState().getGoalBySession(sessionId) ??
+      (await useGoalStore.getState().loadGoalForSession(sessionId, true))
+    return encodeStructuredToolResult({
+      goal: goal ?? null,
+      ...(goal ? {} : { message: 'No active goal for this session' })
+    })
+  },
   requiresApproval: () => false
 }
 
@@ -43,7 +53,26 @@ const createGoalHandler: ToolHandler = {
       required: ['objective']
     }
   },
-  execute: async () => encodeNativeOnlyGoalResult('create_goal'),
+  execute: async (input, ctx) => {
+    const sessionId = requireSessionId(ctx)
+    if (!sessionId) return encodeToolError('A session is required to create a goal')
+    const objective = typeof input.objective === 'string' ? input.objective.trim() : ''
+    if (!objective) return encodeToolError('objective is required')
+    const tokenBudget = input.token_budget
+    if (
+      tokenBudget !== undefined &&
+      (typeof tokenBudget !== 'number' || !Number.isFinite(tokenBudget) || tokenBudget <= 0)
+    )
+      return encodeToolError('token_budget must be a positive number when provided')
+    const result = await useGoalStore.getState().createGoal({
+      sessionId,
+      objective,
+      tokenBudget: tokenBudget as number | undefined
+    })
+    return result.success
+      ? encodeStructuredToolResult({ goal: result.goal })
+      : encodeToolError(result.error ?? 'Goal was not created')
+  },
   requiresApproval: () => false
 }
 
@@ -65,7 +94,17 @@ const updateGoalHandler: ToolHandler = {
       required: ['status']
     }
   },
-  execute: async () => encodeNativeOnlyGoalResult('update_goal'),
+  execute: async (input, ctx) => {
+    const sessionId = requireSessionId(ctx)
+    if (!sessionId) return encodeToolError('A session is required to update a goal')
+    const status = input.status
+    if (status !== 'complete' && status !== 'blocked')
+      return encodeToolError('status must be complete or blocked')
+    const result = await useGoalStore.getState().updateGoal(sessionId, { status })
+    return result.success
+      ? encodeStructuredToolResult({ goal: result.goal })
+      : encodeToolError(result.error ?? 'Goal was not updated')
+  },
   requiresApproval: () => false
 }
 

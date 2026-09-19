@@ -1,4 +1,5 @@
-import { ipcMain, BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { managedModelReverseRequest } from '../remote/managed-model-bridge'
+import { ipcMain, BrowserWindow, dialog, type IpcMainInvokeEvent } from 'electron'
 import { rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -37,6 +38,8 @@ import {
 import { getNativeAgentRuntimeManager } from './native-agent-runtime'
 import { getCodeGraphWorker } from '../lib/codegraph-worker'
 import { getNativeSshConnectionPayload } from './ssh-handlers'
+import { initializeSshConfigCache, withSshWorkspace } from '../ssh/ssh-config'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { hooksService } from '../hooks/hooks-service'
 import type { HookEvent, HookInvocation } from '../../shared/hooks/types'
 import {
@@ -58,6 +61,10 @@ import { getCronExecutionState } from '../cron/cron-agent-background'
 import { executeMcpToolFromMain, readMcpResourceFromMain } from './mcp-handlers'
 import { executeJsExtensionToolInMain } from './extension-js-runtime'
 import { readPermissionPolicySnapshot, readProviderRetryMaxAttempts } from './settings-handlers'
+import { getWebSearchSecretStore } from '../web/web-search-secret-store'
+import { withMainOwnedWebSearchSecret } from '../web/web-search-secret-resolution'
+import * as sessionsDao from '../db/sessions-dao'
+import { resolveAuthorizedAgentRunWorkspace } from './agent-run-workspace'
 
 const SIDECAR_RENDERER_REQUEST_TIMEOUT_MS = 10 * 60_000
 const DEBUG_BODY_TEMP_DIR = join(tmpdir(), 'ola-request-debug-bodies')
@@ -85,12 +92,62 @@ type PendingRendererApprovalRequest = {
   resolve: (value: PendingRendererApprovalResponse) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>
+  nativeCommandApproval?: { window: BrowserWindow | undefined; toolName: string; command: string }
 }
 
 type PendingRendererToolRequest = {
   resolve: (value: unknown) => void
   reject: (error: Error) => void
   timer: ReturnType<typeof setTimeout>
+}
+
+function nativeCommandApproval(
+  params: unknown,
+  targetWindow: BrowserWindow | undefined,
+  autoApprove: boolean
+): { window: BrowserWindow | undefined; toolName: string; command: string } | undefined {
+  // "Full access" is an explicit, persisted user choice. The renderer has already
+  // auto-approved this request, so showing a second native dialog here would make
+  // the mode ineffective. When an approval is required, the normal and whitelist
+  // modes retain the native command confirmation as a defense in depth boundary.
+  if (autoApprove) return undefined
+
+  const request = params as { toolCall?: { name?: unknown; input?: { command?: unknown } } } | null
+  const toolName = typeof request?.toolCall?.name === 'string' ? request.toolCall.name : ''
+  const command =
+    typeof request?.toolCall?.input?.command === 'string'
+      ? request.toolCall.input.command.trim()
+      : ''
+  if (!['Bash', 'Shell', 'PowerShell', 'Monitor'].includes(toolName) || !command) return undefined
+  return { window: targetWindow, toolName, command }
+}
+
+function redactCommandForNativeApproval(command: string): string {
+  return command
+    .replace(/(password|passphrase|secret|token|api[_-]?key)\s*([=:])\s*([^\s'";]+)/giu, '$1$2••••')
+    .slice(0, 1600)
+}
+
+async function confirmNativeCommandApproval(request: {
+  window: BrowserWindow | undefined
+  toolName: string
+  command: string
+}): Promise<boolean> {
+  const options = {
+    type: 'warning' as const,
+    buttons: ['Cancel', 'Run command'],
+    defaultId: 0,
+    cancelId: 0,
+    noLink: true,
+    title: 'Confirm command execution',
+    message: `Run ${request.toolName} command?`,
+    detail: redactCommandForNativeApproval(request.command)
+  }
+  const result =
+    request.window && !request.window.isDestroyed()
+      ? await dialog.showMessageBox(request.window, options)
+      : await dialog.showMessageBox(options)
+  return result.response === 1
 }
 
 type McpCallToolInvokeArgs = {
@@ -187,6 +244,16 @@ function readNonEmptyString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
+/**
+ * The transition Worker still needs the search credential in its private
+ * request payload. Renderer input is never trusted as authority: Main imports
+ * a legacy value once when necessary, then replaces it with the encrypted
+ * Main-owned secret immediately before dispatch.
+ */
+async function injectWebSearchSecret(params: unknown): Promise<unknown> {
+  return await withMainOwnedWebSearchSecret(getWebSearchSecretStore(), params)
+}
+
 function readBooleanEnv(name: string, defaultValue = false): boolean {
   const raw = process.env[name]
   if (raw === undefined) return defaultValue
@@ -218,17 +285,20 @@ function logMessagePackTrace(message: string, details: Record<string, unknown>):
 
 function enrichAgentRunParams(params: unknown): unknown {
   const record = normalizeRendererRequestRecord(params)
+  // Only Main-resolved workspace configurations may supply SSH credentials.
+  // A renderer-supplied connection object is not an authority.
+  const sanitized = { ...record }
+  delete sanitized.connection
   const sshConnectionId = readNonEmptyString(record.sshConnectionId)
-  if (!sshConnectionId || record.connection) return params
+  if (!sshConnectionId) return sanitized
 
   const connection = getNativeSshConnectionPayload(sshConnectionId)
   if (!connection) {
-    console.warn(`[Sidecar] SSH connection not found for native agent run: ${sshConnectionId}`)
-    return params
+    throw new Error('SSH_CONNECTION_NOT_FOUND_IN_WORKSPACE')
   }
 
   return {
-    ...record,
+    ...sanitized,
     connection
   }
 }
@@ -237,19 +307,39 @@ async function prepareGoalAwareAgentRunParams(
   params: unknown,
   manager: SidecarBridgeManager
 ): Promise<unknown> {
-  const enrichedParams = enrichAgentRunParams(params)
-  const record = normalizeRendererRequestRecord(enrichedParams)
+  const record = normalizeRendererRequestRecord(params)
   const runId = readNonEmptyString(record.runId)
   const sessionId = readNonEmptyString(record.sessionId)
   const messages = Array.isArray(record.messages) ? record.messages : null
 
   if (!runId || !sessionId || !messages) {
-    return enrichedParams
+    const requestedWorkspaceId = readNonEmptyString(record.workspaceId)
+    if (requestedWorkspaceId && requestedWorkspaceId !== 'local-personal')
+      throw new Error('SESSION_WORKSPACE_MISMATCH')
+    return withSshWorkspace('local-personal', async () => {
+      await initializeSshConfigCache()
+      return enrichAgentRunParams(record)
+    })
   }
+
+  // A renderer run payload is not a workspace authority. Resolve persistent
+  // ownership before Goal preparation can read or change per-session state.
+  const requestedWorkspaceId = readNonEmptyString(record.workspaceId)
+  const authorization = {
+    sessionWorkspace: async (id: string) =>
+      (await sessionsDao.getSession(id))?.workspace_id ?? null,
+    availableWorkspaceIds: loadOfflineWorkspaceIds
+  }
+  const workspaceId = await resolveAuthorizedAgentRunWorkspace(
+    sessionId,
+    requestedWorkspaceId,
+    authorization
+  )
 
   const preparedMessages = await getGoalRuntimeService().prepareRun({
     runId,
     sessionId,
+    workspaceId,
     planMode: record.planMode === true,
     source: readAgentRunSource(record.goalRunSource),
     messages: messages as Parameters<
@@ -274,9 +364,20 @@ async function prepareGoalAwareAgentRunParams(
     }
   })
 
-  return {
-    ...record,
-    messages: preparedMessages
+  try {
+    const currentWorkspaceId = await resolveAuthorizedAgentRunWorkspace(
+      sessionId,
+      requestedWorkspaceId,
+      authorization
+    )
+    if (currentWorkspaceId !== workspaceId) throw new Error('SESSION_WORKSPACE_MISMATCH')
+    return await withSshWorkspace(workspaceId, async () => {
+      await initializeSshConfigCache()
+      return enrichAgentRunParams({ ...record, messages: preparedMessages, workspaceId })
+    })
+  } catch (error) {
+    getGoalRuntimeService().discardPreparedRun(runId)
+    throw error
   }
 }
 
@@ -501,6 +602,7 @@ export function registerSidecarHandlers(): void {
   const pendingApprovalRequests = new Map<string, PendingRendererApprovalRequest>()
   const pendingRendererToolRequests = new Map<string, PendingRendererToolRequest>()
   const runWindowIds = new Map<string, number>()
+  const runAutoApproval = new Map<string, boolean>()
   const sessionWindowIds = new Map<string, number>()
   const lastStreamSequences = new Map<string, number>()
   const agentStreamReplayCache = new Map<string, CachedAgentStreamRun>()
@@ -609,6 +711,7 @@ export function registerSidecarHandlers(): void {
   const cleanupAgentRunIfTerminal = (runId: string, terminal: boolean): void => {
     if (!terminal) return
     runWindowIds.delete(runId)
+    runAutoApproval.delete(runId)
   }
 
   const sendAgentStreamBytes = (
@@ -712,15 +815,16 @@ export function registerSidecarHandlers(): void {
     if (!targetWindow) return
 
     const bytes = batch.frames.length === 1 ? batch.frames[0] : Buffer.concat(batch.frames)
-    const sent = sendAgentStreamBytes(targetWindow, bytes, {
+    // Cache before delivery. Electron can transiently reject a renderer IPC delivery
+    // while the WebContents remains valid; caching only after a successful send turns
+    // that short interruption into an unrecoverable sequence gap.
+    cacheSentAgentStreamFrames(targetWindow, batch.frames)
+    sendAgentStreamBytes(targetWindow, bytes, {
       source: 'native-raw',
       runId: batch.runId,
       sessionId: batch.sessionId,
       frames: batch.frames.length
     })
-    if (sent) {
-      cacheSentAgentStreamFrames(targetWindow, batch.frames)
-    }
   }
 
   const flushAllStreamBatches = (): void => {
@@ -737,15 +841,13 @@ export function registerSidecarHandlers(): void {
         allowFallback: false
       })
       if (targetWindow) {
-        const sent = sendAgentStreamBytes(targetWindow, frame.bytes, {
+        cacheSentAgentStreamFrames(targetWindow, [frame.bytes])
+        sendAgentStreamBytes(targetWindow, frame.bytes, {
           source: 'native-raw',
           runId: frame.runId,
           sessionId: frame.sessionId,
           seq: frame.seq
         })
-        if (sent) {
-          cacheSentAgentStreamFrames(targetWindow, [frame.bytes])
-        }
       }
       return
     }
@@ -802,14 +904,12 @@ export function registerSidecarHandlers(): void {
     })
     lastStreamSequences.delete(runId)
     if (targetWindow) {
-      const sent = sendAgentStreamBytes(targetWindow, bytes, {
+      cacheSentAgentStreamFrames(targetWindow, [bytes])
+      sendAgentStreamBytes(targetWindow, bytes, {
         source: 'worker-interrupted',
         runId,
         sessionId: resolvedSessionId
       })
-      if (sent) {
-        cacheSentAgentStreamFrames(targetWindow, [bytes])
-      }
     }
     void observeGoalRuntimeFrame(bytes).catch((error) => {
       console.warn(
@@ -824,6 +924,7 @@ export function registerSidecarHandlers(): void {
     // Reverse requests (approvals, renderer tool execution) must not overtake
     // stream events that were emitted before them.
     flushAllStreamBatches()
+    if (method.startsWith('ola/model-')) return managedModelReverseRequest(method, params)
     switch (method) {
       case 'hooks/run': {
         const hookParams = params as {
@@ -838,6 +939,7 @@ export function registerSidecarHandlers(): void {
       case 'approval/request': {
         const requestId = `sidecar-approval-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
         const targetWindow = resolveRendererTargetWindow(params, runWindowIds, sessionWindowIds)
+        const approvalRunId = readNonEmptyString((params as { runId?: unknown })?.runId)
 
         if (!targetWindow) {
           return { approved: false, reason: 'No renderer available for approval request' }
@@ -849,7 +951,16 @@ export function registerSidecarHandlers(): void {
             reject(new Error('Renderer approval request timed out'))
           }, SIDECAR_RENDERER_REQUEST_TIMEOUT_MS)
 
-          pendingApprovalRequests.set(requestId, { resolve, reject, timer })
+          pendingApprovalRequests.set(requestId, {
+            resolve,
+            reject,
+            timer,
+            nativeCommandApproval: nativeCommandApproval(
+              params,
+              targetWindow,
+              approvalRunId ? runAutoApproval.get(approvalRunId) === true : false
+            )
+          })
 
           const sent = sendReverseRequest(targetWindow, SIDECAR_APPROVAL_REQUEST_MSGPACK_CHANNEL, {
             requestId,
@@ -1198,7 +1309,8 @@ export function registerSidecarHandlers(): void {
     rememberRendererOrigin(event, params, runWindowIds, sessionWindowIds)
     const ready = await manager.ensureStarted()
     if (!ready) throw new Error('SIDECAR_UNAVAILABLE')
-    const enrichedParams = await prepareGoalAwareAgentRunParams(params, manager)
+    let enrichedParams = await prepareGoalAwareAgentRunParams(params, manager)
+    enrichedParams = await injectWebSearchSecret(enrichedParams)
     if (
       enrichedParams &&
       typeof enrichedParams === 'object' &&
@@ -1223,6 +1335,12 @@ export function registerSidecarHandlers(): void {
       const result = (await manager.request('agent/run', enrichedParams, 60_000)) as {
         started: boolean
         runId: string
+      }
+      if (result.started && result.runId) {
+        runAutoApproval.set(
+          result.runId,
+          (enrichedParams as { autoApprove?: unknown } | null)?.autoApprove === true
+        )
       }
       rememberRendererOrigin(event, enrichedParams, runWindowIds, sessionWindowIds, result.runId)
       console.log('[Sidecar] agent:run request accepted')
@@ -1296,19 +1414,25 @@ export function registerSidecarHandlers(): void {
     }
   })
 
-  const completeApprovalResponse = (payload: {
+  const completeApprovalResponse = async (payload: {
     requestId: string
     approved: boolean
     reason?: string
-  }): { ok: boolean } => {
+  }): Promise<{ ok: boolean }> => {
     const pending = pendingApprovalRequests.get(payload.requestId)
     if (!pending) return { ok: false }
 
     pendingApprovalRequests.delete(payload.requestId)
     clearTimeout(pending.timer)
+    let approved = payload.approved === true
+    let reason = payload.reason
+    if (approved && pending.nativeCommandApproval) {
+      approved = await confirmNativeCommandApproval(pending.nativeCommandApproval)
+      if (!approved) reason = 'Native command confirmation was declined'
+    }
     pending.resolve({
-      approved: payload.approved === true,
-      ...(payload.reason ? { reason: payload.reason } : {})
+      approved,
+      ...(reason ? { reason } : {})
     })
     return { ok: true }
   }
@@ -1334,7 +1458,7 @@ export function registerSidecarHandlers(): void {
   ipcMain.handle(
     SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL,
     async (_event, bytes: Uint8Array): Promise<{ ok: boolean }> => {
-      return completeApprovalResponse(
+      return await completeApprovalResponse(
         decodeMessagePackPayload<{ requestId: string; approved: boolean; reason?: string }>(bytes)
       )
     }

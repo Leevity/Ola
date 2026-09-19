@@ -8,10 +8,7 @@ internal static class DbPluginSessionTools
 
     private static SqliteConnection OpenDefaultConnection()
     {
-        return DbConnectionFactory.OpenReadWrite(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
-            "data.db"));
+        return DbConnectionFactory.OpenReadWrite(Path.Combine(OlaDataRoot.DirectoryPath, "data.db"));
     }
 
     public static WorkerResponse ListNormalProjects(JsonElement parameters)
@@ -22,7 +19,7 @@ internal static class DbPluginSessionTools
             using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT id, name, working_folder, ssh_connection_id, plugin_id, pinned,
-                       created_at, updated_at
+                       created_at, updated_at, workspace_id
                   FROM projects
                  WHERE plugin_id IS NULL OR plugin_id = ''
                  ORDER BY pinned DESC, updated_at DESC
@@ -52,6 +49,12 @@ internal static class DbPluginSessionTools
             var modelId = providerId is null
                 ? null
                 : NormalizeOptional(JsonHelpers.GetString(parameters, "modelId"));
+            var workspaceId = NormalizeOptional(JsonHelpers.GetString(parameters, "workspaceId")) ?? "local-personal";
+            DbManagedProviderScope.Validate(providerId, workspaceId);
+            var modelSource = parameters.TryGetProperty("modelSource", out var modelSourceElement) &&
+                modelSourceElement.ValueKind != JsonValueKind.Null
+                ? NormalizeModelSource(modelSourceElement.GetString(), workspaceId)
+                : null;
             var modelSelectionMode = providerId is not null && modelId is not null
                 ? "manual"
                 : "inherit";
@@ -65,13 +68,16 @@ internal static class DbPluginSessionTools
                 UPDATE sessions
                    SET provider_id = $providerId,
                        model_id = $modelId,
+                       model_source = $modelSource,
                        model_selection_mode = $modelSelectionMode
-                 WHERE plugin_id = $pluginId
+                 WHERE plugin_id = $pluginId AND workspace_id = $workspaceId
                 """,
                 new DbSql.SqlParam("$providerId", providerId),
                 new DbSql.SqlParam("$modelId", modelId),
+                new DbSql.SqlParam("$modelSource", modelSource),
                 new DbSql.SqlParam("$modelSelectionMode", modelSelectionMode),
-                new DbSql.SqlParam("$pluginId", pluginId));
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed, 0);
         }
@@ -87,10 +93,15 @@ internal static class DbPluginSessionTools
         {
             var pluginId = RequireString(parameters, "pluginId");
             var projectId = NormalizeOptional(JsonHelpers.GetString(parameters, "projectId"));
+            var workspaceId = NormalizeOptional(JsonHelpers.GetString(parameters, "workspaceId")) ?? "local-personal";
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var project = projectId is null ? null : FindProject(connection, transaction, projectId);
+            if (project is not null && project.WorkspaceId != workspaceId)
+            {
+                throw new InvalidOperationException("Project workspace does not match channel workspace.");
+            }
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -99,12 +110,13 @@ internal static class DbPluginSessionTools
                    SET project_id = $projectId,
                        working_folder = $workingFolder,
                        ssh_connection_id = $sshConnectionId
-                 WHERE plugin_id = $pluginId
+                 WHERE plugin_id = $pluginId AND workspace_id = $workspaceId
                 """,
                 new DbSql.SqlParam("$projectId", project?.Id),
                 new DbSql.SqlParam("$workingFolder", EmptyToNull(project?.WorkingFolder)),
                 new DbSql.SqlParam("$sshConnectionId", project?.SshConnectionId),
-                new DbSql.SqlParam("$pluginId", pluginId));
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed, 0);
         }
@@ -119,6 +131,7 @@ internal static class DbPluginSessionTools
         try
         {
             var pluginId = RequireString(parameters, "pluginId");
+            var workspaceId = WorkspaceId(parameters);
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
@@ -128,20 +141,24 @@ internal static class DbPluginSessionTools
                 """
                 DELETE FROM messages
                  WHERE session_id IN (
-                   SELECT id FROM sessions WHERE plugin_id = $pluginId
+                   SELECT id FROM sessions
+                    WHERE plugin_id = $pluginId AND workspace_id = $workspaceId
                  )
                 """,
-                new DbSql.SqlParam("$pluginId", pluginId));
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             var deletedSessions = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM sessions WHERE plugin_id = $pluginId",
-                new DbSql.SqlParam("$pluginId", pluginId));
+                "DELETE FROM sessions WHERE plugin_id = $pluginId AND workspace_id = $workspaceId",
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             var deletedProjects = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM projects WHERE plugin_id = $pluginId",
-                new DbSql.SqlParam("$pluginId", pluginId));
+                "DELETE FROM projects WHERE plugin_id = $pluginId AND workspace_id = $workspaceId",
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
 
             return Mutation(deletedSessions + deletedProjects, deletedMessages);
@@ -157,6 +174,7 @@ internal static class DbPluginSessionTools
         try
         {
             var pluginId = RequireString(parameters, "pluginId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             var rows = QuerySessionRows(
                 connection,
@@ -165,10 +183,11 @@ internal static class DbPluginSessionTools
                        ssh_connection_id, plan_id, pinned, plugin_id, external_chat_id, provider_id,
                        model_id, model_selection_mode, COALESCE(message_count, 0) AS message_count
                   FROM sessions
-                 WHERE plugin_id = $pluginId
+                 WHERE plugin_id = $pluginId AND workspace_id = $workspaceId
                  ORDER BY updated_at DESC
                 """,
-                new DbSql.SqlParam("$pluginId", pluginId));
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             return WorkerResponse.Json(rows, WorkerJsonContext.Default.ListPluginSessionRow);
         }
         catch (Exception ex)
@@ -182,6 +201,7 @@ internal static class DbPluginSessionTools
         try
         {
             var pluginId = RequireString(parameters, "pluginId");
+            var workspaceId = WorkspaceId(parameters);
             var sessionId = NormalizeOptional(JsonHelpers.GetString(parameters, "id")) ?? CreateSessionId();
             var title = RequireString(parameters, "title");
             var mode = NormalizeOptional(JsonHelpers.GetString(parameters, "mode")) ?? "cowork";
@@ -191,6 +211,7 @@ internal static class DbPluginSessionTools
             var externalChatId = NormalizeOptional(JsonHelpers.GetString(parameters, "externalChatId"));
             var projectId = NormalizeOptional(JsonHelpers.GetString(parameters, "projectId"));
             var providerId = NormalizeOptional(JsonHelpers.GetString(parameters, "providerId"));
+            DbManagedProviderScope.Validate(providerId, workspaceId);
             var modelId = providerId is null
                 ? null
                 : NormalizeOptional(JsonHelpers.GetString(parameters, "modelId"));
@@ -201,6 +222,10 @@ internal static class DbPluginSessionTools
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var project = projectId is null ? null : FindProject(connection, transaction, projectId);
+            if (project is not null && project.WorkspaceId != workspaceId)
+            {
+                throw new InvalidOperationException("Project workspace does not match channel workspace.");
+            }
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -208,11 +233,11 @@ internal static class DbPluginSessionTools
                 INSERT INTO sessions (
                   id, title, icon, mode, created_at, updated_at, project_id, working_folder,
                   ssh_connection_id, pinned, plugin_id, external_chat_id, provider_id, model_id,
-                  model_selection_mode
+                  model_selection_mode, workspace_id
                 ) VALUES (
                   $id, $title, NULL, $mode, $createdAt, $updatedAt, $projectId, $workingFolder,
                   $sshConnectionId, 0, $pluginId, $externalChatId, $providerId, $modelId,
-                  $modelSelectionMode
+                  $modelSelectionMode, $workspaceId
                 )
                 """,
                 new DbSql.SqlParam("$id", sessionId),
@@ -227,7 +252,8 @@ internal static class DbPluginSessionTools
                 new DbSql.SqlParam("$externalChatId", externalChatId),
                 new DbSql.SqlParam("$providerId", providerId),
                 new DbSql.SqlParam("$modelId", modelId),
-                new DbSql.SqlParam("$modelSelectionMode", modelSelectionMode));
+                new DbSql.SqlParam("$modelSelectionMode", modelSelectionMode),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed, 0);
         }
@@ -242,8 +268,9 @@ internal static class DbPluginSessionTools
         try
         {
             var externalChatId = RequireString(parameters, "externalChatId");
+            var workspaceId = WorkspaceId(parameters);
             return WorkerResponse.Json(
-                FindPluginSessionRecordByChat(externalChatId),
+                FindPluginSessionRecordByChat(externalChatId, workspaceId, parameters),
                 WorkerJsonContext.Default.PluginSessionFindResult);
         }
         catch (Exception ex)
@@ -258,14 +285,17 @@ internal static class DbPluginSessionTools
     {
         try
         {
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             var rows = QuerySessionRows(
                 connection,
                 $"""
                 {SessionSelectSql}
                  WHERE plugin_id IS NOT NULL AND plugin_id != ''
+                   AND workspace_id = $workspaceId
                  ORDER BY updated_at DESC
-                """);
+                """,
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             return WorkerResponse.Json(rows, WorkerJsonContext.Default.ListPluginSessionRow);
         }
         catch (Exception ex)
@@ -279,11 +309,12 @@ internal static class DbPluginSessionTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
             var limit = Math.Clamp(JsonHelpers.GetInt(parameters, "limit", 50), 1, 500);
             var offset = Math.Max(0, JsonHelpers.GetInt(parameters, "offset", 0));
 
             return WorkerResponse.Json(
-                ListPluginSessionMessageRecords(sessionId, limit, offset),
+                ListPluginSessionMessageRecords(sessionId, limit, offset, workspaceId, parameters),
                 WorkerJsonContext.Default.ListPluginSessionMessageRow);
         }
         catch (Exception ex)
@@ -297,18 +328,31 @@ internal static class DbPluginSessionTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var deleted = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM messages WHERE session_id = $sessionId",
-                new DbSql.SqlParam("$sessionId", sessionId));
+                """
+                DELETE FROM messages WHERE session_id IN (
+                  SELECT id FROM sessions
+                   WHERE id = $sessionId AND workspace_id = $workspaceId
+                     AND plugin_id IS NOT NULL AND plugin_id != ''
+                )
+                """,
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "UPDATE sessions SET message_count = 0 WHERE id = $sessionId",
-                new DbSql.SqlParam("$sessionId", sessionId));
+                """
+                UPDATE sessions SET message_count = 0
+                 WHERE id = $sessionId AND workspace_id = $workspaceId
+                   AND plugin_id IS NOT NULL AND plugin_id != ''
+                """,
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(0, deleted);
         }
@@ -323,18 +367,31 @@ internal static class DbPluginSessionTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var deletedMessages = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM messages WHERE session_id = $sessionId",
-                new DbSql.SqlParam("$sessionId", sessionId));
+                """
+                DELETE FROM messages WHERE session_id IN (
+                  SELECT id FROM sessions
+                   WHERE id = $sessionId AND workspace_id = $workspaceId
+                     AND plugin_id IS NOT NULL AND plugin_id != ''
+                )
+                """,
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             var deletedSessions = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM sessions WHERE id = $sessionId",
-                new DbSql.SqlParam("$sessionId", sessionId));
+                """
+                DELETE FROM sessions
+                 WHERE id = $sessionId AND workspace_id = $workspaceId
+                   AND plugin_id IS NOT NULL AND plugin_id != ''
+                """,
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(deletedSessions, deletedMessages);
         }
@@ -349,6 +406,7 @@ internal static class DbPluginSessionTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
             var title = RequireString(parameters, "title");
             var updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
@@ -357,10 +415,15 @@ internal static class DbPluginSessionTools
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "UPDATE sessions SET title = $title, updated_at = $updatedAt WHERE id = $sessionId",
+                """
+                UPDATE sessions SET title = $title, updated_at = $updatedAt
+                 WHERE id = $sessionId AND workspace_id = $workspaceId
+                   AND plugin_id IS NOT NULL AND plugin_id != ''
+                """,
                 new DbSql.SqlParam("$title", title),
                 new DbSql.SqlParam("$updatedAt", updatedAt),
-                new DbSql.SqlParam("$sessionId", sessionId));
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed, 0);
         }
@@ -379,8 +442,14 @@ internal static class DbPluginSessionTools
             var chatName = NormalizeOptional(JsonHelpers.GetString(parameters, "chatName"));
             var senderName = NormalizeOptional(JsonHelpers.GetString(parameters, "senderName"));
             var requestedProjectId = NormalizeOptional(JsonHelpers.GetString(parameters, "projectId"));
+            var workspaceId = NormalizeOptional(JsonHelpers.GetString(parameters, "workspaceId")) ?? "local-personal";
             var providerId = NormalizeOptional(JsonHelpers.GetString(parameters, "providerId"));
+            DbManagedProviderScope.Validate(providerId, workspaceId);
             var modelId = NormalizeOptional(JsonHelpers.GetString(parameters, "modelId"));
+            var modelSource = parameters.TryGetProperty("modelSource", out var modelSourceElement) &&
+                modelSourceElement.ValueKind != JsonValueKind.Null
+                ? NormalizeModelSource(modelSourceElement.GetString(), workspaceId)
+                : null;
             var compositeKey = BuildPluginMessageSessionKey(pluginId, chatId);
             var legacyCompositeKeyPrefix = BuildLegacyPluginMessageSessionKeyPrefix(pluginId, chatId);
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -391,6 +460,10 @@ internal static class DbPluginSessionTools
             var project = requestedProjectId is null
                 ? null
                 : FindProject(connection, transaction, requestedProjectId);
+            if (project is not null && project.WorkspaceId != workspaceId)
+            {
+                throw new InvalidOperationException("Project workspace does not match channel workspace.");
+            }
             var session = FindSessionByExternalChatId(connection, transaction, compositeKey);
 
             if (session is null)
@@ -416,6 +489,11 @@ internal static class DbPluginSessionTools
                 ? "manual"
                 : "inherit";
 
+            if (session is not null && session.WorkspaceId != workspaceId)
+            {
+                throw new InvalidOperationException("Channel session workspace does not match channel workspace.");
+            }
+
             if (session is null)
             {
                 var sessionId = CreateSessionId();
@@ -428,11 +506,11 @@ internal static class DbPluginSessionTools
                     INSERT INTO sessions (
                       id, title, icon, mode, created_at, updated_at, project_id, working_folder,
                       ssh_connection_id, pinned, plugin_id, external_chat_id, provider_id, model_id,
-                      model_selection_mode
+                      model_selection_mode, workspace_id, model_source
                     ) VALUES (
                       $id, $title, NULL, 'cowork', $createdAt, $updatedAt, $projectId, $workingFolder,
                       $sshConnectionId, 0, $pluginId, $externalChatId, $providerId, $modelId,
-                      $modelSelectionMode
+                      $modelSelectionMode, $workspaceId, $modelSource
                     )
                     """,
                     new DbSql.SqlParam("$id", sessionId),
@@ -446,9 +524,11 @@ internal static class DbPluginSessionTools
                     new DbSql.SqlParam("$externalChatId", compositeKey),
                     new DbSql.SqlParam("$providerId", providerId),
                     new DbSql.SqlParam("$modelId", modelId),
-                    new DbSql.SqlParam("$modelSelectionMode", modelSelectionMode));
+                    new DbSql.SqlParam("$modelSelectionMode", modelSelectionMode),
+                    new DbSql.SqlParam("$workspaceId", workspaceId),
+                    new DbSql.SqlParam("$modelSource", modelSource));
 
-                session = new RoutedSession(sessionId, title, project?.Id);
+                session = new RoutedSession(sessionId, title, project?.Id, workspaceId);
             }
             else
             {
@@ -482,7 +562,7 @@ internal static class DbPluginSessionTools
                         new DbSql.SqlParam("$id", session.Id));
                 }
 
-                if (providerId is not null || modelId is not null)
+                if (providerId is not null || modelId is not null || modelSource is not null)
                 {
                     DbSql.ExecuteNonQuery(
                         connection,
@@ -491,11 +571,13 @@ internal static class DbPluginSessionTools
                         UPDATE sessions
                            SET provider_id = $providerId,
                                model_id = $modelId,
+                               model_source = $modelSource,
                                model_selection_mode = $modelSelectionMode
                          WHERE id = $id
                         """,
                         new DbSql.SqlParam("$providerId", providerId),
                         new DbSql.SqlParam("$modelId", modelId),
+                        new DbSql.SqlParam("$modelSource", modelSource),
                         new DbSql.SqlParam("$modelSelectionMode", modelSelectionMode),
                         new DbSql.SqlParam("$id", session.Id));
                 }
@@ -541,18 +623,26 @@ internal static class DbPluginSessionTools
           FROM sessions
         """;
 
-    internal static PluginSessionFindResult FindPluginSessionRecordByChat(string externalChatId)
+    internal static PluginSessionFindResult FindPluginSessionRecordByChat(
+        string externalChatId,
+        string? workspaceId = null,
+        JsonElement? dbParameters = null)
     {
         try
         {
-            using var connection = OpenDefaultConnection();
+            using var connection = dbParameters.HasValue
+                ? DbConnectionFactory.OpenReadWrite(dbParameters.Value)
+                : OpenDefaultConnection();
             using var command = connection.CreateCommand();
             command.CommandText = $"""
                 {SessionSelectSql}
                  WHERE external_chat_id = $externalChatId
+                   AND plugin_id IS NOT NULL AND plugin_id != ''
+                   AND ($workspaceId IS NULL OR workspace_id = $workspaceId)
                  LIMIT 1
                 """;
             command.Parameters.AddWithValue("$externalChatId", externalChatId);
+            command.Parameters.AddWithValue("$workspaceId", (object?)workspaceId ?? DBNull.Value);
 
             using var reader = command.ExecuteReader();
             var session = reader.Read() ? ReadSessionRow(reader) : null;
@@ -567,18 +657,29 @@ internal static class DbPluginSessionTools
     internal static List<PluginSessionMessageRow> ListPluginSessionMessageRecords(
         string sessionId,
         int limit,
-        int offset = 0)
+        int offset = 0,
+        string? workspaceId = null,
+        JsonElement? dbParameters = null)
     {
-        using var connection = OpenDefaultConnection();
+        using var connection = dbParameters.HasValue
+            ? DbConnectionFactory.OpenReadWrite(dbParameters.Value)
+            : OpenDefaultConnection();
         using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT id, role, content, created_at
               FROM messages
              WHERE session_id = $sessionId
+               AND EXISTS (
+                 SELECT 1 FROM sessions
+                  WHERE id = $sessionId
+                    AND plugin_id IS NOT NULL AND plugin_id != ''
+                    AND ($workspaceId IS NULL OR workspace_id = $workspaceId)
+               )
              ORDER BY sort_order ASC
              LIMIT $limit OFFSET $offset
             """;
         command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$workspaceId", (object?)workspaceId ?? DBNull.Value);
         command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 500));
         command.Parameters.AddWithValue("$offset", Math.Max(0, offset));
 
@@ -655,7 +756,8 @@ internal static class DbPluginSessionTools
             PluginId = GetNullableString(reader, 4),
             Pinned = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
             CreatedAt = reader.GetInt64(6),
-            UpdatedAt = reader.GetInt64(7)
+            UpdatedAt = reader.GetInt64(7),
+            WorkspaceId = reader.IsDBNull(8) ? "local-personal" : reader.GetString(8)
         };
     }
 
@@ -667,7 +769,7 @@ internal static class DbPluginSessionTools
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, working_folder, ssh_connection_id
+            SELECT id, working_folder, ssh_connection_id, workspace_id
               FROM projects
              WHERE id = $id
              LIMIT 1
@@ -679,7 +781,8 @@ internal static class DbPluginSessionTools
             ? new ProjectRef(
                 reader.GetString(0),
                 GetNullableString(reader, 1),
-                GetNullableString(reader, 2))
+                GetNullableString(reader, 2),
+                reader.IsDBNull(3) ? "local-personal" : reader.GetString(3))
             : null;
     }
 
@@ -691,7 +794,7 @@ internal static class DbPluginSessionTools
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, title, project_id
+            SELECT id, title, project_id, workspace_id
               FROM sessions
              WHERE external_chat_id = $externalChatId
              LIMIT 1
@@ -709,7 +812,7 @@ internal static class DbPluginSessionTools
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, title, project_id
+            SELECT id, title, project_id, workspace_id
               FROM sessions
              WHERE plugin_id = $pluginId
                AND external_chat_id LIKE $externalChatIdPrefix
@@ -728,7 +831,8 @@ internal static class DbPluginSessionTools
             ? new RoutedSession(
                 reader.GetString(0),
                 reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-                GetNullableString(reader, 2))
+                GetNullableString(reader, 2),
+                reader.IsDBNull(3) ? "local-personal" : reader.GetString(3))
             : null;
     }
 
@@ -813,6 +917,44 @@ internal static class DbPluginSessionTools
         return string.IsNullOrEmpty(trimmed) ? null : trimmed;
     }
 
+    private static string WorkspaceId(JsonElement parameters)
+    {
+        var value = JsonHelpers.GetString(parameters, "workspaceId");
+        if (value is null) return "local-personal";
+        if (value.Length == 0 || value.Length > 1024 || value != value.Trim())
+        {
+            throw new InvalidOperationException("Invalid channel workspace.");
+        }
+        return value;
+    }
+
+    // Channel model bindings are public identifiers only. Do not allow this
+    // compatibility boundary to accept a provider credential or account ticket.
+    private static string? NormalizeModelSource(string? value, string workspaceId)
+    {
+        var trimmed = NormalizeOptional(value);
+        if (trimmed is null) return null;
+        if (trimmed.Length > 4096) throw new InvalidOperationException("Invalid model source.");
+        using var document = JsonDocument.Parse(trimmed);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Invalid model source.");
+        var kind = JsonHelpers.GetString(root, "kind");
+        var valid = kind == "local"
+            ? IsModelSourceIdentifier(JsonHelpers.GetString(root, "providerId")) &&
+              IsModelSourceIdentifier(JsonHelpers.GetString(root, "modelId")) &&
+              root.EnumerateObject().Count() == 3
+            : (kind == "ola-personal" || kind == "ola-team") &&
+              IsModelSourceIdentifier(JsonHelpers.GetString(root, "workspaceId")) &&
+              JsonHelpers.GetString(root, "workspaceId") == workspaceId &&
+              IsModelSourceIdentifier(JsonHelpers.GetString(root, "resourceId")) &&
+              root.EnumerateObject().Count() == 3;
+        if (!valid) throw new InvalidOperationException("Invalid model source.");
+        return root.GetRawText();
+    }
+
+    private static bool IsModelSourceIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= 1024 && !value.Any(char.IsControl);
+
     private static string? EmptyToNull(string? value)
     {
         return string.IsNullOrEmpty(value) ? null : value;
@@ -823,7 +965,7 @@ internal static class DbPluginSessionTools
         return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     }
 
-    private sealed record ProjectRef(string Id, string? WorkingFolder, string? SshConnectionId);
+    private sealed record ProjectRef(string Id, string? WorkingFolder, string? SshConnectionId, string WorkspaceId);
 
-    private sealed record RoutedSession(string Id, string Title, string? ProjectId);
+    private sealed record RoutedSession(string Id, string Title, string? ProjectId, string WorkspaceId);
 }

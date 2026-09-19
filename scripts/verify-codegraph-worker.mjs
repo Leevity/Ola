@@ -1,6 +1,7 @@
 ﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
+import assertStrict from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { loadGrammarManifest, resolveGrammarFiles } from './codegraph-grammar-manifest.mjs'
@@ -77,6 +78,30 @@ async function main() {
       CODEGRAPH_HOME: path.join(tempDir, 'data')
     }))
     const routes = await client.request('worker/routes')
+    const inventory = JSON.parse(
+      await readFile(
+        new URL('../docs/migrations/ts-runtime/capability-inventory.json', import.meta.url)
+      )
+    )
+    const expectedRoutes = new Set(
+      inventory.routes
+        .filter(
+          (route) =>
+            route.source.startsWith('sidecars/Ola.CodeGraph.Core/') ||
+            route.source === 'sidecars/Ola.Native.Worker/Modules/SystemModule.cs'
+        )
+        .map((route) => route.method)
+    )
+    assertStrict.deepEqual(
+      [...routes.methods].filter((method) => !expectedRoutes.has(method)).sort(),
+      [],
+      'CodeGraph Worker has routes missing from the migration inventory'
+    )
+    assertStrict.deepEqual(
+      [...expectedRoutes].filter((method) => !routes.methods.includes(method)).sort(),
+      [],
+      'Migration inventory contains CodeGraph routes absent at runtime'
+    )
     assert(
       routes.methods.includes('codegraph/index') && routes.methods.includes('codegraph/search'),
       'CodeGraph worker routes are incomplete'

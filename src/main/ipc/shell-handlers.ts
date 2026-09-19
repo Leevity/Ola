@@ -10,7 +10,7 @@ import { spawn } from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 import { safeSendMessagePackToWindow } from '../window-ipc'
-import { getNativeWorker } from '../lib/native-worker'
+import { executeLocalShell } from '../shell/local-shell-executor'
 import { buildShellEnvironment } from './shell-environment'
 import { decodeMessagePackPayload, toMessagePackChannel } from '../../shared/messagepack/binary-ipc'
 import { registerMessagePackHandler } from './messagepack-handler'
@@ -74,35 +74,6 @@ interface ShellStartedEvent {
   terminalId: string
 }
 
-interface NativeShellStartedEvent {
-  execId?: string
-  processId?: string
-  terminalId?: string
-}
-
-interface NativeShellOutputEvent {
-  execId?: string
-  chunk?: string
-  stream?: ShellStream
-}
-
-interface NativeShellExecResult {
-  success: boolean
-  exitCode: number
-  stdout: string
-  stderr: string
-  error?: string | null
-  processId?: string | null
-  terminalId?: string | null
-  timing: ShellExecutionTiming
-}
-
-interface NativeShellAbortResult {
-  success: boolean
-  aborted: boolean
-  error?: string | null
-}
-
 const UNAUTHORIZED_SHELL_IPC_ERROR = 'Unauthorized shell IPC sender'
 
 function getTrustedShellOwnerWindow(
@@ -132,8 +103,6 @@ function registerTrustedShellMessagePackHandler<TArgs>(
     return await handler(args, event)
   })
 }
-
-let shellOutputForwardingRegistered = false
 
 type OpenWithAppId = 'vscode'
 
@@ -397,39 +366,11 @@ function serializeShellEnvironment(): Record<string, string> {
   return serialized
 }
 
-function isNativeShellStartedEvent(value: unknown): value is NativeShellStartedEvent {
-  return typeof value === 'object' && value !== null
-}
-
-function isNativeShellOutputEvent(value: unknown): value is NativeShellOutputEvent {
-  return typeof value === 'object' && value !== null
-}
-
 export function registerShellHandlers(): void {
-  const nativeWorker = getNativeWorker()
   const runningShellProcesses = new Map<
     string,
     { ownerWindowId: number; terminalId: string; abort: (reason?: 'user' | 'timeout') => void }
   >()
-
-  if (!shellOutputForwardingRegistered) {
-    shellOutputForwardingRegistered = true
-    nativeWorker.onEvent('shell/output', (params) => {
-      if (!isNativeShellOutputEvent(params)) return
-      const execId = typeof params.execId === 'string' ? params.execId.trim() : ''
-      if (!execId || typeof params.chunk !== 'string') return
-      const payload = {
-        execId,
-        chunk: params.chunk,
-        stream: params.stream === 'stderr' ? 'stderr' : 'stdout'
-      }
-      const ownerWindowId = runningShellProcesses.get(execId)?.ownerWindowId
-      const ownerWindow = ownerWindowId === undefined ? null : BrowserWindow.fromId(ownerWindowId)
-      if (ownerWindow && !ownerWindow.isDestroyed()) {
-        safeSendMessagePackToWindow(ownerWindow, 'shell:output', payload)
-      }
-    })
-  }
 
   registerTrustedShellMessagePackHandler<ShellExecArgs>('shell:exec', async (args, event) => {
     const DEFAULT_TIMEOUT = 600_000
@@ -443,69 +384,47 @@ export function registerShellHandlers(): void {
     const ownerWindow = getTrustedShellOwnerWindow(event)
     if (!ownerWindow) return { error: UNAUTHORIZED_SHELL_IPC_ERROR }
 
-    const cleanupStarted = nativeWorker.onEvent('shell/started', (params) => {
-      if (!execId || !ownerWindow || !isNativeShellStartedEvent(params)) return
-      if (params.execId !== execId) return
-      const payload: ShellStartedEvent = {
-        execId,
-        processId: String(params.processId ?? params.terminalId ?? execId),
-        terminalId: String(params.terminalId ?? params.processId ?? execId)
-      }
-      runningShellProcesses.set(execId, {
-        ownerWindowId: ownerWindow.id,
-        terminalId: payload.terminalId,
-        abort: (reason: 'user' | 'timeout' = 'user') => {
-          void nativeWorker
-            .request<NativeShellAbortResult>('shell/abort', { execId, reason }, 10_000)
-            .catch((error) => console.warn('[Shell] Native abort failed:', error))
-        }
-      })
-      safeSendMessagePackToWindow(ownerWindow, 'shell:started', payload)
-    })
-
-    if (execId) {
-      runningShellProcesses.set(execId, {
-        ownerWindowId: ownerWindow.id,
-        terminalId: `native-shell-${execId}`,
-        abort: (reason: 'user' | 'timeout' = 'user') => {
-          void nativeWorker
-            .request<NativeShellAbortResult>('shell/abort', { execId, reason }, 10_000)
-            .catch((error) => console.warn('[Shell] Native abort failed:', error))
-        }
-      })
-    }
-
     try {
-      const result = await nativeWorker.request<NativeShellExecResult>(
-        'shell/exec',
-        {
-          command: args.command,
-          timeout,
-          cwd: args.cwd || process.cwd(),
-          ...(execId ? { execId } : {}),
-          ...(args.shell ? { shell: args.shell } : {}),
-          env: serializeShellEnvironment()
+      const result = await executeLocalShell({
+        command: args.command,
+        cwd: args.cwd || process.cwd(),
+        timeoutMs: timeout,
+        ...(args.shell ? { shell: args.shell } : {}),
+        env: serializeShellEnvironment(),
+        onOutput: (chunk, stream) => {
+          if (execId)
+            safeSendMessagePackToWindow(ownerWindow, 'shell:output', { execId, chunk, stream })
         },
-        timeout + 30_000
-      )
+        onStarted: (processId) => {
+          if (!execId) return
+          const payload: ShellStartedEvent = {
+            execId,
+            processId: processId || execId,
+            terminalId: processId || execId
+          }
+          safeSendMessagePackToWindow(ownerWindow, 'shell:started', payload)
+        },
+        registerAbort: (abort) => {
+          if (execId)
+            runningShellProcesses.set(execId, {
+              ownerWindowId: ownerWindow.id,
+              terminalId: execId,
+              abort
+            })
+        }
+      })
 
       return buildShellResult({
         exitCode: result.exitCode,
         stdout: result.stdout ?? '',
         stderr: result.stderr ?? '',
-        ...(result.error ? { error: result.error } : {}),
-        ...(result.processId ? { processId: result.processId } : {}),
-        ...(result.terminalId ? { terminalId: result.terminalId } : {}),
         timing: {
-          totalMs: result.timing?.totalMs ?? Date.now() - startedAt,
-          spawnMs: result.timing?.spawnMs ?? 0,
-          ...(result.timing?.firstChunkMs !== undefined && result.timing?.firstChunkMs !== null
-            ? { firstChunkMs: result.timing.firstChunkMs }
-            : {}),
-          shell: result.timing?.shell ?? 'native',
-          executionEngine: 'native_aot',
-          timedOut: result.timing?.timedOut === true,
-          aborted: result.timing?.aborted === true
+          totalMs: Date.now() - startedAt,
+          spawnMs: 0,
+          shell: result.shell,
+          executionEngine: 'main',
+          timedOut: result.timedOut,
+          aborted: result.aborted
         }
       })
     } catch (err) {
@@ -522,7 +441,6 @@ export function registerShellHandlers(): void {
         }
       })
     } finally {
-      cleanupStarted()
       if (execId) runningShellProcesses.delete(execId)
     }
   })

@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 
 internal static class QqSessionStore
 {
-    private const string DataDirectoryName = ".ola";
     private const string QqBotDirectoryName = "qq-bot";
     private const string SessionsDirectoryName = "sessions";
     private const long SessionExpireMs = 5 * 60 * 1000;
@@ -135,11 +134,7 @@ internal static class QqSessionStore
 
     private static string GetSessionsDirectory()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            DataDirectoryName,
-            QqBotDirectoryName,
-            SessionsDirectoryName);
+        return Path.Combine(OlaDataRoot.DirectoryPath, QqBotDirectoryName, SessionsDirectoryName);
     }
 
     private static string SanitizeAccountId(string accountId)

@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
-import { getNativeWorker } from '../lib/native-worker'
 import { McpAutoConnectCoordinator } from '../mcp/autoconnect-coordinator'
+import { McpConfigStore } from '../mcp/mcp-config-store'
 import { McpManager } from '../mcp/mcp-manager'
 import type { McpServerConfig } from '../mcp/mcp-types'
 import {
@@ -9,10 +9,9 @@ import {
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
 
-const MCP_CONFIG_TIMEOUT_MS = 60_000
-
 let activeMcpManager: McpManager | null = null
 const mcpAutoConnectCoordinator = new McpAutoConnectCoordinator()
+const mcpConfigStore = new McpConfigStore()
 
 type McpCallToolArgs = {
   serverId: string
@@ -29,31 +28,22 @@ type McpReadResourceArgs = {
 // ── Native config persistence ──
 
 async function readServers(): Promise<McpServerConfig[]> {
-  try {
-    return await getNativeWorker().request<McpServerConfig[]>(
-      'mcp/config-list',
-      {},
-      MCP_CONFIG_TIMEOUT_MS
-    )
-  } catch (err) {
-    console.error('[MCP] Config read error:', err)
-    return []
-  }
+  return await mcpConfigStore.list()
 }
 
 async function addServer(config: McpServerConfig): Promise<{ success: boolean; error?: string }> {
-  return await getNativeWorker().request('mcp/config-add', config, MCP_CONFIG_TIMEOUT_MS)
+  return await mcpConfigStore.add(config)
 }
 
 async function updateServer(
   id: string,
   patch: Partial<McpServerConfig>
 ): Promise<{ success: boolean; error?: string }> {
-  return await getNativeWorker().request('mcp/config-update', { id, patch }, MCP_CONFIG_TIMEOUT_MS)
+  return await mcpConfigStore.update(id, patch)
 }
 
 async function removeServer(id: string): Promise<{ success: boolean; error?: string }> {
-  return await getNativeWorker().request('mcp/config-remove', id, MCP_CONFIG_TIMEOUT_MS)
+  return await mcpConfigStore.remove(id)
 }
 
 function isTrustedMcpIpcSender(event: IpcMainInvokeEvent): boolean {
@@ -224,7 +214,7 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
   })
 }
 
-function getActiveMcpManager(): McpManager {
+export function getActiveMcpManager(): McpManager {
   if (!activeMcpManager) {
     throw new Error('MCP manager is not initialized')
   }

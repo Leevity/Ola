@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { Search, Key, Clock, Hash } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useSettingsStore } from '@renderer/stores/settings-store'
@@ -17,11 +17,75 @@ import { toast } from 'sonner'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import type { WebSearchProvider } from '@renderer/lib/tools/web-search-tool'
+import { SETTINGS_PANEL_CLASS, SettingsPageHeader } from './settings-primitives'
 
 export function WebSearchPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
   const [testing, setTesting] = useState(false)
+  const [savingKey, setSavingKey] = useState(false)
+  const [apiKeyDraft, setApiKeyDraft] = useState('')
+  const [secretStatus, setSecretStatus] = useState<{ configured: boolean; suffix: string | null }>({
+    configured: false,
+    suffix: null
+  })
+  const importedLegacyKey = useRef(false)
+
+  const refreshSecretStatus = useCallback(async () => {
+    const status = (await ipcClient.invoke(IPC.WEB_SEARCH_SECRET_STATUS)) as {
+      configured: boolean
+      suffix: string | null
+    }
+    setSecretStatus(status)
+    return status
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      const status = await refreshSecretStatus()
+      // Compatibility import for existing installations. This is intentionally
+      // the only path that reads the deprecated persisted value.
+      if (!status.configured && settings.webSearchApiKey && !importedLegacyKey.current) {
+        importedLegacyKey.current = true
+        const imported = (await ipcClient.invoke(IPC.WEB_SEARCH_SECRET_SET, {
+          apiKey: settings.webSearchApiKey
+        })) as { configured: boolean; suffix: string | null }
+        setSecretStatus(imported)
+        settings.updateSettings({ webSearchApiKey: '' })
+      }
+    })().catch(() => undefined)
+  }, [refreshSecretStatus, settings, settings.webSearchApiKey])
+
+  const saveApiKey = useCallback(async () => {
+    if (!apiKeyDraft.trim()) return
+    setSavingKey(true)
+    try {
+      const status = (await ipcClient.invoke(IPC.WEB_SEARCH_SECRET_SET, {
+        apiKey: apiKeyDraft
+      })) as { configured: boolean; suffix: string | null }
+      setSecretStatus(status)
+      setApiKeyDraft('')
+      settings.updateSettings({ webSearchApiKey: '' })
+      window.dispatchEvent(new Event('ola:web-search-secret-updated'))
+      toast.success(t('websearch.apiKeySaved', { defaultValue: 'API key saved securely' }))
+    } catch (error) {
+      toast.error(
+        t('websearch.testFailed', { error: error instanceof Error ? error.message : String(error) })
+      )
+    } finally {
+      setSavingKey(false)
+    }
+  }, [apiKeyDraft, settings, t])
+
+  const deleteApiKey = useCallback(async () => {
+    const status = (await ipcClient.invoke(IPC.WEB_SEARCH_SECRET_DELETE)) as {
+      configured: boolean
+      suffix: string | null
+    }
+    setSecretStatus(status)
+    setApiKeyDraft('')
+    window.dispatchEvent(new Event('ola:web-search-secret-updated'))
+  }, [])
 
   const providerOptions = [
     { value: 'tavily', label: 'Tavily', description: 'AI-powered search API' },
@@ -42,7 +106,7 @@ export function WebSearchPanel(): React.JSX.Element {
     }
 
     if (
-      !settings.webSearchApiKey &&
+      !secretStatus.configured &&
       ['tavily', 'searxng', 'exa', 'exa-mcp', 'bocha', 'zhipu'].includes(settings.webSearchProvider)
     ) {
       toast.error(t('websearch.apiKeyRequired'))
@@ -58,7 +122,6 @@ export function WebSearchPanel(): React.JSX.Element {
         provider: settings.webSearchProvider,
         maxResults: settings.webSearchMaxResults,
         searchMode: 'web',
-        apiKey: settings.webSearchApiKey,
         timeout: settings.webSearchTimeout
       })) as { error?: string; totalResults?: number }
 
@@ -73,7 +136,7 @@ export function WebSearchPanel(): React.JSX.Element {
     } finally {
       setTesting(false)
     }
-  }, [settings, t])
+  }, [secretStatus.configured, settings, t])
 
   const isLocalSearch = false
   const requiresApiKey = ['tavily', 'searxng', 'exa', 'exa-mcp', 'bocha', 'zhipu'].includes(
@@ -81,11 +144,8 @@ export function WebSearchPanel(): React.JSX.Element {
   )
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-lg font-semibold">{t('websearch.title')}</h2>
-        <p className="text-sm text-muted-foreground">{t('websearch.subtitle')}</p>
-      </div>
+    <div className={SETTINGS_PANEL_CLASS}>
+      <SettingsPageHeader title={t('websearch.title')} description={t('websearch.subtitle')} />
 
       {/* Enable Web Search */}
       <section className="space-y-3">
@@ -145,12 +205,26 @@ export function WebSearchPanel(): React.JSX.Element {
                 </div>
                 <Key className="size-4 text-muted-foreground" />
               </div>
-              <Input
-                type="password"
-                placeholder={t('websearch.apiKeyPlaceholder')}
-                value={settings.webSearchApiKey}
-                onChange={(e) => settings.updateSettings({ webSearchApiKey: e.target.value })}
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="password"
+                  placeholder={
+                    secretStatus.configured
+                      ? `••••${secretStatus.suffix ?? ''}`
+                      : t('websearch.apiKeyPlaceholder')
+                  }
+                  value={apiKeyDraft}
+                  onChange={(e) => setApiKeyDraft(e.target.value)}
+                />
+                <Button size="sm" onClick={saveApiKey} disabled={savingKey || !apiKeyDraft.trim()}>
+                  {savingKey ? t('websearch.testing') : t('common.save', { defaultValue: 'Save' })}
+                </Button>
+                {secretStatus.configured && (
+                  <Button size="sm" variant="outline" onClick={() => void deleteApiKey()}>
+                    {t('common.delete', { defaultValue: 'Delete' })}
+                  </Button>
+                )}
+              </div>
             </section>
           )}
 
@@ -235,7 +309,9 @@ export function WebSearchPanel(): React.JSX.Element {
               {requiresApiKey && (
                 <p>
                   <strong>{t('websearch.apiKey')}:</strong>{' '}
-                  {settings.webSearchApiKey ? '••••••••' : t('websearch.notSet')}
+                  {secretStatus.configured
+                    ? `••••${secretStatus.suffix ?? ''}`
+                    : t('websearch.notSet')}
                 </p>
               )}
               {isLocalSearch && (

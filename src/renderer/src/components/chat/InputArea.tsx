@@ -46,7 +46,11 @@ import { Textarea } from '@renderer/components/ui/textarea'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui/tooltip'
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@renderer/components/ui/hover-card'
-import { useProviderStore, modelSupportsVision } from '@renderer/stores/provider-store'
+import {
+  modelExplicitlyRejectsVision,
+  modelSupportsVision,
+  useProviderStore
+} from '@renderer/stores/provider-store'
 import type {
   AIModelConfig,
   MessageRequestModelMeta,
@@ -97,6 +101,7 @@ import {
   cloneImageAttachments,
   fileToImageAttachment,
   hasEditableDraftContent,
+  isVisionInputUnsupportedError,
   type EditableUserMessageDraft,
   type ImageAttachment
 } from '@renderer/lib/image-attachments'
@@ -1830,9 +1835,37 @@ export function InputArea({
     if (!activeProvider) return null
     return activeProvider.models.find((m) => m.id === activeProvider.modelId) ?? null
   }, [activeProvider])
+  const shouldRejectSelectedModelVisionInput = React.useMemo(() => {
+    if (!activeProvider || modelRoute !== 'main') return false
+    const inheritsAutoRouting =
+      targetSession?.modelSelectionMode !== 'manual' && mainModelSelectionMode === 'auto'
+    if (targetSession?.modelSelectionMode === 'auto' || inheritsAutoRouting) return false
+    const model = activeProvider.models.find((item) => item.id === activeProvider.modelId)
+    return modelExplicitlyRejectsVision(model, activeProvider.type)
+  }, [activeProvider, mainModelSelectionMode, modelRoute, targetSession?.modelSelectionMode])
   const webSearchEnabled = useSettingsStore((s) => s.webSearchEnabled)
   const webSearchProvider = useSettingsStore((s) => s.webSearchProvider)
-  const webSearchApiKey = useSettingsStore((s) => s.webSearchApiKey)
+  const [webSearchSecretConfigured, setWebSearchSecretConfigured] = React.useState(false)
+  React.useEffect(() => {
+    let disposed = false
+    const refresh = (): void => {
+      void ipcClient
+        .invoke(IPC.WEB_SEARCH_SECRET_STATUS)
+        .then((status) => {
+          if (disposed || !status || typeof status !== 'object') return
+          setWebSearchSecretConfigured((status as { configured?: unknown }).configured === true)
+        })
+        .catch(() => {
+          if (!disposed) setWebSearchSecretConfigured(false)
+        })
+    }
+    refresh()
+    window.addEventListener('ola:web-search-secret-updated', refresh)
+    return () => {
+      disposed = true
+      window.removeEventListener('ola:web-search-secret-updated', refresh)
+    }
+  }, [])
   const webSearchRequiresApiKey = [
     'tavily',
     'searxng',
@@ -1841,7 +1874,7 @@ export function InputArea({
     'bocha',
     'zhipu'
   ].includes(webSearchProvider)
-  const canToggleWebSearch = !webSearchRequiresApiKey || Boolean(webSearchApiKey)
+  const canToggleWebSearch = !webSearchRequiresApiKey || webSearchSecretConfigured
   const toggleWebSearch = React.useCallback(() => {
     const store = useSettingsStore.getState()
     const newEnabled = !store.webSearchEnabled
@@ -3145,6 +3178,18 @@ export function InputArea({
     if (!promptText && attachedImages.length === 0) return
     if (disabled || needsWorkingFolder || pendingImageReads > 0) return
 
+    if (attachedImages.length > 0 && shouldRejectSelectedModelVisionInput) {
+      const modelName = composerModelCfg?.name?.trim() || activeProvider?.modelId || 'Model'
+      toast.error(t('input.visionUnsupportedTitle'), {
+        description: t('input.visionUnsupportedDescription', { model: modelName }),
+        action: {
+          label: t('input.openModelSettings'),
+          onClick: () => openSettingsPage('model')
+        }
+      })
+      return
+    }
+
     let goalObjective: string | undefined
     if (hasPendingGoalMode && promptText) {
       const validation = validateGoalObjective(promptText)
@@ -3195,15 +3240,19 @@ export function InputArea({
 
     void Promise.resolve(sendResult).catch(async (error) => {
       console.error('[InputDrafts] send failed; restoring draft:', error)
-      if (activeDraftKey && !hasInputDraftContent(latestDraftRef.current)) {
-        await setPersistedDraft(activeDraftKey, submittedDraft).catch((saveError) => {
-          console.warn('[InputDrafts] failed to restore rejected draft:', saveError)
-        })
+      if (!hasInputDraftContent(latestDraftRef.current)) {
+        if (activeDraftKey) {
+          await setPersistedDraft(activeDraftKey, submittedDraft).catch((saveError) => {
+            console.warn('[InputDrafts] failed to restore rejected draft:', saveError)
+          })
+        }
         applyEditorStateFromSerializedText(submittedDraft.text, submittedDraft.selectedFiles)
         setAttachedImages(cloneImageAttachments(submittedDraft.images))
         setSelectedSkill(submittedDraft.skill)
       }
-      toast.error(t('input.sendFailedDraftRetained'))
+      if (!isVisionInputUnsupportedError(error)) {
+        toast.error(t('input.sendFailedDraftRetained'))
+      }
     })
   }, [
     activeDraftKey,
@@ -3213,6 +3262,10 @@ export function InputArea({
     disabled,
     needsWorkingFolder,
     pendingImageReads,
+    shouldRejectSelectedModelVisionInput,
+    composerModelCfg?.name,
+    activeProvider?.modelId,
+    openSettingsPage,
     hasPendingGoalMode,
     cancelPromptRecommendation,
     selectedSkill,
@@ -3528,9 +3581,7 @@ export function InputArea({
 
       if (!fastProvider) {
         console.error('[Optimizer] No enabled provider found')
-        toast.error('No AI provider available', {
-          description: 'Please configure an AI provider in Settings'
-        })
+        toast.error(t('input.noProvider'), { description: t('input.noProviderDescription') })
         setIsOptimizing(false)
         return
       }
@@ -3544,7 +3595,7 @@ export function InputArea({
 
       if (!fastModel) {
         console.error('[Optimizer] No enabled model found')
-        toast.error('No AI model available', { description: 'Please enable a model in Settings' })
+        toast.error(t('input.noModel'), { description: t('input.noModelDescription') })
         setIsOptimizing(false)
         return
       }
@@ -3577,14 +3628,14 @@ export function InputArea({
       console.log('[Optimizer] Stream completed')
     } catch (error) {
       console.error('[Optimizer] Error:', error)
-      toast.error('Optimization failed', {
-        description: error instanceof Error ? error.message : String(error)
+      toast.error(t('input.optimizationFailed'), {
+        description: `${t('input.optimizationFailedDescription')} ${error instanceof Error ? error.message : String(error)}`
       })
     } finally {
       console.log('[Optimizer] Cleanup')
       setIsOptimizing(false)
     }
-  }, [text, isOptimizing, currentLanguage])
+  }, [text, isOptimizing, currentLanguage, t])
 
   const handleSelectOption = React.useCallback(
     (content: string) => {

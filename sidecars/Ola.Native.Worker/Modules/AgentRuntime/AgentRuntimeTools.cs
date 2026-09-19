@@ -144,7 +144,7 @@ internal static class AgentRuntimeTools
         }
 
         state.Cancel("user");
-        RuntimeJobStore.SetState(runId, "cancelling", parameters, "cancel_requested", "Cancellation requested by user.");
+        RuntimeJobStore.SetState(runId, "cancelling", state.Parameters, "cancel_requested", "Cancellation requested by user.");
         WorkerLog.Info($"agent run cancel requested runId={runId}");
         return WorkerResponse.Json(
             new AgentRuntimeCancelResult(true, runId, null),

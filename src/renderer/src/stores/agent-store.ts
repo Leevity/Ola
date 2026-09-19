@@ -17,6 +17,7 @@ import { invokeMessagePackBinary } from '../lib/ipc/messagepack-ipc-client'
 import { IPC } from '../lib/ipc/channels'
 import { emitAgentRuntimeSync, isAgentRuntimeSyncSuppressed } from '../lib/agent-runtime-sync'
 import { useTeamStore } from './team-store'
+import { useWorkspaceStore } from './workspace-store'
 import { sendApprovalResponse, sendPlanApprovalResponse } from '../lib/agent/teams/inbox-poller'
 import { compactBashToolResultContent } from '../lib/tools/bash-output'
 import { summarizeToolInputForHistory } from '../lib/tools/tool-input-sanitizer'
@@ -1925,11 +1926,13 @@ export const useAgentStore = create<AgentStore>()(
 
       refreshSessionRunChanges: async (sessionId) => {
         if (!sessionId) return
+        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
         try {
           const result = await invokeMessagePackBinary(
             toMessagePackChannel(IPC.AGENT_CHANGES_LIST_SESSION),
-            { sessionId }
+            { sessionId, workspaceId }
           )
+          if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
           if (isAgentChangeError(result) || !Array.isArray(result)) return
           set((state) => {
             clearSessionRunChangeCache(state.runChangesByRunId, sessionId)
@@ -1947,11 +1950,14 @@ export const useAgentStore = create<AgentStore>()(
 
       undoRunChanges: async (runId) => {
         if (!runId) return { error: 'runId is required' }
+        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
         try {
           const result = await invokeMessagePackBinary(
             toMessagePackChannel(IPC.AGENT_CHANGES_UNDO_RUN),
-            { runId }
+            { runId, workspaceId }
           )
+          if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId)
+            return { error: 'Workspace changed during file rollback' }
           if (isAgentChangeError(result)) return { error: result.error }
           const changeset =
             result && typeof result === 'object' && 'changeset' in result
@@ -1971,14 +1977,18 @@ export const useAgentStore = create<AgentStore>()(
 
       undoFileChange: async (runId, changeId) => {
         if (!runId || !changeId) return { error: 'runId and changeId are required' }
+        const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
         try {
           const result = await invokeMessagePackBinary(
             toMessagePackChannel(IPC.AGENT_CHANGES_UNDO_FILE),
             {
               runId,
-              changeId
+              changeId,
+              workspaceId
             }
           )
+          if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId)
+            return { error: 'Workspace changed during file rollback' }
           if (isAgentChangeError(result)) return { error: result.error }
           const changeset =
             result && typeof result === 'object' && 'changeset' in result
@@ -2619,5 +2629,10 @@ export const useAgentStore = create<AgentStore>()(
     }
   )
 )
+
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.activeWorkspaceId !== previous.activeWorkspaceId)
+    useAgentStore.setState({ runChangesByRunId: {} })
+})
 
 void hydrateAgentHistoryPersistence()

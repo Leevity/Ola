@@ -3,6 +3,9 @@ import { nanoid } from 'nanoid'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { isCurrentChannelSessionResponse } from '@renderer/lib/channel-session-cache'
+import { isChannelTaskWorkspaceSwitching } from '@renderer/lib/channel/channel-task-activity'
 import type {
   PluginProviderDescriptor,
   PluginInstance,
@@ -45,6 +48,8 @@ interface ChannelStore {
   // Channel sessions
   channelSessions: Record<string, unknown[]>
   loadChannelSessions: (channelId: string) => Promise<void>
+  resetChannelSessions: () => void
+  resetForWorkspace: () => void
 
   // Helpers
   getDescriptor: (type: string) => PluginProviderDescriptor | undefined
@@ -58,17 +63,61 @@ declare global {
     __pluginListenerActive?: boolean
     __pluginAutoReplyListenerActive?: boolean
     __pluginDispatchedIds?: Set<string>
+    __pluginAcceptedDeliveryIds?: Set<string>
+    __pluginActiveDeliveryIds?: Set<string>
   }
+}
+
+interface ChannelTaskIdentity {
+  workspaceId: string
+  pluginId: string
+  chatId: string
+  messageId?: string
+  deliveryId?: string
+}
+
+function channelTaskDispatchKey(task: ChannelTaskIdentity): string | null {
+  const sourceId = task.messageId || task.deliveryId
+  return sourceId ? JSON.stringify([task.workspaceId, task.pluginId, task.chatId, sourceId]) : null
+}
+
+export function markChannelTaskAccepted(task: ChannelTaskIdentity): void {
+  if (!task.deliveryId) return
+  const accepted = (window.__pluginAcceptedDeliveryIds ??= new Set<string>())
+  accepted.add(task.deliveryId)
+  if (accepted.size > 200) {
+    const oldest = accepted.values().next().value
+    if (oldest) accepted.delete(oldest)
+  }
+  void ipcClient
+    .invoke(IPC.PLUGIN_SESSION_TASK_ACK, {
+      workspaceId: task.workspaceId,
+      deliveryId: task.deliveryId
+    })
+    .catch((error) => console.warn('[Plugin] Failed to acknowledge channel task:', error))
+}
+
+export function releaseUnacceptedChannelTask(task: ChannelTaskIdentity): void {
+  if (!task.deliveryId) return
+  window.__pluginActiveDeliveryIds?.delete(task.deliveryId)
+  if (window.__pluginAcceptedDeliveryIds?.has(task.deliveryId)) return
+  const key = channelTaskDispatchKey(task)
+  if (key) window.__pluginDispatchedIds?.delete(key)
 }
 
 export function initChannelEventListener(): void {
   if (window.__pluginListenerActive) return
   window.__pluginListenerActive = true
   if (!window.__pluginDispatchedIds) window.__pluginDispatchedIds = new Set<string>()
+  if (!window.__pluginAcceptedDeliveryIds) window.__pluginAcceptedDeliveryIds = new Set<string>()
+  if (!window.__pluginActiveDeliveryIds) window.__pluginActiveDeliveryIds = new Set<string>()
 
   ipcClient.on(IPC.PLUGIN_INCOMING_MESSAGE, (...args: unknown[]) => {
     const data = args[0] as PluginIncomingEvent
     if (!data || !data.pluginId) return
+    const currentWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    const channel = useChannelStore.getState().channels.find((item) => item.id === data.pluginId)
+    if (!channel || (channel.workspaceId ?? 'local-personal') !== currentWorkspaceId) return
 
     if (data.type === 'status_change') {
       const status = data.data as 'running' | 'stopped' | 'error'
@@ -93,30 +142,50 @@ export function initChannelEventListener(): void {
       sessionId: string
       pluginId: string
       pluginType: string
+      workspaceId: string
       chatId: string
       content: string
       messageId?: string
+      deliveryId?: string
       projectId?: string
       workingFolder?: string
       sshConnectionId?: string | null
       chatType?: 'p2p' | 'group'
       audio?: { fileKey: string; fileName?: string; mediaType?: string; durationMs?: number }
     }
-    if (!task || !task.sessionId) return
+    if (
+      !task ||
+      !task.sessionId ||
+      isChannelTaskWorkspaceSwitching() ||
+      task.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId ||
+      !window.__pluginAutoReplyListenerActive
+    )
+      return
 
-    // Dedup by messageId — use window-level Set that survives HMR module reloads
-    if (task.messageId) {
+    if (task.deliveryId && window.__pluginAcceptedDeliveryIds?.has(task.deliveryId)) {
+      markChannelTaskAccepted(task)
+      return
+    }
+    if (task.deliveryId && window.__pluginActiveDeliveryIds?.has(task.deliveryId)) return
+
+    // Scope provider message IDs to their workspace, plugin and chat; IDs may repeat elsewhere.
+    const messageKey = channelTaskDispatchKey(task)
+    if (messageKey) {
       const seen = window.__pluginDispatchedIds!
-      if (seen.has(task.messageId)) {
+      if (seen.has(messageKey)) {
         console.log(`[Plugin] Skipping duplicate task for messageId=${task.messageId}`)
+        if (task.deliveryId && window.__pluginAcceptedDeliveryIds?.has(task.deliveryId))
+          markChannelTaskAccepted(task)
         return
       }
-      seen.add(task.messageId)
+      seen.add(messageKey)
       if (seen.size > 200) {
         const first = seen.values().next().value
         if (first) seen.delete(first)
       }
     }
+
+    if (task.deliveryId) window.__pluginActiveDeliveryIds?.add(task.deliveryId)
 
     window.dispatchEvent(new CustomEvent('plugin:auto-reply-task', { detail: task }))
   })
@@ -142,8 +211,10 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   loadChannels: async () => {
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
     try {
-      const plugins = (await ipcClient.invoke(IPC.PLUGIN_LIST)) as PluginInstance[]
+      const plugins = (await ipcClient.invoke(IPC.PLUGIN_LIST, { workspaceId })) as PluginInstance[]
+      if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
       const arr = Array.isArray(plugins) ? plugins : []
       console.log(
         `[ChannelStore] Loaded ${arr.length} plugins:`,
@@ -151,6 +222,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       )
       set({ channels: arr })
     } catch (err) {
+      if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
       console.error('[ChannelStore] Failed to load plugins:', err)
       set({ channels: [] })
     }
@@ -170,6 +242,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       enabled: true,
       config,
       createdAt: Date.now(),
+      workspaceId: useWorkspaceStore.getState().activeWorkspaceId,
       ...(tools ? { tools } : {})
     }
     await ipcClient.invoke(IPC.PLUGIN_ADD, instance)
@@ -180,11 +253,17 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   updateChannel: async (id, patch) => {
+    const channel = get().channels.find((item) => item.id === id)
+    if (!channel) throw new Error('Channel not found')
     const normalizedPatch = { ...patch }
     if ('providerId' in patch && patch.providerId == null) {
       normalizedPatch.model = null
     }
-    await ipcClient.invoke(IPC.PLUGIN_UPDATE, { id, patch: normalizedPatch })
+    await ipcClient.invoke(IPC.PLUGIN_UPDATE, {
+      id,
+      workspaceId: channel.workspaceId ?? 'local-personal',
+      patch: normalizedPatch
+    })
     set((s) => ({
       channels: s.channels.map((p) => {
         if (p.id !== id) return p
@@ -242,7 +321,12 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   removeChannel: async (id) => {
-    await ipcClient.invoke(IPC.PLUGIN_REMOVE, id)
+    const channel = get().channels.find((item) => item.id === id)
+    if (!channel) throw new Error('Channel not found')
+    await ipcClient.invoke(IPC.PLUGIN_REMOVE, {
+      pluginId: id,
+      workspaceId: channel.workspaceId ?? 'local-personal'
+    })
     set((s) => ({
       channels: s.channels.filter((p) => p.id !== id),
       selectedChannelId: s.selectedChannelId === id ? null : s.selectedChannelId,
@@ -275,7 +359,12 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
 
   startChannel: async (id) => {
     try {
-      const res = (await ipcClient.invoke(IPC.PLUGIN_START, id)) as {
+      const channel = get().channels.find((item) => item.id === id)
+      if (!channel) return 'Channel not found'
+      const res = (await ipcClient.invoke(IPC.PLUGIN_START, {
+        pluginId: id,
+        workspaceId: channel.workspaceId ?? 'local-personal'
+      })) as {
         success: boolean
         error?: string
       }
@@ -299,7 +388,12 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
 
   stopChannel: async (id) => {
     try {
-      await ipcClient.invoke(IPC.PLUGIN_STOP, id)
+      const channel = get().channels.find((item) => item.id === id)
+      if (!channel) return
+      await ipcClient.invoke(IPC.PLUGIN_STOP, {
+        pluginId: id,
+        workspaceId: channel.workspaceId ?? 'local-personal'
+      })
       set((s) => ({
         channelStatuses: { ...s.channelStatuses, [id]: 'stopped' }
       }))
@@ -310,10 +404,12 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
 
   refreshChannelStatus: async (id) => {
     try {
-      const status = (await ipcClient.invoke(IPC.PLUGIN_STATUS, id)) as
-        | 'running'
-        | 'stopped'
-        | 'error'
+      const channel = get().channels.find((item) => item.id === id)
+      if (!channel) return
+      const status = (await ipcClient.invoke(IPC.PLUGIN_STATUS, {
+        pluginId: id,
+        workspaceId: channel.workspaceId ?? 'local-personal'
+      })) as 'running' | 'stopped' | 'error'
       set((s) => ({
         channelStatuses: { ...s.channelStatuses, [id]: status }
       }))
@@ -356,8 +452,19 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   },
 
   loadChannelSessions: async (pluginId) => {
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
     try {
-      const sessions = (await ipcClient.invoke(IPC.PLUGIN_SESSIONS_LIST, pluginId)) as unknown[]
+      const sessions = (await ipcClient.invoke(IPC.PLUGIN_SESSIONS_LIST, {
+        pluginId,
+        workspaceId
+      })) as unknown[]
+      if (
+        !isCurrentChannelSessionResponse(
+          workspaceId,
+          useWorkspaceStore.getState().activeWorkspaceId
+        )
+      )
+        return
       set((s) => ({
         channelSessions: { ...s.channelSessions, [pluginId]: sessions }
       }))
@@ -365,6 +472,16 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
       // ignore
     }
   },
+
+  resetChannelSessions: () => set({ channelSessions: {} }),
+  resetForWorkspace: () =>
+    set({
+      channels: [],
+      channelStatuses: {},
+      selectedChannelId: null,
+      activeChannelIdsByProject: {},
+      channelSessions: {}
+    }),
 
   getDescriptor: (type) => {
     return get().providers.find((p) => p.type === type)

@@ -7,6 +7,22 @@ import { recordLocalTextWriteChange } from './agent-change-handlers'
 import { safeSendMessagePackToWindow } from '../window-ipc'
 import { getNativeWorker } from '../lib/native-worker'
 import {
+  deleteLocalPath,
+  globLocalFiles,
+  listLocalDirectory,
+  makeLocalDirectory,
+  moveLocalPath,
+  readLocalDocument,
+  readLocalFile,
+  readLocalFileBinary,
+  readLocalTextFileLines,
+  searchLocalFiles,
+  statLocalPath,
+  writeLocalBinaryFile,
+  writeLocalTextFile
+} from '../../runtime/host/local-file-service'
+import { canUseTsLocalGrep, grepLocalFiles } from '../../runtime/host/local-grep'
+import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
   toMessagePackChannel
@@ -50,7 +66,7 @@ type GrepOutputMode = 'matches' | 'files_with_matches' | 'files_without_matches'
 type GrepLimitReason = 'max_results' | 'max_output_bytes' | 'timeout' | null
 type SearchBackend = 'local' | 'ssh' | 'cron'
 type SearchPathStyle = 'absolute' | 'relative_to_search_root'
-type SearchEngine = 'git_grep' | 'ripgrep' | 'native_aot'
+type SearchEngine = 'git_grep' | 'ripgrep' | 'native_aot' | 'node'
 
 type SearchMeta = {
   backend: SearchBackend
@@ -85,15 +101,6 @@ type GlobToolResult = {
   error?: string
 }
 
-interface ReadTextFileLinesResult {
-  content: string
-  name: string
-  path: string
-  lineCount: number
-  maxLines: number
-  truncated: boolean
-}
-
 function clampTextLineReadLimit(maxLines?: number): number {
   if (typeof maxLines !== 'number' || !Number.isFinite(maxLines)) {
     return DEFAULT_TEXT_LINE_READ_LIMIT
@@ -114,23 +121,6 @@ type GrepToolResult = {
   meta: SearchMeta
   output?: string
   error?: string
-}
-
-type FileMutationResult = {
-  success: boolean
-  error?: string | null
-}
-
-type FileWriteResult = FileMutationResult & {
-  op?: 'create' | 'modify' | string
-}
-
-type FileStatResult = {
-  exists: boolean
-  type: 'file' | 'directory' | 'other' | null
-  size: number | null
-  mtimeMs: number | null
-  error?: string | null
 }
 
 function isMissingFileErrorMessage(error: string): boolean {
@@ -285,6 +275,7 @@ function createGlobToolResult(args: {
   respectGitignore?: boolean
   followSymlinks?: boolean
   maxDepth?: number | null
+  engine?: SearchEngine
   error?: string
 }): GlobToolResult {
   return {
@@ -300,6 +291,7 @@ function createGlobToolResult(args: {
       respectGitignore: args.respectGitignore,
       followSymlinks: args.followSymlinks,
       maxDepth: args.maxDepth,
+      engine: args.engine,
       pathStyle: 'absolute'
     }),
     error: args.error
@@ -613,41 +605,30 @@ function registerTrustedFsMessagePackHandler<TArgs>(
 }
 
 async function handleFsReadFile(args: FsReadFileArgs): Promise<unknown> {
-  try {
-    return await nativeToolRequest('fs/read-file', {
-      ...args,
-      maxFileReadBytes: MAX_FILE_READ_BYTES,
-      maxImageReadBytes: MAX_IMAGE_READ_BYTES
-    })
-  } catch (err) {
-    return { error: String(err) }
-  }
+  return await readLocalFile({
+    ...args,
+    maxFileReadBytes: MAX_FILE_READ_BYTES,
+    maxImageReadBytes: MAX_IMAGE_READ_BYTES
+  })
 }
 
 async function handleFsReadTextFileLines(args: FsReadTextFileLinesArgs): Promise<unknown> {
-  try {
-    return await nativeToolRequest<ReadTextFileLinesResult | { error: string }>(
-      'fs/read-text-file-lines',
-      {
-        path: args.path,
-        maxLines: clampTextLineReadLimit(args.maxLines),
-        maxFileReadBytes: MAX_FILE_READ_BYTES
-      }
-    )
-  } catch (err) {
-    return { error: String(err) }
-  }
+  return await readLocalTextFileLines({
+    path: args.path,
+    maxLines: clampTextLineReadLimit(args.maxLines),
+    maxFileReadBytes: MAX_FILE_READ_BYTES
+  })
 }
 
 async function handleFsWriteFile(args: FsWriteFileArgs): Promise<unknown> {
   try {
-    const stat = await nativeToolRequest<FileStatResult>('fs/stat-path', { path: args.path })
+    const stat = await statLocalPath(args.path)
     if (stat.error && !isMissingFileErrorMessage(stat.error)) return { error: stat.error }
     const beforeExists = !stat.error && Boolean(stat.exists)
     let beforeText: string | undefined
     if (beforeExists) {
       try {
-        const readResult = await nativeToolRequest<string | { error: string }>('fs/read-file', {
+        const readResult = await readLocalFile({
           path: args.path,
           raw: true,
           maxFileReadBytes: MAX_FILE_READ_BYTES,
@@ -663,9 +644,7 @@ async function handleFsWriteFile(args: FsWriteFileArgs): Promise<unknown> {
     if (!beforeExists) {
       const parentDirectory = getParentDirectoryForWrite(args.path)
       if (parentDirectory) {
-        const mkdirResult = await nativeToolRequest<FileMutationResult>('fs/mkdir', {
-          path: parentDirectory
-        })
+        const mkdirResult = await makeLocalDirectory(parentDirectory)
         if (!mkdirResult.success) {
           return { error: mkdirResult.error ?? 'Native parent directory creation failed' }
         }
@@ -676,10 +655,7 @@ async function handleFsWriteFile(args: FsWriteFileArgs): Promise<unknown> {
         error: 'File changed since it was read. Read the file again before editing or writing.'
       }
     }
-    const writeResult = await nativeToolRequest<FileWriteResult>('fs/write-file', {
-      path: args.path,
-      content: args.content
-    })
+    const writeResult = await writeLocalTextFile(args.path, args.content)
     if (!writeResult.success) {
       return { error: writeResult.error ?? 'Native file write failed' }
     }
@@ -697,68 +673,57 @@ async function handleFsWriteFile(args: FsWriteFileArgs): Promise<unknown> {
 }
 
 async function handleFsStatPath(args: { path: string }): Promise<unknown> {
-  try {
-    const result = await nativeToolRequest<FileStatResult>('fs/stat-path', { path: args.path })
-    if (result.error) return { error: result.error }
-    return result
-  } catch (err) {
-    return { error: String(err) }
-  }
+  const result = await statLocalPath(args.path)
+  if (result.error) return { error: result.error }
+  return result
 }
 
 async function handleFsListDir(args: FsListDirArgs): Promise<unknown> {
-  try {
-    return await nativeToolRequest('fs/list-dir', {
-      path: path.resolve(args.path),
-      ignore: args.ignore ?? [],
-      limit: clampToolResultLimit(args.limit, MAX_LIST_DIR_ITEMS) ?? MAX_LIST_DIR_ITEMS
-    })
-  } catch (err) {
-    return { error: String(err) }
-  }
+  return await listLocalDirectory({
+    path: path.resolve(args.path),
+    ignore: args.ignore ?? [],
+    limit: clampToolResultLimit(args.limit, MAX_LIST_DIR_ITEMS) ?? MAX_LIST_DIR_ITEMS
+  })
 }
 
 async function handleFsMkdir(args: { path: string }): Promise<unknown> {
-  try {
-    const result = await nativeToolRequest<FileMutationResult>('fs/mkdir', { path: args.path })
-    return result.success ? { success: true } : { error: result.error ?? 'Native mkdir failed' }
-  } catch (err) {
-    return { error: String(err) }
-  }
+  const result = await makeLocalDirectory(args.path)
+  return result.success ? { success: true } : { error: result.error ?? 'Local mkdir failed' }
 }
 
 async function handleFsDelete(args: { path: string }): Promise<unknown> {
-  try {
-    const result = await nativeToolRequest<FileMutationResult>('fs/delete', { path: args.path })
-    return result.success ? { success: true } : { error: result.error ?? 'Native delete failed' }
-  } catch (err) {
-    return { error: String(err) }
-  }
+  const result = await deleteLocalPath(args.path)
+  return result.success ? { success: true } : { error: result.error ?? 'Local delete failed' }
 }
 
 async function handleFsMove(args: { from: string; to: string }): Promise<unknown> {
-  try {
-    const result = await nativeToolRequest<FileMutationResult>('fs/move', {
-      from: args.from,
-      to: args.to
-    })
-    return result.success ? { success: true } : { error: result.error ?? 'Native move failed' }
-  } catch (err) {
-    return { error: String(err) }
-  }
+  const result = await moveLocalPath(args.from, args.to)
+  return result.success ? { success: true } : { error: result.error ?? 'Local move failed' }
 }
 
 async function handleFsGlob(args: FsGlobArgs): Promise<unknown> {
   const cwd = path.resolve(args.path || process.cwd())
   try {
-    return await nativeToolRequest<GlobToolResult>('fs/glob', {
-      pattern: args.pattern,
+    const maxDepth = clampToolResultLimit(args.maxDepth, MAX_SEARCH_DEPTH)
+    const result = await globLocalFiles({
       path: cwd,
+      pattern: args.pattern,
       limit: clampToolResultLimit(args.limit, MAX_GLOB_MATCHES) ?? 100,
       hidden: args.hidden !== false,
       respectGitignore: args.respectGitignore === true,
+      maxDepth
+    })
+    return createGlobToolResult({
+      searchRoot: cwd,
+      pattern: args.pattern,
+      matches: result.matches,
+      truncated: result.truncated,
+      limitReason: result.truncated ? 'max_results' : null,
+      hiddenIncluded: args.hidden !== false,
+      respectGitignore: args.respectGitignore === true,
       followSymlinks: args.followSymlinks === true,
-      maxDepth: clampToolResultLimit(args.maxDepth, MAX_SEARCH_DEPTH)
+      maxDepth,
+      engine: 'node'
     })
   } catch (err) {
     return createGlobToolResult({
@@ -767,6 +732,7 @@ async function handleFsGlob(args: FsGlobArgs): Promise<unknown> {
       matches: [],
       respectGitignore: args.respectGitignore === true,
       followSymlinks: args.followSymlinks === true,
+      engine: 'node',
       error: String(err)
     })
   }
@@ -774,7 +740,7 @@ async function handleFsGlob(args: FsGlobArgs): Promise<unknown> {
 
 async function handleFsSearchFiles(args: FsSearchFilesArgs): Promise<unknown> {
   try {
-    return await nativeToolRequest('fs/search-files', {
+    return await searchLocalFiles({
       path: path.resolve(args.path || process.cwd()),
       query: args.query ?? '',
       limit: Math.max(1, Math.min(args.limit ?? FILE_SEARCH_MAX_RESULTS, 100))
@@ -787,6 +753,12 @@ async function handleFsSearchFiles(args: FsSearchFilesArgs): Promise<unknown> {
 async function handleFsGrep(args: FsGrepArgs): Promise<unknown> {
   const searchTarget = path.resolve(args.path || process.cwd())
   try {
+    // The TS engine is the default for the supported local-search surface.
+    // Advanced Git/index, pathspec, multiline and textconv modes retain the
+    // Native fallback until their parity gates are complete.
+    if (canUseTsLocalGrep(args)) {
+      return await grepLocalFiles({ ...args, path: searchTarget })
+    }
     return await nativeToolRequest<GrepToolResult>(
       'fs/grep',
       { ...args, path: searchTarget },
@@ -812,36 +784,18 @@ async function handleFsGrep(args: FsGrepArgs): Promise<unknown> {
 }
 
 async function handleFsReadFileBinary(args: FsReadFileBinaryArgs): Promise<unknown> {
-  try {
-    return await nativeToolRequest('fs/read-file-binary', {
-      path: args.path,
-      maxFileReadBytes: MAX_FILE_READ_BYTES
-    })
-  } catch (err) {
-    return { error: String(err) }
-  }
+  return await readLocalFileBinary({ path: args.path, maxFileReadBytes: MAX_FILE_READ_BYTES })
 }
 
 async function handleFsWriteFileBinary(args: FsWriteFileBinaryArgs): Promise<unknown> {
-  try {
-    const result = await nativeToolRequest<FileMutationResult>('fs/write-file-binary', args)
-    return result.success
-      ? { success: true }
-      : { error: result.error ?? 'Native binary file write failed' }
-  } catch (err) {
-    return { error: String(err) }
-  }
+  const result = await writeLocalBinaryFile(args.path, args.data)
+  return result.success
+    ? { success: true }
+    : { error: result.error ?? 'Local binary file write failed' }
 }
 
 export async function handleFsReadDocument(args: FsReadDocumentArgs): Promise<unknown> {
-  try {
-    return await nativeToolRequest('fs/read-document', {
-      path: args.path,
-      maxFileReadBytes: MAX_FILE_READ_BYTES
-    })
-  } catch (err) {
-    return { error: String(err) }
-  }
+  return await readLocalDocument({ path: args.path, maxFileReadBytes: MAX_FILE_READ_BYTES })
 }
 
 export function registerFsHandlers(): void {
@@ -929,12 +883,9 @@ export function registerFsHandlers(): void {
       if (result.canceled || !result.filePath) return { canceled: true }
       try {
         const base64 = args.dataUrl.replace(/^data:image\/\w+;base64,/, '')
-        const writeResult = await nativeToolRequest<FileMutationResult>('fs/write-file-binary', {
-          path: result.filePath,
-          data: base64
-        })
+        const writeResult = await writeLocalBinaryFile(result.filePath, base64)
         if (!writeResult.success) {
-          return { error: writeResult.error ?? 'Native image save failed' }
+          return { error: writeResult.error ?? 'Local image save failed' }
         }
         return { success: true, filePath: result.filePath }
       } catch (err) {

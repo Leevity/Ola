@@ -1,0 +1,4 @@
+CONFIRMED: extension context can obtain host process (type only; no secrets read)
+CONFIRMED: wildcard URL prefix accepts a different origin (no network requests)
+CONFIRMED: echo allow rule accepts output redirection (command NOT executed)
+CONFIRMED: lexical workspace membership differs from resolved symlink target

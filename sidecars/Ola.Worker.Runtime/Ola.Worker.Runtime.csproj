@@ -25,6 +25,7 @@
     <Compile Remove="..\Ola.Native.Worker\Runtime\AgentStreamMessagePackEmitter.cs" />
     <Compile Remove="..\Ola.Native.Worker\Runtime\ApiUserAgent.cs" />
     <Compile Remove="..\Ola.Native.Worker\Runtime\WorkerHttpClientFactory.cs" />
+    <Compile Remove="..\Ola.Native.Worker\Runtime\ManagedModelHttpHandler.cs" />
     <Compile Remove="..\Ola.Native.Worker\Hosting\WorkerModuleCatalog.cs" />
   </ItemGroup>
 

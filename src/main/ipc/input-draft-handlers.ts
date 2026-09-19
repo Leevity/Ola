@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { homedir } from 'node:os'
 import { basename, join } from 'node:path'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import {
   INPUT_DRAFT_MAX_COUNT,
@@ -21,7 +21,7 @@ import {
   type PersistedInputDraft
 } from '../../shared/input-draft-types'
 
-let draftDirectory = join(homedir(), '.ola', 'input-drafts')
+let draftDirectory = join(olaDataRoot(), 'input-drafts')
 let indexPath = join(draftDirectory, 'index-v1.json')
 
 export function configureInputDraftDirectoryForTests(path: string): void {

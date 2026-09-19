@@ -1,5 +1,7 @@
 import type { ToolHandler } from '../../../tools/tool-types'
-import { nativeOnlyTeamResult } from './team-native-guard'
+import { encodeStructuredToolResult, encodeToolError } from '../../../tools/tool-result-format'
+import { getTeamRuntimeSnapshot } from '../runtime-client'
+import { useTeamStore } from '@renderer/stores/team-store'
 
 /**
  * TeamStatus — non-blocking snapshot of the current team state.
@@ -17,6 +19,17 @@ export const teamStatusTool: ToolHandler = {
       required: []
     }
   },
-  execute: async () => nativeOnlyTeamResult('TeamStatus'),
+  execute: async () => {
+    const team = useTeamStore.getState().activeTeam
+    if (!team?.name) return encodeToolError('No active team')
+    try {
+      const snapshot = await getTeamRuntimeSnapshot({ teamName: team.name, limit: 20 })
+      if (!snapshot) return encodeToolError(`Team "${team.name}" does not exist`)
+      useTeamStore.getState().syncRuntimeSnapshot(snapshot, team.sessionId)
+      return encodeStructuredToolResult({ ...snapshot })
+    } catch (error) {
+      return encodeToolError(error instanceof Error ? error.message : String(error))
+    }
+  },
   requiresApproval: () => false
 }

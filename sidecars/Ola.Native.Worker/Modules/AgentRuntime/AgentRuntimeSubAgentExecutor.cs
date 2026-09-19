@@ -10,7 +10,6 @@ internal static partial class AgentRuntimeSubAgentExecutor
     private const string TaskToolName = "Task";
     private const string SubmitReportToolName = "SubmitReport";
     private const int DefaultMaxTurns = 12;
-    private const string AgentsDirectoryName = ".ola/agents";
     private const string CustomSubAgentType = "custom";
 
     private static readonly string[] DefaultTools = ["Read", "Glob", "Grep", "LS", "Skill"];
@@ -270,9 +269,7 @@ internal static partial class AgentRuntimeSubAgentExecutor
     private static List<SubAgentDefinitionNative> LoadAgentDefinitions()
     {
         var result = new List<SubAgentDefinitionNative>();
-        var root = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            AgentsDirectoryName);
+        var root = Path.Combine(OlaDataRoot.DirectoryPath, "agents");
         if (!Directory.Exists(root))
         {
             return result;

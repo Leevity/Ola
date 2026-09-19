@@ -187,7 +187,9 @@ async function upgradeTls(socket: Socket, host: string): Promise<TLSSocket> {
     const tlsSocket = connectTls({
       socket,
       servername: isIP(host) ? undefined : host,
-      rejectUnauthorized: false,
+      // Remote-control credentials and screen data must never be sent to an
+      // unauthenticated endpoint. Hosts need a valid, matching certificate.
+      rejectUnauthorized: true,
       // Some Windows RDP hosts use a machine certificate that only permits RSA key
       // encipherment. Electron's default ECDHE preference then fails in BoringSSL with
       // KEY_USAGE_BIT_INCORRECT before certificate verification can be relaxed. RDP's

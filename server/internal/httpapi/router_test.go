@@ -20,7 +20,7 @@ func (r *revokeRecorder) RevokeDevice(deviceID string) {
 	r.deviceIDs = append(r.deviceIDs, deviceID)
 }
 
-func requestJSON(t *testing.T, handler http.Handler, method, path string, body any, token string) map[string]any {
+func requestJSON(t *testing.T, handler http.Handler, method, path string, body any, token string, headers ...map[string]string) map[string]any {
 	t.Helper()
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -29,6 +29,11 @@ func requestJSON(t *testing.T, handler http.Handler, method, path string, body a
 	req := httptest.NewRequest(method, path, bytes.NewReader(payload))
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	for _, values := range headers {
+		for key, value := range values {
+			req.Header.Set(key, value)
+		}
 	}
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, req)
@@ -112,6 +117,41 @@ func TestControlPlaneAccountRolesAndTeamApproval(t *testing.T) {
 	ownerMe := requestJSON(t, handler, http.MethodGet, "/api/control/me", nil, ownerToken)
 	if ownerMe["role"] != "team_admin" {
 		t.Fatalf("owner role should become team admin: %#v", ownerMe)
+	}
+}
+
+func TestControlModelsRejectsBrowserCredentialsAndForeignReads(t *testing.T) {
+	t.Setenv("OLA_SYSTEM_ADMIN_EMAILS", "system@example.com")
+	handler := NewRouter(testConfig(), store.NewMemoryStore(), nil)
+	adminToken, _ := registerAccountAndDevice(t, handler, "system@example.com")
+	ownerToken, _ := registerAccountAndDevice(t, handler, "owner-models@example.com")
+	foreignToken, _ := registerAccountAndDevice(t, handler, "foreign-models@example.com")
+
+	created := requestJSON(t, handler, http.MethodPost, "/api/control/teams", map[string]any{"name": "Model Team"}, ownerToken)
+	team, _ := created["team"].(map[string]any)
+	teamID, _ := team["id"].(string)
+	approved := requestJSON(t, handler, http.MethodPost, "/api/control/team-applications", map[string]any{"teamId": teamID, "action": "approve"}, adminToken)
+	if approved["_status"] != float64(http.StatusOK) {
+		t.Fatalf("team approval failed: %#v", approved)
+	}
+
+	legacy := requestJSON(t, handler, http.MethodPost, "/api/control/models", map[string]any{
+		"teamId": teamID, "providerId": "platform-default", "model": "safe-model",
+		"baseUrl": "https://attacker.invalid", "apiKey": "stolen",
+	}, ownerToken)
+	if legacy["_status"] != float64(http.StatusBadRequest) {
+		t.Fatalf("browser-supplied provider endpoint must be rejected: %#v", legacy)
+	}
+
+	configured := requestJSON(t, handler, http.MethodPost, "/api/control/models", map[string]any{
+		"teamId": teamID, "providerId": "platform-default", "model": "safe-model", "isDefault": true,
+	}, ownerToken)
+	if configured["_status"] != float64(http.StatusCreated) {
+		t.Fatalf("registered provider should be accepted: %#v", configured)
+	}
+	foreign := requestJSON(t, handler, http.MethodGet, "/api/control/models?teamId="+teamID, nil, foreignToken)
+	if foreign["_status"] != float64(http.StatusForbidden) {
+		t.Fatalf("foreign account must not read team models: %#v", foreign)
 	}
 }
 

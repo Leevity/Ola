@@ -1,3 +1,4 @@
+import i18n from '@renderer/locales'
 import { create } from 'zustand'
 import { toast } from 'sonner'
 import type { ProviderConfig } from '@renderer/lib/api/types'
@@ -118,7 +119,7 @@ export const useTranslateStore = create<TranslateStore>((set, get) => ({
       path: result.path
     })) as { content: string; name: string } | { error: string }
     if ('error' in docResult) {
-      toast.error('Failed to read file', { description: docResult.error })
+      toast.error(i18n.t('input.fileReadFailed', { ns: 'chat' }), { description: docResult.error })
       return
     }
     set({
@@ -163,25 +164,21 @@ export const useTranslateStore = create<TranslateStore>((set, get) => ({
       return
     }
 
-    const providerStore = useProviderStore.getState()
-    const targetProviderId =
-      overrideProviderId ??
-      providerStore.activeTranslationProviderId ??
-      providerStore.activeProviderId
+    const providerConfig = buildEffectiveProviderConfig(overrideProviderId, overrideModelId)
+    const targetProviderId = providerConfig?.providerId
     if (targetProviderId) {
       const ready = await ensureProviderAuthReady(targetProviderId)
       if (!ready) {
-        toast.error('Authentication required', {
-          description: 'Please complete provider login in Settings'
+        toast.error(i18n.t('input.translationAuthenticationRequired', { ns: 'chat' }), {
+          description: i18n.t('input.translationAuthenticationDescription', { ns: 'chat' })
         })
         return
       }
     }
 
-    const providerConfig = buildEffectiveProviderConfig(overrideProviderId, overrideModelId)
     if (!providerConfig || (!providerConfig.apiKey && providerConfig.requiresApiKey !== false)) {
-      toast.error('API key required', {
-        description: 'Please configure an AI provider in Settings'
+      toast.error(i18n.t('input.translationApiKeyRequired', { ns: 'chat' }), {
+        description: i18n.t('input.translationApiKeyDescription', { ns: 'chat' })
       })
       return
     }
@@ -285,7 +282,9 @@ export const useTranslateStore = create<TranslateStore>((set, get) => ({
                 })
                 break
               case 'error':
-                toast.error('Agent translation failed', { description: event.message })
+                toast.error(i18n.t('input.translationFailed', { ns: 'chat' }), {
+                  description: event.message
+                })
                 break
             }
           }
@@ -323,7 +322,7 @@ export const useTranslateStore = create<TranslateStore>((set, get) => ({
     } catch (err) {
       if (!abortController.signal.aborted) {
         const message = err instanceof Error ? err.message : String(err)
-        toast.error('Translation failed', { description: message })
+        toast.error(i18n.t('input.translationFailed', { ns: 'chat' }), { description: message })
       }
     } finally {
       if (activeAbortController === abortController) {

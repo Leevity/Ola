@@ -121,7 +121,7 @@ export function CredentialsPanel(): React.JSX.Element {
               className="size-7"
               onClick={() => void refresh()}
               disabled={loading}
-              title="Refresh"
+              title={t('actions.refresh')}
             >
               <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} />
             </Button>

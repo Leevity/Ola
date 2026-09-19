@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "พิมพ์จดหมาย...",
     "placeholderClarify": "จงอธิบายความคิดของคุณ และผมจะค้นหาต่อไป จนกว่าความต้องการจะชัดเจน...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "ข้อผิดพลาดสุดท้าย",
       "stackTrace": "พาธของสแต็ก",
       "copy": "คัดลอก",
-      "copied": "คัดลอก"
+      "copied": "คัดลอก",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

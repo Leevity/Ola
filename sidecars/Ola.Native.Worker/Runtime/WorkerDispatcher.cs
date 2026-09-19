@@ -38,7 +38,19 @@ internal sealed class WorkerDispatcher
             return WorkerResponse.Error($"Unsupported method: {method}");
         }
 
-        return await handler(parameters, context);
+        var previous = WorkerRequestScope.Current.Value;
+        WorkerRequestScope.Current.Value = new WorkerRequestScope(
+            context, JsonHelpers.GetString(parameters, "sessionId") ??
+                (parameters.ValueKind == JsonValueKind.Object && parameters.TryGetProperty("provider", out var provider)
+                    ? JsonHelpers.GetString(provider, "sessionId") : null));
+        try
+        {
+            return await handler(parameters, context);
+        }
+        finally
+        {
+            WorkerRequestScope.Current.Value = previous;
+        }
     }
 
     public string[] GetRegisteredMethods()

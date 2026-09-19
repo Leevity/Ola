@@ -104,7 +104,11 @@
     "chats": "Gesprekken",
     "noChats": "Nog geen gesprekken",
     "smartRename": "Slimme hernoemen",
-    "smartRenaming": "Slimme hernoeming"
+    "smartRenaming": "Slimme hernoeming",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sessie verwijderd",

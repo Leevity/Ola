@@ -9,6 +9,7 @@ import type {
 import { ipcClient } from '../ipc/ipc-client'
 import { IPC } from '../ipc/channels'
 import { agentBridge } from '../ipc/agent-bridge'
+import { useWorkspaceStore } from '../../stores/workspace-store'
 
 const OPENAI_IMAGES_NATIVE_TIMEOUT_MS = 10 * 60 * 1000
 
@@ -97,7 +98,10 @@ async function requestNativeImages(args: {
   return images
 }
 
-async function persistGeneratedImage(image: GeneratedImage): Promise<ImageBlock> {
+async function persistGeneratedImage(
+  image: GeneratedImage,
+  workspaceId: string
+): Promise<ImageBlock> {
   const fallback: ImageBlock = {
     type: 'image',
     source:
@@ -108,6 +112,7 @@ async function persistGeneratedImage(image: GeneratedImage): Promise<ImageBlock>
 
   try {
     const result = (await ipcClient.invoke(IPC.IMAGE_PERSIST_GENERATED, {
+      workspaceId,
       ...(image.sourceType === 'base64'
         ? { data: image.data, mediaType: image.mediaType }
         : { url: image.data })
@@ -146,6 +151,7 @@ export async function* streamNativeOpenAIImages(args: {
   signal?: AbortSignal
 }): AsyncIterable<StreamEvent> {
   const requestStartedAt = Date.now()
+  const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   let firstImageAt: number | null = null
 
   console.log('[OpenAI Images Provider] native image request start:', {
@@ -200,7 +206,7 @@ export async function* streamNativeOpenAIImages(args: {
 
     for (const img of results) {
       if (firstImageAt === null) firstImageAt = Date.now()
-      const imageBlock = await persistGeneratedImage(img)
+      const imageBlock = await persistGeneratedImage(img, workspaceId)
       yield { type: 'image_generated', imageBlock }
     }
 

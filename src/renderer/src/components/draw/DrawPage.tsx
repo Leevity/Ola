@@ -1,3 +1,4 @@
+import { useWorkspaceProviders, useWorkspaceModelRoute } from '@renderer/hooks/use-workspace-models'
 import {
   useCallback,
   useEffect,
@@ -100,6 +101,7 @@ import {
   useDrawStore
 } from '@renderer/stores/draw-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { DrawGraphCanvas } from './DrawGraphCanvas'
 
 interface ProviderModelGroup {
@@ -572,11 +574,12 @@ export function DrawPage(): React.JSX.Element {
   const closeDrawPage = useUIStore((state) => state.closeDrawPage)
   const openSettingsPage = useUIStore((state) => state.openSettingsPage)
 
-  const providers = useProviderStore((state) => state.providers)
-  const activeImageProviderId = useProviderStore((state) => state.activeImageProviderId)
-  const activeImageModelId = useProviderStore((state) => state.activeImageModelId)
-  const setActiveImageProvider = useProviderStore((state) => state.setActiveImageProvider)
-  const setActiveImageModel = useProviderStore((state) => state.setActiveImageModel)
+  const providers = useWorkspaceProviders()
+  const imageRoute = useWorkspaceModelRoute('image')
+  const activeImageProviderId = imageRoute.providerId
+  const activeImageModelId = imageRoute.modelId
+  const setActiveImageProvider = imageRoute.setProvider
+  const setActiveImageModel = imageRoute.setModel
 
   const [drawMode, setDrawMode] = useState<DrawRunMode>('image')
   const [prompt, setPrompt] = useState('')
@@ -590,6 +593,7 @@ export function DrawPage(): React.JSX.Element {
   const [gifActionPrompt, setGifActionPrompt] = useState('')
   const [streamPreviewEnabled, setStreamPreviewEnabled] = useState(readStoredStreamPreviewEnabled)
   const runs = useDrawStore((state) => state.runs)
+  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const commitRuns = useDrawStore((state) => state.commitRuns)
   const updateStoredRun = useDrawStore((state) => state.updateRun)
   const [attachedImages, setAttachedImages] = useState<ImageAttachment[]>([])
@@ -671,8 +675,12 @@ export function DrawPage(): React.JSX.Element {
 
   useEffect(() => {
     let cancelled = false
+    if (useDrawStore.getState().runs.some((run) => run.workspaceId !== activeWorkspaceId)) {
+      abortActiveDrawRuns()
+      commitRuns([])
+    }
 
-    void listPersistedDrawRuns(t('drawPage.interrupted'), {
+    void listPersistedDrawRuns(activeWorkspaceId, t('drawPage.interrupted'), {
       activeRunIds: getActiveDrawRunIds()
     })
       .then((persistedRuns) => {
@@ -705,7 +713,7 @@ export function DrawPage(): React.JSX.Element {
     return () => {
       cancelled = true
     }
-  }, [commitRuns, t])
+  }, [activeWorkspaceId, commitRuns, t])
 
   useEffect(() => {
     if (!modelDialogOpen) return
@@ -867,15 +875,15 @@ export function DrawPage(): React.JSX.Element {
   const handleDeleteRun = useCallback(
     (runId: string): void => {
       commitRuns((current) => current.filter((run) => run.id !== runId))
-      void deletePersistedDrawRun(runId)
+      void deletePersistedDrawRun(runId, activeWorkspaceId)
     },
-    [commitRuns]
+    [activeWorkspaceId, commitRuns]
   )
 
   const handleClearHistory = useCallback((): void => {
     commitRuns([])
-    void clearPersistedDrawRuns()
-  }, [commitRuns])
+    void clearPersistedDrawRuns(activeWorkspaceId)
+  }, [activeWorkspaceId, commitRuns])
 
   const handleSelectModel = useCallback(
     (value: string): void => {
@@ -1012,9 +1020,10 @@ export function DrawPage(): React.JSX.Element {
   )
 
   const postprocessGifGrid = useCallback(
-    async (runId: string, image: DrawRunImage): Promise<DrawRunImage[]> => {
+    async (runId: string, image: DrawRunImage, workspaceId: string): Promise<DrawRunImage[]> => {
       const base64Data = image.src.startsWith('data:') ? image.src.split(',', 2)[1] || '' : ''
       const result = (await ipcClient.invoke(IPC.IMAGE_CREATE_GIF_FROM_GRID, {
+        workspaceId,
         runId,
         filePath: image.filePath,
         data: base64Data,
@@ -1078,6 +1087,7 @@ export function DrawPage(): React.JSX.Element {
     const controller = new AbortController()
     const newRun: DrawRun = {
       id: runId,
+      workspaceId: activeWorkspaceId,
       prompt: trimmedPrompt,
       providerName: target.provider.name,
       modelName: target.model.name,
@@ -1264,7 +1274,8 @@ export function DrawPage(): React.JSX.Element {
     streamPreviewEnabled,
     t,
     updateRun,
-    commitRuns
+    commitRuns,
+    activeWorkspaceId
   ])
 
   const generateGifRun = useCallback(
@@ -1329,6 +1340,7 @@ export function DrawPage(): React.JSX.Element {
       }
       const newRun: DrawRun = {
         id: runId,
+        workspaceId: activeWorkspaceId,
         prompt: buildGifRunSummary(snapshot),
         providerName: target.provider.name,
         modelName: target.model.name,
@@ -1428,7 +1440,7 @@ export function DrawPage(): React.JSX.Element {
                   : run.meta
               }))
               try {
-                const processedImages = await postprocessGifGrid(runId, image)
+                const processedImages = await postprocessGifGrid(runId, image, newRun.workspaceId)
                 updateRun(runId, (run) => ({
                   ...run,
                   images: processedImages,
@@ -1560,7 +1572,8 @@ export function DrawPage(): React.JSX.Element {
       streamPreviewEnabled,
       t,
       updateRun,
-      commitRuns
+      commitRuns,
+      activeWorkspaceId
     ]
   )
 

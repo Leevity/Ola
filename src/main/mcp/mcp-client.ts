@@ -1,6 +1,6 @@
 import { mkdirSync } from 'fs'
-import { homedir } from 'os'
 import { basename, join } from 'path'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
@@ -23,7 +23,7 @@ function isNpmCommand(command: string): boolean {
 }
 
 function defaultNpmCacheDir(): string {
-  return join(homedir(), '.ola', 'npm-cache')
+  return join(olaDataRoot(), 'npm-cache')
 }
 
 function buildStdioEnv(

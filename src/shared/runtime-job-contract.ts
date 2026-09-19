@@ -26,6 +26,7 @@ export type RuntimeJobState =
 
 export interface RuntimeJobRecord {
   jobId: string
+  workspaceId: string
   runId?: string | null
   sessionId?: string | null
   method: string

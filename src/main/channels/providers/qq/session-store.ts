@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../../../lib/native-worker'
+import { QqSessionFileStore } from './session-file-store'
 
 export interface SessionState {
   sessionId: string | null
@@ -10,7 +10,7 @@ export interface SessionState {
 }
 
 const SAVE_THROTTLE_MS = 1000
-const QQ_SESSION_TIMEOUT_MS = 30_000
+const fileStore = new QqSessionFileStore()
 
 const throttleState = new Map<
   string,
@@ -21,20 +21,9 @@ const throttleState = new Map<
   }
 >()
 
-type MutationResult = {
-  success: boolean
-  error?: string | null
-}
-
-async function nativeQqSessionRequest<T>(method: string, params: unknown): Promise<T> {
-  return await getNativeWorker().request<T>(method, params, QQ_SESSION_TIMEOUT_MS)
-}
-
 export async function loadSession(accountId: string): Promise<SessionState | null> {
   try {
-    return await nativeQqSessionRequest<SessionState | null>('channel/qq-session-load', {
-      accountId
-    })
+    return await fileStore.load(accountId)
   } catch (error) {
     console.error(`[qq-bot:session] Failed to load session for ${accountId}:`, error)
     return null
@@ -90,16 +79,13 @@ export function saveSession(state: SessionState): void {
 
 async function doSaveSession(state: SessionState): Promise<void> {
   try {
-    const result = await nativeQqSessionRequest<MutationResult>('channel/qq-session-save', state)
-    if (!result.success) {
-      throw new Error(result.error || 'Native QQ session save failed')
-    }
+    await fileStore.save(state)
   } catch (error) {
     console.error(`[qq-bot:session] Failed to save session for ${state.accountId}:`, error)
   }
 }
 
-export function clearSession(accountId: string): void {
+export async function clearSession(accountId: string): Promise<void> {
   const throttle = throttleState.get(accountId)
 
   if (throttle?.throttleTimer) {
@@ -107,9 +93,9 @@ export function clearSession(accountId: string): void {
   }
   throttleState.delete(accountId)
 
-  void nativeQqSessionRequest<MutationResult>('channel/qq-session-clear', { accountId }).catch(
-    (error) => {
-      console.error(`[qq-bot:session] Failed to clear session for ${accountId}:`, error)
-    }
-  )
+  try {
+    await fileStore.clear(accountId)
+  } catch (error) {
+    console.error(`[qq-bot:session] Failed to clear session for ${accountId}:`, error)
+  }
 }

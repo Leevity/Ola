@@ -53,7 +53,6 @@ npm run lint         # ESLint with cache
 npm run typecheck    # TypeScript check (tsc --noEmit for both tsconfig.node.json & tsconfig.web.json)
 npm run format       # Prettier (single quotes, no semicolons, 100-col width)
 npm run postinstall  # Prepare native Electron dependencies and the .NET Native Worker
-npm run audit:sync   # Compare Ola with the pinned sibling Ola reference
 ```
 
 **CI:** GitHub Actions (`build.yml`) builds on push to release tag across Windows (x64, arm64), macOS (arm64, amd64), and Linux (x64, arm64). Artifacts uploaded to the GitHub Release.
@@ -74,13 +73,19 @@ npm run audit:sync   # Compare Ola with the pinned sibling Ola reference
 
 ## Testing Guidelines
 
-**There is no test suite.** Validation is done through:
+**Behavioral tests use Vitest** (`tests/runtime/`); the staged Node runtime has its own typecheck. Validation includes:
 
+- `npm run test:runtime` — isolated Agent, scheduler, model binding, SQLite, transport and CLI tests
+- `npm run typecheck:runtime` — staged Node runtime and test types
 - `npm run typecheck` — TypeScript compilation check across both main and renderer
 - `npm run lint` — ESLint static analysis
 - Manual smoke testing via `npm run dev`
 
-When adding behavioral changes, verify with `npm run typecheck` at minimum.
+When adding behavioral changes, run the affected behavioral tests and typechecks.
+
+`src/runtime/` is a staged TS implementation; the desktop still uses Native Worker.
+See `docs/migrations/ts-runtime/README.md` for actual migration status. Do not remove the
+legacy engine or switch production data ownership before parity gates pass.
 
 ## Commit & Pull Request Guidelines
 

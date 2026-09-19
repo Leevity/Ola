@@ -38,20 +38,20 @@ export function registerInputHandlers(): void {
     if (!isTrustedDesktopIpcSender(event)) {
       return { success: false, error: UNAUTHORIZED_DESKTOP_IPC_ERROR }
     }
-    return desktopInputClick(args)
+    return desktopInputClick(args, event.sender.id)
   })
 
   registerMessagePackHandler<TypeArgs>(DESKTOP_INPUT_TYPE, (args, event) => {
     if (!isTrustedDesktopIpcSender(event)) {
       return { success: false, error: UNAUTHORIZED_DESKTOP_IPC_ERROR }
     }
-    return desktopInputType(args)
+    return desktopInputType(args, event.sender.id)
   })
 
   registerMessagePackHandler<ScrollArgs>(DESKTOP_INPUT_SCROLL, (args, event) => {
     if (!isTrustedDesktopIpcSender(event)) {
       return { success: false, error: UNAUTHORIZED_DESKTOP_IPC_ERROR }
     }
-    return desktopInputScroll(args)
+    return desktopInputScroll(args, event.sender.id)
   })
 }

@@ -21,6 +21,8 @@ internal sealed class MemoryRootDescriptor
 
     public string OwnerKey { get; set; } = string.Empty;
 
+    public string WorkspaceId { get; set; } = "local-personal";
+
     public long CreatedAt { get; set; }
 
     public long UpdatedAt { get; set; }
@@ -29,6 +31,8 @@ internal sealed class MemoryRootDescriptor
 internal sealed class MemoryPipelineJob
 {
     public string Id { get; set; } = string.Empty;
+
+    public string WorkspaceId { get; set; } = "local-personal";
 
     public string Kind { get; set; } = "stage1";
 

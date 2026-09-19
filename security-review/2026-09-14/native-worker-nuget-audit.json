@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "parameters": "--vulnerable --include-transitive",
+  "sources": ["https://api.nuget.org/v3/index.json"],
+  "projects": [
+    {
+      "path": "/Users/lqy-macmini/Desktop/vibecoding/Ola/sidecars/Ola.Native.Worker/Ola.Native.Worker.csproj"
+    }
+  ]
+}

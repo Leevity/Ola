@@ -379,13 +379,7 @@ export function RemotePage({
       const message = error instanceof Error ? error.message : String(error)
       const isMac = /Mac/.test(navigator.userAgent)
       if (connection.kind === 'vnc' && isMac) {
-        toast.error(
-          t('remote.noVncMacFailure', {
-            defaultValue:
-              'Cannot reach the macOS VNC server. Open System Settings → General → Sharing → Screen Sharing, allow VNC viewers, and verify the host port (5900 by default). The built-in macOS Screen Sharing service speaks RFB over TCP only and does not speak the WebSocket protocol that noVNC requires — connect over an SSH tunnel with a websockify bridge, or use an external vnc:// viewer.'
-          }),
-          { description: message }
-        )
+        toast.error(t('remote.noVncMacFailure'), { description: message })
       } else {
         toast.error(message)
       }
@@ -569,16 +563,8 @@ export function RemotePage({
               type="button"
               onClick={onToggleMaximize}
               className="titlebar-no-drag inline-flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              title={
-                maximized
-                  ? t('remote.restoreWorkspace', { defaultValue: 'Restore window' })
-                  : t('remote.maximizeWorkspace', { defaultValue: 'Maximize window' })
-              }
-              aria-label={
-                maximized
-                  ? t('remote.restoreWorkspace', { defaultValue: 'Restore window' })
-                  : t('remote.maximizeWorkspace', { defaultValue: 'Maximize window' })
-              }
+              title={maximized ? t('remote.restoreWorkspace') : t('remote.maximizeWorkspace')}
+              aria-label={maximized ? t('remote.restoreWorkspace') : t('remote.maximizeWorkspace')}
             >
               {maximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
             </button>
@@ -611,8 +597,8 @@ export function RemotePage({
             type="button"
             onClick={handleRequestClose}
             className="titlebar-no-drag inline-flex size-8 items-center justify-center rounded-md text-[color:var(--muted-foreground)] transition-colors hover:bg-[color:var(--accent)] hover:text-[color:var(--foreground)]"
-            title={t('remote.closeWorkspace', { defaultValue: 'Close remote control' })}
-            aria-label={t('remote.closeWorkspace', { defaultValue: 'Close remote control' })}
+            title={t('remote.closeWorkspace')}
+            aria-label={t('remote.closeWorkspace')}
           >
             <X className="size-4" />
           </button>
@@ -665,7 +651,7 @@ export function RemotePage({
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <div className="flex items-center justify-between px-4 pb-2 pt-4 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="flex items-center justify-between px-4 pb-2 pt-4 text-sm font-semibold text-muted-foreground">
               <span>{t('remote.savedDevices')}</span>
               <span>{directConnections.length}</span>
             </div>
@@ -849,7 +835,7 @@ export function RemotePage({
             </p>
             <div className="mt-5 flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteTarget(null)}>
-                {t('common.cancel', { defaultValue: 'Cancel' })}
+                {t('remote.cancel')}
               </Button>
               <Button variant="destructive" onClick={() => void confirmDelete()}>
                 {t('remote.deleteDevice')}
@@ -878,7 +864,7 @@ function DirectOverview({
         <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 text-primary">
           <Globe2 className="size-5" />
         </div>
-        <h2 className="mt-5 text-2xl font-semibold tracking-tight">{t('remote.directTitle')}</h2>
+        <h2 className="mt-5 text-lg font-semibold">{t('remote.directTitle')}</h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
           {t('remote.directDescription')}
         </p>
@@ -915,7 +901,7 @@ function DirectOverview({
 
       {recent.length > 0 ? (
         <section className="mt-10">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <h3 className="text-sm font-semibold text-muted-foreground">
             {t('remote.recentDevices')}
           </h3>
           <div className="mt-3 divide-y border-y">
@@ -1125,7 +1111,7 @@ function ConnectionEditor({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          <label className="text-xs font-medium text-muted-foreground">
+          <label className="text-sm font-medium text-muted-foreground">
             {t('remote.deviceType')}
           </label>
           <div className="mt-2 grid grid-cols-2 gap-2">
@@ -1171,7 +1157,7 @@ function ConnectionEditor({
             </div>
 
             <div className="border-t pt-5">
-              <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <div className="mb-4 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                 <ShieldCheck className="size-3.5" />
                 {t('remote.authentication')}
               </div>
@@ -1210,20 +1196,12 @@ function ConnectionEditor({
 
             {value.kind === 'vnc' ? (
               <div className="border-t pt-5">
-                <div className="mb-4 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <div className="mb-4 flex items-center gap-2 text-sm font-medium text-muted-foreground">
                   <Monitor className="size-3.5" />
-                  {t('remote.vncImageQuality', { defaultValue: 'Image quality' })}
+                  {t('remote.vncImageQuality')}
                 </div>
                 <div className="space-y-4">
-                  <Field
-                    label={t('remote.vncQuality', {
-                      defaultValue: 'Quality (sharpness vs. speed)'
-                    })}
-                    hint={t('remote.vncQualityHint', {
-                      defaultValue:
-                        'Higher = crisper but uses more bandwidth; lower reduces lag and the "mosaic" effect on slow links.'
-                    })}
-                  >
+                  <Field label={t('remote.vncQuality')} hint={t('remote.vncQualityHint')}>
                     <div className="flex items-center gap-3">
                       <input
                         type="range"
@@ -1239,13 +1217,7 @@ function ConnectionEditor({
                       </span>
                     </div>
                   </Field>
-                  <Field
-                    label={t('remote.vncEncoding', { defaultValue: 'Encoding' })}
-                    hint={t('remote.vncEncodingHint', {
-                      defaultValue:
-                        'Tight/ZRLE compress the stream (lower bandwidth); Raw sends pixels uncompressed (best fidelity, highest bandwidth).'
-                    })}
-                  >
+                  <Field label={t('remote.vncEncoding')} hint={t('remote.vncEncodingHint')}>
                     <select
                       value={value.vncEncoding}
                       onChange={(event) =>
@@ -1253,23 +1225,12 @@ function ConnectionEditor({
                       }
                       className="w-full rounded-md border bg-background px-3 py-2 text-sm"
                     >
-                      <option value="tight">
-                        {t('remote.vncEncodingTight', { defaultValue: 'Tight (recommended)' })}
-                      </option>
-                      <option value="zrle">
-                        {t('remote.vncEncodingZrle', { defaultValue: 'ZRLE' })}
-                      </option>
-                      <option value="raw">
-                        {t('remote.vncEncodingRaw', { defaultValue: 'Raw (uncompressed)' })}
-                      </option>
+                      <option value="tight">{t('remote.vncEncodingTight')}</option>
+                      <option value="zrle">{t('remote.vncEncodingZrle')}</option>
+                      <option value="raw">{t('remote.vncEncodingRaw')}</option>
                     </select>
                   </Field>
-                  <Field
-                    label={t('remote.vncViewOnly', { defaultValue: 'View only' })}
-                    hint={t('remote.vncViewOnlyHint', {
-                      defaultValue: 'Disables mouse and keyboard input forwarding for this session.'
-                    })}
-                  >
+                  <Field label={t('remote.vncViewOnly')} hint={t('remote.vncViewOnlyHint')}>
                     <Switch
                       checked={value.vncViewOnly}
                       onCheckedChange={(checked) => update({ vncViewOnly: checked })}
@@ -1329,7 +1290,7 @@ function Field({
 }): React.JSX.Element {
   return (
     <label className="block">
-      <span className="mb-2 flex items-center justify-between text-xs font-medium">
+      <span className="mb-2 flex items-center justify-between text-sm font-medium">
         {label}
         {hint ? <span className="font-normal text-muted-foreground">{hint}</span> : null}
       </span>
@@ -1423,12 +1384,10 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-10 py-12">
       <div className="w-full max-w-2xl">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary">
+        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
           <ShieldCheck className="size-4" /> {t('remote.olaAccountTitle')}
         </div>
-        <h2 className="mt-5 text-3xl font-semibold tracking-tight">
-          {t('remote.olaAccountTitle')}
-        </h2>
+        <h2 className="mt-5 text-lg font-semibold">{t('remote.olaAccountTitle')}</h2>
         <p className="mt-3 max-w-xl text-sm leading-7 text-muted-foreground">
           {t('remote.olaAccountDescription')}
         </p>
@@ -1446,7 +1405,7 @@ function ManagedAccountWorkspace(): React.JSX.Element {
             </div>
             {!device ? (
               <div className="flex flex-wrap items-end gap-3">
-                <label className="min-w-[240px] flex-1 text-xs font-medium">
+                <label className="min-w-[240px] flex-1 text-sm font-medium">
                   {t('remote.deviceNamePlaceholder')}
                   <Input
                     className="mt-2"
@@ -1460,15 +1419,23 @@ function ManagedAccountWorkspace(): React.JSX.Element {
               </div>
             ) : (
               <>
-                <div className="rounded-lg bg-muted/40 p-3 text-xs">当前连接状态：{peerStatus}</div>
+                <div className="rounded-lg bg-muted/40 p-3 text-xs">
+                  {t('remote.connectionStatus', {
+                    status: t(
+                      `remote.status${peerStatus.charAt(0).toUpperCase()}${peerStatus.slice(1)}`
+                    )
+                  })}
+                </div>
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
                   <span className="min-w-0 flex-1 text-xs">
-                    屏幕共享：
-                    {captureStatus === 'capturing'
-                      ? '已开启，被控时将共享当前屏幕'
-                      : captureStatus === 'requesting'
-                        ? '正在请求权限…'
-                        : '未开启'}
+                    {t('remote.screenSharingStatus', {
+                      status:
+                        captureStatus === 'capturing'
+                          ? t('remote.screenSharingEnabled')
+                          : captureStatus === 'requesting'
+                            ? t('remote.screenSharingRequesting')
+                            : t('remote.screenSharingDisabled')
+                    })}
                   </span>
                   <Button
                     size="sm"
@@ -1478,12 +1445,14 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                       void (captureStatus === 'capturing' ? stopCapture() : startCapture())
                     }
                   >
-                    {captureStatus === 'capturing' ? '停止共享' : '开启屏幕共享'}
+                    {captureStatus === 'capturing'
+                      ? t('remote.stopScreenSharing')
+                      : t('remote.startScreenSharing')}
                   </Button>
                 </div>
                 {captureError && <p className="text-sm text-destructive">{captureError}</p>}
                 <div className="space-y-2">
-                  <p className="text-xs font-medium">同账户设备</p>
+                  <p className="text-sm font-semibold">{t('remote.sameAccountDevices')}</p>
                   {devices
                     .filter((item) => item.id !== device?.id)
                     .map((item) => (
@@ -1491,14 +1460,16 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                         <span className="size-2 rounded-full bg-emerald-500" />
                         <span className="min-w-0 flex-1 truncate text-sm">{item.deviceName}</span>
                         <span className="text-xs text-muted-foreground">
-                          {item.isOnline ? '在线' : '离线'}
+                          {item.isOnline ? t('remote.online') : t('remote.offline')}
                         </span>
                         <Button
                           size="sm"
                           disabled={!item.isOnline || connectingDeviceId === item.id}
                           onClick={() => void connectSameAccountDevice(item.id)}
                         >
-                          {connectingDeviceId === item.id ? '连接中…' : '免密连接'}
+                          {connectingDeviceId === item.id
+                            ? t('remote.connecting')
+                            : t('remote.connectWithoutPassword')}
                         </Button>
                       </div>
                     ))}
@@ -1513,7 +1484,7 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                 )}
                 {peerStatus !== 'idle' && (
                   <Button variant="outline" onClick={closePeerSession}>
-                    断开连接
+                    {t('remote.disconnectSession')}
                   </Button>
                 )}
               </>
@@ -1524,7 +1495,7 @@ function ManagedAccountWorkspace(): React.JSX.Element {
           </div>
         ) : (
           <div className="mt-8 space-y-4 rounded-xl border p-5">
-            <label className="block text-xs font-medium">
+            <label className="block text-sm font-medium">
               {t('remote.emailPlaceholder')}
               <Input
                 className="mt-2"
@@ -1533,7 +1504,7 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                 onChange={(event) => setEmail(event.target.value)}
               />
             </label>
-            <label className="block text-xs font-medium">
+            <label className="block text-sm font-medium">
               {t('remote.passwordPlaceholder')}
               <Input
                 className="mt-2"
@@ -1553,8 +1524,8 @@ function ManagedAccountWorkspace(): React.JSX.Element {
             </div>
           </div>
         )}
-        <label className="mt-6 block text-xs font-medium">
-          API 服务地址
+        <label className="mt-6 block text-sm font-medium">
+          {t('remote.serviceEndpoint')}
           <Input
             className="mt-2"
             value={apiBaseUrl}
@@ -1585,10 +1556,10 @@ function FutureWorkspace({
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-10 py-14">
       <div className="w-full max-w-3xl">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-primary">
+        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
           <Icon className="size-4" /> {eyebrow}
         </div>
-        <h2 className="mt-5 max-w-2xl text-3xl font-semibold tracking-tight">{title}</h2>
+        <h2 className="mt-5 max-w-2xl text-lg font-semibold">{title}</h2>
         <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">{description}</p>
         <div className="mt-10 border-y">
           {points.map((point, index) => (

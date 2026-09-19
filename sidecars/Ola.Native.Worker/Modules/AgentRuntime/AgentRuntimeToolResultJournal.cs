@@ -32,6 +32,12 @@ internal static class AgentRuntimeToolResultJournal
         {
             using var connection = DbConnectionFactory.OpenReadWriteCreate(
                 DbConnectionFactory.ResolveDbPath(default));
+            using (var owner = connection.CreateCommand())
+            {
+                owner.CommandText = "SELECT workspace_id FROM sessions WHERE id = $sessionId LIMIT 1";
+                owner.Parameters.AddWithValue("$sessionId", sessionId.Trim());
+                if (owner.ExecuteScalar() is not string) return;
+            }
             using var command = connection.CreateCommand();
             command.CommandText = """
                 INSERT INTO runtime_tool_results
@@ -74,6 +80,15 @@ internal static class AgentRuntimeToolResultJournal
         try
         {
             using var connection = DbConnectionFactory.OpenReadWriteCreate(DbConnectionFactory.ResolveDbPath(parameters));
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId")?.Trim();
+            if (string.IsNullOrEmpty(workspaceId)) return WorkerResponse.Error("workspaceId is required");
+            using (var owner = connection.CreateCommand())
+            {
+                owner.CommandText = "SELECT workspace_id FROM sessions WHERE id = $sessionId LIMIT 1";
+                owner.Parameters.AddWithValue("$sessionId", sessionId);
+                if (owner.ExecuteScalar() is not string sessionWorkspace || sessionWorkspace != workspaceId)
+                    return WorkerResponse.Error("Tool result session belongs to another workspace or does not exist.");
+            }
             using var command = connection.CreateCommand();
             var placeholders = new List<string>(ids.Count);
             for (var index = 0; index < ids.Count; index++)

@@ -104,7 +104,11 @@
     "chats": "チャット",
     "noChats": "チャットはまだありません",
     "smartRename": "スマートリネーム",
-    "smartRenaming": "スマートリネーム"
+    "smartRenaming": "スマートリネーム",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "セッション削除",

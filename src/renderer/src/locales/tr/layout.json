@@ -104,7 +104,11 @@
     "chats": "Chats Chats",
     "noChats": "Henüz sohbet yok",
     "smartRename": "Smart Renamename",
-    "smartRenaming": "Smart renaming"
+    "smartRenaming": "Smart renaming",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Oturum silindi",

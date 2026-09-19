@@ -1151,7 +1151,7 @@ internal static partial class SkillCatalog
     private static string SkillsDirectory()
     {
         return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            OlaDataRoot.ExternalDataHome,
             ".agents",
             "skills");
     }

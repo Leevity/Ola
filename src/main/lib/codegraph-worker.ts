@@ -1,6 +1,6 @@
 ﻿import { app } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { randomUUID } from 'node:crypto'
+import { randomBytes, randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
 import fs from 'node:fs'
 import net from 'node:net'
@@ -10,6 +10,7 @@ import { decode, encode } from '@msgpack/msgpack'
 
 const FRAME_HEADER_BYTES = 4
 const MAX_FRAME_BYTES = 256 * 1024 * 1024
+const CODEGRAPH_WORKER_CONNECT_TIMEOUT_MS = 30_000
 const WORKER_RESTART_INITIAL_DELAY_MS = 250
 const WORKER_RESTART_MAX_DELAY_MS = 10_000
 const CODEGRAPH_GRAMMAR_LIBRARIES = [
@@ -45,6 +46,11 @@ interface WorkerFrame {
   error?: string
   event?: string
   params?: unknown
+}
+
+interface CodeGraphWorkerEndpoint {
+  address: string
+  authenticationToken: string
 }
 
 export type CodeGraphWorkerLifecycleEvent = {
@@ -119,11 +125,43 @@ export function getCodeGraphGrammarStatus(grammarsDir: string | null): {
   }
 }
 
-function endpointPath(): string {
+function createEndpoint(): CodeGraphWorkerEndpoint {
   const id = `${process.pid}-${randomUUID().slice(0, 12)}`
-  return process.platform === 'win32'
-    ? `\\\\.\\pipe\\ola-codegraph-${id}`
-    : path.join(process.platform === 'darwin' ? '/tmp' : os.tmpdir(), `ola-cg-${id}.sock`)
+  if (process.platform === 'win32') {
+    return {
+      address: `\\\\.\\pipe\\ola-codegraph-${id}`,
+      authenticationToken: randomBytes(32).toString('base64url')
+    }
+  }
+
+  const tempRoot = fs.realpathSync(os.tmpdir())
+  const runtimeDirectory = fs.mkdtempSync(path.join(tempRoot, 'ola-codegraph-'))
+  fs.chmodSync(runtimeDirectory, 0o700)
+  const details = fs.lstatSync(runtimeDirectory)
+  if (!details.isDirectory() || details.isSymbolicLink()) {
+    throw new Error('Failed to create a private CodeGraph Worker runtime directory')
+  }
+  return {
+    address: path.join(runtimeDirectory, 'worker.sock'),
+    authenticationToken: randomBytes(32).toString('base64url')
+  }
+}
+
+function cleanupEndpoint(endpoint: string): void {
+  if (process.platform === 'win32') return
+  try {
+    const socket = fs.lstatSync(endpoint)
+    if (socket.isSocket() && !socket.isSymbolicLink()) fs.unlinkSync(endpoint)
+  } catch {
+    // The worker removes the socket during orderly shutdown.
+  }
+  try {
+    const runtimeDirectory = path.dirname(endpoint)
+    const directory = fs.lstatSync(runtimeDirectory)
+    if (directory.isDirectory() && !directory.isSymbolicLink()) fs.rmdirSync(runtimeDirectory)
+  } catch {
+    // Do not follow or remove a replaced runtime directory.
+  }
 }
 
 function createFrame(payload: Uint8Array): Buffer {
@@ -228,20 +266,23 @@ export class CodeGraphWorkerManager {
   private async start(): Promise<void> {
     const workerPath = resolveCodeGraphWorkerPath()
     if (!workerPath) throw new Error('CodeGraph worker assets are missing')
-    const endpoint = endpointPath()
-    if (process.platform !== 'win32') fs.rmSync(endpoint, { force: true })
+    const endpoint = createEndpoint()
     const grammarsDir = resolveCodeGraphGrammarsDir(workerPath)
-    const child = spawn(workerPath, ['--ipc', endpoint], {
-      cwd: path.dirname(workerPath),
-      env: {
-        ...process.env,
-        ...(grammarsDir ? { OLA_CODEGRAPH_GRAMMARS_DIR: grammarsDir } : {})
-      },
-      stdio: ['ignore', 'ignore', 'pipe'],
-      windowsHide: true
-    })
+    const child = spawn(
+      workerPath,
+      ['--ipc', endpoint.address, '--ipc-token', endpoint.authenticationToken],
+      {
+        cwd: path.dirname(workerPath),
+        env: {
+          ...process.env,
+          ...(grammarsDir ? { OLA_CODEGRAPH_GRAMMARS_DIR: grammarsDir } : {})
+        },
+        stdio: ['ignore', 'ignore', 'pipe'],
+        windowsHide: true
+      }
+    )
     this.child = child
-    this.endpoint = endpoint
+    this.endpoint = endpoint.address
     child.stderr?.on('data', (chunk: Buffer) => {
       const message = chunk.toString('utf8').trim()
       if (message) console.warn(`[CodeGraphWorker] ${message}`)
@@ -252,29 +293,35 @@ export class CodeGraphWorkerManager {
     child.on('error', (error) => {
       if (this.child === child) this.closeWorker(error)
     })
-    const socket = await this.connect(endpoint, child)
-    this.socket = socket
-    socket.on('data', (chunk) => this.handleData(chunk))
-    socket.on('error', (error) => {
-      if (this.socket === socket) this.closeWorker(error)
-    })
-    socket.on('close', () => {
-      if (this.socket === socket && !this.stopping) {
-        this.closeWorker(new Error('CodeGraph worker IPC closed'))
-      }
-    })
-    await this.request('worker/ping', {}, 10_000)
-    this.generationValue += 1
-    this.restartAttempts = 0
-    this.events.emit('worker/lifecycle', {
-      status: 'ready',
-      generation: this.generationValue
-    } satisfies CodeGraphWorkerLifecycleEvent)
-    console.log('[CodeGraphWorker] IPC connected', { pid: child.pid ?? null, workerPath })
+    try {
+      const socket = await this.connect(endpoint.address, child)
+      this.socket = socket
+      socket.on('data', (chunk) => this.handleData(chunk))
+      socket.on('error', (error) => {
+        if (this.socket === socket) this.closeWorker(error)
+      })
+      socket.on('close', () => {
+        if (this.socket === socket && !this.stopping) {
+          this.closeWorker(new Error('CodeGraph worker IPC closed'))
+        }
+      })
+      await this.authenticate(socket, endpoint.authenticationToken)
+      await this.request('worker/ping', {}, 10_000)
+      this.generationValue += 1
+      this.restartAttempts = 0
+      this.events.emit('worker/lifecycle', {
+        status: 'ready',
+        generation: this.generationValue
+      } satisfies CodeGraphWorkerLifecycleEvent)
+      console.log('[CodeGraphWorker] IPC connected', { pid: child.pid ?? null, workerPath })
+    } catch (error) {
+      this.closeWorker(error instanceof Error ? error : new Error(String(error)))
+      throw error
+    }
   }
 
   private async connect(endpoint: string, child: ChildProcess): Promise<net.Socket> {
-    const deadline = Date.now() + 10_000
+    const deadline = Date.now() + CODEGRAPH_WORKER_CONNECT_TIMEOUT_MS
     let lastError: Error | null = null
     while (Date.now() < deadline) {
       if (child.exitCode !== null) throw new Error('CodeGraph worker exited before IPC connect')
@@ -331,7 +378,7 @@ export class CodeGraphWorkerManager {
     socket?.removeAllListeners()
     socket?.destroy()
     if (child && !child.killed && child.exitCode === null) child.kill()
-    if (endpoint && process.platform !== 'win32') fs.rmSync(endpoint, { force: true })
+    if (endpoint) cleanupEndpoint(endpoint)
 
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer)
@@ -371,6 +418,16 @@ export class CodeGraphWorkerManager {
         this.scheduleRestart(normalized)
       })
     }, retryDelayMs)
+  }
+
+  private authenticate(socket: net.Socket, token: string): Promise<void> {
+    const frame = createFrame(encode({ method: '__ola_handshake', params: { token } }))
+    return new Promise((resolve, reject) => {
+      socket.write(frame, (error) => {
+        if (error) reject(error)
+        else resolve()
+      })
+    })
   }
 }
 

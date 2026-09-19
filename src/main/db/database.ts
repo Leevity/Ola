@@ -1,8 +1,7 @@
-import * as os from 'os'
-import * as path from 'path'
 import { getNativeWorker } from '../lib/native-worker'
-
-const DATA_DIR = path.join(os.homedir(), '.ola')
+import { olaDataRoot } from '../lib/ola-data-root'
+import { closeLegacyReadCanary } from './legacy-read-canary'
+import { closeBusinessWriteCanary } from './business-write-canary'
 
 interface DbInitializeResult {
   success: boolean
@@ -31,8 +30,10 @@ export async function initializeDatabase(): Promise<void> {
 
 export function closeDb(): void {
   initializePromise = null
+  void closeLegacyReadCanary()
+  void closeBusinessWriteCanary()
 }
 
 export function getDataDir(): string {
-  return DATA_DIR
+  return olaDataRoot()
 }

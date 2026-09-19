@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "Typ een bericht...",
     "placeholderClarify": "Beschrijf je idee en ik blijf onderzoeken tot de eisen duidelijk zijn...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "Laatste fout",
       "stackTrace": "Stack trace",
       "copy": "Kopiëren",
-      "copied": "gekopieerd"
+      "copied": "gekopieerd",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

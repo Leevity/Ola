@@ -1,5 +1,5 @@
 import { toolRegistry } from '../agent/tool-registry'
-import { encodeToolError } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
 
 const visualizeShowWidgetHandler: ToolHandler = {
@@ -35,10 +35,25 @@ const visualizeShowWidgetHandler: ToolHandler = {
       required: ['loading_messages', 'title', 'widget_code']
     }
   },
-  execute: async () =>
-    encodeToolError(
-      'visualize_show_widget executes in the .NET Native Worker and is unavailable through the renderer boundary.'
-    ),
+  execute: async (input) => {
+    const title = typeof input.title === 'string' ? input.title.trim() : ''
+    const widgetCode = typeof input.widget_code === 'string' ? input.widget_code.trim() : ''
+    const loadingMessages = Array.isArray(input.loading_messages)
+      ? input.loading_messages.filter((value): value is string => typeof value === 'string')
+      : []
+    if (!title) return encodeToolError('title is required')
+    if (!widgetCode) return encodeToolError('widget_code is required')
+    if (loadingMessages.length === 0) return encodeToolError('loading_messages is required')
+    if (widgetCode.length > 500_000) return encodeToolError('widget_code exceeds the 500KB limit')
+    const kind = /^<svg[\s>]/i.test(widgetCode) ? 'svg' : 'html'
+    return encodeStructuredToolResult({
+      success: true,
+      title,
+      kind,
+      loading_messages: loadingMessages.slice(0, 4),
+      widget_code_chars: widgetCode.length
+    })
+  },
   requiresApproval: () => false
 }
 

@@ -40,16 +40,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Cache build dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.npm
@@ -61,9 +61,15 @@ jobs:
             ola-build-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 10.0.x
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
 
       - name: Install dependencies
         run: npm ci
@@ -78,10 +84,16 @@ jobs:
 
       - name: Quality gates
         run: |
+          npm audit --omit=dev --audit-level=high
           npm run typecheck
+          npm run typecheck:runtime
+          npm run test:runtime
+          npm run runtime:build
+          dotnet test sidecars/Ola.CodeGraph.Tests/Ola.CodeGraph.Tests.csproj --verbosity minimal
           npm run lint:ci
           npm run format:check
           npm run verify:ci-core
+          cd server && go test ./...
         env:
           OLA_NATIVE_WORKER_RID: linux-x64
 
@@ -98,7 +110,7 @@ jobs:
       release_id: ${{ steps.meta.outputs.release_id }}
     steps:
       - name: Checkout (gh cli needs repo context)
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Extract release metadata
         id: meta
@@ -143,18 +155,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Cache build dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.npm
@@ -171,20 +183,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Checkout pinned Ola audit reference
-        if: ${{ vars.OLA_REFERENCE_REPOSITORY != '' }}
-        uses: actions/checkout@v6
-        with:
-          repository: ${{ vars.OLA_REFERENCE_REPOSITORY }}
-          ref: 18413c22a498a26748fa28dfcc05a24df8787ad8
-          path: Ola
-
-      - name: Check Ola sync audit baseline
-        if: ${{ vars.OLA_REFERENCE_REPOSITORY != '' }}
-        run: npm run audit:sync:check
-        env:
-          OLA_REFERENCE: ${{ github.workspace }}/Ola
-
       - name: Sync version to package.json
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
 
@@ -192,7 +190,7 @@ jobs:
         run: npm run build
 
       - name: Upload compiled app
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ola-build-output
           path: out
@@ -230,18 +228,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Cache build dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.npm
@@ -253,7 +251,7 @@ jobs:
             ola-build-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 10.0.x
 
@@ -280,7 +278,7 @@ jobs:
           OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
 
       - name: Download compiled app
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: ola-build-output
           path: out
@@ -294,7 +292,8 @@ jobs:
           WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
         run: |
           if [ "$RELEASE_REQUIRED" = "true" ] && { [ -z "$WIN_CSC_LINK" ] || [ -z "$WIN_CSC_KEY_PASSWORD" ]; }; then
-            echo "::warning::Release signing credentials are required for signed Windows packages; credentials are not configured, publishing unsigned Windows packages"
+            echo "::error::Release signing credentials are required for public Windows packages"
+            exit 1
           elif [ "$RELEASE_REQUIRED" = "true" ]; then
             echo "Using configured Windows code signing credentials"
           fi
@@ -374,7 +373,7 @@ jobs:
 
       - name: Upload Windows artifacts
         if: matrix.platform == 'win'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}
           path: |
@@ -473,7 +472,7 @@ jobs:
 
       - name: Upload Linux artifacts
         if: matrix.platform == 'linux'
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}
           path: |
@@ -529,18 +528,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ needs.prepare.outputs.checkout_ref }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 22
+          node-version: 24
           cache: npm
 
       - name: Cache build dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             ~/.npm
@@ -552,12 +551,15 @@ jobs:
             ola-build-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 10.0.x
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Verify Electron workspace IPC frame isolation
+        run: npm run test:electron-ipc
 
       # 将 Release 版本号同步写入 package.json
       - name: Sync version to package.json
@@ -574,7 +576,7 @@ jobs:
           OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
 
       - name: Download compiled app
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: ola-build-output
           path: out
@@ -652,7 +654,8 @@ jobs:
           fi
 
           if [ "$MAC_SIGNING_ENABLED" != "true" ] || [ -z "$CSC_KEY_PASSWORD" ] || [ -z "$APPLE_ID" ] || [ -z "$APPLE_APP_SPECIFIC_PASSWORD" ] || [ -z "$APPLE_TEAM_ID" ]; then
-            echo "::warning::macOS signing credentials are not configured; publishing unsigned macOS packages"
+            echo "::error::macOS signing and notarization credentials are required for public packages"
+            exit 1
           fi
 
       - name: Package ${{ matrix.platform }}-${{ matrix.artifact_arch }}
@@ -766,7 +769,7 @@ jobs:
         run: node scripts/verify-release-artifacts.mjs --platform mac --assets release-assets --checksums release-assets/SHA256SUMS-mac-${{ matrix.artifact_arch }}.txt --smoke-dir dist --sbom release-assets/Ola-mac-${{ matrix.artifact_arch }}.spdx.json
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: ola-${{ matrix.platform }}-${{ matrix.artifact_arch }}
           path: |
@@ -799,16 +802,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
 
       - name: Download macOS arm64 artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: ola-mac-arm64
           path: mac-arm64
 
       - name: Download macOS amd64 artifacts
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
         with:
           name: ola-mac-amd64
           path: mac-amd64
@@ -872,7 +875,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository for gh release context
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Publish verified draft Release
         env:

@@ -1,8 +1,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { connect, type Socket } from 'node:net'
+import { randomBytes } from 'node:crypto'
 import { decode, encode } from '@msgpack/msgpack'
 
 type Frame = Record<string, unknown>
@@ -29,9 +29,14 @@ Usage:
 The params file is the same JSON payload accepted by the Ola agent/run route.`)
 }
 
-function createEndpoint(): string {
-  if (process.platform === 'win32') return `\\\\.\\pipe\\ola-cli-${process.pid}`
-  return join(tmpdir(), `ola-cli-${process.pid}.sock`)
+function createEndpoint(): { endpoint: string; runtimeDir?: string } {
+  const nonce = randomBytes(16).toString('hex')
+  if (process.platform === 'win32') return { endpoint: `\\\\.\\pipe\\ola-cli-${nonce}` }
+  // macOS limits Unix domain socket paths to 104 bytes. Its per-user temp path
+  // is much longer than that, so use the short /tmp alias for our private dir.
+  const runtimeDir = mkdtempSync(join('/tmp', 'ola-cli-'))
+  chmodSync(runtimeDir, 0o700)
+  return { endpoint: join(runtimeDir, `${nonce}.sock`), runtimeDir }
 }
 
 function frame(value: unknown): Buffer {
@@ -48,14 +53,18 @@ class WorkerClient {
   private nextId = 1
   private readonly pending = new Map<number, Pending>()
   private readonly events = new Set<(frame: Frame) => void>()
+  private runtimeDir: string | undefined
 
   async connect(workerPath?: string): Promise<void> {
-    const endpoint = createEndpoint()
+    const endpointInfo = createEndpoint()
+    const endpoint = endpointInfo.endpoint
+    this.runtimeDir = endpointInfo.runtimeDir
     const resolvedWorker = workerPath ?? process.env.OLA_NATIVE_WORKER_PATH
     if (!resolvedWorker || !existsSync(resolvedWorker)) {
       throw new Error('Set OLA_NATIVE_WORKER_PATH or pass --worker <path>.')
     }
-    this.child = spawn(resolvedWorker, ['--ipc', endpoint], {
+    const authenticationToken = randomBytes(32).toString('hex')
+    this.child = spawn(resolvedWorker, ['--ipc', endpoint, '--ipc-token', authenticationToken], {
       stdio: 'pipe',
       env: { ...process.env, OLA_NATIVE_DEBUG: process.env.OLA_NATIVE_DEBUG ?? '0' }
     })
@@ -71,6 +80,7 @@ class WorkerClient {
       const attempt = (): void => {
         const socket = connect(endpoint)
         socket.once('connect', () => {
+          socket.write(frame({ method: '__ola_handshake', params: { token: authenticationToken } }))
           this.socket = socket
           socket.on('data', (chunk) => this.read(chunk))
           socket.on('error', (error) => this.failPending(error))
@@ -103,6 +113,7 @@ class WorkerClient {
   async close(): Promise<void> {
     this.socket?.destroy()
     this.child?.kill()
+    if (this.runtimeDir) rmSync(this.runtimeDir, { recursive: true, force: true })
   }
 
   private read(chunk: Buffer): void {

@@ -53,6 +53,7 @@ export interface DrawRunError {
 
 export interface DrawRun {
   id: string
+  workspaceId: string
   prompt: string
   providerName: string
   modelName: string
@@ -68,6 +69,7 @@ export interface DrawRun {
 
 interface DrawRunRow {
   id: string
+  workspace_id: string
   prompt: string
   provider_name: string
   model_name: string
@@ -112,6 +114,7 @@ function fromRow(
 ): DrawRun {
   const run: DrawRun = {
     id: row.id,
+    workspaceId: row.workspace_id,
     prompt: row.prompt,
     providerName: row.provider_name,
     modelName: row.model_name,
@@ -127,10 +130,14 @@ function fromRow(
 }
 
 export async function listPersistedDrawRuns(
+  workspaceId: string,
   interruptedMessage: string,
   options?: { activeRunIds?: ReadonlySet<string> }
 ): Promise<DrawRun[]> {
-  const rows = await invokeMessagePackBinary<DrawRunRow[]>(DB_DRAW_RUNS_LIST_MSGPACK_CHANNEL, {})
+  const rows = await invokeMessagePackBinary<DrawRunRow[]>(
+    DB_DRAW_RUNS_LIST_MSGPACK_CHANNEL,
+    workspaceId
+  )
   const activeRunIds = options?.activeRunIds ?? new Set<string>()
   const runs = rows.map((row) => fromRow(row, interruptedMessage, activeRunIds))
 
@@ -147,6 +154,7 @@ export async function listPersistedDrawRuns(
 export async function savePersistedDrawRun(run: DrawRun): Promise<void> {
   await invokeMessagePackBinary(DB_DRAW_RUNS_SAVE_MSGPACK_CHANNEL, {
     id: run.id,
+    workspaceId: run.workspaceId,
     prompt: run.prompt,
     providerName: run.providerName,
     modelName: run.modelName,
@@ -160,10 +168,10 @@ export async function savePersistedDrawRun(run: DrawRun): Promise<void> {
   })
 }
 
-export async function deletePersistedDrawRun(id: string): Promise<void> {
-  await invokeMessagePackBinary(DB_DRAW_RUNS_DELETE_MSGPACK_CHANNEL, id)
+export async function deletePersistedDrawRun(id: string, workspaceId: string): Promise<void> {
+  await invokeMessagePackBinary(DB_DRAW_RUNS_DELETE_MSGPACK_CHANNEL, { id, workspaceId })
 }
 
-export async function clearPersistedDrawRuns(): Promise<void> {
-  await invokeMessagePackBinary(DB_DRAW_RUNS_CLEAR_MSGPACK_CHANNEL, {})
+export async function clearPersistedDrawRuns(workspaceId: string): Promise<void> {
+  await invokeMessagePackBinary(DB_DRAW_RUNS_CLEAR_MSGPACK_CHANNEL, workspaceId)
 }

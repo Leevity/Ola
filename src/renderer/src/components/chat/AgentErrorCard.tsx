@@ -14,6 +14,9 @@ import {
   Wrench
 } from 'lucide-react'
 import type { AgentErrorCode } from '@renderer/lib/api/types'
+import { Button } from '@renderer/components/ui/button'
+import { useUIStore } from '@renderer/stores/ui-store'
+import { explainUserFacingError } from '@renderer/lib/user-facing-error'
 
 interface AgentErrorCardProps {
   code: AgentErrorCode
@@ -149,12 +152,18 @@ export function AgentErrorCard({
   stackTrace
 }: AgentErrorCardProps): React.JSX.Element {
   const { t } = useTranslation('chat')
+  const openSettingsPage = useUIStore((state) => state.openSettingsPage)
   const [copied, setCopied] = useState(false)
 
   const category = useMemo(() => classify(code, message, errorType), [code, message, errorType])
   const view = CATEGORY_VIEW[category]
   const Icon = view.icon
+  const explanation = useMemo(
+    () => explainUserFacingError(errorType, message),
+    [errorType, message]
+  )
   const displayMessage = useMemo(() => {
+    if (explanation.messageKey) return t(explanation.messageKey)
     if (errorType !== 'transport_circuit_open') return message
 
     const seconds = message.match(/\b(\d+)s\b/i)?.[1]
@@ -166,7 +175,7 @@ export function AgentErrorCard({
     return lastError
       ? `${base} ${t('assistantMessage.agentError.lastErrorLabel')}: ${lastError}`
       : base
-  }, [errorType, message, t])
+  }, [errorType, explanation.messageKey, message, t])
 
   const hasDetails = Boolean(errorType || details || stackTrace)
 
@@ -214,6 +223,29 @@ export function AgentErrorCard({
             <p className="mt-2 break-words rounded-md bg-background/60 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-foreground/80">
               {displayMessage}
             </p>
+          ) : null}
+          {explanation.action ? (
+            <div className="mt-3">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (explanation.action === 'refreshStatus') {
+                    window.location.reload()
+                    return
+                  }
+                  openSettingsPage(
+                    explanation.action === 'openProvider'
+                      ? 'provider'
+                      : explanation.action === 'openModel'
+                        ? 'model'
+                        : 'system'
+                  )
+                }}
+              >
+                {t(`assistantMessage.agentError.action.${explanation.action}`)}
+              </Button>
+            </div>
           ) : null}
           {hasDetails ? (
             <details className="mt-2 group">

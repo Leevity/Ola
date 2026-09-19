@@ -1,6 +1,9 @@
 import { toolRegistry } from '../agent/tool-registry'
-import { encodeStructuredToolResult } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import { ipcClient } from '../ipc/ipc-client'
+import { IPC } from '../ipc/channels'
+import { useSettingsStore } from '@renderer/stores/settings-store'
 
 // Web search provider types
 export type WebSearchProvider =
@@ -20,12 +23,6 @@ export interface WebSearchConfig {
   searchEngine?: string // For local search engines
   maxResults?: number
   timeout?: number
-}
-
-function nativeOnlyResult(toolName: string): string {
-  return encodeStructuredToolResult({
-    error: `${toolName} execution has migrated to .NET Native Worker.`
-  })
 }
 
 const webSearchHandler: ToolHandler = {
@@ -55,7 +52,31 @@ const webSearchHandler: ToolHandler = {
       required: ['query']
     }
   },
-  execute: async () => nativeOnlyResult('WebSearch'),
+  execute: async (input) => {
+    const query = typeof input.query === 'string' ? input.query.trim() : ''
+    if (!query) return encodeToolError('query is required')
+    const settings = useSettingsStore.getState()
+    const maxResults =
+      typeof input.maxResults === 'number' && Number.isFinite(input.maxResults)
+        ? Math.max(1, Math.min(Math.trunc(input.maxResults), 20))
+        : settings.webSearchMaxResults
+    try {
+      const result = await ipcClient.invoke(IPC.WEB_SEARCH, {
+        query,
+        provider: settings.webSearchProvider,
+        maxResults,
+        searchMode: input.searchMode === 'news' ? 'news' : 'web',
+        timeout: settings.webSearchTimeout
+      })
+      return encodeStructuredToolResult(
+        result && typeof result === 'object'
+          ? { ...(result as Record<string, unknown>) }
+          : { result }
+      )
+    } catch (error) {
+      return encodeToolError(error instanceof Error ? error.message : String(error))
+    }
+  },
   requiresApproval: () => false
 }
 
@@ -89,7 +110,26 @@ const webFetchHandler: ToolHandler = {
       additionalProperties: false
     }
   },
-  execute: async () => nativeOnlyResult('WebFetch'),
+  execute: async (input) => {
+    const rawUrls = input.urls ?? input.url
+    const urls = Array.isArray(rawUrls)
+      ? rawUrls.filter((value): value is string => typeof value === 'string')
+      : typeof rawUrls === 'string'
+        ? [rawUrls]
+        : []
+    if (urls.length === 0) return encodeToolError('url or urls is required')
+    const format = input.format === 'text' || input.format === 'html' ? input.format : 'markdown'
+    try {
+      const result = await ipcClient.invoke(IPC.WEB_FETCH, { urls, format })
+      return encodeStructuredToolResult(
+        result && typeof result === 'object'
+          ? { ...(result as Record<string, unknown>) }
+          : { result }
+      )
+    } catch (error) {
+      return encodeToolError(error instanceof Error ? error.message : String(error))
+    }
+  },
   requiresApproval: () => false
 }
 

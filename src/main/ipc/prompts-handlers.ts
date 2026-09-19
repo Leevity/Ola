@@ -1,31 +1,24 @@
 import { registerMessagePackHandler } from './messagepack-handler'
-import {
-  ensureNativeUserContent,
-  getBundledResourceDirCandidates,
-  nativeUserContentRequest
-} from './user-content-native'
-
-function promptParams(args: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    ...args,
-    bundledDirCandidates: getBundledResourceDirCandidates('prompts')
-  }
-}
+import { join } from 'node:path'
+import { olaDataRoot } from '../lib/ola-data-root'
+import { getBundledResourceDirCandidates } from '../resources/bundled-resources'
+import { PromptCatalog } from '../user-content/prompt-catalog'
 
 export function registerPromptsHandlers(): void {
-  ensureNativeUserContent('prompts/ensure', promptParams())
+  const catalog = new PromptCatalog({
+    userDirectory: join(olaDataRoot(), 'prompts'),
+    bundledDirectoryCandidates: getBundledResourceDirCandidates('prompts')
+  })
+  void catalog.ensure()
 
   registerMessagePackHandler<undefined, string[]>('prompts:list', async () => {
-    return nativeUserContentRequest<string[]>('prompts/list', promptParams())
+    return await catalog.list()
   })
 
   registerMessagePackHandler<{ name: string }, { content: string } | { error: string }>(
     'prompts:load',
     async (args) => {
-      return nativeUserContentRequest<{ content: string } | { error: string }>(
-        'prompts/load',
-        promptParams(args)
-      )
+      return await catalog.load(args.name)
     }
   )
 }

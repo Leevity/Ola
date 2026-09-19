@@ -5,6 +5,9 @@ internal sealed class DrawRunRow
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
+    [JsonPropertyName("workspace_id")]
+    public string WorkspaceId { get; set; } = "local-personal";
+
     [JsonPropertyName("prompt")]
     public string Prompt { get; set; } = string.Empty;
 

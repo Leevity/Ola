@@ -191,8 +191,7 @@ internal static class AgentRuntimeImageGenerateExecutor
         }
 
         var outputDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
+            OlaDataRoot.DirectoryPath,
             "images",
             DateTime.Now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         Directory.CreateDirectory(outputDir);

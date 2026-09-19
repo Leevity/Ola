@@ -33,9 +33,11 @@ const TOOL_ARGS_MAX_LIMIT_MS = 8
 const RENDER_POOL_P95_LIMIT_MS = 2
 const RENDER_POOL_MAX_LIMIT_MS = 8
 
+type ViteImportMeta = ImportMeta & { env?: { DEV?: boolean } }
+
 const enabled =
   typeof window !== 'undefined' &&
-  Boolean(import.meta.env?.DEV) &&
+  Boolean((import.meta as ViteImportMeta).env?.DEV) &&
   !window.location.hash.startsWith('#notify')
 
 const samples: Record<SampleBucket, DurationSample[]> = {

@@ -39,6 +39,7 @@ import {
 } from '@renderer/stores/cron-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { toast } from 'sonner'
 
 const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
@@ -213,7 +214,10 @@ function CronJobCard({
 
   const handleAbortAgent = (): void => {
     void ipcClient
-      .invoke(IPC.CRON_ABORT_RUN, { jobId: job.id })
+      .invoke(IPC.CRON_ABORT_RUN, {
+        jobId: job.id,
+        workspaceId: useWorkspaceStore.getState().activeWorkspaceId
+      })
       .then((result) => {
         const payload = result as { success?: boolean; error?: string }
         if (payload?.success) {
@@ -1134,7 +1138,11 @@ export function CronPanel(): React.JSX.Element {
   }, [view, loadRuns])
 
   const handleToggle = async (id: string, enabled: boolean): Promise<void> => {
-    const result = (await ipcClient.invoke(IPC.CRON_TOGGLE, { jobId: id, enabled })) as {
+    const result = (await ipcClient.invoke(IPC.CRON_TOGGLE, {
+      jobId: id,
+      enabled,
+      workspaceId: useWorkspaceStore.getState().activeWorkspaceId
+    })) as {
       error?: string
     }
     if (result.error) {
@@ -1155,7 +1163,10 @@ export function CronPanel(): React.JSX.Element {
   }
 
   const handleRunNow = async (id: string): Promise<void> => {
-    const result = (await ipcClient.invoke(IPC.CRON_RUN_NOW, { jobId: id })) as { error?: string }
+    const result = (await ipcClient.invoke(IPC.CRON_RUN_NOW, {
+      jobId: id,
+      workspaceId: useWorkspaceStore.getState().activeWorkspaceId
+    })) as { error?: string }
     if (result.error) {
       toast.error('Execution failed', { description: result.error })
       return

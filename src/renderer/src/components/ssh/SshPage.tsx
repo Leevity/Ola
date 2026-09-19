@@ -601,7 +601,12 @@ export function SshPage({ embedded = false }: { embedded?: boolean } = {}): Reac
     () => resolveAppThemeMode(theme === 'system' ? resolvedTheme : theme),
     [resolvedTheme, theme]
   )
-  const activeChromePreset = shellTone === 'library' ? themePreset : sshTerminalThemePreset
+  const activeChromePreset =
+    embedded || shellTone !== 'library' ? sshTerminalThemePreset : themePreset
+  // The standalone SSH library follows the app's light/dark scheme. Inside RemotePage,
+  // every surface must stay on the remote workbench's dark terminal canvas so the host
+  // library cannot reintroduce a light strip between the remote titlebar and terminal.
+  const activeChromeMode = embedded ? 'dark' : resolvedThemeMode
   const activeChromeThemeTitle = tSettings(getThemePresetDefinition(activeChromePreset).labelKey)
   const activeChromeThemeScope =
     shellTone === 'library'
@@ -613,8 +618,8 @@ export function SshPage({ embedded = false }: { embedded?: boolean } = {}): Reac
     theme: activeChromeThemeTitle
   })
   const shellPalette = useMemo(
-    () => getSshChromePalette(activeChromePreset, resolvedThemeMode),
-    [activeChromePreset, resolvedThemeMode]
+    () => getSshChromePalette(activeChromePreset, activeChromeMode),
+    [activeChromePreset, activeChromeMode]
   )
   const sshWorkspaceStyle = useMemo(
     () => createSshWorkspaceStyle(shellPalette, shellTone),

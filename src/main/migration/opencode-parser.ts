@@ -1,7 +1,7 @@
 import * as fs from 'fs'
-import * as os from 'os'
 import * as path from 'path'
 import { globSync } from 'glob'
+import { olaExternalDataHome } from '../lib/ola-data-root'
 import type {
   OpenCodeInstructionsSource,
   OpenCodeSourceAgent,
@@ -12,7 +12,9 @@ import type {
   ParsedOpenCodeConfig
 } from './types'
 
-const OPENCODE_CONFIG_PATH = path.join(os.homedir(), '.config', 'opencode', 'opencode.json')
+function openCodeConfigPath(): string {
+  return path.join(olaExternalDataHome(), '.config', 'opencode', 'opencode.json')
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -145,6 +147,12 @@ function normalizeJsonLike(input: string): string {
 function replaceEnvTokens(input: string, warnings: string[], contextLabel: string): string {
   return input.replace(/\{env:([^}]+)\}/g, (_match, rawName: string) => {
     const envName = rawName.trim()
+    if (process.env.OLA_E2E_DATA_ROOT !== undefined && !envName.startsWith('OLA_E2E_')) {
+      warnings.push(
+        `Environment variable ${envName} is unavailable in isolated E2E: ${contextLabel}`
+      )
+      return ''
+    }
     const envValue = process.env[envName]
     if (envValue === undefined) {
       warnings.push(`Environment variable ${envName} not set: ${contextLabel}`)
@@ -373,6 +381,27 @@ function normalizeAbsoluteGlobPattern(input: string): string {
   return input.replace(/\\/g, '/')
 }
 
+function isWithinIsolatedHome(candidate: string): boolean {
+  if (process.env.OLA_E2E_DATA_ROOT === undefined) return true
+  try {
+    const root = fs.realpathSync(olaExternalDataHome())
+    const actual = fs.realpathSync(candidate)
+    const relative = path.relative(root, actual)
+    return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+  } catch {
+    return false
+  }
+}
+
+function isolatedGlobIsSafe(entry: string, sourceDir: string): boolean {
+  if (process.env.OLA_E2E_DATA_ROOT === undefined) return true
+  const pattern = path.resolve(sourceDir, entry)
+  const segments = pattern.split(path.sep)
+  const wildcard = segments.findIndex((segment) => isGlobPattern(segment))
+  const fixedPrefix = wildcard < 0 ? pattern : segments.slice(0, wildcard).join(path.sep)
+  return isWithinIsolatedHome(fixedPrefix)
+}
+
 function buildManagedInstructionsContent(
   files: Array<{ source: string; path: string; content: string }>
 ): string {
@@ -396,17 +425,24 @@ function resolveInstructions(
     const entry = rawEntry.trim()
     if (!entry) continue
 
+    if (isGlobPattern(entry) && !isolatedGlobIsSafe(entry, sourceDir)) {
+      unresolved.push({ source: entry, reason: 'Outside isolated Ola data root' })
+      continue
+    }
+
     const matches = isGlobPattern(entry)
       ? globSync(path.isAbsolute(entry) ? normalizeAbsoluteGlobPattern(entry) : entry, {
           cwd: sourceDir,
           absolute: true,
           nodir: true,
+          follow: false,
           windowsPathsNoEscape: true
         })
       : [path.isAbsolute(entry) ? entry : path.resolve(sourceDir, entry)]
 
     const existingMatches = matches.filter(
-      (filePath) => fs.existsSync(filePath) && fs.statSync(filePath).isFile()
+      (filePath) =>
+        isWithinIsolatedHome(filePath) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()
     )
 
     if (existingMatches.length === 0) {
@@ -447,7 +483,7 @@ function resolveInstructions(
 }
 
 function createEmptyParsedConfig(): ParsedOpenCodeConfig {
-  const sourcePath = OPENCODE_CONFIG_PATH
+  const sourcePath = openCodeConfigPath()
   return {
     sourcePath,
     sourceDir: path.dirname(sourcePath),
@@ -467,11 +503,15 @@ function createEmptyParsedConfig(): ParsedOpenCodeConfig {
 }
 
 export function getOpenCodeConfigPath(): string {
-  return OPENCODE_CONFIG_PATH
+  return openCodeConfigPath()
 }
 
 export function parseOpenCodeConfig(): ParsedOpenCodeConfig {
   const initial = createEmptyParsedConfig()
+  if (fs.existsSync(initial.sourcePath) && !isWithinIsolatedHome(initial.sourcePath)) {
+    initial.warnings.push('OpenCode configuration is outside isolated Ola data root')
+    return initial
+  }
   if (!fs.existsSync(initial.sourcePath)) {
     initial.warnings.push('No OpenCode configuration file detected')
     return initial

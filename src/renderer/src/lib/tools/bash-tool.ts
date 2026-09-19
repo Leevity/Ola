@@ -1,15 +1,10 @@
 import { toolRegistry } from '../agent/tool-registry'
 import { encodeBashToolResult } from './bash-output'
 import type { ToolHandler } from './tool-types'
+import { ipcClient } from '../ipc/ipc-client'
+import { IPC } from '../ipc/channels'
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 600_000
-
-function nativeOnlyBashResult(): string {
-  return encodeBashToolResult({
-    exitCode: 1,
-    stderr: 'Bash execution has migrated to .NET Native Worker.'
-  })
-}
 
 const bashHandler: ToolHandler = {
   definition: {
@@ -38,7 +33,32 @@ const bashHandler: ToolHandler = {
       required: ['command']
     }
   },
-  execute: async () => nativeOnlyBashResult(),
+  execute: async (input, ctx) => {
+    const command = typeof input.command === 'string' ? input.command.trim() : ''
+    if (!command) return encodeBashToolResult({ exitCode: 1, stderr: 'command is required' })
+    const timeout =
+      typeof input.timeout === 'number' && Number.isFinite(input.timeout)
+        ? Math.max(1, Math.min(Math.trunc(input.timeout), 3_600_000))
+        : DEFAULT_COMMAND_TIMEOUT_MS
+    try {
+      const result = await ipcClient.invoke(IPC.SHELL_EXEC, {
+        command,
+        timeout,
+        cwd: ctx.workingFolder,
+        shell: typeof input.shell === 'string' ? input.shell : undefined
+      })
+      return encodeBashToolResult(
+        result && typeof result === 'object'
+          ? { ...(result as Record<string, unknown>) }
+          : { exitCode: 1, stderr: String(result) }
+      )
+    } catch (error) {
+      return encodeBashToolResult({
+        exitCode: 1,
+        stderr: error instanceof Error ? error.message : String(error)
+      })
+    }
+  },
   requiresApproval: (_input, ctx) => {
     if (ctx.channelPermissions) return !ctx.channelPermissions.allowShell
     return true

@@ -1,5 +1,7 @@
-// ── Plugin System — Renderer-side Types ──
+// ── Plugin System — Renderer-side Types
 // Mirrors main process types for use in renderer
+
+import type { ModelSource } from '../../../../shared/runtime/model-source'
 
 export interface ConfigFieldSchema {
   key: string
@@ -53,12 +55,16 @@ export interface PluginInstance {
   createdAt: number
   /** Bound project ID (null = unbound) */
   projectId?: string | null
+  /** Legacy channel records without this field belong to local-personal. */
+  workspaceId?: string
   /** Per-tool enablement flags (missing = default enabled) */
   tools?: Record<string, boolean>
   /** Provider ID for this plugin's auto-reply agent (null = use global active provider) */
   providerId?: string | null
   /** Model override for this plugin's auto-reply agent (null = use global default) */
   model?: string | null
+  /** Public, typed model binding. It never contains API keys or account tickets. */
+  modelSource?: ModelSource | null
   /** Feature toggles */
   features?: PluginFeatures
   /** Security permissions (defaults applied if missing) */

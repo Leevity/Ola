@@ -383,7 +383,7 @@ export function IronRdpViewer({
   }
 
   return (
-    <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden bg-black">
+    <div className="relative flex h-full min-h-[520px] flex-col overflow-hidden bg-[color:var(--remote-surface)]">
       <div className="flex items-center justify-between border-b border-[color:var(--border)] bg-[color:var(--remote-panel)] px-4 py-2 text-xs text-[color:var(--muted-foreground)]">
         <span>{remoteSession.viewerDestination}</span>
         <span className="flex items-center gap-3">
@@ -409,11 +409,15 @@ export function IronRdpViewer({
               const option = RESOLUTION_OPTIONS.find((item) => item.value === mode)
               if (option && option.width > 0) resizeDesktop(session, option.width, option.height)
             }}
-            className="rounded border border-white/15 bg-white/10 px-2 py-1 text-[11px] text-white outline-none"
+            className="rounded border border-[color:var(--remote-border)] bg-[color:var(--secondary)] px-2 py-1 text-[11px] text-[color:var(--foreground)] outline-none"
             aria-label={t('remote.resolution')}
           >
             {RESOLUTION_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value} className="bg-zinc-900">
+              <option
+                key={option.value}
+                value={option.value}
+                className="bg-[color:var(--remote-panel)]"
+              >
                 {option.value === 'adaptive'
                   ? t('remote.resolutionAdaptive')
                   : `${option.width} × ${option.height}`}
@@ -421,7 +425,7 @@ export function IronRdpViewer({
             ))}
           </select>
           {desktopSize ? (
-            <span className="font-mono text-white/45">
+            <span className="font-mono text-[color:var(--muted-foreground)]">
               {desktopSize.width} × {desktopSize.height}
             </span>
           ) : null}
@@ -433,19 +437,17 @@ export function IronRdpViewer({
         </span>
       </div>
       {error ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-950 px-8 text-white">
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-[color:var(--remote-panel)] px-8 text-[color:var(--foreground)]">
           <div className="w-full max-w-lg">
-            <div className="text-xs font-medium uppercase tracking-widest text-red-400">
-              {t('remote.connectionFailed')}
-            </div>
-            <h3 className="mt-3 text-xl font-semibold">{errorTitle}</h3>
-            <p className="mt-2 text-sm leading-6 text-zinc-300">{error}</p>
+            <div className="text-sm font-semibold text-red-400">{t('remote.connectionFailed')}</div>
+            <h3 className="mt-3 text-lg font-semibold">{errorTitle}</h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--muted-foreground)]">{error}</p>
             {errorDetail ? (
-              <details className="mt-5 rounded-lg border border-white/10 bg-white/5 px-4 py-3">
-                <summary className="cursor-pointer text-xs text-zinc-300">
+              <details className="mt-5 rounded-lg border border-[color:var(--remote-border)] bg-[color:var(--secondary)] px-4 py-3">
+                <summary className="cursor-pointer text-xs text-[color:var(--muted-foreground)]">
                   {t('remote.technicalDetails')}
                 </summary>
-                <pre className="mt-3 whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-zinc-400">
+                <pre className="mt-3 whitespace-pre-wrap break-all font-mono text-[11px] leading-5 text-[color:var(--muted-foreground)]">
                   {errorDetail}
                 </pre>
               </details>
@@ -453,7 +455,10 @@ export function IronRdpViewer({
           </div>
         </div>
       ) : null}
-      <div ref={viewportRef} className="relative min-h-0 flex-1 overflow-hidden bg-black">
+      <div
+        ref={viewportRef}
+        className="relative min-h-0 flex-1 overflow-hidden bg-[color:var(--remote-surface)]"
+      >
         <canvas
           ref={canvasRef}
           tabIndex={0}

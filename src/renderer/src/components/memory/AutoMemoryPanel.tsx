@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Play, RefreshCw, RotateCcw, ShieldCheck } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -14,6 +14,7 @@ import {
   undoMemoryAutomationEntry
 } from '@renderer/lib/agent/memory-automation'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type {
   MemoryAutomationEntry,
   MemoryAutomationListResult,
@@ -23,9 +24,11 @@ import type {
   MemoryPipelineListRootsResult,
   MemoryRootDescriptor
 } from '../../../../shared/memory-automation-types'
+import { MemoryPanelRequestGate, type MemoryPanelRequestToken } from './memory-panel-request-gate'
 
 interface AutoMemoryPanelProps {
   variant: 'global' | 'project'
+  projectId?: string | null
   projectRootPath?: string | null
   sshConnectionId?: string | null
 }
@@ -96,49 +99,82 @@ function formatJobStatusLabel(t: ReturnType<typeof useTranslation>['t'], status:
 
 export function AutoMemoryPanel({
   variant,
+  projectId,
   projectRootPath,
   sshConnectionId
 }: AutoMemoryPanelProps): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
+  const scopeKey = JSON.stringify([
+    workspaceId,
+    variant,
+    projectId,
+    projectRootPath,
+    sshConnectionId
+  ])
+  const requestGate = useRef(new MemoryPanelRequestGate())
+  requestGate.current.setScope(scopeKey)
+  const [loadedRequest, setLoadedRequest] = useState<MemoryPanelRequestToken | null>(null)
   const [entries, setEntries] = useState<MemoryAutomationEntry[]>([])
   const [roots, setRoots] = useState<MemoryRootDescriptor[]>([])
   const [jobs, setJobs] = useState<MemoryPipelineJob[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loadingRequest, setLoadingRequest] = useState<MemoryPanelRequestToken | null>(null)
   const [running, setRunning] = useState(false)
   const [undoingId, setUndoingId] = useState<string | null>(null)
   const targets = useMemo(
     () => (variant === 'project' ? PROJECT_TARGETS : GLOBAL_TARGETS),
     [variant]
   )
+  const loading =
+    loadingRequest !== null && requestGate.current.accepts(loadingRequest, workspaceId)
+  const showLoaded =
+    loadedRequest !== null && requestGate.current.accepts(loadedRequest, workspaceId)
+  const visibleEntries = showLoaded ? entries : []
+  const visibleRoots = showLoaded ? roots : []
+  const visibleJobs = showLoaded ? jobs : []
 
   const loadEntries = useCallback(async (): Promise<void> => {
-    setLoading(true)
+    const request = requestGate.current.begin(scopeKey, workspaceId)
+    const isCurrent = (): boolean =>
+      requestGate.current.accepts(request, useWorkspaceStore.getState().activeWorkspaceId)
+    setLoadingRequest(request)
     try {
       const result = (await ipcClient.invoke(IPC.MEMORY_AUTOMATION_LIST, {
+        workspaceId,
         targets,
         rootScope: variant === 'project' ? 'project' : 'global',
         targetPathIncludes: variant === 'project' ? projectRootPath : undefined,
         limit: 30
       })) as MemoryAutomationListResult
-      setEntries(result.entries)
       const rootResult = (await ipcClient.invoke(IPC.MEMORY_PIPELINE_LIST_ROOTS, {
+        workspaceId,
         scope: variant === 'project' ? 'project' : 'global',
         rootPath: variant === 'project' && projectRootPath ? undefined : undefined,
         workingFolder: variant === 'project' ? projectRootPath : undefined,
         sshConnectionId: variant === 'project' ? sshConnectionId : undefined
       })) as MemoryPipelineListRootsResult
-      setRoots(rootResult.roots ?? [])
-      const rootIds = new Set((rootResult.roots ?? []).map((root) => root.id))
+      const scopedRoots = (rootResult.roots ?? []).filter(
+        (root) => root.workspaceId === workspaceId
+      )
+      const rootIds = new Set(scopedRoots.map((root) => root.id))
       const jobResult = (await ipcClient.invoke(IPC.MEMORY_PIPELINE_LIST_JOBS, {
+        workspaceId,
         limit: 20
       })) as MemoryPipelineListJobsResult
+      if (!isCurrent()) return
+      setEntries(result.entries.filter((entry) => entry.workspaceId === workspaceId))
+      setRoots(scopedRoots)
       setJobs(
-        (jobResult.jobs ?? []).filter((job) =>
-          job.memoryRootId ? rootIds.has(job.memoryRootId) : variant === 'global'
-        )
+        (jobResult.jobs ?? [])
+          .filter((job) => job.workspaceId === workspaceId)
+          .filter((job) =>
+            job.memoryRootId ? rootIds.has(job.memoryRootId) : variant === 'global'
+          )
       )
+      setLoadedRequest(request)
     } catch (error) {
+      if (!isCurrent()) return
       toast.error(
         t('memory.auto.loadFailed', {
           defaultValue: 'Failed to load auto memory records'
@@ -148,13 +184,18 @@ export function AutoMemoryPanel({
         }
       )
     } finally {
-      setLoading(false)
+      if (isCurrent()) setLoadingRequest(null)
     }
-  }, [projectRootPath, sshConnectionId, t, targets, variant])
+  }, [projectRootPath, scopeKey, sshConnectionId, t, targets, variant, workspaceId])
 
   useEffect(() => {
     void loadEntries()
   }, [loadEntries])
+
+  useEffect(() => {
+    const gate = requestGate.current
+    return () => gate.setScope('')
+  }, [])
 
   const handleRunSession = useCallback(async (): Promise<void> => {
     setRunning(true)
@@ -184,6 +225,7 @@ export function AutoMemoryPanel({
     setRunning(true)
     try {
       await runDailyMemoryRollup({
+        projectId: variant === 'project' ? projectId : undefined,
         projectRootPath: variant === 'project' ? projectRootPath : undefined,
         sshConnectionId: variant === 'project' ? sshConnectionId : undefined,
         global: variant === 'global'
@@ -206,7 +248,7 @@ export function AutoMemoryPanel({
     } finally {
       setRunning(false)
     }
-  }, [loadEntries, projectRootPath, sshConnectionId, t, variant])
+  }, [loadEntries, projectId, projectRootPath, sshConnectionId, t, variant])
 
   const handleUndo = useCallback(
     async (entry: MemoryAutomationEntry): Promise<void> => {
@@ -360,19 +402,19 @@ export function AutoMemoryPanel({
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
             {t('memory.auto.roots', { defaultValue: 'Roots' })}
           </p>
-          <p className="mt-1 text-sm font-medium">{roots.length}</p>
+          <p className="mt-1 text-sm font-medium">{visibleRoots.length}</p>
           <p className="mt-1 break-all text-[11px] text-muted-foreground">
-            {roots[0]?.rootPath ?? t('memory.auto.noRoot', { defaultValue: 'No root yet' })}
+            {visibleRoots[0]?.rootPath ?? t('memory.auto.noRoot', { defaultValue: 'No root yet' })}
           </p>
         </div>
         <div className="rounded-md border border-border/60 bg-background/70 p-3">
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
             {t('memory.auto.jobs', { defaultValue: 'Jobs' })}
           </p>
-          <p className="mt-1 text-sm font-medium">{jobs.length}</p>
+          <p className="mt-1 text-sm font-medium">{visibleJobs.length}</p>
           <p className="mt-1 text-[11px] text-muted-foreground">
-            {jobs[0]
-              ? `${formatJobKindLabel(t, jobs[0].kind)} / ${formatJobStatusLabel(t, jobs[0].status)}`
+            {visibleJobs[0]
+              ? `${formatJobKindLabel(t, visibleJobs[0].kind)} / ${formatJobStatusLabel(t, visibleJobs[0].status)}`
               : t('memory.auto.noJobs', { defaultValue: 'No pipeline jobs yet' })}
           </p>
         </div>
@@ -392,12 +434,12 @@ export function AutoMemoryPanel({
       </div>
 
       <div className="space-y-2">
-        {entries.length === 0 ? (
+        {visibleEntries.length === 0 ? (
           <p className="rounded-md border border-dashed border-border/70 px-3 py-3 text-xs text-muted-foreground">
             {t('memory.auto.empty', { defaultValue: 'No auto memory records yet.' })}
           </p>
         ) : (
-          entries.map((entry) => (
+          visibleEntries.map((entry) => (
             <div
               key={entry.id}
               className="grid gap-2 rounded-md border border-border/60 bg-background/70 p-3"

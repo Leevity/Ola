@@ -5,6 +5,7 @@ import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { ProjectWikiDocument } from '../../../../shared/project-wiki'
 
 interface ProjectWikiPanelProps {
@@ -18,6 +19,7 @@ export function ProjectWikiPanel({
 }: ProjectWikiPanelProps = {}): React.JSX.Element {
   const { t } = useTranslation('settings')
   const activeProjectId = useChatStore((state) => state.activeProjectId)
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const activeProjectRoot = useChatStore(
     (state) => state.projects.find((project) => project.id === activeProjectId)?.workingFolder
   )
@@ -49,7 +51,8 @@ export function ProjectWikiPanel({
 
       try {
         const stored = (await ipcClient.invoke('wiki:get', {
-          projectRoot: nextProjectRoot
+          projectRoot: nextProjectRoot,
+          workspaceId
         })) as ProjectWikiDocument | null
         if (!cancelled) setDocument(stored)
       } catch (cause) {
@@ -61,7 +64,7 @@ export function ProjectWikiPanel({
     return () => {
       cancelled = true
     }
-  }, [activeProjectRoot, controlledProjectRoot])
+  }, [activeProjectRoot, controlledProjectRoot, workspaceId])
 
   async function chooseFolder(): Promise<void> {
     const result = (await ipcClient.invoke('fs:select-folder', { defaultPath: projectRoot })) as {
@@ -77,9 +80,10 @@ export function ProjectWikiPanel({
     try {
       const result = (await ipcClient.invoke('wiki:generate', {
         projectRoot: projectRoot.trim(),
-        force
+        force,
+        workspaceId
       })) as ProjectWikiDocument
-      setDocument(result)
+      if (useWorkspaceStore.getState().activeWorkspaceId === workspaceId) setDocument(result)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
@@ -94,7 +98,7 @@ export function ProjectWikiPanel({
         filters: [{ name: 'Markdown', extensions: ['md'] }]
       })) as { path?: string }
       if (!picked.path) return
-      await ipcClient.invoke('wiki:export', { projectRoot, destination: picked.path })
+      await ipcClient.invoke('wiki:export', { projectRoot, destination: picked.path, workspaceId })
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -105,9 +109,9 @@ export function ProjectWikiPanel({
       <header className={embedded ? 'rounded-xl border bg-muted/10 p-4' : undefined}>
         <div className="flex items-center gap-2">
           <BookOpen className="size-5 text-primary" />
-          <h2 className="text-xl font-semibold">
+          <h3 className="text-sm font-semibold">
             {t('wiki.title', { defaultValue: 'Project Wiki' })}
-          </h2>
+          </h3>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('wiki.description', {

@@ -1,6 +1,15 @@
-import * as os from 'os'
 import * as path from 'path'
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { getNativeWorker } from '../lib/native-worker'
+import { olaDataRoot, olaExternalDataHome } from '../lib/ola-data-root'
+import { sshWorkspaceConfigPath } from './ssh-workspace-path'
+import {
+  mutateSshConfigFile,
+  normalizeSshConfigDocument,
+  patchSshConnection,
+  patchSshGroup,
+  readSshConfigDocument
+} from './ssh-config-json'
 
 export interface OpenSshHostConfig {
   host: string
@@ -47,21 +56,31 @@ export interface SshConfigData {
 
 type SshConfigListener = (data: SshConfigData) => void
 
-type NativeMutationResult = {
-  success?: boolean
-  error?: string
-  config?: SshConfigData
-}
-
 const EMPTY_CONFIG: SshConfigData = { groups: [], connections: [] }
 const SSH_CONFIG_POLL_MS = 30_000
 
-let cachedConfig: SshConfigData = EMPTY_CONFIG
-let lastSerialized = JSON.stringify(EMPTY_CONFIG)
+const workspaceContext = new AsyncLocalStorage<string>()
+const cachedConfigs = new Map<string, SshConfigData>()
+const lastSerialized = new Map<string, string>()
+const cacheGenerations = new Map<string, number>()
 let watcherStarted = false
 let reloadTimer: NodeJS.Timeout | null = null
-let initializePromise: Promise<void> | null = null
+const initializePromises = new Map<string, Promise<void>>()
 const listeners = new Set<SshConfigListener>()
+
+export function currentSshWorkspaceId(): string {
+  return workspaceContext.getStore() ?? 'local-personal'
+}
+
+export function currentSshWorkspaceGeneration(): number {
+  return cacheGenerations.get(currentSshWorkspaceId()) ?? 0
+}
+
+export function withSshWorkspace<T>(workspaceId: string, operation: () => T): T {
+  if (!workspaceId || workspaceId !== workspaceId.trim() || workspaceId.length > 1024)
+    throw new Error('INVALID_SSH_WORKSPACE')
+  return workspaceContext.run(workspaceId, operation)
+}
 
 function cloneConfig(config: SshConfigData): SshConfigData {
   return {
@@ -70,94 +89,12 @@ function cloneConfig(config: SshConfigData): SshConfigData {
   }
 }
 
-function toNumber(value: unknown, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
-}
-
-function toString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
-
-function toAuthType(value: unknown): SshConfigConnection['authType'] {
-  if (value === 'privateKey' || value === 'agent' || value === 'password') return value
-  return 'password'
-}
-
-function normalizeGroup(raw: unknown): SshConfigGroup | null {
-  if (!raw || typeof raw !== 'object') return null
-  const value = raw as Record<string, unknown>
-  const id = toString(value.id)
-  const name = toString(value.name)
-  if (!id || !name) return null
-  const createdAt = toNumber(value.createdAt, Date.now())
-  return {
-    id,
-    name,
-    sortOrder: toNumber(value.sortOrder, 0),
-    createdAt,
-    updatedAt: toNumber(value.updatedAt, createdAt)
-  }
-}
-
-function normalizeConnection(raw: unknown): SshConfigConnection | null {
-  if (!raw || typeof raw !== 'object') return null
-  const value = raw as Record<string, unknown>
-  const id = toString(value.id)
-  const name = toString(value.name)
-  const host = toString(value.host)
-  const username = toString(value.username)
-  if (!id || !name || !host || !username) return null
-  const createdAt = toNumber(value.createdAt, Date.now())
-  return {
-    id,
-    groupId: toString(value.groupId),
-    name,
-    host,
-    port: toNumber(value.port, 22),
-    username,
-    authType: toAuthType(value.authType),
-    password: toString(value.password),
-    privateKeyPath: toString(value.privateKeyPath),
-    passphrase: toString(value.passphrase),
-    startupCommand: toString(value.startupCommand),
-    defaultDirectory: toString(value.defaultDirectory),
-    proxyJump: toString(value.proxyJump),
-    keepAliveInterval: toNumber(value.keepAliveInterval, 60),
-    sortOrder: toNumber(value.sortOrder, 0),
-    lastConnectedAt: typeof value.lastConnectedAt === 'number' ? value.lastConnectedAt : null,
-    createdAt,
-    updatedAt: toNumber(value.updatedAt, createdAt)
-  }
-}
-
-function normalizeConfig(raw: unknown): SshConfigData {
-  if (!raw || typeof raw !== 'object') return EMPTY_CONFIG
-  const value = raw as Record<string, unknown>
-  const groupsRaw = Array.isArray(value.groups) ? value.groups : []
-  const connectionsRaw = Array.isArray(value.connections) ? value.connections : []
-  const groupIds = new Set<string>()
-  const connectionIds = new Set<string>()
-  const groups = groupsRaw.map(normalizeGroup).filter((group): group is SshConfigGroup => {
-    if (!group || groupIds.has(group.id)) return false
-    groupIds.add(group.id)
-    return true
-  })
-  const connections = connectionsRaw
-    .map(normalizeConnection)
-    .filter((connection): connection is SshConfigConnection => {
-      if (!connection || connectionIds.has(connection.id)) return false
-      connectionIds.add(connection.id)
-      return true
-    })
-  return { groups, connections }
-}
-
-function setCache(next: SshConfigData, notify: boolean): void {
-  const normalized = normalizeConfig(next)
+function setCache(workspaceId: string, next: SshConfigData, notify: boolean): void {
+  const normalized = normalizeSshConfigDocument(next)
   const serialized = JSON.stringify(normalized)
-  cachedConfig = normalized
-  if (serialized === lastSerialized) return
-  lastSerialized = serialized
+  cachedConfigs.set(workspaceId, normalized)
+  if (serialized === lastSerialized.get(workspaceId)) return
+  lastSerialized.set(workspaceId, serialized)
   if (notify) {
     listeners.forEach((listener) => listener(cloneConfig(normalized)))
   }
@@ -171,42 +108,68 @@ async function nativeRequest<T>(
   return await getNativeWorker().request<T>(method, params, timeoutMs)
 }
 
-async function refreshFromNative(notify: boolean): Promise<void> {
-  const snapshot = await nativeRequest<SshConfigData>('ssh/config-snapshot')
-  setCache(snapshot, notify)
+async function refreshFromDisk(notify: boolean): Promise<void> {
+  const workspaceId = currentSshWorkspaceId()
+  const generation = cacheGenerations.get(workspaceId) ?? 0
+  const next = normalizeSshConfigDocument(
+    await readSshConfigDocument(getSshConfigPath(workspaceId))
+  )
+  if ((cacheGenerations.get(workspaceId) ?? 0) === generation) setCache(workspaceId, next, notify)
 }
 
-async function applyMutation(method: string, params: unknown, timeoutMs = 60_000): Promise<void> {
-  const result = await nativeRequest<NativeMutationResult>(method, params, timeoutMs)
-  if (result?.error || result?.success === false) {
-    throw new Error(result.error || `${method} failed`)
+async function mutateConfig(mutation: (current: SshConfigData) => SshConfigData): Promise<void> {
+  const workspaceId = currentSshWorkspaceId()
+  const generation = cacheGenerations.get(workspaceId) ?? 0
+  const canCommit = (): boolean => (cacheGenerations.get(workspaceId) ?? 0) === generation
+  const next = await mutateSshConfigFile(getSshConfigPath(workspaceId), mutation, canCommit)
+  if ((cacheGenerations.get(workspaceId) ?? 0) === generation) setCache(workspaceId, next, true)
+}
+
+/** Drop managed credentials when account or membership authorization changes. */
+export function forgetUnavailableSshConfigCaches(availableIds: ReadonlySet<string>): void {
+  const managedIds = new Set([
+    ...cachedConfigs.keys(),
+    ...lastSerialized.keys(),
+    ...initializePromises.keys()
+  ])
+  for (const workspaceId of managedIds) {
+    if (workspaceId === 'local-personal' || availableIds.has(workspaceId)) continue
+    cacheGenerations.set(workspaceId, (cacheGenerations.get(workspaceId) ?? 0) + 1)
+    cachedConfigs.delete(workspaceId)
+    lastSerialized.delete(workspaceId)
+    initializePromises.delete(workspaceId)
   }
-  if (result?.config) {
-    setCache(result.config, true)
-  } else {
-    await refreshFromNative(true)
-  }
+}
+
+export async function reloadSshConfigCache(): Promise<void> {
+  await refreshFromDisk(true)
 }
 
 export async function initializeSshConfigCache(): Promise<void> {
-  if (!initializePromise) {
-    initializePromise = refreshFromNative(false).finally(() => {
-      initializePromise = null
+  const workspaceId = currentSshWorkspaceId()
+  if (cachedConfigs.has(workspaceId)) return
+  if (!initializePromises.has(workspaceId)) {
+    const initializing = refreshFromDisk(false).finally(() => {
+      if (initializePromises.get(workspaceId) === initializing)
+        initializePromises.delete(workspaceId)
     })
+    initializePromises.set(workspaceId, initializing)
   }
-  await initializePromise
+  await initializePromises.get(workspaceId)
 }
 
 export function startSshConfigWatcher(): void {
   if (watcherStarted) return
   watcherStarted = true
   void initializeSshConfigCache().catch((error) => {
-    console.warn('[SSH Config] Initial native load failed:', error)
+    console.warn('[SSH Config] Initial load failed:', error)
   })
   reloadTimer = setInterval(() => {
-    void refreshFromNative(true).catch((error) => {
-      console.warn('[SSH Config] Native refresh failed:', error)
-    })
+    for (const workspaceId of cachedConfigs.keys()) {
+      void withSshWorkspace(workspaceId, () => refreshFromDisk(true)).catch((error) => {
+        console.warn('[SSH Config] Refresh failed:', error)
+      })
+    }
   }, SSH_CONFIG_POLL_MS)
   reloadTimer.unref?.()
 }
@@ -224,13 +187,13 @@ export function onSshConfigChange(listener: SshConfigListener): () => void {
   return () => listeners.delete(listener)
 }
 
-export function getSshConfigPath(): string {
-  return path.join(os.homedir(), '.ola.json')
+export function getSshConfigPath(workspaceId = currentSshWorkspaceId()): string {
+  return sshWorkspaceConfigPath(olaExternalDataHome(), workspaceId, olaDataRoot())
 }
 
 export async function getOpenSshHostConfig(
   alias: string,
-  configPath = path.join(os.homedir(), '.ssh', 'config')
+  configPath = path.join(olaExternalDataHome(), '.ssh', 'config')
 ): Promise<OpenSshHostConfig | null> {
   const normalizedAlias = alias.trim()
   if (!normalizedAlias) return null
@@ -241,11 +204,11 @@ export async function getOpenSshHostConfig(
 }
 
 export function getSshConfigSnapshot(): SshConfigData {
-  return cloneConfig(cachedConfig)
+  return cloneConfig(cachedConfigs.get(currentSshWorkspaceId()) ?? EMPTY_CONFIG)
 }
 
 export async function setSshConfigSnapshot(data: SshConfigData): Promise<void> {
-  await applyMutation('ssh/config-write-snapshot', normalizeConfig(data))
+  await mutateConfig(() => normalizeSshConfigDocument(data))
 }
 
 export function listSshGroups(): SshConfigGroup[] {
@@ -261,31 +224,63 @@ export function getSshConnection(id: string): SshConfigConnection | undefined {
 }
 
 export async function createSshGroup(group: SshConfigGroup): Promise<void> {
-  await applyMutation('ssh/config-group-create', group)
+  if (!group.id?.trim() || !group.name?.trim()) throw new Error('Invalid SSH group')
+  await mutateConfig((current) => ({
+    ...current,
+    groups: [...current.groups.filter((item) => item.id !== group.id), group]
+  }))
 }
 
 export async function updateSshGroup(
   id: string,
   patch: Partial<Pick<SshConfigGroup, 'name' | 'sortOrder' | 'updatedAt'>>
 ): Promise<void> {
-  await applyMutation('ssh/config-group-update', { id, patch })
+  await mutateConfig((current) => {
+    const index = current.groups.findIndex((item) => item.id === id)
+    if (index < 0) throw new Error('SSH group not found')
+    current.groups[index] = patchSshGroup(current.groups[index], patch)
+    return current
+  })
 }
 
 export async function deleteSshGroup(id: string): Promise<void> {
-  await applyMutation('ssh/config-group-delete', { id })
+  await mutateConfig((current) => ({
+    groups: current.groups.filter((group) => group.id !== id),
+    connections: current.connections.map((connection) =>
+      connection.groupId === id ? { ...connection, groupId: null } : connection
+    )
+  }))
 }
 
 export async function createSshConnection(connection: SshConfigConnection): Promise<void> {
-  await applyMutation('ssh/config-connection-create', connection)
+  if (
+    !connection.id?.trim() ||
+    !connection.name?.trim() ||
+    !connection.host?.trim() ||
+    !connection.username?.trim()
+  )
+    throw new Error('Invalid SSH connection')
+  await mutateConfig((current) => ({
+    ...current,
+    connections: [...current.connections.filter((item) => item.id !== connection.id), connection]
+  }))
 }
 
 export async function updateSshConnection(
   id: string,
   patch: Partial<Omit<SshConfigConnection, 'id'>>
 ): Promise<void> {
-  await applyMutation('ssh/config-connection-update', { id, patch })
+  await mutateConfig((current) => {
+    const index = current.connections.findIndex((item) => item.id === id)
+    if (index < 0) throw new Error('SSH connection not found')
+    current.connections[index] = patchSshConnection(current.connections[index], patch)
+    return current
+  })
 }
 
 export async function deleteSshConnection(id: string): Promise<void> {
-  await applyMutation('ssh/config-connection-delete', { id })
+  await mutateConfig((current) => ({
+    ...current,
+    connections: current.connections.filter((connection) => connection.id !== id)
+  }))
 }

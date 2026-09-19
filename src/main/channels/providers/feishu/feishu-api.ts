@@ -1,7 +1,138 @@
 import * as https from 'https'
-import * as http from 'http'
+import { lookup } from 'node:dns/promises'
+import { isIP } from 'node:net'
 
 const BASE_URL = 'https://open.feishu.cn'
+const MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
+const MAX_DOWNLOAD_REDIRECTS = 3
+
+type ResolvedAddress = { address: string; family: 4 | 6 }
+
+function isPublicAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    const octets = address.split('.').map(Number)
+    const [first, second] = octets
+    if (first === 0 || first === 10 || first === 127 || first >= 224) return false
+    if (first === 100 && second >= 64 && second <= 127) return false
+    if (first === 169 && second === 254) return false
+    if (first === 172 && second >= 16 && second <= 31) return false
+    if (first === 192 && (second === 0 || second === 168)) return false
+    if (first === 198 && (second === 18 || second === 19 || second === 51)) return false
+    if (first === 203 && second === 0) return false
+    return true
+  }
+
+  if (isIP(address) === 6) {
+    const normalized = address.toLowerCase()
+    // Loopback, unspecified, IPv4-mapped, unique-local and link-local addresses
+    // are never valid outbound media destinations.
+    return !(
+      normalized === '::' ||
+      normalized === '::1' ||
+      normalized.startsWith('::ffff:') ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      normalized.startsWith('fe8') ||
+      normalized.startsWith('fe9') ||
+      normalized.startsWith('fea') ||
+      normalized.startsWith('feb')
+    )
+  }
+
+  return false
+}
+
+function parseSafeDownloadUrl(rawUrl: string): URL {
+  let url: URL
+  try {
+    url = new URL(rawUrl)
+  } catch {
+    throw new Error('Invalid download URL')
+  }
+
+  if (
+    url.protocol !== 'https:' ||
+    url.username ||
+    url.password ||
+    (url.port && url.port !== '443')
+  ) {
+    throw new Error('Only HTTPS download URLs on port 443 are allowed')
+  }
+  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+  if (!hostname || (!isPublicAddress(hostname) && isIP(hostname) !== 0)) {
+    throw new Error('Download URL must use a public host')
+  }
+  return url
+}
+
+async function resolvePublicAddress(hostname: string): Promise<ResolvedAddress> {
+  const addresses = await lookup(hostname, { all: true, verbatim: true })
+  const resolved = addresses.find((candidate) => isPublicAddress(candidate.address))
+  if (!resolved) throw new Error('Download URL does not resolve to a public address')
+  return { address: resolved.address, family: resolved.family as 4 | 6 }
+}
+
+export async function downloadSafeRemoteResource(rawUrl: string, redirects = 0): Promise<Buffer> {
+  if (redirects > MAX_DOWNLOAD_REDIRECTS) throw new Error('Too many download redirects')
+  const url = parseSafeDownloadUrl(rawUrl)
+  const hostname = url.hostname.replace(/^\[|\]$/g, '')
+  const endpoint = await resolvePublicAddress(hostname)
+
+  return await new Promise((resolve, reject) => {
+    const request = https.get(
+      {
+        protocol: 'https:',
+        hostname: endpoint.address,
+        port: 443,
+        path: `${url.pathname}${url.search}`,
+        headers: { Host: url.host },
+        servername: hostname,
+        family: endpoint.family,
+        rejectUnauthorized: true
+      },
+      (response) => {
+        if (
+          response.statusCode &&
+          response.statusCode >= 300 &&
+          response.statusCode < 400 &&
+          response.headers.location
+        ) {
+          response.resume()
+          const redirectUrl = new URL(response.headers.location, url).toString()
+          void downloadSafeRemoteResource(redirectUrl, redirects + 1).then(resolve, reject)
+          return
+        }
+        if (response.statusCode !== 200) {
+          response.resume()
+          reject(new Error(`Download URL failed: HTTP ${response.statusCode ?? 0}`))
+          return
+        }
+
+        const contentLength = Number(response.headers['content-length'] ?? 0)
+        if (!Number.isFinite(contentLength) || contentLength > MAX_DOWNLOAD_BYTES) {
+          response.destroy()
+          reject(new Error('Download exceeds the 25 MiB size limit'))
+          return
+        }
+
+        const chunks: Buffer[] = []
+        let receivedBytes = 0
+        response.on('data', (chunk: Buffer) => {
+          receivedBytes += chunk.length
+          if (receivedBytes > MAX_DOWNLOAD_BYTES) {
+            response.destroy(new Error('Download exceeds the 25 MiB size limit'))
+            return
+          }
+          chunks.push(chunk)
+        })
+        response.on('end', () => resolve(Buffer.concat(chunks)))
+        response.on('error', reject)
+      }
+    )
+    request.setTimeout(30_000, () => request.destroy(new Error('Download timed out (30s)')))
+    request.on('error', reject)
+  })
+}
 
 interface HttpResponse {
   statusCode: number
@@ -563,35 +694,9 @@ export class FeishuApi {
     })
   }
 
-  /**
-   * Download a file from an HTTP/HTTPS URL and return the raw buffer.
-   */
+  /** Download a bounded HTTPS resource from a DNS-validated public address. */
   static downloadUrl(url: string): Promise<Buffer> {
-    return new Promise((resolve, reject) => {
-      const mod = url.startsWith('https') ? https : http
-      mod
-        .get(url, (res) => {
-          if (
-            res.statusCode &&
-            res.statusCode >= 300 &&
-            res.statusCode < 400 &&
-            res.headers.location
-          ) {
-            // Follow one redirect
-            FeishuApi.downloadUrl(res.headers.location).then(resolve).catch(reject)
-            return
-          }
-          if (res.statusCode !== 200) {
-            reject(new Error(`Download URL failed: HTTP ${res.statusCode}`))
-            return
-          }
-          const chunks: Buffer[] = []
-          res.on('data', (chunk: Buffer) => chunks.push(chunk))
-          res.on('end', () => resolve(Buffer.concat(chunks)))
-          res.on('error', reject)
-        })
-        .on('error', reject)
-    })
+    return downloadSafeRemoteResource(url)
   }
 
   /** Send an image message to a chat using an image_key */

@@ -1,4 +1,4 @@
-﻿{
+{
   "wiki": {
     "title": "项目 Wiki",
     "subtitle": "构建增量本地项目地图",
@@ -11,7 +11,40 @@
   },
   "desktopAutomation": {
     "title": "桌面自动化",
-    "subtitle": "录制并重放经过审批的桌面流程"
+    "subtitle": "录制并安全重放本地桌面工作流。",
+    "defaultFlowName": "桌面流程",
+    "safetyNotice": "不会保存键入文本。每次高风险重放均需要单独的原生确认。",
+    "recording": {
+      "title": "录制流程",
+      "description": "将桌面操作录制为本地工作流。"
+    },
+    "flowName": "流程名称",
+    "flowNameDescription": "使用清晰的名称，方便之后查找和识别。",
+    "start": "开始录制",
+    "stopAndSave": "停止并保存",
+    "status": {
+      "recording": "正在录制 · {{count}} 个步骤",
+      "idle": "空闲 · {{count}} 个步骤"
+    },
+    "replay": {
+      "success": "重放完成 · {{count}} 个步骤改变了屏幕内容。",
+      "failed": "重放已停止：{{error}}"
+    },
+    "unknownError": "未知错误",
+    "current": {
+      "title": "当前流程",
+      "description": "当前保存在内存中的录制流程。"
+    },
+    "saveCurrent": "保存当前流程",
+    "saved": {
+      "title": "已保存流程",
+      "description": "运行或删除之前保存的桌面工作流。",
+      "empty": "暂未保存桌面流程。"
+    },
+    "cancelReplay": "取消重放",
+    "flowSummary": "{{name}} · {{count}} 个步骤",
+    "run": "运行",
+    "delete": "删除 {{name}}"
   },
   "hooks": {
     "title": "自动化 Hook",
@@ -20,7 +53,10 @@
     "securityNotice": "Hook 会执行本地命令。信任前请核对解析后的路径和哈希；任何文件变化都会要求重新授权。",
     "configured": "已配置的 Hook",
     "empty": "用户级和当前项目均未发现 Hook。",
-    "source": { "user": "用户级", "project": "项目级" },
+    "source": {
+      "user": "用户级",
+      "project": "项目级"
+    },
     "configHash": "配置",
     "revoke": "撤销信任",
     "reviewAndTrust": "审查并信任",
@@ -91,7 +127,8 @@
       "personalization": "个性化",
       "dataUsage": "数据与使用",
       "about": "关于"
-    }
+    },
+    "back": "返回"
   },
   "profile": {
     "title": "个人资料",
@@ -342,6 +379,10 @@
   "sync": {
     "title": "同步",
     "subtitle": "通过 WebDAV 进行 Ola 数据记录级同步。",
+    "workspaceUnavailable": {
+      "title": "此工作空间暂不支持同步",
+      "description": "旧版 WebDAV 同步无法隔离工作空间，仅在没有活动托管工作空间时用于本地个人数据。个人与团队工作空间的空间化同步仍在迁移中。"
+    },
     "loading": "正在加载同步设置...",
     "provider": {
       "title": "同步提供商",
@@ -830,7 +871,15 @@
       "allowedDomains": "允许访问域名",
       "allowedDomainsDesc": "留空表示允许所有域名；填写后仅允许匹配域名打开。",
       "domainPlaceholder": "example.com\nsub.example.org",
-      "domainRuleHint": "每行一个域名，也可以用逗号分隔。禁止名单优先于允许名单；子域名会自动匹配。"
+      "domainRuleHint": "每行一个域名，也可以用逗号分隔。禁止名单优先于允许名单；子域名会自动匹配。",
+      "exportCookies": "导出加密 Cookie",
+      "exportingCookies": "导出中...",
+      "cookieExportComplete": "已将 {{exported}} 条 Cookie 导出到加密归档",
+      "cookieExportErrors": {
+        "secure_storage_unavailable": "系统安全存储不可用，已禁用加密 Cookie 导出",
+        "write_failed": "导出加密浏览器 Cookie 失败",
+        "unknown": "浏览器 Cookie 导出失败"
+      }
     },
     "items": {
       "image": {
@@ -948,7 +997,9 @@
         "share": "分享目标",
         "shareDesc": "可选，从已连接的托管或部署 MCP 工具中检测。"
       }
-    }
+    },
+    "defaultPlugins": "默认插件",
+    "customPlugins": "自定义扩展"
   },
   "migration": {
     "title": "迁移中心",
@@ -1651,7 +1702,23 @@
     "testSuccess": "连接成功！共找到 {{count}} 个技能。",
     "testFailed": "连接失败：{{error}}",
     "configSummary": "配置摘要",
-    "notSet": "未设置"
+    "notSet": "未设置",
+    "marketTab": "技能市场",
+    "installedTab": "已安装",
+    "installedTitle": "已安装的 Skill",
+    "installedDescription": "这里展示当前已安装并可被 Ola 动态加载的 Skill。",
+    "refreshInstalled": "刷新",
+    "loadingInstalled": "正在加载已安装 Skill…",
+    "emptyInstalled": "暂无已安装 Skill",
+    "emptyInstalledDescription": "可以从技能页面安装 Skill，安装后会自动显示在这里。",
+    "installedBadge": "已安装",
+    "noDescription": "暂无描述",
+    "openFolder": "打开目录",
+    "delete": "删除",
+    "deleteTitle": "删除 {{name}}",
+    "deleteDescription": "删除后将从 Ola 的已安装 Skill 目录中移除。",
+    "deleteSuccess": "已删除 {{name}}",
+    "deleteFailed": "删除 {{name}} 失败"
   },
   "soulmarket": {
     "title": "SOUL 市场",
@@ -1786,10 +1853,110 @@
       "securityDesc": "权限、审批、凭据、MCP、Extension 和桌面自动化由两种画像共同使用。",
       "defaultTitle": "默认画像",
       "defaultDesc": "新对话从该画像开始，发送第一条消息前仍可以临时覆盖。"
-    }
+    },
+    "shellType": "Shell 类型",
+    "shellDefault": "系统默认",
+    "gitPolicy": "Git 策略",
+    "gitInspect": "仅查看",
+    "gitAsk": "写入前询问",
+    "gitApproval": "经批准后允许",
+    "verificationPolicy": "验证策略",
+    "verifyNone": "不自动验证",
+    "verifyStatic": "运行 lint 和类型检查",
+    "verifyFull": "运行测试和构建",
+    "diffStyle": "差异展示方式",
+    "diffInline": "在对话中内联展示",
+    "diffSidePanel": "在侧边栏打开",
+    "fileApproval": "文件操作批准",
+    "approvalAlways": "始终询问",
+    "approvalRisk": "仅风险操作询问",
+    "approvalGlobal": "使用全局策略",
+    "useTeams": "优先使用团队委派",
+    "useTeamsDesc": "对于较大的工程任务，建议使用子 Agent 和 Team 工作流。",
+    "defaultsDescription": "默认{{mode}}。画像变更仅应用于新对话。",
+    "defaultsChat": "从对话开始",
+    "defaultsExecution": "从执行开始"
   },
   "credentials": {
     "title": "凭据管理",
     "subtitle": "管理 Agent 可用于站点登录的凭据"
+  },
+  "architecture": {
+    "groups": {
+      "common": "常用",
+      "models": "模型与账户",
+      "execution": "执行与安全",
+      "integrations": "扩展与集成",
+      "personalization": "数据与个性化",
+      "advanced": "高级"
+    },
+    "pages": {
+      "modelManagement": {
+        "description": "管理可用模型及其能力。"
+      },
+      "model": {
+        "description": "选择默认模型和任务专用模型行为。"
+      },
+      "projectIntelligence": {
+        "title": "项目智能",
+        "description": "管理项目 Wiki 与 CodeGraph 索引。"
+      },
+      "advanced": {
+        "title": "高级",
+        "description": "上下文、并发、开发者与实验性控制。"
+      },
+      "olaAccount": {
+        "title": "Ola 账户",
+        "description": "使用 Ola 个人与团队模型资源，终端不会保存其 API Key。",
+        "localProviderNotice": "本地服务商在所有空间中都可离线使用；Ola 托管模型的凭据仅保存在 Ola 主站。",
+        "connection": {
+          "title": "账户连接",
+          "description": "登录后加载个人空间与团队空间资源。",
+          "signIn": "登录 Ola",
+          "signOut": "退出登录",
+          "manage": "前往 Ola 管理",
+          "notSignedIn": "尚未登录",
+          "notSignedInDescription": "登录后可使用 Ola 托管的个人与团队模型。"
+        },
+        "spaces": {
+          "title": "工作空间",
+          "description": "切换空间会影响新建工作；已有对话保留原来的空间和模型绑定。",
+          "local": "本地个人空间",
+          "personal": "Ola 个人空间",
+          "team": "Ola 团队空间",
+          "localModels": "本地模型",
+          "resourceCount": "{{count}} 个托管模型",
+          "localName": "本地个人空间"
+        },
+        "resources": {
+          "title": "托管模型资源",
+          "description": "终端仅保存资源元数据，API Key 不会离开 Ola 主站。",
+          "refresh": "刷新",
+          "available": "可用",
+          "unavailable": "不可用",
+          "empty": "当前空间没有可用的 Ola 托管模型。"
+        },
+        "syncUnavailable": "当前主站尚未提供工作空间同步服务。已保留本地与此前同步的内容；请在主站升级完成后刷新。",
+        "deviceRegistered": "已注册设备：{{name}}",
+        "lastSynced": "上次刷新：{{time}}",
+        "defaultModel": "默认模型"
+      }
+    },
+    "usage": {
+      "title": "用量与成本",
+      "description": "查看本地模型用量、成本与性能。"
+    },
+    "petStudio": {
+      "title": "宠物工作室",
+      "description": "在系统设置之外管理桌面伙伴。"
+    }
+  },
+  "projectIntelligence": {
+    "title": "项目智能",
+    "description": "通过项目 Wiki 与 CodeGraph 理解当前项目。",
+    "activeProject": "当前项目：{{path}}",
+    "noProject": "请选择包含工作目录的项目，以使用这两项能力。",
+    "wikiTitle": "项目 Wiki",
+    "codeGraphTitle": "CodeGraph"
   }
 }

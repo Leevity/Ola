@@ -3005,36 +3005,10 @@ export function AssistantMessage({
                 <ExecutionTraceCard
                   runOutcome={runOutcome}
                   filesChanged={runPresentation?.changeSummary.fileCount ?? 0}
-                >
-                  {renderContent()}
-                  {completionSummary ? <CompletionSummaryBar summary={completionSummary} /> : null}
-                  {runPresentation?.changeSummary.fileCount ? (
-                    <SessionChangeSummaryCard
-                      sessionId={sessionId}
-                      messageId={msgId}
-                      toolUseIds={messageToolUseIds}
-                    />
-                  ) : null}
-                </ExecutionTraceCard>
-                <FinalOutcomeCard outcome={runOutcome.outcome} />
-              </>
-            ) : (
-              <>
+                  onViewProcess={expandExecutionRuns}
+                />
                 {renderContent()}
-                {!isStreaming && completionSummary ? (
-                  <CompletionSummaryBar summary={completionSummary} />
-                ) : null}
-              </>
-            )}
-            {!isStreaming && isLiveMode && !runOutcome ? (
-              <RunResultCard
-                presentation={runPresentation}
-                onViewProcess={expandExecutionRuns}
-                onCopyResult={plainText.trim() ? handleCopy : undefined}
-                onReviewChanges={runChangeSet ? handleOpenRunChanges : undefined}
-                onExportResult={sessionId ? () => void handleExportResult() : undefined}
-                onFork={sessionId && msgId ? () => void handleFork() : undefined}
-              >
+                {completionSummary ? <CompletionSummaryBar summary={completionSummary} /> : null}
                 {runPresentation?.changeSummary.fileCount ? (
                   <SessionChangeSummaryCard
                     sessionId={sessionId}
@@ -3042,8 +3016,33 @@ export function AssistantMessage({
                     toolUseIds={messageToolUseIds}
                   />
                 ) : null}
-              </RunResultCard>
-            ) : null}
+                {!plainText.trim() ? <FinalOutcomeCard outcome={runOutcome.outcome} /> : null}
+              </>
+            ) : (
+              <>
+                {!isStreaming && isLiveMode && !runOutcome ? (
+                  <RunResultCard
+                    presentation={runPresentation}
+                    onViewProcess={expandExecutionRuns}
+                    onCopyResult={plainText.trim() ? handleCopy : undefined}
+                    onReviewChanges={runChangeSet ? handleOpenRunChanges : undefined}
+                    onExportResult={sessionId ? () => void handleExportResult() : undefined}
+                    onFork={sessionId && msgId ? () => void handleFork() : undefined}
+                  />
+                ) : null}
+                {renderContent()}
+                {!isStreaming && completionSummary ? (
+                  <CompletionSummaryBar summary={completionSummary} />
+                ) : null}
+                {!isStreaming && runPresentation?.changeSummary.fileCount ? (
+                  <SessionChangeSummaryCard
+                    sessionId={sessionId}
+                    messageId={msgId}
+                    toolUseIds={messageToolUseIds}
+                  />
+                ) : null}
+              </>
+            )}
           </>
         )}
         {!isStreaming &&

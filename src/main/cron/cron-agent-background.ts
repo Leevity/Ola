@@ -1,4 +1,6 @@
 import { nanoid } from 'nanoid'
+import { join } from 'node:path'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { readConfig } from '../ipc/secure-key-store'
 import {
   readPermissionPolicySnapshot,
@@ -14,11 +16,11 @@ export type { ToolCallState, InteractiveAgentEvent }
 import type { RequestDebugInfoWire } from '../../shared/agent-stream-protocol'
 import { decodeAgentStreamEnvelope } from '../../shared/messagepack/agent-stream-codec'
 import { getNativeSshConnectionPayload } from '../ipc/ssh-handlers'
-import {
-  getBundledResourceDirCandidates,
-  nativeUserContentRequest
-} from '../ipc/user-content-native'
-import { safeSendMessagePackToAllWindows } from '../window-ipc'
+import { initializeSshConfigCache, withSshWorkspace } from '../ssh/ssh-config'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { getBundledResourceDirCandidates } from '../resources/bundled-resources'
+import { AgentCatalog } from '../user-content/agent-catalog'
+import { sendCronWorkspaceEvent } from './cron-workspace-events'
 import {
   appendCronRunLog,
   createCronRun,
@@ -35,6 +37,7 @@ import { getDefaultApiUserAgent, resolveApiUserAgent } from '../lib/api-user-age
 import { resolveProviderServiceTier } from '../../shared/provider-service-tier'
 import { listProviderHealth } from '../provider/provider-health-registry'
 import { resolveProviderFallback } from '../provider/provider-fallback-resolver'
+import type { ModelSource } from '../../shared/runtime/model-source'
 
 const DEFAULT_AGENT = 'CronAgent'
 const RESPONSES_SESSION_SCOPE_AGENT_MAIN = 'agent-main'
@@ -283,6 +286,7 @@ interface ProviderConfig {
 
 export interface ToolContext {
   sessionId?: string
+  workspaceId?: string
   workingFolder?: string
   signal: AbortSignal
   currentToolUseId?: string
@@ -332,6 +336,9 @@ export interface CronAgentRunOptions {
   prompt: string
   agentId?: string | null
   model?: string | null
+  modelSource?: ModelSource | null
+  /** Data and authorization scope of the scheduled job. */
+  workspaceId?: string | null
   sourceProviderId?: string | null
   workingFolder?: string | null
   sshConnectionId?: string | null
@@ -350,6 +357,7 @@ interface ExecutionState {
 }
 
 interface CronRunFinishedPayload {
+  workspaceId: string | null | undefined
   jobId: string
   runId: string
   status: 'success' | 'error' | 'aborted'
@@ -609,6 +617,18 @@ function getFastProviderConfig(
   return buildProviderConfigById(state, settings, providerId, modelId)
 }
 
+/** Explicit ModelSource is a binding, never a request to choose a fallback. */
+async function resolveCronProviderConfigExact(
+  providerId: string,
+  modelId: string
+): Promise<ProviderConfig | null> {
+  const settings = getPersistedSettingsState()
+  const state = await getPersistedProvidersState()
+  const direct = buildProviderConfigById(state, settings, providerId, modelId)
+  if (!direct || (direct.requiresApiKey !== false && !direct.apiKey)) return null
+  return direct
+}
+
 async function resolveCronProviderConfig(
   providerId?: string | null,
   modelOverride?: string | null
@@ -719,18 +739,13 @@ async function resolveCronProviderConfig(
 async function resolveCronAgentDefinition(agentId?: string | null): Promise<AgentDefinition> {
   if (!agentId || agentId === DEFAULT_AGENT) return FALLBACK_CRON_AGENT
   try {
-    const agent = await nativeUserContentRequest<
-      | (AgentDefinition & {
-          tools?: string[]
-          maxTurns?: number
-        })
-      | { error: string }
-    >('agents/load', {
-      name: agentId,
-      bundledDirCandidates: getBundledResourceDirCandidates('agents')
+    const catalog = new AgentCatalog({
+      userDirectory: join(olaDataRoot(), 'agents'),
+      bundledDirectoryCandidates: getBundledResourceDirCandidates('agents')
     })
+    const agent = await catalog.load(agentId)
     if ('error' in agent) {
-      console.warn('[CronAgent] Native agent load failed:', agent.error)
+      console.warn('[CronAgent] Agent load failed:', agent.error)
       return FALLBACK_CRON_AGENT
     }
 
@@ -757,7 +772,7 @@ async function resolveCronAgentDefinition(agentId?: string | null): Promise<Agen
       systemPrompt: agent.systemPrompt
     }
   } catch (err) {
-    console.warn('[CronAgent] Failed to load custom agent definition from native worker:', err)
+    console.warn('[CronAgent] Failed to load custom agent definition:', err)
   }
   return FALLBACK_CRON_AGENT
 }
@@ -1010,6 +1025,14 @@ async function* runNativeAgentLoop(args: {
     }
   })
 
+  const unsubscribeInterrupted = manager.onRunInterrupted((run) => {
+    if (run.runId !== nativeRunId || finished) return
+    finished = true
+    queue.push({ type: 'error', error: new Error('Agent runtime interrupted') })
+    queue.push({ type: 'loop_end', reason: 'error' })
+    wake()
+  })
+
   const abortHandler = (): void => {
     if (nativeRunId) {
       void manager.request('agent/cancel', { runId: nativeRunId }, 10_000).catch(() => {})
@@ -1021,8 +1044,18 @@ async function* runNativeAgentLoop(args: {
   args.config.signal.addEventListener('abort', abortHandler, { once: true })
 
   try {
+    args.config.signal.throwIfAborted()
+    if (
+      args.toolCtx.sshConnectionId &&
+      args.toolCtx.workspaceId !== 'local-personal' &&
+      !(await loadOfflineWorkspaceIds()).has(args.toolCtx.workspaceId ?? '')
+    )
+      throw new Error('SSH_WORKSPACE_UNAVAILABLE')
     const connection = args.toolCtx.sshConnectionId
-      ? getNativeSshConnectionPayload(args.toolCtx.sshConnectionId)
+      ? await withSshWorkspace(args.toolCtx.workspaceId ?? 'local-personal', async () => {
+          await initializeSshConfigCache()
+          return getNativeSshConnectionPayload(args.toolCtx.sshConnectionId!)
+        })
       : null
     if (args.toolCtx.sshConnectionId && !connection) {
       throw new Error(`SSH connection not found for cron agent: ${args.toolCtx.sshConnectionId}`)
@@ -1080,6 +1113,7 @@ async function* runNativeAgentLoop(args: {
     yield { type: 'loop_end', reason: args.config.signal.aborted ? 'aborted' : 'error' }
   } finally {
     args.config.signal.removeEventListener('abort', abortHandler)
+    unsubscribeInterrupted()
     unsubscribe()
   }
 }
@@ -1352,6 +1386,7 @@ type CronRunSnapshot = {
   sourceProjectNameSnapshot: string | null
   sourceProviderIdSnapshot: string | null
   modelSnapshot: string | null
+  modelSourceSnapshot: string | null
   workingFolderSnapshot: string | null
   deliveryModeSnapshot: string | null
   deliveryTargetSnapshot: string | null
@@ -1419,6 +1454,7 @@ async function createRunRecord(options: {
   sourceProjectNameSnapshot?: string | null
   sourceProviderIdSnapshot?: string | null
   modelSnapshot?: string | null
+  modelSourceSnapshot?: string | null
   workingFolderSnapshot?: string | null
   deliveryModeSnapshot?: string | null
   deliveryTargetSnapshot?: string | null
@@ -1456,12 +1492,17 @@ function appendRunLog(
   return appendCronRunLog(runId, timestamp, type, content)
 }
 
-function emitRunStarted(jobId: string, runId: string): void {
+function emitRunStarted(
+  workspaceId: string | null | undefined,
+  jobId: string,
+  runId: string
+): void {
   const payload = { jobId, runId }
-  safeSendMessagePackToAllWindows('cron:run-started', payload)
+  sendCronWorkspaceEvent(workspaceId ?? 'local-personal', 'cron:run-started', payload)
 }
 
 function emitRunProgress(
+  workspaceId: string | null | undefined,
   jobId: string,
   runId: string,
   progress: { iteration: number; toolCalls: number; currentStep?: string }
@@ -1472,10 +1513,11 @@ function emitRunProgress(
     ...progress,
     elapsed: Date.now() - (executionState.get(jobId)?.startedAt ?? Date.now())
   }
-  safeSendMessagePackToAllWindows('cron:run-progress', payload)
+  sendCronWorkspaceEvent(workspaceId ?? 'local-personal', 'cron:run-progress', payload)
 }
 
 function emitRunLog(
+  workspaceId: string | null | undefined,
   jobId: string,
   entry: {
     timestamp: number
@@ -1484,11 +1526,14 @@ function emitRunLog(
   }
 ): void {
   const payload = { jobId, ...entry }
-  safeSendMessagePackToAllWindows('cron:run-log-appended', payload)
+  sendCronWorkspaceEvent(workspaceId ?? 'local-personal', 'cron:run-log-appended', payload)
 }
 
-async function loadRunSnapshot(runId: string): Promise<CronRunSnapshot | null> {
-  const row = await getCronRun(runId)
+async function loadRunSnapshot(
+  runId: string,
+  workspaceId: string
+): Promise<CronRunSnapshot | null> {
+  const row = await getCronRun(runId, workspaceId)
   if (!row) return null
 
   return {
@@ -1509,14 +1554,19 @@ async function loadRunSnapshot(runId: string): Promise<CronRunSnapshot | null> {
     sourceProjectNameSnapshot: row.source_project_name_snapshot,
     sourceProviderIdSnapshot: row.source_provider_id_snapshot,
     modelSnapshot: row.model_snapshot,
+    modelSourceSnapshot: row.model_source_snapshot,
     workingFolderSnapshot: row.working_folder_snapshot,
     deliveryModeSnapshot: row.delivery_mode_snapshot,
     deliveryTargetSnapshot: row.delivery_target_snapshot
   }
 }
 
-async function loadJobSnapshot(jobId: string, scheduled: boolean): Promise<CronJobSnapshot | null> {
-  const row = await getCronJob(jobId)
+async function loadJobSnapshot(
+  jobId: string,
+  workspaceId: string,
+  scheduled: boolean
+): Promise<CronJobSnapshot | null> {
+  const row = await getCronJob(jobId, workspaceId)
   if (!row) return null
 
   return {
@@ -1559,14 +1609,15 @@ async function loadJobSnapshot(jobId: string, scheduled: boolean): Promise<CronJ
 }
 
 async function emitRunFinished(payload: CronRunFinishedPayload): Promise<void> {
-  const run = await loadRunSnapshot(payload.runId)
-  const job = await loadJobSnapshot(payload.jobId, Boolean(payload.scheduled))
+  const workspaceId = payload.workspaceId ?? 'local-personal'
+  const run = await loadRunSnapshot(payload.runId, workspaceId)
+  const job = await loadJobSnapshot(payload.jobId, workspaceId, Boolean(payload.scheduled))
   const eventPayload = {
     ...payload,
     ...(run ? { run } : {}),
     ...(job ? { job } : {})
   }
-  safeSendMessagePackToAllWindows('cron:run-finished', eventPayload)
+  sendCronWorkspaceEvent(workspaceId, 'cron:run-finished', eventPayload)
 }
 
 export function getCronExecutionState(jobId: string): ExecutionState | null {
@@ -1618,6 +1669,8 @@ async function runCronAgentInternal(
     prompt,
     agentId,
     model: modelOverride,
+    modelSource,
+    workspaceId,
     sourceProviderId,
     workingFolder,
     sshConnectionId,
@@ -1632,10 +1685,29 @@ async function runCronAgentInternal(
 
   const runId = `run-${nanoid(8)}`
   const startedAt = executionState.get(jobId)?.startedAt ?? Date.now()
-  const providerConfig = await resolveCronProviderConfig(
-    sourceProviderId ?? null,
-    modelOverride ?? null
-  )
+  const explicitSource = modelSource ?? null
+  const providerConfig =
+    explicitSource?.kind === 'local'
+      ? await resolveCronProviderConfigExact(explicitSource.providerId, explicitSource.modelId)
+      : explicitSource
+        ? {
+            type: 'openai-chat' as const,
+            apiKey: '',
+            requiresApiKey: false,
+            providerId: `ola-managed:${explicitSource.workspaceId}`,
+            model: explicitSource.resourceId,
+            baseUrl: `https://ola.invalid/workspaces/${encodeURIComponent(explicitSource.workspaceId)}/resources/${encodeURIComponent(explicitSource.resourceId)}/v1`
+          }
+        : sourceProviderId?.startsWith('ola-managed:')
+          ? {
+              type: 'openai-chat' as const,
+              apiKey: '',
+              requiresApiKey: false,
+              providerId: sourceProviderId,
+              model: modelOverride ?? '',
+              baseUrl: `https://ola.invalid/workspaces/${encodeURIComponent(sourceProviderId.slice('ola-managed:'.length))}/resources/${encodeURIComponent(modelOverride ?? '')}/v1`
+            }
+          : await resolveCronProviderConfig(sourceProviderId ?? null, modelOverride ?? null)
   const definition = await resolveCronAgentDefinition(agentId)
   const availableTools = buildAllowedToolDefinitions(
     definition.allowedTools.length > 0 ? definition.allowedTools : FALLBACK_CRON_AGENT.allowedTools
@@ -1650,16 +1722,17 @@ async function runCronAgentInternal(
     promptSnapshot: prompt,
     sourceSessionIdSnapshot: sessionId ?? null,
     modelSnapshot: modelOverride ?? null,
+    modelSourceSnapshot: explicitSource ? JSON.stringify(explicitSource) : null,
     workingFolderSnapshot: workingFolder ?? null,
     deliveryModeSnapshot: deliveryMode,
     deliveryTargetSnapshot: deliveryTarget ?? null
   })
-  emitRunStarted(jobId, runId)
+  emitRunStarted(workspaceId, jobId, runId)
 
   if (!providerConfig) {
     const error = 'No AI provider configured for CronAgent background execution'
     await appendRunLog(runId, Date.now(), 'error', error)
-    emitRunLog(jobId, { timestamp: Date.now(), type: 'error', content: error })
+    emitRunLog(workspaceId, jobId, { timestamp: Date.now(), type: 'error', content: error })
     await updateRunRecord(runId, {
       finishedAt: Date.now(),
       status: 'error',
@@ -1668,6 +1741,7 @@ async function runCronAgentInternal(
       error
     })
     await emitRunFinished({
+      workspaceId,
       jobId,
       runId,
       status: 'error',
@@ -1696,7 +1770,7 @@ async function runCronAgentInternal(
   if (innerProvider.requiresApiKey !== false && !innerProvider.apiKey) {
     const error = 'Provider API key is missing for CronAgent background execution'
     await appendRunLog(runId, Date.now(), 'error', error)
-    emitRunLog(jobId, { timestamp: Date.now(), type: 'error', content: error })
+    emitRunLog(workspaceId, jobId, { timestamp: Date.now(), type: 'error', content: error })
     await updateRunRecord(runId, {
       finishedAt: Date.now(),
       status: 'error',
@@ -1705,6 +1779,7 @@ async function runCronAgentInternal(
       error
     })
     await emitRunFinished({
+      workspaceId,
       jobId,
       runId,
       status: 'error',
@@ -1754,7 +1829,8 @@ async function runCronAgentInternal(
     signal: controller.signal
   }
   const toolCtx: ToolContext = {
-    sessionId: deliveryTarget ?? undefined,
+    sessionId: sessionId ?? undefined,
+    workspaceId: workspaceId ?? 'local-personal',
     workingFolder: workingFolder ?? undefined,
     sshConnectionId: sshConnectionId ?? undefined,
     signal: controller.signal,
@@ -1774,7 +1850,7 @@ async function runCronAgentInternal(
   ): Promise<void> => {
     const timestamp = Date.now()
     await appendRunLog(runId, timestamp, type, content)
-    emitRunLog(jobId, { timestamp, type, content })
+    emitRunLog(workspaceId, jobId, { timestamp, type, content })
   }
   const setProgress = (progress: {
     iteration: number
@@ -1785,7 +1861,7 @@ async function runCronAgentInternal(
       startedAt,
       progress
     })
-    emitRunProgress(jobId, runId, progress)
+    emitRunProgress(workspaceId, jobId, runId, progress)
   }
 
   // Persisting the transcript replaces every row for the run, so writing on
@@ -1961,6 +2037,7 @@ async function runCronAgentInternal(
   })
   await flushTranscript()
   await emitRunFinished({
+    workspaceId,
     jobId,
     runId,
     status,

@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "메시지를 입력하세요...",
     "placeholderClarify": "아이디어를 적어 주세요. 요구 사항이 명확해질 때까지 계속 확인하겠습니다...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "최근 오류",
       "stackTrace": "스택 추적",
       "copy": "관련 기사",
-      "copied": "뚱 베어"
+      "copied": "뚱 베어",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

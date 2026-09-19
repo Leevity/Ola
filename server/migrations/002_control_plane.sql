@@ -47,6 +47,14 @@ CREATE TABLE IF NOT EXISTS device_configs (
 CREATE INDEX IF NOT EXISTS idx_org_members_account ON organization_members(account_id);
 CREATE INDEX IF NOT EXISTS idx_org_apps_status ON organization_applications(status);
 CREATE INDEX IF NOT EXISTS idx_model_configs_org ON model_configs(organization_id);
+WITH ranked_defaults AS (
+  SELECT id, ROW_NUMBER() OVER (PARTITION BY organization_id ORDER BY updated_at DESC, id DESC) AS position
+  FROM model_configs WHERE is_default = TRUE
+)
+UPDATE model_configs SET is_default = FALSE
+WHERE id IN (SELECT id FROM ranked_defaults WHERE position > 1);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_model_configs_one_default_per_org
+  ON model_configs(organization_id) WHERE is_default = TRUE;
 CREATE TABLE IF NOT EXISTS control_plane_state (
   id SMALLINT PRIMARY KEY CHECK (id = 1),
   payload JSONB NOT NULL,

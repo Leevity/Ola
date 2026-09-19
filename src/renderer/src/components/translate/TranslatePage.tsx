@@ -1,3 +1,4 @@
+import { useWorkspaceProviders, useWorkspaceModelRoute } from '@renderer/hooks/use-workspace-models'
 import { useMemo, useState } from 'react'
 import {
   ArrowLeft,
@@ -34,10 +35,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@renderer/components/ui
 import { ModelIcon, ProviderIcon } from '@renderer/components/settings/provider-icons'
 import { cn } from '@renderer/lib/utils'
 import { useUIStore } from '@renderer/stores/ui-store'
-import {
-  isProviderAvailableForModelSelection,
-  useProviderStore
-} from '@renderer/stores/provider-store'
+import { isProviderAvailableForModelSelection } from '@renderer/stores/provider-store'
 import { useTranslateStore } from '@renderer/stores/translate-store'
 import type { AgentStep } from '@renderer/stores/translate-store'
 
@@ -234,11 +232,13 @@ export function TranslatePage(): React.JSX.Element {
   const closeTranslatePage = useUIStore((s) => s.closeTranslatePage)
   const openSettingsPage = useUIStore((s) => s.openSettingsPage)
 
-  const providers = useProviderStore((s) => s.providers)
-  const activeProviderId = useProviderStore((s) => s.activeProviderId)
-  const activeModelId = useProviderStore((s) => s.activeModelId)
-  const activeTranslationProviderId = useProviderStore((s) => s.activeTranslationProviderId)
-  const activeTranslationModelId = useProviderStore((s) => s.activeTranslationModelId)
+  const providers = useWorkspaceProviders()
+  const mainRoute = useWorkspaceModelRoute('main')
+  const activeProviderId = mainRoute.providerId
+  const activeModelId = mainRoute.modelId
+  const translationRoute = useWorkspaceModelRoute('translation')
+  const activeTranslationProviderId = translationRoute.providerId
+  const activeTranslationModelId = translationRoute.modelId
 
   const sourceLanguageOptions = useMemo<LanguageOption[]>(
     () => [

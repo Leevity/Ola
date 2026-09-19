@@ -24,7 +24,7 @@ internal static partial class AgentRuntimeSkillExecutor
         }
 
         var skillsRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+            OlaDataRoot.ExternalDataHome,
             SkillsDirectoryName);
         var skillDirectory = ResolveSkillDirectory(skillsRoot, skillName);
         if (skillDirectory is null)

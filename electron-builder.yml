@@ -97,11 +97,26 @@ files:
   - '!node_modules/**/*.ts'
   - '!node_modules/**/*.map'
 asarUnpack:
+  # The desktop TS runtime opens this sibling Worker from Main.
+  - out/main/journal-worker.mjs
+  - out/main/journal-schema.mjs
+  # Production TS canary reads construct this Worker relative to the Main bundle.
+  - out/main/legacy-read-worker.mjs
+  # The P8 handover repository uses the same dynamic Main-worker loading path.
+  - out/main/business-worker.mjs
+  - out/main/business-schema.mjs
+  # The TS CodeGraph SQLite worker is loaded by a Node Worker URL from Main.
+  - out/main/graph-store-worker.mjs
+  # DesktopRuntime's service lease Worker resolves from out/main/../storage.
+  - out/storage/lease-worker.mjs
   - resources/**
   - node_modules/ssh2/**
   - node_modules/cpu-features/**
   - node_modules/@jitsi/robotjs/**
   - node_modules/node-gyp-build/**
+  # Tree-sitter loads these WASM binaries by absolute file path at runtime.
+  - node_modules/web-tree-sitter/**
+  - node_modules/tree-sitter-wasms/**
 win:
   executableName: ola
   icon: build/icon.ico

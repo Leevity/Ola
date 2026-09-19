@@ -28,7 +28,8 @@ internal static class DbMemoryAutomationTools
         ssh_connection_id,
         created_at,
         updated_at,
-        undone_at
+        undone_at,
+        workspace_id
         """;
 
     public static WorkerResponse AddEntry(JsonElement parameters)
@@ -38,6 +39,8 @@ internal static class DbMemoryAutomationTools
             var now = Now();
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var workspaceId = ResolveWorkspaceId(parameters);
+            ValidateEntryAssociations(connection, transaction, parameters, workspaceId);
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = $"""
@@ -66,7 +69,8 @@ internal static class DbMemoryAutomationTools
                   ssh_connection_id,
                   created_at,
                   updated_at,
-                  undone_at
+                  undone_at,
+                  workspace_id
                 )
                 VALUES (
                   $id,
@@ -93,7 +97,8 @@ internal static class DbMemoryAutomationTools
                   $sshConnectionId,
                   $createdAt,
                   $updatedAt,
-                  NULL
+                  NULL,
+                  $workspaceId
                 )
                 RETURNING {EntrySelectColumns}
                 """;
@@ -121,6 +126,7 @@ internal static class DbMemoryAutomationTools
             command.Parameters.AddWithValue("$sshConnectionId", GetOptionalString(parameters, "sshConnectionId") ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("$createdAt", now);
             command.Parameters.AddWithValue("$updatedAt", now);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
 
             var entry = ReadEntries(command).First();
             transaction.Commit();
@@ -142,7 +148,7 @@ internal static class DbMemoryAutomationTools
         {
             var id = RequireString(parameters, "id");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var entry = GetEntry(connection, null, id);
+            var entry = GetEntry(connection, null, id, ResolveWorkspaceId(parameters));
             return WorkerResponse.Json(
                 new MemoryAutomationEntryResult(true, entry, null),
                 WorkerJsonContext.Default.MemoryAutomationEntryResult);
@@ -163,6 +169,8 @@ internal static class DbMemoryAutomationTools
             using var command = connection.CreateCommand();
             var where = new List<string>();
             var parameterIndex = 0;
+            where.Add("workspace_id = $workspaceId");
+            command.Parameters.AddWithValue("$workspaceId", ResolveWorkspaceId(parameters));
 
             AddInFilter(command, where, "status", "statuses", JsonHelpers.GetStringArray(parameters, "statuses"), ref parameterIndex);
             AddNullableStringFilter(command, where, parameters, "id", "id", ref parameterIndex);
@@ -203,7 +211,8 @@ internal static class DbMemoryAutomationTools
                   ssh_connection_id,
                   created_at,
                   updated_at,
-                  undone_at
+                  undone_at,
+                  workspace_id
                 FROM memory_automation_entries
                 {(where.Count > 0 ? $"WHERE {string.Join(" AND ", where)}" : string.Empty)}
                 ORDER BY created_at DESC
@@ -236,13 +245,14 @@ internal static class DbMemoryAutomationTools
                        error = $error,
                        updated_at = $updatedAt,
                        undone_at = CASE WHEN $status = 'undone' THEN $updatedAt ELSE undone_at END
-                 WHERE id = $id
+                 WHERE id = $id AND workspace_id = $workspaceId
                  RETURNING {EntrySelectColumns}
                 """;
             command.Parameters.AddWithValue("$status", status);
             command.Parameters.AddWithValue("$error", GetOptionalString(parameters, "error") ?? (object)DBNull.Value);
             command.Parameters.AddWithValue("$updatedAt", now);
             command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$workspaceId", ResolveWorkspaceId(parameters));
             var entry = ReadEntries(command).FirstOrDefault();
             transaction.Commit();
             return WorkerResponse.Json(
@@ -265,14 +275,16 @@ internal static class DbMemoryAutomationTools
             using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT 1
-                  FROM memory_automation_rollups
-                 WHERE scope = $scope
+                  FROM memory_automation_rollups_v2
+                 WHERE workspace_id = $workspaceId
+                   AND scope = $scope
                    AND target_path = $targetPath
                    AND source_date = $sourceDate
                    AND content_hash = $contentHash
                  LIMIT 1
                 """;
             command.Parameters.AddWithValue("$scope", RequireString(parameters, "scope"));
+            command.Parameters.AddWithValue("$workspaceId", ResolveWorkspaceId(parameters));
             command.Parameters.AddWithValue("$targetPath", RequireString(parameters, "targetPath"));
             command.Parameters.AddWithValue("$sourceDate", RequireString(parameters, "sourceDate"));
             command.Parameters.AddWithValue("$contentHash", RequireString(parameters, "contentHash"));
@@ -300,7 +312,8 @@ internal static class DbMemoryAutomationTools
                 connection,
                 transaction,
                 """
-                INSERT OR REPLACE INTO memory_automation_rollups (
+                INSERT OR REPLACE INTO memory_automation_rollups_v2 (
+                  workspace_id,
                   scope,
                   target,
                   target_path,
@@ -309,6 +322,7 @@ internal static class DbMemoryAutomationTools
                   processed_at
                 )
                 VALUES (
+                  $workspaceId,
                   $scope,
                   $target,
                   $targetPath,
@@ -317,6 +331,7 @@ internal static class DbMemoryAutomationTools
                   $processedAt
                 )
                 """,
+                new DbSql.SqlParam("$workspaceId", ResolveWorkspaceId(parameters)),
                 new DbSql.SqlParam("$scope", RequireString(parameters, "scope")),
                 new DbSql.SqlParam("$target", JsonHelpers.GetString(parameters, "target") ?? "project_memory"),
                 new DbSql.SqlParam("$targetPath", RequireString(parameters, "targetPath")),
@@ -339,13 +354,50 @@ internal static class DbMemoryAutomationTools
     private static MemoryAutomationEntry? GetEntry(
         SqliteConnection connection,
         SqliteTransaction? transaction,
-        string id)
+        string id,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"SELECT {EntrySelectColumns} FROM memory_automation_entries WHERE id = $id LIMIT 1";
+        command.CommandText = $"SELECT {EntrySelectColumns} FROM memory_automation_entries WHERE id = $id AND workspace_id = $workspaceId LIMIT 1";
         command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadEntries(command).FirstOrDefault();
+    }
+
+    private static void ValidateEntryAssociations(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        JsonElement parameters,
+        string workspaceId)
+    {
+        RequireAssociationWorkspace(connection, transaction, "memory_roots", GetOptionalString(parameters, "memoryRootId"), workspaceId);
+        RequireAssociationWorkspace(connection, transaction, "memory_jobs", GetOptionalString(parameters, "jobId"), workspaceId);
+        RequireAssociationWorkspace(connection, transaction, "projects", GetOptionalString(parameters, "projectId"), workspaceId);
+        var sessionId = GetOptionalString(parameters, "sourceSessionId");
+        if (sessionId?.StartsWith("rollup:", StringComparison.Ordinal) == true)
+            return;
+        else
+        {
+            RequireAssociationWorkspace(connection, transaction, "sessions", sessionId, workspaceId);
+        }
+    }
+
+    private static void RequireAssociationWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string tableName,
+        string? id,
+        string workspaceId)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = $"SELECT 1 FROM {tableName} WHERE id = $id AND workspace_id = $workspaceId LIMIT 1";
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
+        if (command.ExecuteScalar() is null)
+            throw new InvalidOperationException("Memory automation association is not available in this workspace.");
     }
 
     private static List<MemoryAutomationEntry> ReadEntries(SqliteCommand command)
@@ -380,7 +432,8 @@ internal static class DbMemoryAutomationTools
                 SshConnectionId = reader.IsDBNull(21) ? null : reader.GetString(21),
                 CreatedAt = reader.GetInt64(22),
                 UpdatedAt = reader.GetInt64(23),
-                UndoneAt = reader.IsDBNull(24) ? null : reader.GetInt64(24)
+                UndoneAt = reader.IsDBNull(24) ? null : reader.GetInt64(24),
+                WorkspaceId = reader.GetString(25)
             });
         }
 
@@ -529,6 +582,11 @@ internal static class DbMemoryAutomationTools
             ? value
             : throw new InvalidOperationException($"Missing required memory automation field: {name}");
     }
+
+    private static string ResolveWorkspaceId(JsonElement parameters) =>
+        JsonHelpers.GetString(parameters, "workspaceId") is { Length: > 0 } workspaceId
+            ? workspaceId
+            : "local-personal";
 
     private static string CreateId()
     {

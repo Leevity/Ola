@@ -1,7 +1,7 @@
 ﻿import { ipcMain, BrowserWindow } from 'electron'
 import * as fs from 'fs'
 import * as path from 'path'
-import { FeishuApi } from '../channels/providers/feishu/feishu-api'
+import { downloadSafeRemoteResource, FeishuApi } from '../channels/providers/feishu/feishu-api'
 import { nanoid } from 'nanoid'
 import { ChannelManager } from '../channels/channel-manager'
 import {
@@ -17,12 +17,37 @@ import {
 } from '../../shared/messagepack/binary-ipc'
 import { CHANNEL_PROVIDERS } from '../channels/channel-descriptors'
 import { getNativeWorker } from '../lib/native-worker'
+import {
+  canaryFindPluginSessionByChat,
+  canaryListAllPluginSessions,
+  canaryListPluginSessionMessages,
+  canaryListPluginSessions
+} from '../db/legacy-read-canary'
+import { businessWriteCanary } from '../db/business-write-canary'
+import {
+  authorizeChannelSessionWorkspace,
+  readAuthorizedChannelSession
+} from '../channels/channel-session-workspace'
+import {
+  authorizeChannelPluginWorkspace,
+  authorizeChannelStreamWorkspace,
+  channelPluginInWorkspace,
+  loadAuthorizedChannelPlugin
+} from '../channels/channel-plugin-workspace'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { handleChannelAutoReply } from '../channels/auto-reply'
 import type {
   ChannelInstance,
   ChannelEvent,
-  ChannelProviderDescriptor
+  ChannelProviderDescriptor,
+  MessagingChannelService
 } from '../channels/channel-types'
+import {
+  legacyModelSource,
+  modelSourceSelection,
+  parseModelSource,
+  type ModelSource
+} from '../../shared/runtime/model-source'
 import {
   startWeixinLoginWithQr,
   waitForWeixinLogin,
@@ -30,6 +55,8 @@ import {
 } from '../channels/providers/weixin/weixin-login'
 import type { FeishuService } from '../channels/providers/feishu/feishu-service'
 import type { WeixinService } from '../channels/providers/weixin/weixin-service'
+
+void BrowserWindow
 
 let activeChannelManager: ChannelManager | null = null
 
@@ -42,6 +69,7 @@ interface NativeProjectRow {
   pinned: number
   created_at: number
   updated_at: number
+  workspace_id?: string | null
 }
 
 interface NativePluginSessionRow {
@@ -97,6 +125,15 @@ function registerChannelMessagePackHandler<TArgs>(
 ): void {
   ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<TArgs>(bytes)
+    if (channel.startsWith('plugin:weixin:') || channel.startsWith('plugin:feishu:')) {
+      const pluginArgs = args as { pluginId?: unknown; workspaceId?: unknown } | null
+      await authorizeChannelPluginWorkspace(
+        pluginArgs?.pluginId,
+        pluginArgs?.workspaceId,
+        readPlugins,
+        loadOfflineWorkspaceIds
+      )
+    }
     return encodeMessagePackPayload(await handler(args))
   })
 }
@@ -111,69 +148,28 @@ function assertNativeMutation(
   return result
 }
 
-async function captureQrPageAsDataUrl(url: string): Promise<string | undefined> {
-  const win = new BrowserWindow({
-    show: false,
-    width: 720,
-    height: 960,
-    autoHideMenuBar: true,
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-      offscreen: false
-    }
-  })
-
-  try {
-    await win.loadURL(url)
-    await new Promise((resolve) => setTimeout(resolve, 1800))
-    const image = await win.webContents.capturePage()
-    const png = image.toPNG()
-    return `data:image/png;base64,${png.toString('base64')}`
-  } catch {
-    return undefined
-  } finally {
-    if (!win.isDestroyed()) {
-      win.destroy()
-    }
-  }
-}
-
 async function normalizeQrDisplayUrl(url?: string): Promise<string | undefined> {
   const value = url?.trim()
   if (!value) return undefined
-  if (value.startsWith('data:image/')) return value
+  if (value.startsWith('data:image/')) {
+    if (
+      value.length > 4 * 1024 * 1024 ||
+      !/^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(value)
+    ) {
+      return undefined
+    }
+    return value
+  }
   if (!/^https?:\/\//i.test(value)) return value
 
   try {
-    const response = await fetch(value)
-    if (!response.ok) {
-      return (await captureQrPageAsDataUrl(value)) || value
-    }
-
-    const contentType = response.headers.get('content-type') || ''
-
-    if (contentType.startsWith('image/')) {
-      const buffer = Buffer.from(await response.arrayBuffer())
-      return `data:${contentType};base64,${buffer.toString('base64')}`
-    }
-
-    const html = await response.text()
-    const imgMatch = html.match(/<img[^>]+src=["']([^"']+)["']/i)
-    if (imgMatch?.[1]) {
-      const imgSrc = new URL(imgMatch[1], value).toString()
-      const imageResponse = await fetch(imgSrc)
-      if (imageResponse.ok) {
-        const imageType = imageResponse.headers.get('content-type') || 'image/png'
-        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer())
-        return `data:${imageType};base64,${imageBuffer.toString('base64')}`
-      }
-    }
-
-    return (await captureQrPageAsDataUrl(value)) || value
+    const buffer = await downloadSafeRemoteResource(value)
+    // QR providers return image bytes. Deliberately do not render arbitrary
+    // remote HTML or follow image links: those paths turn a login preview into
+    // an SSRF-capable browser surface.
+    return `data:image/png;base64,${buffer.toString('base64')}`
   } catch {
-    return (await captureQrPageAsDataUrl(value)) || value
+    return undefined
   }
 }
 
@@ -203,12 +199,8 @@ async function readBinarySource(
   }
 
   if (/^https?:\/\//i.test(value)) {
-    const response = await fetch(value)
-    if (!response.ok) {
-      throw new Error(`Download URL failed: HTTP ${response.status}`)
-    }
     return {
-      buffer: Buffer.from(await response.arrayBuffer()),
+      buffer: await downloadSafeRemoteResource(value),
       fileName: resolveSourceFileName(value, fallbackName)
     }
   }
@@ -251,15 +243,50 @@ async function writePlugins(plugins: ChannelInstance[]): Promise<void> {
   await writeChannelPlugins(plugins)
 }
 
+/**
+ * Channel configurations are public data. Keep the legacy provider/model
+ * projection synchronized, but make ModelSource the authoritative binding so
+ * managed resources cannot be mistaken for an ordinary local provider.
+ */
+function normalizeChannelModelBinding(channel: ChannelInstance): ChannelInstance {
+  const workspaceId = channel.workspaceId?.trim() || 'local-personal'
+  let source: ModelSource | null | undefined = channel.modelSource
+  if (source !== undefined && source !== null) {
+    source = parseModelSource(source)
+    if (source.kind !== 'local' && source.workspaceId !== workspaceId)
+      throw new Error('WORKSPACE_MISMATCH')
+  } else if (channel.providerId && channel.model) {
+    // Older managed bindings did not persist the workspace kind. Retain their
+    // legacy projection for reading; only an explicit typed update may upgrade
+    // them, because guessing personal vs team would weaken authorization.
+    source = channel.providerId.startsWith('ola-managed:')
+      ? undefined
+      : legacyModelSource(channel.providerId, channel.model)
+  } else {
+    source = null
+  }
+  const selection = source
+    ? modelSourceSelection(source)
+    : source === undefined
+      ? { providerId: channel.providerId ?? null, modelId: channel.model ?? null }
+      : { providerId: null, modelId: null }
+  return {
+    ...channel,
+    workspaceId,
+    modelSource: source,
+    providerId: selection.providerId,
+    model: selection.modelId
+  }
+}
+
 // ── Notify renderer of channel events ──
 
 function notifyRenderer(event: ChannelEvent): void {
-  safeSendMessagePackToAllWindows('plugin:incoming-message', event)
-
-  // Route incoming messages through auto-reply pipeline
   if (event.type === 'incoming_message') {
     handleChannelAutoReply(event)
+    return
   }
+  safeSendMessagePackToAllWindows('plugin:incoming-message', event)
 }
 
 // ── Register IPC handlers ──
@@ -275,7 +302,14 @@ export async function autoStartChannels(channelManager: ChannelManager): Promise
   )
   for (const instance of toStart) {
     try {
-      await channelManager.startPlugin(instance, notifyRenderer)
+      const current = await loadAuthorizedChannelPlugin(
+        instance.id,
+        instance.workspaceId,
+        readPlugins,
+        loadOfflineWorkspaceIds
+      )
+      if (!current.enabled || !(current.features?.autoStart ?? true)) continue
+      await channelManager.startPlugin(current, notifyRenderer)
       console.log(`[Channel Manager] Auto-started: ${instance.name} (${instance.type})`)
     } catch (err) {
       console.error(`[Channel Manager] Auto-start failed for ${instance.name}:`, err)
@@ -289,8 +323,15 @@ export async function executePluginAction(args: {
   pluginId: string
   action: string
   params: Record<string, unknown>
+  workspaceId?: string
 }): Promise<unknown> {
   const { pluginId, action, params } = args
+  await authorizeChannelPluginWorkspace(
+    pluginId,
+    args.workspaceId,
+    readPlugins,
+    loadOfflineWorkspaceIds
+  )
   const service = activeChannelManager?.getService(pluginId)
   if (!service) {
     throw new Error(`Plugin ${pluginId} is not running`)
@@ -326,6 +367,12 @@ export async function executeChannelSpecificPluginTool(
   if (!pluginId) {
     return { error: 'Missing pluginId' }
   }
+  await authorizeChannelPluginWorkspace(
+    pluginId,
+    args.workspaceId,
+    readPlugins,
+    loadOfflineWorkspaceIds
+  )
   if (toolName && !(await isPluginToolEnabled(pluginId, toolName))) {
     return { error: `Tool "${toolName}" is disabled for this channel.` }
   }
@@ -692,24 +739,40 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   })
 
   // List persisted plugin instances (auto-provisions built-in plugins)
-  registerChannelMessagePackHandler<undefined>('plugin:list', async () => {
+  registerChannelMessagePackHandler<{ workspaceId: string }>('plugin:list', async (args) => {
+    if (typeof args?.workspaceId !== 'string') throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
+    const workspaceId = await authorizeChannelSessionWorkspace(
+      args.workspaceId,
+      loadOfflineWorkspaceIds
+    )
     const plugins = await readPlugins()
-    const projects = await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
+    const belongsToWorkspace = (plugin: ChannelInstance): boolean =>
+      channelPluginInWorkspace(plugin, workspaceId)
+    const projects = (
+      await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
+    ).filter((project) => (project.workspace_id || 'local-personal') === workspaceId)
     let changed = false
 
     // Migrate legacy unbound built-ins to the first normal project when there is only one.
     if (projects.length === 1) {
       for (const descriptor of CHANNEL_PROVIDERS) {
-        const legacyUnbound = plugins.find((p) => p.type === descriptor.type && !p.projectId)
+        const legacyUnbound = plugins.find(
+          (p) => belongsToWorkspace(p) && p.type === descriptor.type && !p.projectId
+        )
         const hasBoundInstance = plugins.some(
           (p) => p.type === descriptor.type && p.projectId === projects[0].id
         )
         if (legacyUnbound && !hasBoundInstance) {
           legacyUnbound.projectId = projects[0].id
+          legacyUnbound.workspaceId = projects[0].workspace_id || 'local-personal'
           changed = true
         }
       }
     }
+
+    const workspaceByProjectId = new Map(
+      projects.map((project) => [project.id, project.workspace_id || 'local-personal'])
+    )
 
     // Auto-provision one built-in channel instance per normal project and provider type.
     for (const project of projects) {
@@ -734,6 +797,7 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
             config,
             createdAt: Date.now(),
             projectId: project.id,
+            workspaceId: project.workspace_id || 'local-personal',
             tools: buildToolsMap(descriptor)
           })
           changed = true
@@ -751,9 +815,14 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     }
 
     // Ensure old plugin instances have config keys matching their current schema
-    for (const p of plugins) {
+    for (const p of plugins.filter(belongsToWorkspace)) {
       const desc = CHANNEL_PROVIDERS.find((d) => d.type === p.type)
       if (!desc) continue
+      const projectWorkspace = p.projectId ? workspaceByProjectId.get(p.projectId) : undefined
+      if (projectWorkspace && p.workspaceId !== projectWorkspace) {
+        p.workspaceId = projectWorkspace
+        changed = true
+      }
       const schemaKeys = new Set(desc.configSchema.map((f) => f.key))
       for (const field of desc.configSchema) {
         if (!(field.key in p.config)) {
@@ -787,9 +856,11 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
             'config',
             'createdAt',
             'projectId',
+            'workspaceId',
             'tools',
             'providerId',
             'model',
+            'modelSource',
             'features',
             'permissions'
           ].includes(key)
@@ -804,147 +875,243 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         p.tools = nextTools
         changed = true
       }
+      const normalized = normalizeChannelModelBinding(p)
+      if (JSON.stringify(normalized) !== JSON.stringify(p)) {
+        Object.assign(p, normalized)
+        changed = true
+      }
     }
 
     if (changed) await writePlugins(plugins)
+    const scoped = plugins.filter(belongsToWorkspace)
     console.log(
-      `[Channels] Loaded ${plugins.length} channels (${plugins.filter((p) => p.builtin).length} built-in)`
+      `[Channels] Loaded ${scoped.length} channels (${scoped.filter((p) => p.builtin).length} built-in)`
     )
-    return plugins
+    return scoped
   })
 
   // Add a new plugin instance
   registerChannelMessagePackHandler<ChannelInstance>('plugin:add', async (instance) => {
+    if (typeof instance?.workspaceId !== 'string') throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
+    const workspaceId = await authorizeChannelSessionWorkspace(
+      instance.workspaceId,
+      loadOfflineWorkspaceIds
+    )
     const plugins = await readPlugins()
+    if (!instance.id || plugins.some((plugin) => plugin.id === instance.id))
+      throw new Error('CHANNEL_PLUGIN_ID_UNAVAILABLE')
+    if (instance.projectId) {
+      const projects = await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
+      const project = projects.find((item) => item.id === instance.projectId)
+      if (!project || (project.workspace_id || 'local-personal') !== workspaceId)
+        throw new Error('CHANNEL_PROJECT_WORKSPACE_MISMATCH')
+    }
     const desc = CHANNEL_PROVIDERS.find((d) => d.type === instance.type)
     const nextTools = buildToolsMap(desc, instance.tools)
-    plugins.push({
-      ...instance,
-      ...(nextTools ? { tools: nextTools } : {})
-    })
+    plugins.push(
+      normalizeChannelModelBinding({
+        ...instance,
+        workspaceId,
+        ...(nextTools ? { tools: nextTools } : {})
+      })
+    )
     await writePlugins(plugins)
     return { success: true }
   })
 
   // Update a plugin instance
-  registerChannelMessagePackHandler<{ id: string; patch: Partial<ChannelInstance> }>(
-    'plugin:update',
-    async ({ id, patch }) => {
-      const plugins = await readPlugins()
-      const idx = plugins.findIndex((p) => p.id === id)
-      if (idx === -1) return { success: false, error: 'Plugin not found' }
-      const next = { ...plugins[idx], ...patch }
-      if ('providerId' in patch && patch.providerId == null) {
-        next.model = null
+  registerChannelMessagePackHandler<{
+    id: string
+    workspaceId: string
+    patch: Partial<ChannelInstance>
+  }>('plugin:update', async ({ id, workspaceId, patch }) => {
+    await authorizeChannelPluginWorkspace(id, workspaceId, readPlugins, loadOfflineWorkspaceIds)
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+      throw new Error('INVALID_CHANNEL_PATCH')
+    const plugins = await readPlugins()
+    const idx = plugins.findIndex((p) => p.id === id)
+    if (idx === -1) return { success: false, error: 'Plugin not found' }
+    if (
+      ('workspaceId' in patch && patch.workspaceId !== workspaceId) ||
+      ('id' in patch && patch.id !== id)
+    )
+      throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
+    let next = { ...plugins[idx], ...patch }
+    if ('projectId' in patch && patch.projectId) {
+      const projects = await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
+      const project = projects.find((item) => item.id === patch.projectId)
+      if (!project) return { success: false, error: 'Project not found' }
+      if ((project.workspace_id || 'local-personal') !== workspaceId)
+        throw new Error('CHANNEL_PROJECT_WORKSPACE_MISMATCH')
+    }
+    if ('providerId' in patch && patch.providerId == null) {
+      next.model = null
+    }
+    if (('providerId' in patch || 'model' in patch) && !('modelSource' in patch)) {
+      // A legacy selector edit intentionally replaces a previous explicit
+      // binding. The normalizer upgrades local selections and preserves an
+      // old managed projection only when its workspace kind is unknown.
+      next.modelSource = undefined
+    }
+    next = normalizeChannelModelBinding(next)
+    plugins[idx] = next
+    await writePlugins(plugins)
+
+    if ('providerId' in patch || 'model' in patch || 'modelSource' in patch) {
+      try {
+        const providerId = next.providerId ?? null
+        const modelId = providerId ? (next.model ?? null) : null
+        assertNativeMutation(
+          await requestNativeDb<NativePluginSessionMutationResult>(
+            'db/plugin-sync-session-models',
+            {
+              pluginId: id,
+              providerId,
+              modelId,
+              workspaceId: next.workspaceId,
+              modelSource: next.modelSource ? JSON.stringify(next.modelSource) : null
+            }
+          ),
+          'Sync channel session model'
+        )
+      } catch (err) {
+        console.error('[Channels] Failed to sync channel session model:', err)
       }
-      plugins[idx] = next
+    }
+
+    if ('projectId' in patch) {
+      try {
+        assertNativeMutation(
+          await requestNativeDb<NativePluginSessionMutationResult>(
+            'db/plugin-sync-session-project',
+            {
+              pluginId: id,
+              projectId: next.projectId ?? null,
+              workspaceId: next.workspaceId
+            }
+          ),
+          'Sync channel project binding'
+        )
+      } catch (err) {
+        console.error('[Channels] Failed to sync channel project binding:', err)
+      }
+    }
+    return { success: true }
+  })
+
+  // Remove a plugin instance (also cascade-deletes plugin sessions)
+  // Built-in plugins cannot be removed.
+  registerChannelMessagePackHandler<{ pluginId: string; workspaceId: string }>(
+    'plugin:remove',
+    async ({ pluginId: id, workspaceId }) => {
+      await authorizeChannelPluginWorkspace(id, workspaceId, readPlugins, loadOfflineWorkspaceIds)
+      const allPlugins = await readPlugins()
+      const target = allPlugins.find((p) => p.id === id)
+      if (!target) return { success: false, error: 'Plugin not found' }
+      if (target?.builtin) {
+        return { success: false, error: 'Built-in plugins cannot be removed' }
+      }
+      // Stop service if running
+      await channelManager.stopPlugin(id)
+      const plugins = allPlugins.filter((p) => p.id !== id)
       await writePlugins(plugins)
-
-      if ('providerId' in patch || 'model' in patch) {
-        try {
-          const providerId = next.providerId ?? null
-          const modelId = providerId ? (next.model ?? null) : null
-          assertNativeMutation(
-            await requestNativeDb<NativePluginSessionMutationResult>(
-              'db/plugin-sync-session-models',
-              {
-                pluginId: id,
-                providerId,
-                modelId
-              }
-            ),
-            'Sync channel session model'
-          )
-        } catch (err) {
-          console.error('[Channels] Failed to sync channel session model:', err)
-        }
-      }
-
-      if ('projectId' in patch) {
-        try {
-          assertNativeMutation(
-            await requestNativeDb<NativePluginSessionMutationResult>(
-              'db/plugin-sync-session-project',
-              {
-                pluginId: id,
-                projectId: next.projectId ?? null
-              }
-            ),
-            'Sync channel project binding'
-          )
-        } catch (err) {
-          console.error('[Channels] Failed to sync channel project binding:', err)
-        }
+      // Cascade-delete plugin sessions and their messages
+      try {
+        assertNativeMutation(
+          await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-remove-data', {
+            pluginId: id,
+            workspaceId: target?.workspaceId || 'local-personal'
+          }),
+          'Remove channel data'
+        )
+      } catch (err) {
+        console.error('[Channels] Failed to cascade-delete sessions:', err)
       }
       return { success: true }
     }
   )
 
-  // Remove a plugin instance (also cascade-deletes plugin sessions)
-  // Built-in plugins cannot be removed.
-  registerChannelMessagePackHandler<string>('plugin:remove', async (id) => {
-    const allPlugins = await readPlugins()
-    const target = allPlugins.find((p) => p.id === id)
-    if (target?.builtin) {
-      return { success: false, error: 'Built-in plugins cannot be removed' }
-    }
-    // Stop service if running
-    await channelManager.stopPlugin(id)
-    const plugins = allPlugins.filter((p) => p.id !== id)
-    await writePlugins(plugins)
-    // Cascade-delete plugin sessions and their messages
-    try {
-      assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-remove-data', {
-          pluginId: id
-        }),
-        'Remove channel data'
-      )
-    } catch (err) {
-      console.error('[Channels] Failed to cascade-delete sessions:', err)
-    }
-    return { success: true }
-  })
-
   // Start a plugin service
-  registerChannelMessagePackHandler<string>('plugin:start', async (id) => {
-    const plugins = await readPlugins()
-    const instance = plugins.find((p) => p.id === id)
-    if (!instance) return { success: false, error: 'Plugin not found' }
-
-    try {
-      await channelManager.startPlugin(instance, notifyRenderer)
-      return { success: true }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      return { success: false, error: msg }
+  registerChannelMessagePackHandler<{ pluginId: string; workspaceId: string }>(
+    'plugin:start',
+    async ({ pluginId, workspaceId }) => {
+      try {
+        const instance = await loadAuthorizedChannelPlugin(
+          pluginId,
+          workspaceId,
+          readPlugins,
+          loadOfflineWorkspaceIds
+        )
+        await channelManager.startPlugin(instance, notifyRenderer)
+        return { success: true }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return { success: false, error: msg }
+      }
     }
-  })
+  )
 
   // Stop a plugin service
-  registerChannelMessagePackHandler<string>('plugin:stop', async (id) => {
-    await channelManager.stopPlugin(id)
-    return { success: true }
-  })
+  registerChannelMessagePackHandler<{ pluginId: string; workspaceId: string }>(
+    'plugin:stop',
+    async ({ pluginId, workspaceId }) => {
+      await authorizeChannelPluginWorkspace(
+        pluginId,
+        workspaceId,
+        readPlugins,
+        loadOfflineWorkspaceIds
+      )
+      await channelManager.stopPlugin(pluginId)
+      return { success: true }
+    }
+  )
 
   // Get plugin status
-  registerChannelMessagePackHandler<string>('plugin:status', async (id) => {
-    return channelManager.getStatus(id)
-  })
+  registerChannelMessagePackHandler<{ pluginId: string; workspaceId: string }>(
+    'plugin:status',
+    async ({ pluginId, workspaceId }) => {
+      await authorizeChannelPluginWorkspace(
+        pluginId,
+        workspaceId,
+        readPlugins,
+        loadOfflineWorkspaceIds
+      )
+      return channelManager.getStatus(pluginId)
+    }
+  )
 
   // Unified action dispatch — routes to the correct MessagingPluginService method
   registerChannelMessagePackHandler<{
     pluginId: string
     action: string
     params: Record<string, unknown>
-  }>('plugin:exec', async ({ pluginId, action, params }) => {
-    return await executePluginAction({ pluginId, action, params })
+    workspaceId: string
+  }>('plugin:exec', async ({ pluginId, action, params, workspaceId }) => {
+    if (typeof workspaceId !== 'string') throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
+    return await executePluginAction({ pluginId, action, params, workspaceId })
   })
 
   // List plugin sessions (filtered by plugin_id)
-  registerChannelMessagePackHandler<string>('plugin:sessions:list', async (pluginId) => {
-    return await requestNativeDb<NativePluginSessionRow[]>('db/plugin-sessions-list', { pluginId })
-  })
+  registerChannelMessagePackHandler<{ pluginId: string; workspaceId?: string }>(
+    'plugin:sessions:list',
+    async ({ pluginId, workspaceId: rawWorkspaceId }) => {
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        rawWorkspaceId,
+        loadOfflineWorkspaceIds
+      )
+      const plugin = (await readPlugins()).find((item) => item.id === pluginId)
+      if (!plugin || (plugin.workspaceId || 'local-personal') !== workspaceId)
+        throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
+      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
+        const migrated = await canaryListPluginSessions(pluginId, workspaceId)
+        if (migrated !== undefined) return migrated
+        return await requestNativeDb<NativePluginSessionRow[]>('db/plugin-sessions-list', {
+          pluginId,
+          workspaceId
+        })
+      })
+    }
+  )
 
   // Create a plugin session
   registerChannelMessagePackHandler<{
@@ -955,12 +1122,37 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     createdAt: number
     updatedAt: number
     externalChatId?: string
+    workspaceId?: string
   }>('plugin:sessions:create', async (args) => {
+    const workspaceId = await authorizeChannelSessionWorkspace(
+      args.workspaceId,
+      loadOfflineWorkspaceIds
+    )
     const plugin = (await readPlugins()).find((item) => item.id === args.pluginId)
+    if (!plugin || (plugin.workspaceId || 'local-personal') !== workspaceId)
+      throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
+    const writer = businessWriteCanary()
+    if (writer) {
+      await writer.createChannelSession({
+        id: args.id,
+        pluginId: args.pluginId,
+        title: args.title,
+        mode: args.mode,
+        workspaceId,
+        createdAt: args.createdAt,
+        updatedAt: args.updatedAt,
+        externalChatId: args.externalChatId ?? null,
+        projectId: plugin.projectId ?? null,
+        providerId: plugin.providerId ?? null,
+        modelId: plugin.model ?? null
+      })
+      return { success: true }
+    }
     const result = await requestNativeDb<NativePluginSessionMutationResult>(
       'db/plugin-sessions-create',
       {
         ...args,
+        workspaceId,
         projectId: plugin?.projectId ?? null,
         providerId: plugin?.providerId ?? null,
         modelId: plugin?.model ?? null
@@ -973,17 +1165,25 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   })
 
   // Find a plugin session by external chat ID
-  registerChannelMessagePackHandler<string>(
+  registerChannelMessagePackHandler<{ externalChatId: string; workspaceId?: string }>(
     'plugin:sessions:find-by-chat',
-    async (externalChatId) => {
-      const result = await requestNativeDb<NativePluginSessionFindResult>(
-        'db/plugin-sessions-find-by-chat',
-        { externalChatId }
+    async ({ externalChatId, workspaceId: rawWorkspaceId }) => {
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        rawWorkspaceId,
+        loadOfflineWorkspaceIds
       )
-      if (!result.success) {
-        throw new Error(result.error || 'Find plugin session failed')
-      }
-      return result.session ?? null
+      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
+        const migrated = await canaryFindPluginSessionByChat(externalChatId, workspaceId)
+        if (migrated !== undefined) return migrated
+        const result = await requestNativeDb<NativePluginSessionFindResult>(
+          'db/plugin-sessions-find-by-chat',
+          { externalChatId, workspaceId }
+        )
+        if (!result.success) {
+          throw new Error(result.error || 'Find plugin session failed')
+        }
+        return result.session ?? null
+      })
     }
   )
 
@@ -992,9 +1192,53 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   // Active streaming handles keyed by per-reply streamId.
   const streamHandles = new Map<
     string,
-    import('../channels/channel-types').ChannelStreamingHandle
+    {
+      handle: import('../channels/channel-types').ChannelStreamingHandle
+      workspaceId: string
+      pluginId: string
+      chatId: string
+      service: MessagingChannelService
+    }
   >()
   const streamContents = new Map<string, string>()
+  const streamStartsInFlight = new Set<string>()
+
+  async function activeStream(args: {
+    pluginId: string
+    workspaceId: string
+    chatId: string
+    streamId?: string
+  }): Promise<{ key: string; stream: NonNullable<ReturnType<typeof streamHandles.get>> } | null> {
+    const key = args.streamId || `${args.pluginId}:${args.chatId}`
+    const stream = streamHandles.get(key)
+    try {
+      await authorizeChannelStreamWorkspace(
+        args.pluginId,
+        args.workspaceId,
+        stream?.workspaceId,
+        readPlugins,
+        loadOfflineWorkspaceIds
+      )
+    } catch (error) {
+      if (
+        stream &&
+        stream.pluginId === args.pluginId &&
+        stream.chatId === args.chatId &&
+        stream.workspaceId === args.workspaceId
+      ) {
+        streamHandles.delete(key)
+        streamContents.delete(key)
+      }
+      throw error
+    }
+    if (!stream || stream.pluginId !== args.pluginId || stream.chatId !== args.chatId) return null
+    if (channelManager.getService(args.pluginId) !== stream.service) {
+      streamHandles.delete(key)
+      streamContents.delete(key)
+      return null
+    }
+    return { key, stream }
+  }
 
   /**
    * Start a streaming message for a plugin chat.
@@ -1003,15 +1247,32 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
    */
   registerChannelMessagePackHandler<{
     pluginId: string
+    workspaceId: string
     chatId: string
     streamId?: string
     initialContent: string
     messageId?: string
   }>('plugin:stream:start', async (args) => {
+    const workspaceId = await authorizeChannelStreamWorkspace(
+      args.pluginId,
+      args.workspaceId,
+      undefined,
+      readPlugins,
+      loadOfflineWorkspaceIds
+    )
     const service = channelManager.getService(args.pluginId)
     if (!service || !service.supportsStreaming || !service.sendStreamingMessage) {
       return { ok: false, supportsStreaming: false }
     }
+    const key = args.streamId || `${args.pluginId}:${args.chatId}`
+    const existing = streamHandles.get(key)
+    if (existing && existing.service !== service) {
+      streamHandles.delete(key)
+      streamContents.delete(key)
+    }
+    if (streamHandles.has(key) || streamStartsInFlight.has(key))
+      return { ok: false, error: 'CHANNEL_STREAM_ALREADY_EXISTS' }
+    streamStartsInFlight.add(key)
 
     try {
       const handle = await service.sendStreamingMessage(
@@ -1019,44 +1280,97 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         args.initialContent,
         args.messageId
       )
-      const key = args.streamId || `${args.pluginId}:${args.chatId}`
-      streamHandles.set(key, handle)
+      await authorizeChannelStreamWorkspace(
+        args.pluginId,
+        args.workspaceId,
+        workspaceId,
+        readPlugins,
+        loadOfflineWorkspaceIds
+      )
+      if (channelManager.getService(args.pluginId) !== service)
+        return { ok: false, error: 'CHANNEL_STREAM_SERVICE_CHANGED' }
+      streamHandles.set(key, {
+        handle,
+        workspaceId,
+        pluginId: args.pluginId,
+        chatId: args.chatId,
+        service
+      })
       streamContents.set(key, args.initialContent ?? '')
       console.log(`[PluginStream] Started streaming for ${args.pluginId}:${args.chatId}:${key}`)
       return { ok: true, supportsStreaming: true }
     } catch (err) {
       console.error('[PluginStream] Failed to start streaming:', err)
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    } finally {
+      streamStartsInFlight.delete(key)
     }
   })
 
   // ── Plugin Session Management ──
 
   /** List all plugin sessions (sessions with plugin_id set) */
-  registerChannelMessagePackHandler<undefined>('plugin:sessions:list-all', async () => {
-    return await requestNativeDb<NativePluginSessionRow[]>('db/plugin-sessions-list-all')
-  })
-
-  /** Get messages for a plugin session */
-  registerChannelMessagePackHandler<{ sessionId: string; limit?: number; offset?: number }>(
-    'plugin:sessions:messages',
+  registerChannelMessagePackHandler<{ workspaceId?: string }>(
+    'plugin:sessions:list-all',
     async (args) => {
-      return await requestNativeDb<NativePluginSessionMessageRow[]>(
-        'db/plugin-sessions-messages',
-        args as Record<string, unknown>
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        args?.workspaceId,
+        loadOfflineWorkspaceIds
       )
+      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
+        const migrated = await canaryListAllPluginSessions(workspaceId)
+        if (migrated !== undefined) return migrated
+        return await requestNativeDb<NativePluginSessionRow[]>('db/plugin-sessions-list-all', {
+          workspaceId
+        })
+      })
     }
   )
 
+  /** Get messages for a plugin session */
+  registerChannelMessagePackHandler<{
+    sessionId: string
+    limit?: number
+    offset?: number
+    workspaceId?: string
+  }>('plugin:sessions:messages', async (args) => {
+    const workspaceId = await authorizeChannelSessionWorkspace(
+      args.workspaceId,
+      loadOfflineWorkspaceIds
+    )
+    return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
+      const migrated = await canaryListPluginSessionMessages(
+        args.sessionId,
+        workspaceId,
+        args.limit,
+        args.offset
+      )
+      if (migrated !== undefined) return migrated
+      return await requestNativeDb<NativePluginSessionMessageRow[]>('db/plugin-sessions-messages', {
+        ...args,
+        workspaceId
+      })
+    })
+  })
+
   /** Clear all messages in a plugin session */
-  registerChannelMessagePackHandler<{ sessionId: string }>(
+  registerChannelMessagePackHandler<{ sessionId: string; workspaceId?: string }>(
     'plugin:sessions:clear',
     async (args) => {
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        args.workspaceId,
+        loadOfflineWorkspaceIds
+      )
+      const writer = businessWriteCanary()
+      if (writer) {
+        const deleted = await writer.clearChannelSession({ sessionId: args.sessionId, workspaceId })
+        return { deleted }
+      }
       const result = assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>(
-          'db/plugin-sessions-clear',
-          args as Record<string, unknown>
-        ),
+        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-sessions-clear', {
+          ...args,
+          workspaceId
+        }),
         'Clear plugin session'
       )
       return { deleted: result.deleted }
@@ -1064,16 +1378,31 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   )
 
   /** Delete a plugin session and its messages */
-  registerChannelMessagePackHandler<{ sessionId: string }>(
+  registerChannelMessagePackHandler<{ sessionId: string; workspaceId?: string }>(
     'plugin:sessions:delete',
     async (args) => {
-      assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>(
-          'db/plugin-sessions-delete',
-          args as Record<string, unknown>
-        ),
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        args.workspaceId,
+        loadOfflineWorkspaceIds
+      )
+      const writer = businessWriteCanary()
+      if (writer) {
+        const changed = await writer.deleteChannelSession({
+          sessionId: args.sessionId,
+          workspaceId
+        })
+        if (!changed) throw new Error('CHANNEL_SESSION_NOT_FOUND')
+        safeSendMessagePackToAllWindows('plugin:session-deleted', { sessionId: args.sessionId })
+        return { ok: true }
+      }
+      const result = assertNativeMutation(
+        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-sessions-delete', {
+          ...args,
+          workspaceId
+        }),
         'Delete plugin session'
       )
+      if (result.changed === 0) throw new Error('CHANNEL_SESSION_NOT_FOUND')
       // Notify renderer to remove from store
       const payload = { sessionId: args.sessionId }
       safeSendMessagePackToAllWindows('plugin:session-deleted', payload)
@@ -1082,16 +1411,31 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   )
 
   /** Rename a plugin session */
-  registerChannelMessagePackHandler<{ sessionId: string; title: string }>(
+  registerChannelMessagePackHandler<{ sessionId: string; title: string; workspaceId?: string }>(
     'plugin:sessions:rename',
     async (args) => {
-      assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>(
-          'db/plugin-sessions-rename',
-          args as Record<string, unknown>
-        ),
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        args.workspaceId,
+        loadOfflineWorkspaceIds
+      )
+      const writer = businessWriteCanary()
+      if (writer) {
+        const changed = await writer.renameChannelSession({
+          sessionId: args.sessionId,
+          workspaceId,
+          title: args.title
+        })
+        if (!changed) throw new Error('CHANNEL_SESSION_NOT_FOUND')
+        return { ok: true }
+      }
+      const result = assertNativeMutation(
+        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-sessions-rename', {
+          ...args,
+          workspaceId
+        }),
         'Rename plugin session'
       )
+      if (result.changed === 0) throw new Error('CHANNEL_SESSION_NOT_FOUND')
       return { ok: true }
     }
   )
@@ -1544,17 +1888,18 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   /** Send a streaming content update (accumulated text, not delta) */
   registerChannelMessagePackHandler<{
     pluginId: string
+    workspaceId: string
     chatId: string
     streamId?: string
     content: string
   }>('plugin:stream:update', async (args) => {
-    const key = args.streamId || `${args.pluginId}:${args.chatId}`
-    const handle = streamHandles.get(key)
-    if (!handle) return { ok: false }
+    const active = await activeStream(args)
+    if (!active) return { ok: false }
+    const { key, stream } = active
 
     try {
       streamContents.set(key, args.content)
-      await handle.update(args.content)
+      await stream.handle.update(args.content)
       return { ok: true }
     } catch (err) {
       console.warn(`[PluginStream] Update failed for ${key}:`, err)
@@ -1565,18 +1910,19 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   /** Append a streaming delta and forward the accumulated content to providers */
   registerChannelMessagePackHandler<{
     pluginId: string
+    workspaceId: string
     chatId: string
     streamId?: string
     delta: string
   }>('plugin:stream:append', async (args) => {
-    const key = args.streamId || `${args.pluginId}:${args.chatId}`
-    const handle = streamHandles.get(key)
-    if (!handle) return { ok: false }
+    const active = await activeStream(args)
+    if (!active) return { ok: false }
+    const { key, stream } = active
 
     try {
       const nextContent = `${streamContents.get(key) ?? ''}${args.delta ?? ''}`
       streamContents.set(key, nextContent)
-      await handle.update(nextContent)
+      await stream.handle.update(nextContent)
       return { ok: true }
     } catch (err) {
       console.warn(`[PluginStream] Append failed for ${key}:`, err)
@@ -1587,17 +1933,18 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
   /** Finish the streaming message with final content */
   registerChannelMessagePackHandler<{
     pluginId: string
+    workspaceId: string
     chatId: string
     streamId?: string
     content: string
   }>('plugin:stream:finish', async (args) => {
-    const key = args.streamId || `${args.pluginId}:${args.chatId}`
-    const handle = streamHandles.get(key)
-    if (!handle) return { ok: false }
+    const active = await activeStream(args)
+    if (!active) return { ok: false }
+    const { key, stream } = active
 
     try {
       streamContents.set(key, args.content)
-      await handle.finish(args.content)
+      await stream.handle.finish(args.content)
       streamHandles.delete(key)
       streamContents.delete(key)
       console.log(`[PluginStream] Finished streaming for ${args.pluginId}:${args.chatId}:${key}`)

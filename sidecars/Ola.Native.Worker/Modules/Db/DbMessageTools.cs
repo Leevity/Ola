@@ -200,21 +200,27 @@ internal static class DbMessageTools
 
             var limit = Math.Clamp(JsonHelpers.GetInt(parameters, "limit", 50), 1, 200);
             var escaped = EscapeLike(query);
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId")?.Trim();
+            if (workspaceId?.Length == 0) workspaceId = null;
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT m.session_id AS session_id, m.content AS snippet
                   FROM messages m
+                  JOIN sessions s ON s.id = m.session_id
                   JOIN (
                     SELECT session_id, MIN(sort_order) AS so
                       FROM messages
                      WHERE content LIKE $like ESCAPE '\'
                      GROUP BY session_id
                   ) f ON f.session_id = m.session_id AND f.so = m.sort_order
+                 WHERE ($workspaceId IS NULL OR s.workspace_id = $workspaceId)
+                 ORDER BY m.session_id ASC
                  LIMIT $limit
                 """;
             command.Parameters.AddWithValue("$like", $"%{escaped}%");
+            command.Parameters.AddWithValue("$workspaceId", (object?)workspaceId ?? DBNull.Value);
             command.Parameters.AddWithValue("$limit", limit);
 
             var rows = new List<MessageContentMatch>();
@@ -647,8 +653,9 @@ internal static class DbMessageTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var messages = LoadMessageContents(connection, sessionId);
+            var messages = LoadMessageContents(connection, sessionId, workspaceId);
 
             if (messages.Count < 6)
             {
@@ -669,13 +676,14 @@ internal static class DbMessageTools
                     continue;
                 }
 
-                ExecuteNonQuery(
+                compacted += ExecuteNonQuery(
                     connection,
                     transaction,
-                    "UPDATE messages SET content = $content WHERE id = $id",
+                    "UPDATE messages SET content = $content WHERE id = $id AND session_id = $sessionId AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)",
                     new SqlParam("$content", compactedContent),
-                    new SqlParam("$id", row.Id));
-                compacted++;
+                    new SqlParam("$id", row.Id),
+                    new SqlParam("$sessionId", sessionId),
+                    new SqlParam("$workspaceId", workspaceId));
             }
             transaction.Commit();
 
@@ -696,17 +704,20 @@ internal static class DbMessageTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
             command.CommandText = """
-                SELECT usage, created_at
-                  FROM messages
-                 WHERE session_id = $sessionId
-                   AND role = 'assistant'
-                   AND usage IS NOT NULL
-                 ORDER BY created_at ASC
+                SELECT m.usage, m.created_at
+                  FROM messages m JOIN sessions s ON s.id = m.session_id
+                 WHERE m.session_id = $sessionId
+                   AND s.workspace_id = $workspaceId
+                   AND m.role = 'assistant'
+                   AND m.usage IS NOT NULL
+                 ORDER BY m.created_at ASC
                 """;
             command.Parameters.AddWithValue("$sessionId", sessionId);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
 
             var stats = new UsageStatsAccumulator();
             using var reader = command.ExecuteReader();
@@ -889,16 +900,17 @@ internal static class DbMessageTools
         return rows;
     }
 
-    private static List<MessageContentRow> LoadMessageContents(SqliteConnection connection, string sessionId)
+    private static List<MessageContentRow> LoadMessageContents(SqliteConnection connection, string sessionId, string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT id, content
-              FROM messages
-             WHERE session_id = $sessionId
-             ORDER BY created_at ASC
+            SELECT m.id, m.content
+              FROM messages m JOIN sessions s ON s.id = m.session_id
+             WHERE m.session_id = $sessionId AND s.workspace_id = $workspaceId
+             ORDER BY m.created_at ASC
             """;
         command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
 
         var rows = new List<MessageContentRow>();
         using var reader = command.ExecuteReader();

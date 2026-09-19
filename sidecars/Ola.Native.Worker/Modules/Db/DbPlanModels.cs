@@ -31,6 +31,10 @@ internal sealed class PlanRow
 
     [JsonPropertyName("updated_at")]
     public long UpdatedAt { get; set; }
+
+    [JsonPropertyName("workspace_id")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? WorkspaceId { get; set; }
 }
 
 internal sealed record PlanFindResult(

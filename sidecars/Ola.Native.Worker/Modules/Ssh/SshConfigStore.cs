@@ -826,12 +826,12 @@ internal static class SshConfigStore
 
     private static string GetConfigPath()
     {
-        return Path.Combine(HomeDirectory(), ConfigFileName);
+        return Path.Combine(OlaDataRoot.ExternalDataHome, ConfigFileName);
     }
 
     private static string HomeDirectory()
     {
-        return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return OlaDataRoot.ExternalDataHome;
     }
 
     private static string StripInlineComment(string value)

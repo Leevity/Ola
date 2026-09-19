@@ -10,11 +10,13 @@ import {
 } from 'fs'
 import { homedir } from 'os'
 import { dirname, extname, join, parse, relative, resolve, sep } from 'path'
+import { olaDataRoot } from '../lib/ola-data-root'
 import type {
   ProjectWikiDocument,
   ProjectWikiGenerateRequest,
   ProjectWikiNode
 } from '../../shared/project-wiki'
+import { wikiWorkspaceStorageKey } from './wiki-workspace-key'
 
 const MAX_FILES = 5000
 const MAX_FILE_BYTES = 2 * 1024 * 1024
@@ -72,7 +74,28 @@ function isSensitiveFile(name: string): boolean {
   return SENSITIVE_FILE_PATTERNS.some((pattern) => pattern.test(name))
 }
 
-function validateProjectRoot(projectRoot: string): string {
+function isInsideDataRoot(candidate: string, dataRoot: string): boolean {
+  const lexicalRoot = resolve(dataRoot)
+  const realRoot = existsSync(lexicalRoot) ? realpathSync(lexicalRoot) : lexicalRoot
+  const lexicalCandidate = resolve(candidate)
+  let existingAncestor = lexicalCandidate
+  while (!existsSync(existingAncestor) && existingAncestor !== parse(existingAncestor).root) {
+    existingAncestor = dirname(existingAncestor)
+  }
+  const realCandidate = join(
+    realpathSync(existingAncestor),
+    relative(existingAncestor, lexicalCandidate)
+  )
+  return [lexicalCandidate, realCandidate].some(
+    (path) =>
+      path === lexicalRoot ||
+      path.startsWith(`${lexicalRoot}${sep}`) ||
+      path === realRoot ||
+      path.startsWith(`${realRoot}${sep}`)
+  )
+}
+
+export function validateProjectRoot(projectRoot: string, dataRoot = olaDataRoot()): string {
   const normalized = resolve(projectRoot)
   const realRoot = existsSync(normalized) ? realpathSync(normalized) : normalized
   const home = resolve(homedir())
@@ -80,16 +103,18 @@ function validateProjectRoot(projectRoot: string): string {
   if (realRoot === root || realRoot === home) {
     throw new Error('Choose a project directory instead of a filesystem or home root.')
   }
-  const olaHome = resolve(join(home, '.ola'))
-  if (realRoot === olaHome || realRoot.startsWith(`${olaHome}${sep}`)) {
+  if (isInsideDataRoot(normalized, dataRoot)) {
     throw new Error('The Ola data directory cannot be scanned.')
   }
   return realRoot
 }
 
-function cachePath(projectRoot: string): string {
-  const key = createHash('sha256').update(projectRoot).digest('hex').slice(0, 24)
-  const directory = join(homedir(), '.ola', 'wiki')
+function cachePath(projectRoot: string, workspaceId: string): string {
+  const key = createHash('sha256')
+    .update(wikiWorkspaceStorageKey(projectRoot, workspaceId))
+    .digest('hex')
+    .slice(0, 24)
+  const directory = join(olaDataRoot(), 'wiki')
   mkdirSync(directory, { recursive: true })
   return join(directory, `${key}.json`)
 }
@@ -265,13 +290,14 @@ function nodesFromSharedIndex(files: SharedIndexedFile[]): ProjectWikiNode[] {
 
 export function generateProjectWiki(
   request: ProjectWikiGenerateRequest,
-  sharedFiles?: SharedIndexedFile[]
+  sharedFiles?: SharedIndexedFile[],
+  workspaceId = 'local-personal'
 ): ProjectWikiDocument {
   const projectRoot = validateProjectRoot(request.projectRoot)
   if (!existsSync(projectRoot) || !statSync(projectRoot).isDirectory()) {
     throw new Error('Project root must be an existing directory.')
   }
-  const target = cachePath(projectRoot)
+  const target = cachePath(projectRoot, workspaceId)
   if (!request.force && existsSync(target)) {
     try {
       const cached = JSON.parse(readFileSync(target, 'utf8')) as ProjectWikiDocument
@@ -299,8 +325,11 @@ export function generateProjectWiki(
   return document
 }
 
-export function loadProjectWiki(projectRoot: string): ProjectWikiDocument | null {
-  const path = cachePath(validateProjectRoot(projectRoot))
+export function loadProjectWiki(
+  projectRoot: string,
+  workspaceId = 'local-personal'
+): ProjectWikiDocument | null {
+  const path = cachePath(validateProjectRoot(projectRoot), workspaceId)
   if (!existsSync(path)) return null
   try {
     return JSON.parse(readFileSync(path, 'utf8')) as ProjectWikiDocument
@@ -325,11 +354,13 @@ export function projectWikiMarkdown(document: ProjectWikiDocument): string {
   return `${lines.join('\n')}\n`
 }
 
-export function writeProjectWikiMarkdown(document: ProjectWikiDocument, destination: string): void {
+export function writeProjectWikiMarkdown(
+  document: ProjectWikiDocument,
+  destination: string,
+  dataRoot = olaDataRoot()
+): void {
   const target = resolve(destination)
-  const home = resolve(homedir())
-  const olaHome = resolve(join(home, '.ola'))
-  if (!destination || target === parse(target).root || target.startsWith(`${olaHome}${sep}`)) {
+  if (!destination || target === parse(target).root || isInsideDataRoot(target, dataRoot)) {
     throw new Error('Wiki export destination is not allowed.')
   }
   if (extname(target).toLowerCase() !== '.md') {
@@ -339,7 +370,7 @@ export function writeProjectWikiMarkdown(document: ProjectWikiDocument, destinat
     throw new Error('Wiki export directory does not exist.')
   }
   const realDirectory = realpathSync(dirname(target))
-  if (realDirectory === olaHome || realDirectory.startsWith(`${olaHome}${sep}`)) {
+  if (isInsideDataRoot(realDirectory, dataRoot)) {
     throw new Error('Wiki export destination is not allowed.')
   }
   writeFileSync(target, projectWikiMarkdown(document), { encoding: 'utf8', mode: 0o600 })

@@ -1,12 +1,14 @@
 ﻿import { app } from 'electron'
 import { spawn, type ChildProcess } from 'child_process'
-import { randomUUID } from 'crypto'
+import { randomBytes, randomUUID } from 'crypto'
 import { EventEmitter } from 'events'
 import * as fs from 'fs'
 import * as net from 'net'
+import * as os from 'os'
 import * as path from 'path'
 import { decode, encode } from '@msgpack/msgpack'
 import { readNativeMessagePackRoute, type NativeMessagePackRoute } from './messagepack-route-reader'
+import { NativeWorkerRequestGate } from './native-worker-request-gate'
 
 const DEFAULT_NATIVE_WORKER_TIMEOUT_MS = 60_000
 const DEFAULT_NATIVE_WORKER_SLOW_REQUEST_MS = 750
@@ -54,6 +56,11 @@ type NativeWorkerRoutesResult = {
   methods?: unknown
 }
 
+type NativeWorkerEndpoint = {
+  address: string
+  authenticationToken: string
+}
+
 export type NativeWorkerRawEventFrame = NativeMessagePackRoute & {
   bytes: Buffer
   byteLength: number
@@ -82,6 +89,8 @@ export class NativeWorkerManager {
   private restartAttempts = 0
   private generationValue = 0
   private stopping = false
+  private parkedForHandover = false
+  private readonly requestGate = new NativeWorkerRequestGate()
 
   get isRunning(): boolean {
     return (
@@ -116,6 +125,7 @@ export class NativeWorkerManager {
   }
 
   async ensureStarted(): Promise<void> {
+    if (this.parkedForHandover) throw new Error('Native worker is parked for database handover')
     if (this.isRunning) return
     if (!this.startPromise) {
       this.startPromise = this.start().finally(() => {
@@ -144,6 +154,11 @@ export class NativeWorkerManager {
     params?: unknown,
     timeoutMs = DEFAULT_NATIVE_WORKER_TIMEOUT_MS
   ): Promise<T> {
+    if (this.parkedForHandover) throw new Error('Native worker is parked for database handover')
+    return await this.requestGate.run(() => this.requestCore<T>(method, params, timeoutMs))
+  }
+
+  private async requestCore<T>(method: string, params: unknown, timeoutMs: number): Promise<T> {
     await this.ensureStarted()
     const socket = this.socket
     if (!socket || !this.isRunning) {
@@ -207,6 +222,32 @@ export class NativeWorkerManager {
     this.stopping = false
   }
 
+  async parkForHandover(timeoutMs = 10_000): Promise<void> {
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 60_000)
+      throw new Error('Invalid native worker handover timeout')
+    await this.requestGate.quiesce(timeoutMs)
+    this.parkedForHandover = true
+    this.stopping = true
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer)
+      this.restartTimer = null
+    }
+    const child = this.child
+    const exit = waitForChildExit(child, timeoutMs)
+    this.closeWorker(new Error('Native worker parked for database handover'))
+    try {
+      await exit
+      await this.startPromise?.catch(() => undefined)
+      if (this.child) {
+        const lateExit = waitForChildExit(this.child, timeoutMs)
+        this.closeWorker(new Error('Native worker parked during startup'))
+        await lateExit
+      }
+    } finally {
+      this.stopping = false
+    }
+  }
+
   private async start(): Promise<void> {
     const workerPath = resolveNativeWorkerPath()
     if (!workerPath) {
@@ -214,7 +255,6 @@ export class NativeWorkerManager {
     }
 
     const endpoint = createNativeWorkerEndpoint()
-    cleanupNativeWorkerEndpoint(endpoint)
     const childEnv = createNativeWorkerEnv()
     console.log('[NativeWorker] starting', {
       workerPath,
@@ -223,15 +263,19 @@ export class NativeWorkerManager {
       slowRequestMs: getNativeWorkerSlowRequestMs()
     })
 
-    const child = spawn(workerPath, ['--ipc', endpoint], {
-      cwd: path.dirname(workerPath),
-      env: childEnv,
-      stdio: ['ignore', 'ignore', 'pipe'],
-      windowsHide: true
-    })
+    const child = spawn(
+      workerPath,
+      ['--ipc', endpoint.address, '--ipc-token', endpoint.authenticationToken],
+      {
+        cwd: path.dirname(workerPath),
+        env: childEnv,
+        stdio: ['ignore', 'ignore', 'pipe'],
+        windowsHide: true
+      }
+    )
 
     this.child = child
-    this.endpoint = endpoint
+    this.endpoint = endpoint.address
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString('utf8').trim()
       if (text) console.warn(`[NativeWorker] ${text}`)
@@ -244,7 +288,7 @@ export class NativeWorkerManager {
     })
 
     try {
-      this.socket = await connectNativeWorker(endpoint, child)
+      this.socket = await connectNativeWorker(endpoint.address, child)
       this.socket.on('data', (chunk) => this.handleSocketData(chunk))
       this.socket.on('error', (error) => {
         if (!this.stopping) this.closeWorker(error)
@@ -255,6 +299,7 @@ export class NativeWorkerManager {
         }
       })
 
+      await authenticateNativeWorker(this.socket, endpoint.authenticationToken)
       await this.request('worker/ping', {}, 10_000)
       await this.verifyRequiredMethods(workerPath)
       this.generationValue += 1
@@ -505,11 +550,11 @@ export class NativeWorkerManager {
       generation: this.generationValue,
       error
     } satisfies NativeWorkerLifecycleEvent)
-    if (!this.stopping) this.scheduleRestart(error)
+    if (!this.stopping && !this.parkedForHandover) this.scheduleRestart(error)
   }
 
   private scheduleRestart(error: Error): void {
-    if (this.restartTimer || this.isRunning) return
+    if (this.parkedForHandover || this.restartTimer || this.isRunning) return
 
     const retryDelayMs = Math.min(
       WORKER_RESTART_MAX_DELAY_MS,
@@ -544,6 +589,31 @@ export async function stopNativeWorker(): Promise<void> {
   await nativeWorker?.stop()
 }
 
+export async function parkNativeWorkerForHandover(timeoutMs?: number): Promise<void> {
+  await getNativeWorker().parkForHandover(timeoutMs)
+}
+
+function waitForChildExit(child: ChildProcess | null, timeoutMs: number): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
+  return new Promise<void>((resolve, reject) => {
+    let forceTimer: ReturnType<typeof setTimeout> | null = null
+    const finish = (): void => {
+      clearTimeout(gracefulTimer)
+      if (forceTimer) clearTimeout(forceTimer)
+      child.off('exit', finish)
+      resolve()
+    }
+    child.once('exit', finish)
+    const gracefulTimer = setTimeout(() => {
+      child.kill('SIGKILL')
+      forceTimer = setTimeout(() => {
+        child.off('exit', finish)
+        reject(new Error('Native worker did not exit after handover stop'))
+      }, 5_000)
+    }, timeoutMs)
+  })
+}
+
 function createFrame(payload: Uint8Array): Buffer {
   if (payload.byteLength <= 0 || payload.byteLength > MAX_FRAME_BYTES) {
     throw new Error(`Invalid native worker request length: ${payload.byteLength}`)
@@ -563,8 +633,10 @@ async function connectNativeWorker(endpoint: string, child: ChildProcess): Promi
   let lastError: Error | null = null
 
   while (Date.now() < deadline) {
-    if (child.exitCode !== null) {
-      throw new Error(`Native worker exited before IPC connection: code=${child.exitCode}`)
+    if (child.exitCode !== null || child.signalCode !== null) {
+      throw new Error(
+        `Native worker exited before IPC connection: code=${child.exitCode} signal=${child.signalCode}`
+      )
     }
 
     try {
@@ -608,22 +680,62 @@ function connectOnce(endpoint: string): Promise<net.Socket> {
   })
 }
 
-function createNativeWorkerEndpoint(): string {
+function createNativeWorkerEndpoint(): NativeWorkerEndpoint {
   const id = `${process.pid}-${Date.now().toString(36)}-${randomUUID()}`
   if (process.platform === 'win32') {
-    return `\\\\.\\pipe\\ola-native-${id}`
+    return {
+      address: `\\\\.\\pipe\\ola-native-${id}`,
+      authenticationToken: randomBytes(32).toString('base64url')
+    }
   }
 
-  return path.join('/tmp', `ola-native-${id}.sock`)
+  // /tmp is a symlink on macOS. The native worker deliberately rejects linked
+  // parents, so create a fresh private directory below the resolved temp root.
+  // Its short path also keeps the Unix socket address below platform limits.
+  const tempRoot = fs.realpathSync(os.tmpdir())
+  const runtimeDirectory = fs.mkdtempSync(path.join(tempRoot, 'ola-native-'))
+  fs.chmodSync(runtimeDirectory, 0o700)
+  const details = fs.lstatSync(runtimeDirectory)
+  if (!details.isDirectory() || details.isSymbolicLink()) {
+    throw new Error('Failed to create a private Native Worker runtime directory')
+  }
+
+  return {
+    address: path.join(runtimeDirectory, 'worker.sock'),
+    authenticationToken: randomBytes(32).toString('base64url')
+  }
 }
 
 function cleanupNativeWorkerEndpoint(endpoint: string): void {
   if (process.platform === 'win32') return
   try {
-    fs.rmSync(endpoint, { force: true })
+    const socket = fs.lstatSync(endpoint)
+    if (socket.isSocket() && !socket.isSymbolicLink()) {
+      fs.unlinkSync(endpoint)
+    }
   } catch {
     // The worker also removes the Unix socket path on orderly shutdown.
   }
+
+  try {
+    const runtimeDirectory = path.dirname(endpoint)
+    const directory = fs.lstatSync(runtimeDirectory)
+    if (directory.isDirectory() && !directory.isSymbolicLink()) {
+      fs.rmdirSync(runtimeDirectory)
+    }
+  } catch {
+    // Do not follow or remove a replaced runtime directory.
+  }
+}
+
+function authenticateNativeWorker(socket: net.Socket, token: string): Promise<void> {
+  const frame = createFrame(encode({ method: '__ola_handshake', params: { token } }))
+  return new Promise((resolve, reject) => {
+    socket.write(frame, (error) => {
+      if (error) reject(error)
+      else resolve()
+    })
+  })
 }
 
 function delay(ms: number): Promise<void> {

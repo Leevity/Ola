@@ -2,8 +2,11 @@ import { app } from 'electron'
 import { createHash, randomUUID } from 'crypto'
 import { applySyncDbMerge, captureSyncDbSnapshot, saveSyncDbMetadata } from '../db/sync-dao'
 import { flushSettingsSync, reloadSettingsCache } from '../ipc/settings-handlers'
-import { getNativeWorker } from '../lib/native-worker'
+import { SyncFileStore } from './sync-file-store'
 import { safeSendMessagePackToAllWindows } from '../window-ipc'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { assertLegacySyncPersonalOnly } from './legacy-sync-workspace-guard'
+import { hashSyncBundleContent } from '../../shared/sync-bundle-contract'
 import {
   getActiveSyncProvider,
   patchSyncConfig,
@@ -11,6 +14,7 @@ import {
   writeSyncConfig
 } from './sync-config'
 import { RemoteStateChangedError, WebDavProvider, type RemoteBundleState } from './webdav-provider'
+import { SyncHandoverGate } from './sync-handover-gate'
 import type {
   SyncBundle,
   SyncBundleManifest,
@@ -29,7 +33,7 @@ import type {
 const SYNC_SCHEMA_VERSION = 1
 const KEY_SEPARATOR = '\u0000'
 const FILE_DOMAIN = 'file'
-const SYNC_NATIVE_TIMEOUT_MS = 120_000
+const syncFileStore = new SyncFileStore()
 
 interface BaselineRecordState {
   domain: string
@@ -61,19 +65,6 @@ interface PendingConflictState {
   remote: RemoteBundleState
   merge: MergeResult
   startedAt: number
-}
-
-interface NativeSyncFileSnapshotResult {
-  success: boolean
-  records: SyncRecord[]
-  error?: string | null
-}
-
-interface NativeSyncFileMutationResult {
-  success: boolean
-  changed: number
-  settingsChanged?: boolean
-  error?: string | null
 }
 
 function emitSyncEvent(channel: string, payload: unknown): void {
@@ -110,54 +101,25 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value))
 }
 
-async function captureSyncFileSnapshot(): Promise<NativeSyncFileSnapshotResult> {
-  console.log('[SyncFiles][Native] capture snapshot start')
-  const result = await getNativeWorker().request<NativeSyncFileSnapshotResult>(
-    'sync/files-capture',
-    {},
-    SYNC_NATIVE_TIMEOUT_MS
-  )
-  if (!result.success) {
-    throw new Error(result.error || 'Native sync file snapshot failed')
-  }
-  console.log('[SyncFiles][Native] capture snapshot done', {
-    records: result.records.length
-  })
-  return result
+async function captureSyncFileSnapshot(): Promise<{ records: SyncRecord[] }> {
+  const records = await syncFileStore.capture()
+  return { records }
 }
 
 async function applySyncFileRecords(records: SyncRecord[]): Promise<void> {
   if (records.length === 0) return
-  console.log('[SyncFiles][Native] apply files start', { records: records.length })
-  const result = await getNativeWorker().request<NativeSyncFileMutationResult>(
-    'sync/files-apply',
-    { records },
-    SYNC_NATIVE_TIMEOUT_MS
-  )
-  if (!result.success) {
-    throw new Error(result.error || 'Native sync file apply failed')
-  }
+  const result = await syncFileStore.apply(records)
   if (result.settingsChanged) {
     await reloadSettingsCache()
   }
-  console.log('[SyncFiles][Native] apply files done', { changed: result.changed })
 }
 
 async function deleteSyncFileRecords(recordIds: string[]): Promise<void> {
   if (recordIds.length === 0) return
-  console.log('[SyncFiles][Native] delete files start', { records: recordIds.length })
-  const result = await getNativeWorker().request<NativeSyncFileMutationResult>(
-    'sync/files-delete',
-    { recordIds },
-    SYNC_NATIVE_TIMEOUT_MS
-  )
-  if (!result.success) {
-    throw new Error(result.error || 'Native sync file delete failed')
-  }
+  const result = await syncFileStore.delete(recordIds)
   if (result.settingsChanged) {
     await reloadSettingsCache()
   }
-  console.log('[SyncFiles][Native] delete files done', { changed: result.changed })
 }
 
 async function captureLocalSnapshot(providerId: string, deviceId: string): Promise<LocalSnapshot> {
@@ -477,11 +439,7 @@ function buildBundle(
     domains,
     tombstones: sortedTombstones.length
   }
-  const contentHash = hashValue({
-    manifest: manifestBase,
-    records: sortedRecords,
-    tombstones: sortedTombstones
-  })
+  const contentHash = hashSyncBundleContent(manifestBase, sortedRecords, sortedTombstones)
   return {
     manifest: {
       ...manifestBase,
@@ -553,6 +511,12 @@ export class SyncEngine {
   private pendingConflict: PendingConflictState | null = null
   private running = false
   private status: SyncRunStatus = 'idle'
+  private readonly handoverGate = new SyncHandoverGate()
+
+  async quiesceForHandover(): Promise<void> {
+    await this.handoverGate.quiesce()
+    this.pendingConflict = null
+  }
 
   getProviderDescriptors(): SyncProviderDescriptor[] {
     return [
@@ -586,19 +550,22 @@ export class SyncEngine {
 
   async run(mode: SyncRunMode): Promise<SyncRunSummary> {
     if (this.running) throw new Error('A sync run is already in progress')
+    const leaveHandoverGate = this.handoverGate.enter()
     this.running = true
     this.status = 'running'
     this.pendingConflict = null
     const startedAt = Date.now()
     const runId = randomUUID()
-    const provider = await getActiveSyncProvider()
-    console.log('[SyncEngine] run start', { runId, mode, providerId: provider.id })
-    emitSyncEvent('sync:status-changed', await this.getStatus())
-    emitSyncEvent('sync:run-progress', { runId, phase: 'started', mode })
+    let provider: SyncProviderConfig | null = null
 
     try {
+      provider = await getActiveSyncProvider()
+      console.log('[SyncEngine] run start', { runId, mode, providerId: provider.id })
+      emitSyncEvent('sync:status-changed', await this.getStatus())
+      emitSyncEvent('sync:run-progress', { runId, phase: 'started', mode })
       if (!provider.enabled) throw new Error('Sync provider is disabled')
       if (provider.type !== 'webdav') throw new Error('Unsupported sync provider')
+      await assertLegacySyncPersonalOnly(loadOfflineWorkspaceIds)
 
       const config = await readSyncConfig()
       const local = await captureLocalSnapshot(provider.id, config.deviceId)
@@ -657,7 +624,7 @@ export class SyncEngine {
     } catch (error) {
       const summary: SyncRunSummary = {
         id: runId,
-        providerId: provider.id,
+        providerId: provider?.id ?? 'unknown',
         mode,
         status: 'error',
         startedAt,
@@ -675,6 +642,7 @@ export class SyncEngine {
       return summary
     } finally {
       this.running = false
+      leaveHandoverGate()
       emitSyncEvent('sync:status-changed', await this.getStatus())
     }
   }
@@ -682,6 +650,7 @@ export class SyncEngine {
   async resolveConflicts(resolutions: SyncConflictResolution[]): Promise<SyncRunSummary> {
     if (!this.pendingConflict) throw new Error('No pending sync conflicts')
     if (this.running) throw new Error('A sync run is already in progress')
+    const leaveHandoverGate = this.handoverGate.enter()
 
     this.running = true
     this.status = 'running'
@@ -716,6 +685,7 @@ export class SyncEngine {
       return summary
     } finally {
       this.running = false
+      leaveHandoverGate()
       emitSyncEvent('sync:status-changed', await this.getStatus())
     }
   }

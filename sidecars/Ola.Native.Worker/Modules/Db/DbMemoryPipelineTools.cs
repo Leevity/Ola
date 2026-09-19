@@ -13,7 +13,8 @@ internal static class DbMemoryPipelineTools
                transport,
                owner_key,
                created_at,
-               updated_at
+               updated_at,
+               workspace_id
           FROM memory_roots
         """;
 
@@ -30,7 +31,8 @@ internal static class DbMemoryPipelineTools
                started_at,
                finished_at,
                created_at,
-               updated_at
+               updated_at,
+               workspace_id
           FROM memory_jobs
         """;
 
@@ -57,10 +59,21 @@ internal static class DbMemoryPipelineTools
         try
         {
             var now = Now();
-            var ownerKey = BuildOwnerKey(parameters);
+            var workspaceId = ResolveWorkspaceId(parameters);
+            var ownerKey = BuildOwnerKey(parameters, workspaceId);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
-            var existing = GetRootByOwnerKey(connection, transaction, ownerKey);
+            if (JsonHelpers.GetString(parameters, "projectId") is { Length: > 0 } projectId)
+            {
+                using var project = connection.CreateCommand();
+                project.Transaction = transaction;
+                project.CommandText = "SELECT COUNT(*) FROM projects WHERE id = $projectId AND workspace_id = $workspaceId";
+                project.Parameters.AddWithValue("$projectId", projectId);
+                project.Parameters.AddWithValue("$workspaceId", workspaceId);
+                if (Convert.ToInt64(project.ExecuteScalar()) != 1)
+                    throw new InvalidOperationException("Memory root project is not available in this workspace.");
+            }
+            var existing = GetRootByOwnerKey(connection, transaction, ownerKey, workspaceId);
             if (existing is not null)
             {
                 DbSql.ExecuteNonQuery(
@@ -74,7 +87,7 @@ internal static class DbMemoryPipelineTools
                            root_path = $rootPath,
                            transport = $transport,
                            updated_at = $updatedAt
-                     WHERE id = $id
+                     WHERE id = $id AND workspace_id = $workspaceId
                     """,
                     new DbSql.SqlParam("$projectId", JsonHelpers.GetString(parameters, "projectId")),
                     new DbSql.SqlParam("$workingFolder", JsonHelpers.GetString(parameters, "workingFolder")),
@@ -82,8 +95,9 @@ internal static class DbMemoryPipelineTools
                     new DbSql.SqlParam("$rootPath", RequireString(parameters, "rootPath")),
                     new DbSql.SqlParam("$transport", ResolveTransport(parameters)),
                     new DbSql.SqlParam("$updatedAt", now),
-                    new DbSql.SqlParam("$id", existing.Id));
-                var updated = GetRoot(connection, transaction, existing.Id);
+                    new DbSql.SqlParam("$id", existing.Id),
+                    new DbSql.SqlParam("$workspaceId", workspaceId));
+                var updated = GetRoot(connection, transaction, existing.Id, workspaceId);
                 transaction.Commit();
                 return WorkerResponse.Json(updated!, WorkerJsonContext.Default.MemoryRootDescriptor);
             }
@@ -95,9 +109,9 @@ internal static class DbMemoryPipelineTools
                 """
                 INSERT INTO memory_roots (
                   id, scope, project_id, working_folder, ssh_connection_id, root_path, transport,
-                  owner_key, created_at, updated_at
+                  owner_key, created_at, updated_at, workspace_id
                 )
-                VALUES ($id, $scope, $projectId, $workingFolder, $sshConnectionId, $rootPath, $transport, $ownerKey, $createdAt, $updatedAt)
+                VALUES ($id, $scope, $projectId, $workingFolder, $sshConnectionId, $rootPath, $transport, $ownerKey, $createdAt, $updatedAt, $workspaceId)
                 """,
                 new DbSql.SqlParam("$id", id),
                 new DbSql.SqlParam("$scope", RequireString(parameters, "scope")),
@@ -108,9 +122,10 @@ internal static class DbMemoryPipelineTools
                 new DbSql.SqlParam("$transport", ResolveTransport(parameters)),
                 new DbSql.SqlParam("$ownerKey", ownerKey),
                 new DbSql.SqlParam("$createdAt", now),
-                new DbSql.SqlParam("$updatedAt", now));
+                new DbSql.SqlParam("$updatedAt", now),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
 
-            var root = GetRoot(connection, transaction, id);
+            var root = GetRoot(connection, transaction, id, workspaceId);
             transaction.Commit();
             return WorkerResponse.Json(root!, WorkerJsonContext.Default.MemoryRootDescriptor);
         }
@@ -126,7 +141,7 @@ internal static class DbMemoryPipelineTools
         {
             var id = RequireString(parameters, "id");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var root = GetRoot(connection, null, id);
+            var root = GetRoot(connection, null, id, ResolveWorkspaceId(parameters));
             return WorkerResponse.Json(
                 new MemoryRootFindResult(true, root, null),
                 WorkerJsonContext.Default.MemoryRootFindResult);
@@ -145,6 +160,8 @@ internal static class DbMemoryPipelineTools
         {
             var where = new List<string>();
             var values = new List<DbSql.SqlParam>();
+            where.Add("workspace_id = $workspaceId");
+            values.Add(new DbSql.SqlParam("$workspaceId", ResolveWorkspaceId(parameters)));
             var scope = JsonHelpers.GetString(parameters, "scope");
             if (!string.IsNullOrEmpty(scope) && !string.Equals(scope, "both", StringComparison.Ordinal))
             {
@@ -185,19 +202,23 @@ internal static class DbMemoryPipelineTools
             var leaseOwner = JsonHelpers.GetString(parameters, "leaseOwner");
             var running = status == "running";
             var id = CreateId();
+            var workspaceId = ResolveWorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            if (JsonHelpers.GetString(parameters, "memoryRootId") is { Length: > 0 } rootId)
+                RequireRootInWorkspace(connection, transaction, rootId, workspaceId);
+            RequireSourceSessionInWorkspace(connection, transaction, JsonHelpers.GetString(parameters, "sourceSessionId"), workspaceId);
             DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
                 """
                 INSERT INTO memory_jobs (
                   id, kind, status, memory_root_id, source_session_id, lease_owner, lease_expires_at,
-                  attempts, error, started_at, finished_at, created_at, updated_at
+                  attempts, error, started_at, finished_at, created_at, updated_at, workspace_id
                 )
                 VALUES (
                   $id, $kind, $status, $memoryRootId, $sourceSessionId, $leaseOwner, $leaseExpiresAt,
-                  $attempts, NULL, $startedAt, NULL, $createdAt, $updatedAt
+                  $attempts, NULL, $startedAt, NULL, $createdAt, $updatedAt, $workspaceId
                 )
                 """,
                 new DbSql.SqlParam("$id", id),
@@ -210,8 +231,9 @@ internal static class DbMemoryPipelineTools
                 new DbSql.SqlParam("$attempts", running ? 1 : 0),
                 new DbSql.SqlParam("$startedAt", running ? now : null),
                 new DbSql.SqlParam("$createdAt", now),
-                new DbSql.SqlParam("$updatedAt", now));
-            var job = GetJob(connection, transaction, id);
+                new DbSql.SqlParam("$updatedAt", now),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
+            var job = GetJob(connection, transaction, id, workspaceId);
             transaction.Commit();
             return WorkerResponse.Json(job!, WorkerJsonContext.Default.MemoryPipelineJob);
         }
@@ -227,7 +249,7 @@ internal static class DbMemoryPipelineTools
         {
             var id = RequireString(parameters, "id");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var job = GetJob(connection, null, id);
+            var job = GetJob(connection, null, id, ResolveWorkspaceId(parameters));
             return WorkerResponse.Json(
                 new MemoryJobFindResult(true, job, null),
                 WorkerJsonContext.Default.MemoryJobFindResult);
@@ -245,6 +267,7 @@ internal static class DbMemoryPipelineTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = ResolveWorkspaceId(parameters);
             var now = Now();
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
@@ -259,14 +282,15 @@ internal static class DbMemoryPipelineTools
                        lease_expires_at = NULL,
                        finished_at = $finishedAt,
                        updated_at = $updatedAt
-                 WHERE id = $id
+                 WHERE id = $id AND workspace_id = $workspaceId
                 """,
                 new DbSql.SqlParam("$status", JsonHelpers.GetString(parameters, "status") ?? "succeeded"),
                 new DbSql.SqlParam("$error", JsonHelpers.GetString(parameters, "error")),
                 new DbSql.SqlParam("$finishedAt", now),
                 new DbSql.SqlParam("$updatedAt", now),
-                new DbSql.SqlParam("$id", id));
-            var job = GetJob(connection, transaction, id);
+                new DbSql.SqlParam("$id", id),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
+            var job = GetJob(connection, transaction, id, workspaceId);
             transaction.Commit();
             return WorkerResponse.Json(
                 new MemoryJobFindResult(true, job, null),
@@ -286,6 +310,8 @@ internal static class DbMemoryPipelineTools
         {
             var where = new List<string>();
             var values = new List<DbSql.SqlParam>();
+            where.Add("workspace_id = $workspaceId");
+            values.Add(new DbSql.SqlParam("$workspaceId", ResolveWorkspaceId(parameters)));
             AddNullableFilter(parameters, where, values, "memoryRootId", "memory_root_id");
             AddNullableFilter(parameters, where, values, "sourceSessionId", "source_session_id");
             AddInFilter(parameters, where, values, "statuses", "status");
@@ -321,6 +347,7 @@ internal static class DbMemoryPipelineTools
             var now = Now();
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRootInWorkspace(connection, transaction, RequireString(parameters, "memoryRootId"), ResolveWorkspaceId(parameters));
             DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -376,6 +403,7 @@ internal static class DbMemoryPipelineTools
             var memoryRootId = RequireString(parameters, "memoryRootId");
             var limit = Math.Clamp(JsonHelpers.GetInt(parameters, "limit", 500), 1, 5000);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            RequireRootInWorkspace(connection, null, memoryRootId, ResolveWorkspaceId(parameters));
             using var command = connection.CreateCommand();
             command.CommandText = $"""
                 {Stage1SelectSql}
@@ -401,6 +429,7 @@ internal static class DbMemoryPipelineTools
             var now = Now();
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRootInWorkspace(connection, transaction, RequireString(parameters, "memoryRootId"), ResolveWorkspaceId(parameters));
             DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -451,6 +480,7 @@ internal static class DbMemoryPipelineTools
             var memoryRootId = RequireString(parameters, "memoryRootId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRootInWorkspace(connection, transaction, memoryRootId, ResolveWorkspaceId(parameters));
             var deletedStage1Outputs = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -479,36 +509,73 @@ internal static class DbMemoryPipelineTools
     private static MemoryRootDescriptor? GetRoot(
         SqliteConnection connection,
         SqliteTransaction? transaction,
-        string id)
+        string id,
+        string? workspaceId = null)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{RootSelectSql} WHERE id = $id LIMIT 1";
+        command.CommandText = $"{RootSelectSql} WHERE id = $id" +
+            (workspaceId is null ? string.Empty : " AND workspace_id = $workspaceId") + " LIMIT 1";
         command.Parameters.AddWithValue("$id", id);
+        if (workspaceId is not null) command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadRoots(command).FirstOrDefault();
+    }
+
+    private static void RequireRootInWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string rootId,
+        string workspaceId)
+    {
+        if (GetRoot(connection, transaction, rootId, workspaceId) is null)
+            throw new InvalidOperationException("Memory root is not available in this workspace.");
+    }
+
+    private static void RequireSourceSessionInWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string? sessionId,
+        string workspaceId)
+    {
+        if (string.IsNullOrEmpty(sessionId)) return;
+        if (sessionId.StartsWith("rollup:", StringComparison.Ordinal))
+            return;
+
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT workspace_id FROM sessions WHERE id = $sessionId LIMIT 1";
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        var sourceWorkspaceId = command.ExecuteScalar() as string;
+        if (sourceWorkspaceId != workspaceId &&
+            (sourceWorkspaceId is not null || workspaceId != "local-personal"))
+            throw new InvalidOperationException("Memory job source session is not available in this workspace.");
     }
 
     private static MemoryRootDescriptor? GetRootByOwnerKey(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        string ownerKey)
+        string ownerKey,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{RootSelectSql} WHERE owner_key = $ownerKey LIMIT 1";
+        command.CommandText = $"{RootSelectSql} WHERE owner_key = $ownerKey AND workspace_id = $workspaceId LIMIT 1";
         command.Parameters.AddWithValue("$ownerKey", ownerKey);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadRoots(command).FirstOrDefault();
     }
 
     private static MemoryPipelineJob? GetJob(
         SqliteConnection connection,
         SqliteTransaction? transaction,
-        string id)
+        string id,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{JobSelectSql} WHERE id = $id LIMIT 1";
+        command.CommandText = $"{JobSelectSql} WHERE id = $id AND workspace_id = $workspaceId LIMIT 1";
         command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadJobs(command).FirstOrDefault();
     }
 
@@ -551,7 +618,8 @@ internal static class DbMemoryPipelineTools
                 Transport = reader.GetString(6),
                 OwnerKey = reader.GetString(7),
                 CreatedAt = reader.GetInt64(8),
-                UpdatedAt = reader.GetInt64(9)
+                UpdatedAt = reader.GetInt64(9),
+                WorkspaceId = reader.GetString(10)
             });
         }
 
@@ -578,7 +646,8 @@ internal static class DbMemoryPipelineTools
                 StartedAt = reader.IsDBNull(9) ? null : reader.GetInt64(9),
                 FinishedAt = reader.IsDBNull(10) ? null : reader.GetInt64(10),
                 CreatedAt = reader.GetInt64(11),
-                UpdatedAt = reader.GetInt64(12)
+                UpdatedAt = reader.GetInt64(12),
+                WorkspaceId = reader.GetString(13)
             });
         }
 
@@ -653,7 +722,7 @@ internal static class DbMemoryPipelineTools
         where.Add($"{columnName} IN ({string.Join(", ", markers)})");
     }
 
-    private static string BuildOwnerKey(JsonElement parameters)
+    private static string BuildOwnerKey(JsonElement parameters, string workspaceId)
     {
         var transport = ResolveTransport(parameters);
         var projectId = JsonHelpers.GetString(parameters, "projectId")?.Trim() ?? string.Empty;
@@ -662,7 +731,7 @@ internal static class DbMemoryPipelineTools
             JsonHelpers.GetString(parameters, "workingFolder") ?? string.Empty,
             sshConnectionId);
         var rootPath = NormalizeOwnerPath(RequireString(parameters, "rootPath"), sshConnectionId);
-        return string.Join(
+        var key = string.Join(
             "::",
             RequireString(parameters, "scope"),
             transport,
@@ -670,7 +739,13 @@ internal static class DbMemoryPipelineTools
             sshConnectionId,
             workingFolder,
             rootPath);
+        return workspaceId == "local-personal" ? key : $"{workspaceId.Length}:{workspaceId}::{key}";
     }
+
+    private static string ResolveWorkspaceId(JsonElement parameters) =>
+        JsonHelpers.GetString(parameters, "workspaceId") is { Length: > 0 } workspaceId
+            ? workspaceId
+            : "local-personal";
 
     private static string NormalizeOwnerPath(string value, string? sshConnectionId)
     {

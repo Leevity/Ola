@@ -1,20 +1,11 @@
-import { getNativeWorker } from '../lib/native-worker'
 import type { ChannelInstance } from './channel-types'
+import { ChannelConfigFileStore } from './channel-config-file-store'
 
-const CHANNEL_CONFIG_TIMEOUT_MS = 60_000
-
-type MutationResult = {
-  success: boolean
-  error?: string
-}
+const channelConfigStore = new ChannelConfigFileStore()
 
 export async function readChannelPlugins(): Promise<ChannelInstance[]> {
   try {
-    return await getNativeWorker().request<ChannelInstance[]>(
-      'channel/config-list',
-      {},
-      CHANNEL_CONFIG_TIMEOUT_MS
-    )
+    return await channelConfigStore.list()
   } catch (err) {
     console.error('[Channels] Config read error:', err)
     return []
@@ -22,23 +13,14 @@ export async function readChannelPlugins(): Promise<ChannelInstance[]> {
 }
 
 export async function writeChannelPlugins(plugins: ChannelInstance[]): Promise<void> {
-  const result = await getNativeWorker().request<MutationResult>(
-    'channel/config-write',
-    plugins,
-    CHANNEL_CONFIG_TIMEOUT_MS
-  )
+  const result = await channelConfigStore.write(plugins)
   if (!result.success) {
     throw new Error(result.error ?? 'Channel config write failed')
   }
 }
 
 export async function getChannelPlugin(id: string): Promise<ChannelInstance | null> {
-  const result = await getNativeWorker().request<{ plugin?: ChannelInstance | null }>(
-    'channel/config-get',
-    id,
-    CHANNEL_CONFIG_TIMEOUT_MS
-  )
-  return result.plugin ?? null
+  return await channelConfigStore.get(id)
 }
 
 export async function isChannelPluginToolEnabled(

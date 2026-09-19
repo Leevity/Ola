@@ -1,6 +1,5 @@
 import * as React from 'react'
-import { useState } from 'react'
-import { Check, ChevronDown, CircleAlert, CircleX, MinusCircle } from 'lucide-react'
+import { Check, ChevronRight, CircleAlert, CircleX, MinusCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { RunOutcomeMeta } from '@renderer/lib/api/types'
 import { cn } from '@renderer/lib/utils'
@@ -9,16 +8,15 @@ import { formatDurationMs } from '@renderer/lib/format-duration'
 interface ExecutionTraceCardProps {
   runOutcome: RunOutcomeMeta
   filesChanged?: number
-  children: React.ReactNode
+  onViewProcess?: () => void
 }
 
 export function ExecutionTraceCard({
   runOutcome,
   filesChanged = 0,
-  children
+  onViewProcess
 }: ExecutionTraceCardProps): React.JSX.Element {
   const { t } = useTranslation('chat')
-  const [expanded, setExpanded] = useState(false)
   const status = runOutcome.lifecycle
   const statusLabel = t(`runOutcome.status.${status}`)
   const StatusIcon =
@@ -31,15 +29,11 @@ export function ExecutionTraceCard({
           : CircleX
 
   return (
-    <section
-      className="mb-3 overflow-hidden rounded-lg border border-border/55 bg-muted/15"
-      aria-label={t('runOutcome.traceTitle')}
-    >
+    <section className="mb-3 border-b border-border/60" aria-label={t('runOutcome.traceTitle')}>
       <button
         type="button"
-        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-xs transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-        onClick={() => setExpanded((value) => !value)}
-        aria-expanded={expanded}
+        className="flex w-full items-center gap-2 px-1 py-2 text-left text-xs transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={onViewProcess}
       >
         <span
           className={cn(
@@ -65,19 +59,8 @@ export function ExecutionTraceCard({
             {t('runOutcome.failedSteps', { count: runOutcome.failedToolCallCount })}
           </span>
         ) : null}
-        <ChevronDown
-          className={cn('size-3.5 shrink-0 transition-transform', expanded && 'rotate-180')}
-          aria-hidden="true"
-        />
+        <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
       </button>
-      {expanded ? (
-        <div className="border-t border-border/45 px-3 py-3">
-          <div className="mb-2 text-[11px] text-muted-foreground">
-            {t('runOutcome.traceDetailHint')}
-          </div>
-          {children}
-        </div>
-      ) : null}
     </section>
   )
 }

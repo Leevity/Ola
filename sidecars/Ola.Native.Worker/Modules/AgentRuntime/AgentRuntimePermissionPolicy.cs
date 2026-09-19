@@ -97,11 +97,11 @@ internal sealed class AgentRuntimePermissionPolicy
             {
                 return false;
             }
-            if (decision.Outcome == PermissionCommandOutcome.Allow)
-            {
-                return true;
-            }
-            return IsToolWhitelisted(toolName);
+            // A textual shell rule cannot prove the executable, argument boundaries, redirections,
+            // or command substitutions that the selected shell will interpret. Keep every raw shell
+            // invocation on the explicit approval path until commands use a structured executable
+            // and argument schema.
+            return false;
         }
         return IsToolWhitelisted(toolName);
     }

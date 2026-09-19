@@ -64,6 +64,25 @@ assert(
 assert(!source.includes('console.log'), 'cookie importer must not log cookie data')
 assert(!source.includes('console.error'), 'cookie importer must not log cookie data')
 assert(
+  source.includes('export async function exportBuiltInBrowserCookies'),
+  'encrypted built-in cookie export is missing'
+)
+assert(
+  source.includes('canPersistSecrets(safeStorage)') &&
+    source.includes("encryption: 'electron-safe-storage'"),
+  'cookie export must require secure storage and label its ciphertext format'
+)
+assert(
+  /safeStorage\s*\.encryptString/.test(source) && source.includes('mode: 0o600'),
+  'cookie export must encrypt before writing a user-private archive'
+)
+assert(
+  /registerTrustedBrowserMessagePackHandler<\{ workspaceId: string \}>\(\s*'browser:export-cookies'/.test(
+    handlers
+  ) && handlers.includes('exportBuiltInBrowserCookies'),
+  'encrypted cookie export must be exposed through the Main browser IPC boundary'
+)
+assert(
   /function isTrustedBrowserIpcSender\(event: IpcMainInvokeEvent\): boolean/.test(handlers),
   'browser IPC sender authorization helper missing'
 )
@@ -77,9 +96,18 @@ assert(
   'browser IPC authorization wrapper missing'
 )
 assert(
-  /registerTrustedBrowserMessagePackHandler<[\s\S]*browser:import-cookies/.test(handlers) &&
-    /registerTrustedBrowserMessagePackHandler<undefined>\('browser:clear-cookies'/.test(handlers),
+  /registerTrustedBrowserMessagePackHandler<\{[\s\S]*workspaceId: string[\s\S]*\}>\('browser:import-cookies'/.test(
+    handlers
+  ) &&
+    /registerTrustedBrowserMessagePackHandler<\{ workspaceId: string \}>\(\s*'browser:clear-cookies'/.test(
+      handlers
+    ),
   'cookie mutation handlers must use the trusted browser IPC wrapper'
+)
+assert(
+  /importBrowserCookies\(input\.profileId, input\.workspaceId\)/.test(handlers) &&
+    /getBuiltInBrowserStorageSessions\(\[input\.workspaceId\]\)/.test(handlers),
+  'cookie mutation handlers must scope imports and clears to the requested workspace'
 )
 assert(
   handlers.includes('Unauthorized browser IPC sender'),

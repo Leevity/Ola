@@ -2,9 +2,15 @@ import { app, ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent
 import { Client, type ConnectConfig, type ClientChannel } from 'ssh2'
 import * as fs from 'fs'
 import * as path from 'path'
+import { SftpWorkspaceActivity } from '../ssh/sftp-workspace-activity'
+import { SshWorkspaceSwitchGate } from '../ssh/ssh-workspace-switch-gate'
+import { revokeUnavailableWorkspaceResources } from '../ssh/ssh-workspace-revocation'
 import {
   startSshConfigWatcher,
   initializeSshConfigCache,
+  withSshWorkspace,
+  currentSshWorkspaceId,
+  forgetUnavailableSshConfigCaches,
   onSshConfigChange,
   listSshGroups,
   createSshGroup,
@@ -20,6 +26,10 @@ import {
   type SshConfigConnection,
   type OpenSshHostConfig
 } from '../ssh/ssh-config'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { onRemoteAccountCleared, onWorkspaceDirectoryChanged } from '../remote/account-lifecycle'
+import { authorizeSshWorkspace } from '../ssh/ssh-workspace-authorization'
+import { sshSessionsForConnection } from '../ssh/ssh-session-scope'
 import {
   applySshImport,
   exportSshConfig,
@@ -47,6 +57,7 @@ import {
 interface SshSession {
   id: string
   connectionId: string
+  workspaceId: string
   ownerWindowId: number
   client: Client
   shell: ClientChannel | null
@@ -85,6 +96,7 @@ const sshDiagnostics: Array<{
   id: number
   sessionId: string
   connectionId: string
+  workspaceId: string
   ownerWindowId: number
   stage: 'dial' | 'handshake' | 'auth' | 'shell' | 'reconnect'
   level: 'info' | 'error'
@@ -120,6 +132,7 @@ const TEXT_READ_BLOCKED_EXTENSIONS = new Set([
 ])
 let sshConfigWatcherAttached = false
 let nativeSshEventsRegistered = false
+let accountRevocationSubscribed = false
 
 type SshClientSession = {
   connectionId: string
@@ -175,6 +188,15 @@ interface NativeSshFileMutationResult {
   success: boolean
   error?: string | null
   op?: 'create' | 'modify' | null
+}
+
+async function abortNativeSshTask(method: string, taskId: string): Promise<void> {
+  const result = await getNativeWorker().request<NativeSshFileMutationResult>(
+    method,
+    { taskId },
+    10_000
+  )
+  if (!result.success) throw new Error(result.error ?? `SSH task abort failed: ${method}`)
 }
 
 interface NativeSshFileHomeResult {
@@ -266,8 +288,10 @@ type UploadEvent = {
 type UploadTaskState = {
   taskId: string
   connectionId: string
+  workspaceId: string
   ownerWindowId: number
   canceled: boolean
+  started: boolean
   cancel: (reason?: string) => Promise<void>
 }
 
@@ -300,10 +324,12 @@ type TransferEvent = {
 type TransferTaskState = {
   taskId: string
   type: TransferTaskType
+  workspaceId: string
   ownerWindowId: number
   sourceConnectionId?: string | null
   targetConnectionId?: string | null
   canceled: boolean
+  started: boolean
   cancel: (reason?: string) => Promise<void>
 }
 
@@ -357,6 +383,74 @@ type SshGrepResult = {
 
 const uploadTasks = new Map<string, UploadTaskState>()
 const transferTasks = new Map<string, TransferTaskState>()
+const sftpWorkspaceActivity = new SftpWorkspaceActivity()
+const sshWorkspaceSwitchGate = new SshWorkspaceSwitchGate()
+
+export function beginMainSshWorkspaceSwitch(): () => void {
+  return sshWorkspaceSwitchGate.beginSwitch(hasActiveMainSshWorkspaceActivity)
+}
+
+export function hasActiveMainSshWorkspaceActivity(): boolean {
+  return (
+    [...sshSessions.values()].some((session) =>
+      ['connecting', 'connected', 'reconnecting'].includes(session.status)
+    ) ||
+    uploadTasks.size > 0 ||
+    transferTasks.size > 0 ||
+    sftpWorkspaceActivity.hasActivity((windowId) => {
+      const window = BrowserWindow.fromId(windowId)
+      return window !== null && !window.isDestroyed()
+    })
+  )
+}
+
+/** Disconnect account-owned SSH activity before another account can use the process. */
+export async function revokeManagedSshWorkspaceActivity(): Promise<void> {
+  await revokeUnavailableSshWorkspaceActivity(new Set())
+}
+
+async function revokeUnavailableSshWorkspaceActivity(
+  availableIds: ReadonlySet<string>
+): Promise<void> {
+  forgetUnavailableSshConfigCaches(availableIds)
+  const outcomes = await Promise.allSettled([
+    revokeUnavailableWorkspaceResources(sshSessions, availableIds, (session, sessionId) => {
+      session.userInitiatedDisconnect = true
+      session.status = 'disconnected'
+      if (session.reconnectTimer) clearTimeout(session.reconnectTimer)
+      const closeErrors: unknown[] = []
+      for (const transport of [session.shell, session.client, session.jumpClient]) {
+        if (!transport) continue
+        try {
+          transport.destroy()
+        } catch (error) {
+          closeErrors.push(error)
+        }
+      }
+      sendSshSessionMessage(session, 'ssh:status', {
+        sessionId,
+        connectionId: session.connectionId,
+        status: 'disconnected'
+      })
+      if (closeErrors.length) throw new AggregateError(closeErrors, 'SSH session close failed')
+    }),
+    revokeUnavailableWorkspaceResources(uploadTasks, availableIds, (task) =>
+      task.cancel('Account changed')
+    ),
+    revokeUnavailableWorkspaceResources(transferTasks, availableIds, (task) =>
+      task.cancel('Account changed')
+    )
+  ])
+  sftpWorkspaceActivity.forgetUnavailableWorkspaces(availableIds)
+  const remainingDiagnostics = sshDiagnostics.filter(
+    (entry) => entry.workspaceId === 'local-personal' || availableIds.has(entry.workspaceId)
+  )
+  sshDiagnostics.splice(0, sshDiagnostics.length, ...remainingDiagnostics)
+  const errors = outcomes.flatMap((outcome) =>
+    outcome.status === 'rejected' ? [outcome.reason] : []
+  )
+  if (errors.length) throw new AggregateError(errors, 'SSH workspace revocation incomplete')
+}
 
 function logSshDebug(message: string, details: Record<string, unknown>): void {
   if (!isSshDebugEnabled()) return
@@ -493,10 +587,19 @@ function sendSshSessionMessage(session: SshSession, channel: string, data: unkno
   }
 }
 
-function isSshSessionOwnedBy(event: IpcMainInvokeEvent | IpcMainEvent, sessionId: string): boolean {
+function isSshSessionOwnedBy(
+  event: IpcMainInvokeEvent | IpcMainEvent,
+  sessionId: string,
+  workspaceId = currentSshWorkspaceId()
+): boolean {
   const session = sshSessions.get(sessionId)
   const ownerWindow = BrowserWindow.fromWebContents(event.sender)
-  return Boolean(session && ownerWindow && session.ownerWindowId === ownerWindow.id)
+  return Boolean(
+    session &&
+    ownerWindow &&
+    session.ownerWindowId === ownerWindow.id &&
+    session.workspaceId === workspaceId
+  )
 }
 
 function ensureSshConfigWatcher(): void {
@@ -977,6 +1080,7 @@ function recordSshDiagnostic(
     id: nextSshDiagnosticId++,
     sessionId: session.id,
     connectionId: session.connectionId,
+    workspaceId: session.workspaceId,
     ownerWindowId: session.ownerWindowId,
     stage,
     level,
@@ -1018,7 +1122,20 @@ function scheduleSshReconnect(session: SshSession, connection: SshConfigConnecti
       session.reconnectTimer = undefined
       void (async () => {
         try {
-          const connected = await connectWithProxyJump(connection)
+          if (
+            session.workspaceId !== 'local-personal' &&
+            !(await loadOfflineWorkspaceIds()).has(session.workspaceId)
+          ) {
+            session.userInitiatedDisconnect = true
+            session.status = 'disconnected'
+            session.client.end()
+            session.jumpClient?.end()
+            sshSessions.delete(session.id)
+            return
+          }
+          const connected = await withSshWorkspace(session.workspaceId, () =>
+            connectWithProxyJump(connection)
+          )
           if (session.userInitiatedDisconnect) {
             connected.client.end()
             connected.jumpClient?.end()
@@ -1114,8 +1231,30 @@ function registerSshMessagePackHandler<TArgs>(
     if (!isTrustedSshIpcSender(event)) {
       return encodeMessagePackPayload({ error: 'Unauthorized SSH IPC sender' })
     }
-    const args = decodeMessagePackPayload<TArgs>(bytes)
-    return encodeMessagePackPayload(await handler(args, event))
+    let releaseRequest: (() => void) | undefined
+    try {
+      releaseRequest = sshWorkspaceSwitchGate.beginRequest()
+      const args = decodeMessagePackPayload<TArgs>(bytes)
+      const rawWorkspaceId = (args as { workspaceId?: unknown } | null)?.workspaceId
+      let workspaceId: string
+      try {
+        workspaceId = await authorizeSshWorkspace(rawWorkspaceId, loadOfflineWorkspaceIds)
+      } catch {
+        return encodeMessagePackPayload({ error: 'SSH_WORKSPACE_UNAVAILABLE' })
+      }
+      return encodeMessagePackPayload(
+        await withSshWorkspace(workspaceId, async () => {
+          await initializeSshConfigCache()
+          return handler(args, event)
+        })
+      )
+    } catch (error) {
+      if (error instanceof Error && error.message === 'WORKSPACE_BUSY_SSH')
+        return encodeMessagePackPayload({ error: 'WORKSPACE_BUSY_SSH' })
+      throw error
+    } finally {
+      releaseRequest?.()
+    }
   })
 }
 
@@ -1308,22 +1447,47 @@ async function handleSshHomeDir(args: { connectionId: string }): Promise<unknown
   }
 }
 
-async function handleSshFsConnect(args: { connectionId: string }): Promise<unknown> {
+async function handleSshFsConnect(
+  args: { connectionId: string },
+  event: IpcMainInvokeEvent
+): Promise<unknown> {
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  if (!ownerWindow || ownerWindow.isDestroyed()) return { error: 'SSH window is unavailable' }
+  const ticket = sftpWorkspaceActivity.beginConnect(
+    ownerWindow.id,
+    args.connectionId,
+    currentSshWorkspaceId()
+  )
   try {
     const result = await nativeSshFsRequest<NativeSshFileHomeResult>(
       'ssh/fs-home-dir',
       args.connectionId
     )
+    if (
+      currentSshWorkspaceId() !== 'local-personal' &&
+      !(await loadOfflineWorkspaceIds()).has(currentSshWorkspaceId())
+    ) {
+      sftpWorkspaceActivity.finishConnect(ticket, false)
+      return { error: 'SSH_WORKSPACE_UNAVAILABLE' }
+    }
+    sftpWorkspaceActivity.finishConnect(ticket, result.success)
     return result.success
       ? { success: true, homeDir: result.path ?? null }
       : { error: result.error }
   } catch (err) {
+    sftpWorkspaceActivity.finishConnect(ticket, false)
     return { error: String(err) }
   }
 }
 
-async function handleSshFsDisconnect(args: { connectionId: string }): Promise<unknown> {
+async function handleSshFsDisconnect(
+  args: { connectionId: string },
+  event: IpcMainInvokeEvent
+): Promise<unknown> {
   try {
+    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+    if (!ownerWindow || ownerWindow.isDestroyed()) return { error: 'SSH window is unavailable' }
+    sftpWorkspaceActivity.disconnect(ownerWindow.id, args.connectionId, currentSshWorkspaceId())
     logSshDebug('native fs disconnect requested', { connectionId: args.connectionId })
     return { success: true }
   } catch (err) {
@@ -1412,6 +1576,11 @@ async function handleSshGrep(args: SshGrepArgs): Promise<unknown> {
 }
 
 export async function registerSshHandlers(): Promise<void> {
+  if (!accountRevocationSubscribed) {
+    accountRevocationSubscribed = true
+    onRemoteAccountCleared(revokeManagedSshWorkspaceActivity)
+    onWorkspaceDirectoryChanged(revokeUnavailableSshWorkspaceActivity)
+  }
   registerSshChangeAdapter({
     readSnapshot: readSshTextSnapshot,
     writeText: writeSshTextFile,
@@ -1521,6 +1690,11 @@ export async function registerSshHandlers(): Promise<void> {
     const taskId = `ssh-upload-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     try {
       const localStat = await fs.promises.stat(args.localPath)
+      if (
+        currentSshWorkspaceId() !== 'local-personal' &&
+        !(await loadOfflineWorkspaceIds()).has(currentSshWorkspaceId())
+      )
+        return { error: 'SSH_WORKSPACE_UNAVAILABLE' }
       const kind: 'file' | 'folder' = args.kind
         ? args.kind
         : localStat.isDirectory()
@@ -1530,14 +1704,19 @@ export async function registerSshHandlers(): Promise<void> {
       const task: UploadTaskState = {
         taskId,
         connectionId: args.connectionId,
+        workspaceId: currentSshWorkspaceId(),
         ownerWindowId: ownerWindow.id,
         canceled: false,
+        started: false,
         cancel: async (): Promise<void> => {
           if (task.canceled) return
           task.canceled = true
-          await getNativeWorker()
-            .request<NativeSshFileMutationResult>('ssh/fs-upload-abort', { taskId }, 10_000)
-            .catch((error) => console.warn('[SSH] Native upload abort failed:', error))
+          try {
+            if (task.started) await abortNativeSshTask('ssh/fs-upload-abort', taskId)
+          } catch (error) {
+            task.canceled = false
+            throw error
+          }
           sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
@@ -1551,6 +1730,7 @@ export async function registerSshHandlers(): Promise<void> {
       if (kind === 'file') {
         void (async () => {
           try {
+            if (task.canceled) return
             sendUploadEvent({
               taskId,
               connectionId: args.connectionId,
@@ -1559,6 +1739,7 @@ export async function registerSshHandlers(): Promise<void> {
               message: 'Uploading...'
             })
 
+            task.started = true
             const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
               'ssh/fs-upload-file',
               args.connectionId,
@@ -1602,6 +1783,7 @@ export async function registerSshHandlers(): Promise<void> {
 
       void (async () => {
         try {
+          if (task.canceled) return
           sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
@@ -1609,6 +1791,7 @@ export async function registerSshHandlers(): Promise<void> {
             message: 'Preparing upload...'
           })
 
+          task.started = true
           const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
             'ssh/fs-upload-directory',
             args.connectionId,
@@ -1722,6 +1905,7 @@ export async function registerSshHandlers(): Promise<void> {
       const task: TransferTaskState = {
         taskId,
         type: args.type,
+        workspaceId: currentSshWorkspaceId(),
         ownerWindowId: ownerWindow.id,
         sourceConnectionId:
           args.type === 'remote-copy' ? args.sourceConnectionId : args.connectionId,
@@ -1732,7 +1916,9 @@ export async function registerSshHandlers(): Promise<void> {
               ? args.targetConnectionId
               : null,
         canceled: false,
+        started: false,
         cancel: async () => {
+          if (task.canceled) return
           task.canceled = true
           sendTransferEvent({
             taskId,
@@ -1750,6 +1936,7 @@ export async function registerSshHandlers(): Promise<void> {
 
       void (async () => {
         try {
+          if (task.canceled) return
           if (args.type === 'upload') {
             if (!Array.isArray(args.localPaths) || args.localPaths.length === 0) {
               throw new Error('No local paths selected for upload')
@@ -1758,13 +1945,12 @@ export async function registerSshHandlers(): Promise<void> {
             task.cancel = async (): Promise<void> => {
               if (task.canceled) return
               task.canceled = true
-              await getNativeWorker()
-                .request<NativeSshFileMutationResult>(
-                  'ssh/fs-upload-abort',
-                  { taskId: task.taskId },
-                  10_000
-                )
-                .catch((error) => console.warn('[SSH] Native transfer upload abort failed:', error))
+              try {
+                if (task.started) await abortNativeSshTask('ssh/fs-upload-abort', task.taskId)
+              } catch (error) {
+                task.canceled = false
+                throw error
+              }
               sendTransferEvent({
                 taskId,
                 type: task.type,
@@ -1776,6 +1962,7 @@ export async function registerSshHandlers(): Promise<void> {
               })
             }
 
+            task.started = true
             const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
               'ssh/fs-transfer-upload',
               args.connectionId,
@@ -1804,15 +1991,12 @@ export async function registerSshHandlers(): Promise<void> {
             task.cancel = async (): Promise<void> => {
               if (task.canceled) return
               task.canceled = true
-              await getNativeWorker()
-                .request<NativeSshFileMutationResult>(
-                  'ssh/fs-download-abort',
-                  { taskId: task.taskId },
-                  10_000
-                )
-                .catch((error) =>
-                  console.warn('[SSH] Native transfer download abort failed:', error)
-                )
+              try {
+                if (task.started) await abortNativeSshTask('ssh/fs-download-abort', task.taskId)
+              } catch (error) {
+                task.canceled = false
+                throw error
+              }
               sendTransferEvent({
                 taskId,
                 type: task.type,
@@ -1824,6 +2008,7 @@ export async function registerSshHandlers(): Promise<void> {
               })
             }
 
+            task.started = true
             const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
               'ssh/fs-transfer-download',
               args.connectionId,
@@ -1852,13 +2037,12 @@ export async function registerSshHandlers(): Promise<void> {
             task.cancel = async (): Promise<void> => {
               if (task.canceled) return
               task.canceled = true
-              await getNativeWorker()
-                .request<NativeSshFileMutationResult>(
-                  'ssh/fs-remote-copy-abort',
-                  { taskId: task.taskId },
-                  10_000
-                )
-                .catch((error) => console.warn('[SSH] Native remote-copy abort failed:', error))
+              try {
+                if (task.started) await abortNativeSshTask('ssh/fs-remote-copy-abort', task.taskId)
+              } catch (error) {
+                task.canceled = false
+                throw error
+              }
               sendTransferEvent({
                 taskId,
                 type: task.type,
@@ -1870,6 +2054,7 @@ export async function registerSshHandlers(): Promise<void> {
               })
             }
 
+            task.started = true
             const result = await nativeSshRemoteCopyRequest<NativeSshFileTransferResult>(
               'ssh/fs-transfer-remote-copy',
               args.sourceConnectionId,
@@ -2062,16 +2247,22 @@ export async function registerSshHandlers(): Promise<void> {
 
   registerSshMessagePackHandler<{ id: string }>('ssh:connection:delete', async (args) => {
     try {
-      // Disconnect any active sessions for this connection
-      for (const [sessionId, session] of sshSessions) {
-        if (session.connectionId === args.id) {
-          session.userInitiatedDisconnect = true
-          if (session.reconnectTimer) clearTimeout(session.reconnectTimer)
-          session.client.end()
-          sshSessions.delete(sessionId)
-        }
-      }
       await deleteSshConnection(args.id)
+      // A connection ID can also exist in another workspace; only its own sessions are removed.
+      for (const [sessionId, session] of sshSessionsForConnection(
+        sshSessions,
+        args.id,
+        currentSshWorkspaceId()
+      )) {
+        session.userInitiatedDisconnect = true
+        session.status = 'disconnected'
+        if (session.reconnectTimer) clearTimeout(session.reconnectTimer)
+        session.shell?.end()
+        session.client.end()
+        session.jumpClient?.end()
+        sshSessions.delete(sessionId)
+      }
+      sftpWorkspaceActivity.forgetConnection(args.id, currentSshWorkspaceId())
       return { success: true }
     } catch (err) {
       return { error: String(err) }
@@ -2145,6 +2336,7 @@ export async function registerSshHandlers(): Promise<void> {
       const session: SshSession = {
         id: sessionId,
         connectionId: args.connectionId,
+        workspaceId: currentSshWorkspaceId(),
         ownerWindowId: ownerWindow.id,
         client: new Client(),
         shell: null,
@@ -2183,6 +2375,18 @@ export async function registerSshHandlers(): Promise<void> {
           try {
             const connected = await connectWithProxyJump(connection)
             clearTimeout(connectTimeout)
+            if (
+              session.userInitiatedDisconnect ||
+              !sshSessions.has(sessionId) ||
+              (session.workspaceId !== 'local-personal' &&
+                !(await loadOfflineWorkspaceIds()).has(session.workspaceId))
+            ) {
+              connected.client.end()
+              connected.jumpClient?.end()
+              sshSessions.delete(sessionId)
+              resolve({ error: 'SSH_WORKSPACE_UNAVAILABLE' })
+              return
+            }
             session.client = connected.client
             session.jumpClient = connected.jumpClient
             session.status = 'connected'
@@ -2295,8 +2499,12 @@ export async function registerSshHandlers(): Promise<void> {
 
   ipcMain.on(toMessagePackChannel('ssh:data'), (event, bytes: Uint8Array) => {
     if (!isTrustedSshIpcSender(event)) return
-    const args = decodeMessagePackPayload<{ sessionId: string; data: string }>(bytes)
-    if (!isSshSessionOwnedBy(event, args.sessionId)) return
+    const args = decodeMessagePackPayload<{
+      sessionId: string
+      data: string
+      workspaceId?: string
+    }>(bytes)
+    if (!isSshSessionOwnedBy(event, args.sessionId, args.workspaceId ?? 'local-personal')) return
     handleSshData(args)
   })
 
@@ -2311,8 +2519,13 @@ export async function registerSshHandlers(): Promise<void> {
 
   ipcMain.on(toMessagePackChannel('ssh:resize'), (event, bytes: Uint8Array) => {
     if (!isTrustedSshIpcSender(event)) return
-    const args = decodeMessagePackPayload<{ sessionId: string; cols: number; rows: number }>(bytes)
-    if (!isSshSessionOwnedBy(event, args.sessionId)) return
+    const args = decodeMessagePackPayload<{
+      sessionId: string
+      cols: number
+      rows: number
+      workspaceId?: string
+    }>(bytes)
+    if (!isSshSessionOwnedBy(event, args.sessionId, args.workspaceId ?? 'local-personal')) return
     handleSshResize(args)
   })
 
@@ -2348,7 +2561,11 @@ export async function registerSshHandlers(): Promise<void> {
     if (!ownerWindow) return []
     const list: { id: string; connectionId: string; status: string; error?: string }[] = []
     for (const session of sshSessions.values()) {
-      if (session.ownerWindowId !== ownerWindow.id) continue
+      if (
+        session.ownerWindowId !== ownerWindow.id ||
+        session.workspaceId !== currentSshWorkspaceId()
+      )
+        continue
       list.push({
         id: session.id,
         connectionId: session.connectionId,
@@ -2359,6 +2576,10 @@ export async function registerSshHandlers(): Promise<void> {
     return list
   })
 
+  registerSshMessagePackHandler<void>('ssh:workspace-activity', async () => ({
+    busy: hasActiveMainSshWorkspaceActivity()
+  }))
+
   registerSshMessagePackHandler<{ connectionId?: string }>(
     'ssh:diagnostics:list',
     async (args, event) => {
@@ -2368,6 +2589,7 @@ export async function registerSshHandlers(): Promise<void> {
         entries: sshDiagnostics.filter(
           (entry) =>
             entry.ownerWindowId === ownerWindow.id &&
+            entry.workspaceId === currentSshWorkspaceId() &&
             (!args?.connectionId || entry.connectionId === args.connectionId)
         )
       }

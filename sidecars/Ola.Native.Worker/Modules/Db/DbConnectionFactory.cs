@@ -55,10 +55,7 @@ internal static class DbConnectionFactory
             return Path.GetFullPath(dbPath);
         }
 
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
-            "data.db");
+        return Path.Combine(OlaDataRoot.DirectoryPath, "data.db");
     }
 
     private static void EnsureSqliteInitialized()

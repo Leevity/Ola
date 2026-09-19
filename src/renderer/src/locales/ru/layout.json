@@ -104,7 +104,11 @@
     "chats": "Чаты",
     "noChats": "Пока нет чатов",
     "smartRename": "Умное имя",
-    "smartRenaming": "Умное переименование"
+    "smartRenaming": "Умное переименование",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Сессия удалена",

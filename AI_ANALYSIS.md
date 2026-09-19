@@ -19,28 +19,28 @@ Ola 不是一个单纯的聊天客户端，而是一个“本地优先的 AI 多
 
 ## 2. 功能全景与完成度
 
-| 功能域 | 当前能力 | 完成度判断 | 主要依赖 |
-| --- | --- | --- | --- |
-| 桌面壳与窗口 | 主窗口、SSH 窗口、Detached session、Pet、通知窗口、托盘、协议唤起、崩溃恢复 | 已实现 | Electron |
-| 对话与 Agent | 多模式对话、流式输出、思考、工具调用、审批、重试、上下文压缩、重放 | 核心已实现 | Provider + Native Worker |
-| 模型供应商 | OpenAI/Responses、Anthropic、Gemini/Vertex、OAuth 和多厂商预设、fallback、health | 已实现，配置后可用 | 模型 API / OAuth |
-| 文件、Shell、Git、终端 | 本地/远程文件、读写编辑、Glob/Grep、Shell、Git、xterm、Monaco | 已实现 | 本机权限、SSH、Git |
-| Plan / Task / Goal | 计划审阅、任务依赖、预算、阻塞审计、继续执行 | 已实现 | SQLite + runtime jobs |
-| 子智能体 / Team | 子智能体委派、团队成员、消息、JSONL 运行时、历史 | 已实现 | Native Worker + SQLite/JSONL |
-| Skills / Souls / Prompts / Memory | 动态技能、Soul/User/MEMORY、项目级覆盖、记忆自动化 | 已实现 | Worker 文件/DB |
-| 浏览器与桌面自动化 | WebView 导航、点击、输入、截图、桌面截图/输入、流程录制/回放 | 已实现，需权限与真实页面验证 | Electron WebView、RobotJS |
-| MCP / Extensions / App Plugins | stdio/SSE/HTTP MCP、声明式 HTTP 扩展、沙箱 JS、UI renderer、插件工具 | 已实现 | 外部 MCP/HTTP/插件 |
-| SSH | SSH 配置、终端、远程文件、SFTP、断点续传、远端 Agent 工具 | 已实现，需真实主机验证 | SSH / SFTP |
-| RDP / VNC / OLA device | 内置 RDP CleanPath bridge、noVNC bridge、外部客户端、输入授权、凭据租约 | RDP/VNC 主链已实现；OLA device 仍是扩展方向 | 远程主机、IronRDP/noVNC |
-| Channels | 飞书、钉钉、Discord、QQ、Telegram、企业微信、微信公众号、WhatsApp | 已实现，需真实账号/网络 | 平台 API/SDK/WebSocket |
-| Cron | at/every/5 段 cron、持久化、并发控制、取消、后台 Agent、多渠道交付 | 已实现，需真实环境 | node-cron/渠道/Provider |
-| 凭据、Cookie、OAuth | safeStorage Vault、域名校验、Cookie 导入、登录编排、OAuth callback | 已实现，安全敏感 | OS Keychain/DPAPI、WebView |
-| Draw / Image / Audio / Video | Draw Graph、图片生成/编辑、音频转写/语音、Seedance 视频任务 | 已实现；视频默认关闭 | 外部模型服务 |
-| Preview / Office | Markdown/Mermaid、HTML、图片、视频、音频、PDF、DOCX、CSV/XLSX、字体、二进制 | 已实现 | React、pdf.js、mammoth、XLSX |
-| Project Wiki | 代码树扫描、符号提取、缓存、Markdown 导出 | 已实现，偏静态索引 | 本地文件系统 |
-| Sync | WebDAV、快照、hash、tombstone、冲突解析、条件写入、旧数据迁移 | 已实现，需真实 WebDAV | WebDAV |
-| Analytics / Update / CLI | 使用量、Provider health、更新器、Native Worker headless CLI | 已实现 | SQLite、electron-updater |
-| Hooks | 配置、信任、历史、取消、执行器基础设施 | **基础设施存在，但当前 `AUTOMATION_HOOKS_ENABLED=false`** | 外部可执行文件；当前关闭 |
+| 功能域                            | 当前能力                                                                         | 完成度判断                                                | 主要依赖                     |
+| --------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------- | ---------------------------- |
+| 桌面壳与窗口                      | 主窗口、SSH 窗口、Detached session、Pet、通知窗口、托盘、协议唤起、崩溃恢复      | 已实现                                                    | Electron                     |
+| 对话与 Agent                      | 多模式对话、流式输出、思考、工具调用、审批、重试、上下文压缩、重放               | 核心已实现                                                | Provider + Native Worker     |
+| 模型供应商                        | OpenAI/Responses、Anthropic、Gemini/Vertex、OAuth 和多厂商预设、fallback、health | 已实现，配置后可用                                        | 模型 API / OAuth             |
+| 文件、Shell、Git、终端            | 本地/远程文件、读写编辑、Glob/Grep、Shell、Git、xterm、Monaco                    | 已实现                                                    | 本机权限、SSH、Git           |
+| Plan / Task / Goal                | 计划审阅、任务依赖、预算、阻塞审计、继续执行                                     | 已实现                                                    | SQLite + runtime jobs        |
+| 子智能体 / Team                   | 子智能体委派、团队成员、消息、JSONL 运行时、历史                                 | 已实现                                                    | Native Worker + SQLite/JSONL |
+| Skills / Souls / Prompts / Memory | 动态技能、Soul/User/MEMORY、项目级覆盖、记忆自动化                               | 已实现                                                    | Worker 文件/DB               |
+| 浏览器与桌面自动化                | WebView 导航、点击、输入、截图、桌面截图/输入、流程录制/回放                     | 已实现，需权限与真实页面验证                              | Electron WebView、RobotJS    |
+| MCP / Extensions / App Plugins    | stdio/SSE/HTTP MCP、声明式 HTTP 扩展、沙箱 JS、UI renderer、插件工具             | 已实现                                                    | 外部 MCP/HTTP/插件           |
+| SSH                               | SSH 配置、终端、远程文件、SFTP、断点续传、远端 Agent 工具                        | 已实现，需真实主机验证                                    | SSH / SFTP                   |
+| RDP / VNC / OLA device            | 内置 RDP CleanPath bridge、noVNC bridge、外部客户端、输入授权、凭据租约          | RDP/VNC 主链已实现；OLA device 仍是扩展方向               | 远程主机、IronRDP/noVNC      |
+| Channels                          | 飞书、钉钉、Discord、QQ、Telegram、企业微信、微信公众号、WhatsApp                | 已实现，需真实账号/网络                                   | 平台 API/SDK/WebSocket       |
+| Cron                              | at/every/5 段 cron、持久化、并发控制、取消、后台 Agent、多渠道交付               | 已实现，需真实环境                                        | node-cron/渠道/Provider      |
+| 凭据、Cookie、OAuth               | safeStorage Vault、域名校验、Cookie 导入、登录编排、OAuth callback               | 已实现，安全敏感                                          | OS Keychain/DPAPI、WebView   |
+| Draw / Image / Audio / Video      | Draw Graph、图片生成/编辑、音频转写/语音、Seedance 视频任务                      | 已实现；视频默认关闭                                      | 外部模型服务                 |
+| Preview / Office                  | Markdown/Mermaid、HTML、图片、视频、音频、PDF、DOCX、CSV/XLSX、字体、二进制      | 已实现                                                    | React、pdf.js、mammoth、XLSX |
+| Project Wiki                      | 代码树扫描、符号提取、缓存、Markdown 导出                                        | 已实现，偏静态索引                                        | 本地文件系统                 |
+| Sync                              | WebDAV、快照、hash、tombstone、冲突解析、条件写入、旧数据迁移                    | 已实现，需真实 WebDAV                                     | WebDAV                       |
+| Analytics / Update / CLI          | 使用量、Provider health、更新器、Native Worker headless CLI                      | 已实现                                                    | SQLite、electron-updater     |
+| Hooks                             | 配置、信任、历史、取消、执行器基础设施                                           | **基础设施存在，但当前 `AUTOMATION_HOOKS_ENABLED=false`** | 外部可执行文件；当前关闭     |
 
 ## 3. 总体架构
 
@@ -314,16 +314,16 @@ Usage events、daily activity、model/provider usage 和 provider health 写入 
 
 ### 示例 A：在当前项目中修复一个登录 Bug
 
-| 步骤 | 用户看到的动作 | 系统实际技术方案 |
-| --- | --- | --- |
-| 1 | 选择项目目录并输入“定位并修复登录 Bug” | session/project/workingFolder 写入 SQLite，当前 Provider/权限/模式载入；[source:src/renderer/src/stores/chat-store.ts] [source:sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs] |
-| 2 | Agent 开始输出思路 | renderer 构建 sidecar request，Worker 发 provider SSE，MessagePack stream 返回 text/thinking delta；[source:src/renderer/src/lib/ipc/sidecar-protocol.ts] [source:sidecars/Ola.Native.Worker/Modules/AgentRuntime/OpenAIChatRuntime.cs] |
-| 3 | Agent 调用 Read/Grep | Tool registry 给出 schema；Native Tool Executor 在 workingFolder 内执行 FileModule，结果写 runtime tool journal；[source:src/renderer/src/lib/agent/tool-registry.ts] [source:sidecars/Ola.Native.Worker/Modules/File/FileModule.cs] |
-| 4 | Agent 需要改文件 | permission policy 判断 Write/Edit 是否需要 approval；主进程把审批卡片发给当前窗口；[source:src/shared/permission-policy.ts] [source:src/main/ipc/sidecar-manager.ts] |
-| 5 | 用户点击允许 | approval response 回到 Worker；Edit/Write 执行并生成 agent change set/file change，UI 更新 diff；[source:sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeNativeToolExecutor.cs] [source:src/main/db] |
-| 6 | Agent 运行测试 | Bash 命令再次走权限策略和 approval；Shell output 分片、截断和归档后回到 Agent；[source:src/main/ipc/shell-handlers.ts] [source:sidecars/Ola.Native.Worker/Modules/Shell/ShellModule.cs] |
-| 7 | 中途窗口卡顿或消息缺 seq | receiver 发现 seq gap，向 `agent:stream-replay` 请求缓存事件，恢复后继续按序消费；[source:src/renderer/src/lib/ipc/agent-stream-receiver.ts] [source:src/main/ipc/sidecar-manager.ts] |
-| 8 | 修复完成 | loop_end、message_end、usage、tool result、change set 和消息写入持久化；用户可以继续追问或回滚/查看变更。[source:src/renderer/src/stores/chat-store.ts] [source:sidecars/Ola.Native.Worker/Modules/Db/DbSchemaMigrator.cs] |
+| 步骤 | 用户看到的动作                         | 系统实际技术方案                                                                                                                                                                                                                        |
+| ---- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1    | 选择项目目录并输入“定位并修复登录 Bug” | session/project/workingFolder 写入 SQLite，当前 Provider/权限/模式载入；[source:src/renderer/src/stores/chat-store.ts] [source:sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs]                                                       |
+| 2    | Agent 开始输出思路                     | renderer 构建 sidecar request，Worker 发 provider SSE，MessagePack stream 返回 text/thinking delta；[source:src/renderer/src/lib/ipc/sidecar-protocol.ts] [source:sidecars/Ola.Native.Worker/Modules/AgentRuntime/OpenAIChatRuntime.cs] |
+| 3    | Agent 调用 Read/Grep                   | Tool registry 给出 schema；Native Tool Executor 在 workingFolder 内执行 FileModule，结果写 runtime tool journal；[source:src/renderer/src/lib/agent/tool-registry.ts] [source:sidecars/Ola.Native.Worker/Modules/File/FileModule.cs]    |
+| 4    | Agent 需要改文件                       | permission policy 判断 Write/Edit 是否需要 approval；主进程把审批卡片发给当前窗口；[source:src/shared/permission-policy.ts] [source:src/main/ipc/sidecar-manager.ts]                                                                    |
+| 5    | 用户点击允许                           | approval response 回到 Worker；Edit/Write 执行并生成 agent change set/file change，UI 更新 diff；[source:sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeNativeToolExecutor.cs] [source:src/main/db]                        |
+| 6    | Agent 运行测试                         | Bash 命令再次走权限策略和 approval；Shell output 分片、截断和归档后回到 Agent；[source:src/main/ipc/shell-handlers.ts] [source:sidecars/Ola.Native.Worker/Modules/Shell/ShellModule.cs]                                                 |
+| 7    | 中途窗口卡顿或消息缺 seq               | receiver 发现 seq gap，向 `agent:stream-replay` 请求缓存事件，恢复后继续按序消费；[source:src/renderer/src/lib/ipc/agent-stream-receiver.ts] [source:src/main/ipc/sidecar-manager.ts]                                                   |
+| 8    | 修复完成                               | loop_end、message_end、usage、tool result、change set 和消息写入持久化；用户可以继续追问或回滚/查看变更。[source:src/renderer/src/stores/chat-store.ts] [source:sidecars/Ola.Native.Worker/Modules/Db/DbSchemaMigrator.cs]              |
 
 这条链路体现了 Ola 的核心价值：模型只提出意图，真正的文件和 Shell 副作用必须经过工具、权限、IPC owner 和持久化记录。
 

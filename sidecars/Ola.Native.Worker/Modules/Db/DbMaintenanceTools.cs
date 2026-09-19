@@ -65,11 +65,12 @@ internal static class DbMaintenanceTools
             connection,
             transaction,
             $$"""
-            INSERT OR IGNORE INTO usage_activity_daily (
-              day, first_at, last_at, request_count, input_tokens, output_tokens,
+            INSERT OR IGNORE INTO usage_activity_daily_v2 (
+              workspace_id, day, first_at, last_at, request_count, input_tokens, output_tokens,
               cache_creation_tokens, cache_read_tokens, reasoning_tokens, total_cost_usd, updated_at
             )
             SELECT
+              workspace_id,
               strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') AS day,
               MIN(created_at) AS first_at,
               MAX(created_at) AS last_at,
@@ -83,7 +84,7 @@ internal static class DbMaintenanceTools
               $updatedAt AS updated_at
             FROM usage_events
             WHERE created_at < $cutoff
-            GROUP BY day
+            GROUP BY workspace_id, day
             """,
             ("$updatedAt", updatedAt),
             ("$cutoff", cutoff));
@@ -92,12 +93,13 @@ internal static class DbMaintenanceTools
             connection,
             transaction,
             $$"""
-            INSERT OR IGNORE INTO usage_activity_daily_models (
-              day, provider_id, provider_name, model_id, model_name, request_count,
+            INSERT OR IGNORE INTO usage_activity_daily_models_v2 (
+              workspace_id, day, provider_id, provider_name, model_id, model_name, request_count,
               input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
               reasoning_tokens, total_cost_usd, updated_at
             )
             SELECT
+              workspace_id,
               strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') AS day,
               COALESCE(provider_id, '') AS provider_id,
               provider_name,
@@ -113,7 +115,7 @@ internal static class DbMaintenanceTools
               $updatedAt AS updated_at
             FROM usage_events
             WHERE created_at < $cutoff
-            GROUP BY day, COALESCE(provider_id, ''), COALESCE(model_id, '')
+            GROUP BY workspace_id, day, COALESCE(provider_id, ''), COALESCE(model_id, '')
             """,
             ("$updatedAt", updatedAt),
             ("$cutoff", cutoff));
@@ -122,12 +124,13 @@ internal static class DbMaintenanceTools
             connection,
             transaction,
             $$"""
-            INSERT OR IGNORE INTO usage_activity_daily_providers (
-              day, provider_id, provider_name, provider_type, provider_builtin_id, provider_base_url,
+            INSERT OR IGNORE INTO usage_activity_daily_providers_v2 (
+              workspace_id, day, provider_id, provider_name, provider_type, provider_builtin_id, provider_base_url,
               request_count, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
               reasoning_tokens, total_cost_usd, updated_at
             )
             SELECT
+              workspace_id,
               strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') AS day,
               COALESCE(provider_id, '') AS provider_id,
               provider_name,
@@ -144,7 +147,7 @@ internal static class DbMaintenanceTools
               $updatedAt AS updated_at
             FROM usage_events
             WHERE created_at < $cutoff
-            GROUP BY day, COALESCE(provider_id, '')
+            GROUP BY workspace_id, day, COALESCE(provider_id, '')
             """,
             ("$updatedAt", updatedAt),
             ("$cutoff", cutoff));
@@ -168,8 +171,9 @@ internal static class DbMaintenanceTools
                   WHERE created_at < $cutoff
                     AND EXISTS (
                       SELECT 1
-                      FROM usage_activity_daily
-                      WHERE day = strftime(
+                      FROM usage_activity_daily_v2
+                      WHERE workspace_id = usage_events.workspace_id
+                        AND day = strftime(
                         '%Y-%m-%d',
                         usage_events.created_at / 1000,
                         'unixepoch',

@@ -2,9 +2,14 @@ package modelgateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -23,6 +28,9 @@ type ProviderConfig struct {
 	BaseURL string
 	APIKey  string
 	Model   string
+	// Explicit means this is a selected tenant/provider configuration. Missing
+	// fields must fail closed and must never inherit the server default key.
+	Explicit bool
 }
 
 func New() *Gateway {
@@ -34,7 +42,15 @@ func New() *Gateway {
 	if model == "" {
 		model = "team-default"
 	}
-	return &Gateway{client: &http.Client{Timeout: 120 * time.Second}, baseURL: baseURL, apiKey: os.Getenv("OLA_MODEL_API_KEY"), model: model}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.DialContext = safeDialContext
+	return &Gateway{client: &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: transport,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}, baseURL: baseURL, apiKey: os.Getenv("OLA_MODEL_API_KEY"), model: model}
 }
 
 func (g *Gateway) Models(w http.ResponseWriter, r *http.Request) {
@@ -47,6 +63,10 @@ func (g *Gateway) ModelsWithConfig(w http.ResponseWriter, r *http.Request, overr
 		return
 	}
 	config := g.config(override)
+	if config.Explicit && config.APIKey == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]string{"message": "Selected model provider is unavailable"}})
+		return
+	}
 	if config.APIKey == "" {
 		writeJSON(w, http.StatusOK, map[string]any{"object": "list", "data": []any{map[string]any{"id": config.Model, "object": "model", "owned_by": "ola"}}})
 		return
@@ -90,6 +110,10 @@ func (g *Gateway) proxyWithConfig(w http.ResponseWriter, r *http.Request, path s
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]string{"message": "No model provider is configured"}})
 		return
 	}
+	if !IsSafeProviderBaseURL(config.BaseURL) {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": map[string]string{"message": "Selected model provider is unavailable"}})
+		return
+	}
 	requestBody := bytes.NewReader(body)
 	request, err := http.NewRequestWithContext(r.Context(), r.Method, strings.TrimRight(config.BaseURL, "/")+path, requestBody)
 	if err != nil {
@@ -115,7 +139,59 @@ func (g *Gateway) proxyWithConfig(w http.ResponseWriter, r *http.Request, path s
 	_, _ = io.Copy(w, response.Body)
 }
 
+// IsSafeProviderBaseURL is deliberately strict because this process holds the
+// platform credential used for model requests. Origins must be HTTPS public
+// endpoints without URL credentials or an address that reaches local networks.
+func IsSafeProviderBaseURL(value string) bool {
+	u, err := url.Parse(value)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if address, err := netip.ParseAddr(host); err == nil {
+		return isPublicAddress(address)
+	}
+	return true
+}
+
+func safeDialContext(ctx context.Context, network, address string) (net.Conn, error) {
+	host, port, err := net.SplitHostPort(address)
+	if err != nil {
+		return nil, err
+	}
+	addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return nil, err
+	}
+	if len(addresses) == 0 {
+		return nil, fmt.Errorf("model provider host has no addresses")
+	}
+	for _, candidate := range addresses {
+		if !isPublicAddress(candidate) {
+			return nil, fmt.Errorf("model provider host resolves to a private address")
+		}
+	}
+	// Dial the already validated address rather than the hostname. Re-resolving
+	// here would permit a DNS rebinding response between validation and connect.
+	return (&net.Dialer{}).DialContext(ctx, network, net.JoinHostPort(addresses[0].String(), port))
+}
+
+func isPublicAddress(address netip.Addr) bool {
+	return address.IsValid() && !address.IsPrivate() && !address.IsLoopback() &&
+		!address.IsLinkLocalUnicast() && !address.IsLinkLocalMulticast() &&
+		!address.IsUnspecified() && !address.IsMulticast()
+}
+
 func (g *Gateway) config(override ProviderConfig) ProviderConfig {
+	if override.Explicit {
+		if override.Model == "" {
+			override.Model = g.model
+		}
+		return override
+	}
 	if override.BaseURL == "" {
 		override.BaseURL = g.baseURL
 	}

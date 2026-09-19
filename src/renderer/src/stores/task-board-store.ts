@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useWorkspaceStore } from './workspace-store'
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { DB_TASKS_LIST_ALL_MSGPACK_CHANNEL } from '../../../shared/messagepack/binary-ipc'
 import {
@@ -32,9 +33,13 @@ export const useTaskBoardStore = create<TaskBoardStore>((set) => ({
   view: 'dashboard',
 
   load: async () => {
-    set({ loading: true })
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    set({ loading: true, tasks: [], selectedTaskId: null })
     try {
-      const rows = await invokeMessagePackBinary<TaskRow[]>(DB_TASKS_LIST_ALL_MSGPACK_CHANNEL, null)
+      const rows = await invokeMessagePackBinary<TaskRow[]>(DB_TASKS_LIST_ALL_MSGPACK_CHANNEL, {
+        workspaceId
+      })
+      if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
       const tasks = rows.map(taskRowToItem)
       useTaskStore.getState().cacheTasks(tasks)
       set({ tasks, loadedAt: Date.now() })
@@ -58,3 +63,9 @@ export const useTaskBoardStore = create<TaskBoardStore>((set) => ({
     set((state) => ({ tasks: state.tasks.map((item) => (item.id === taskId ? updated : item)) }))
   }
 }))
+
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.activeWorkspaceId !== previous.activeWorkspaceId) {
+    void useTaskBoardStore.getState().load()
+  }
+})

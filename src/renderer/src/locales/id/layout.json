@@ -104,7 +104,11 @@
     "chats": "Percakapan",
     "noChats": "Belum ada obrolan.",
     "smartRename": "Nama Nama Pintar",
-    "smartRenaming": "Smart mengubah nama"
+    "smartRenaming": "Smart mengubah nama",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sesi dihapus",

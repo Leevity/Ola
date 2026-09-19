@@ -4,11 +4,13 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +22,15 @@ const meshProtocolVersion = "v0alpha1"
 const meshCapabilityTicketTTL = 5 * time.Minute
 
 var meshCapabilityPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}(\.[a-z][a-z0-9_-]{0,31})+$`)
+var meshSensitivePayloadPattern = regexp.MustCompile(`(?i)(api[_-]?key|authorization|bearer|password|passphrase|private[_-]?key|secret|token)\s*[:=]`)
+
+// The initial secure Mesh release is status-only. Execution and file
+// capabilities remain unavailable until the signed, target-confirmed task
+// protocol and restricted executor are implemented.
+var meshStatusCapabilities = map[string]bool{
+	"mesh.event.receive": true,
+	"system.info":        true,
+}
 
 type meshCapability struct {
 	ID      string `json:"id"`
@@ -50,6 +61,7 @@ type meshEventRecord struct {
 	Type          string          `json:"type"`
 	Payload       json.RawMessage `json:"payload"`
 	Capabilities  []string        `json:"capabilities"`
+	Signature     string          `json:"signature"`
 	CreatedAt     time.Time       `json:"createdAt"`
 }
 
@@ -88,6 +100,7 @@ func (api *API) meshPublishEvent(w http.ResponseWriter, r *http.Request, account
 		Sequence      int64           `json:"sequence"`
 		Type          string          `json:"type"`
 		Payload       json.RawMessage `json:"payload"`
+		Signature     string          `json:"signature"`
 	}
 	if !readJSON(w, r, &req) || !validRemoteIdentifier(req.EventID) ||
 		!validRemoteIdentifier(req.SubjectNodeID) || !validRemoteIdentifier(req.TargetNodeID) ||
@@ -111,6 +124,10 @@ func (api *API) meshPublishEvent(w http.ResponseWriter, r *http.Request, account
 		writeError(w, http.StatusNotFound, "mesh node not found")
 		return
 	}
+	if !validMeshEventSignature(subject.PublicKey, req) {
+		writeError(w, http.StatusForbidden, "invalid mesh event signature")
+		return
+	}
 	queue := api.control.MeshEvents[req.TargetNodeID]
 	for _, existing := range queue {
 		if existing.EventID == req.EventID {
@@ -122,14 +139,67 @@ func (api *API) meshPublishEvent(w http.ResponseWriter, r *http.Request, account
 			return
 		}
 	}
-	event := meshEventRecord{EventID: req.EventID, SubjectNodeID: req.SubjectNodeID, TargetNodeID: req.TargetNodeID, SessionID: req.SessionID, Sequence: req.Sequence, Type: req.Type, Payload: append(json.RawMessage(nil), req.Payload...), Capabilities: append([]string(nil), claims.Capabilities...), CreatedAt: time.Now()}
+	nowUnix := time.Now().Unix()
+	for nonce, expiresAt := range api.control.UsedMeshTicketNonces {
+		if expiresAt <= nowUnix {
+			delete(api.control.UsedMeshTicketNonces, nonce)
+		}
+	}
+	nonceKey := claims.ID + ":" + claims.Nonce
+	if _, used := api.control.UsedMeshTicketNonces[nonceKey]; used {
+		writeError(w, http.StatusForbidden, "mesh capability ticket has already been used")
+		return
+	}
+	event := meshEventRecord{EventID: req.EventID, SubjectNodeID: req.SubjectNodeID, TargetNodeID: req.TargetNodeID, SessionID: req.SessionID, Sequence: req.Sequence, Type: req.Type, Payload: append(json.RawMessage(nil), req.Payload...), Capabilities: append([]string(nil), claims.Capabilities...), Signature: req.Signature, CreatedAt: time.Now()}
 	queue = append(queue, event)
 	if len(queue) > 256 {
 		queue = queue[len(queue)-256:]
 	}
 	api.control.MeshEvents[req.TargetNodeID] = queue
+	api.control.UsedMeshTicketNonces[nonceKey] = claims.ExpiresAt
 	api.control.persistLocked()
 	writeJSON(w, http.StatusAccepted, map[string]any{"event": event})
+}
+
+func validMeshEventSignature(publicKeyText string, req struct {
+	Ticket        string          `json:"ticket"`
+	EventID       string          `json:"eventId"`
+	SubjectNodeID string          `json:"subjectNodeId"`
+	TargetNodeID  string          `json:"targetNodeId"`
+	SessionID     string          `json:"sessionId"`
+	Sequence      int64           `json:"sequence"`
+	Type          string          `json:"type"`
+	Payload       json.RawMessage `json:"payload"`
+	Signature     string          `json:"signature"`
+}) bool {
+	publicKey, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(publicKeyText))
+	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+		return false
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(req.Signature))
+	if err != nil || len(signature) != ed25519.SignatureSize {
+		return false
+	}
+	digest := sha256.Sum256(meshEventSigningBytes(req.EventID, req.SubjectNodeID, req.TargetNodeID, req.SessionID, req.Sequence, req.Type, req.Payload))
+	return ed25519.Verify(ed25519.PublicKey(publicKey), digest[:], signature)
+}
+
+// meshEventSigningBytes is deliberately independent of JSON re-serialization:
+// Node and Go encode some Unicode and HTML characters differently. The original
+// payload bytes are bound through their hash, while the remaining validated
+// fields use an unambiguous line-delimited representation.
+func meshEventSigningBytes(eventID, subjectNodeID, targetNodeID, sessionID string, sequence int64, eventType string, payload json.RawMessage) []byte {
+	payloadDigest := sha256.Sum256(payload)
+	return []byte(strings.Join([]string{
+		meshProtocolVersion,
+		eventID,
+		subjectNodeID,
+		targetNodeID,
+		sessionID,
+		strconv.FormatInt(sequence, 10),
+		eventType,
+		hex.EncodeToString(payloadDigest[:]),
+	}, "\n"))
 }
 
 func (api *API) meshListEvents(w http.ResponseWriter, r *http.Request, account store.Account) {
@@ -150,6 +220,11 @@ func (api *API) meshListEvents(w http.ResponseWriter, r *http.Request, account s
 	node, ok := api.control.MeshNodes[targetNodeID]
 	if !ok || node.AccountID != account.ID {
 		writeError(w, http.StatusNotFound, "mesh node not found")
+		return
+	}
+	deviceClaims, err := auth.ParseDeviceToken([]byte(api.cfg.JWTSecret), r.Header.Get("X-Ola-Device-Token"))
+	if err != nil || deviceClaims.AccountID != account.ID || deviceClaims.DeviceID != node.DeviceID {
+		writeError(w, http.StatusForbidden, "target node device authentication is required")
 		return
 	}
 	result := make([]meshEventDelivery, 0, 32)
@@ -174,7 +249,7 @@ func (api *API) meshListEvents(w http.ResponseWriter, r *http.Request, account s
 
 func validMeshEventType(value string) bool {
 	switch value {
-	case "task.command", "task.started", "task.stdout", "task.stderr", "task.progress", "task.approval_required", "task.completed", "task.failed", "task.cancelled":
+	case "task.started", "task.progress", "task.completed", "task.failed", "task.cancelled":
 		return true
 	default:
 		return false
@@ -182,11 +257,32 @@ func validMeshEventType(value string) bool {
 }
 
 func validMeshEventPayload(payload json.RawMessage) bool {
-	if len(payload) == 0 || len(payload) > 32<<10 {
+	if len(payload) == 0 || len(payload) > 1024 {
 		return false
 	}
 	var object map[string]json.RawMessage
-	return json.Unmarshal(payload, &object) == nil && object != nil
+	if json.Unmarshal(payload, &object) != nil || len(object) == 0 || len(object) > 8 {
+		return false
+	}
+	for key, value := range object {
+		if !regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString(key) {
+			return false
+		}
+		var scalar any
+		if json.Unmarshal(value, &scalar) != nil {
+			return false
+		}
+		switch item := scalar.(type) {
+		case string:
+			if len(item) > 256 || meshSensitivePayloadPattern.MatchString(item) {
+				return false
+			}
+		case float64, bool, nil:
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func (api *API) meshControlPlaneKey(w http.ResponseWriter, r *http.Request) {
@@ -340,6 +436,12 @@ func (api *API) meshIssueCapabilityTicket(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusBadRequest, "invalid capability ticket request")
 		return
 	}
+	for _, capability := range req.Capabilities {
+		if !meshStatusCapabilities[capability] {
+			writeError(w, http.StatusForbidden, "remote execution capabilities are disabled pending the signed task protocol")
+			return
+		}
+	}
 	api.control.mu.RLock()
 	subject, subjectExists := api.control.MeshNodes[req.SubjectNodeID]
 	target, targetExists := api.control.MeshNodes[req.TargetNodeID]
@@ -387,7 +489,7 @@ func validMeshCapabilities(capabilities []meshCapability) bool {
 	seen := map[string]bool{}
 	for _, capability := range capabilities {
 		if !meshCapabilityPattern.MatchString(capability.ID) || seen[capability.ID] ||
-			(capability.Risk != "low" && capability.Risk != "medium" && capability.Risk != "high") ||
+			!meshStatusCapabilities[capability.ID] || capability.Risk != "low" ||
 			len(capability.Version) > 32 {
 			return false
 		}

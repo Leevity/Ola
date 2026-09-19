@@ -1,11 +1,11 @@
 ﻿import { app, BrowserWindow, dialog, powerMonitor, screen } from 'electron'
 import { basename, join } from 'path'
-import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { cp, mkdir, readdir, readFile, stat, writeFile } from 'fs/promises'
 import { registerMessagePackHandler } from './messagepack-handler'
 import { safeSendMessagePackToAllWindows } from '../window-ipc'
 import { decodePersistedStoreState, readSettings, setSettingsValue } from './settings-handlers'
+import { olaDataRoot } from '../lib/ola-data-root'
 
 const PET_ENABLED_SETTINGS_KEY = 'petDesktopEnabled'
 const PET_EXP_SETTINGS_KEY = 'ola-pet-exp'
@@ -13,7 +13,7 @@ const PET_EXP_LOG_LIMIT = 100
 
 /** ~/.ola/pets — directory shared by all renderer processes. */
 async function getPetsDirMain(): Promise<string> {
-  return join(homedir(), '.ola', 'pets')
+  return join(olaDataRoot(), 'pets')
 }
 
 async function safeMkdir(path: string): Promise<void> {
@@ -367,7 +367,7 @@ async function resolveAvailableTemplateTarget(parentDir: string): Promise<string
  */
 export async function installBuiltinPets(): Promise<void> {
   try {
-    const targetRoot = join(homedir(), '.ola', 'pets')
+    const targetRoot = join(olaDataRoot(), 'pets')
     await mkdir(targetRoot, { recursive: true })
 
     for (const candidate of getBundledPetDirCandidates()) {
@@ -417,6 +417,7 @@ export async function installBuiltinPets(): Promise<void> {
 }
 
 export function registerPetHandlers(petDeps: PetWindowDeps): void {
+  registerMessagePackHandler<void>('pet:data-dir', () => getPetsDirMain())
   deps = petDeps
 
   registerMessagePackHandler<void>('pet-window:open', async () => {

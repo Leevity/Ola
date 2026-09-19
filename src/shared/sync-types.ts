@@ -66,6 +66,20 @@ export interface SyncBundle {
   tombstones: SyncTombstone[]
 }
 
+export interface WorkspaceSyncScope {
+  accountId: string
+  apiBaseUrl: string
+  workspaceId: string
+}
+
+export interface WorkspaceSyncBundle extends Omit<SyncBundle, 'manifest' | 'tombstones'> {
+  manifest: SyncBundleManifest & {
+    schemaVersion: 2
+    scopeHash: string
+  }
+  tombstones: Array<SyncTombstone & { workspaceId: string }>
+}
+
 export type SyncConflictKind = 'modify-modify' | 'delete-modify' | 'create-create'
 
 export interface SyncConflict {

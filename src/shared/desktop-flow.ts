@@ -33,11 +33,15 @@ export interface DesktopFlowStep {
 
 export interface DesktopFlow {
   id: string
+  /** Absent only on pre-workspace local-personal recordings. */
+  workspaceId?: string
   name: string
   description?: string
   createdAt: number
   updatedAt: number
   steps: DesktopFlowStep[]
+  /** Legacy flows that contained captured text must be recreated before replay. */
+  requiresReview?: boolean
 }
 
 export interface DesktopFlowRecordingStatus {
@@ -61,4 +65,13 @@ export interface DesktopFlowReplayResult {
   success: boolean
   error?: string
   receipts?: DesktopActionReceipt[]
+}
+
+export interface DesktopFlowRun {
+  id: string
+  flowId: string
+  state: 'running' | 'succeeded' | 'failed' | 'cancelled'
+  errorMessage: string | null
+  startedAt: number
+  finishedAt: number | null
 }

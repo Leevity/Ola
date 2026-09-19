@@ -5,10 +5,12 @@ internal static class DbCronTools
 {
     private static SqliteConnection OpenDefaultConnection()
     {
-        return DbConnectionFactory.OpenReadWrite(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
-            "data.db"));
+        return DbConnectionFactory.OpenReadWrite(Path.Combine(OlaDataRoot.DirectoryPath, "data.db"));
+    }
+
+    private static SqliteConnection OpenJobConnection(string? dbPath)
+    {
+        return dbPath is null ? OpenDefaultConnection() : DbConnectionFactory.OpenReadWrite(dbPath);
     }
 
     private const string CronJobSelectSql = """
@@ -22,6 +24,7 @@ internal static class DbCronTools
                prompt,
                agent_id,
                model,
+               model_source,
                working_folder,
                ssh_connection_id,
                session_id,
@@ -40,7 +43,8 @@ internal static class DbCronTools
                last_fired_at,
                fire_count,
                created_at,
-               updated_at
+               updated_at,
+               workspace_id
           FROM cron_jobs
         """;
 
@@ -62,37 +66,39 @@ internal static class DbCronTools
                source_project_name_snapshot,
                source_provider_id_snapshot,
                model_snapshot,
+               model_source_snapshot,
                working_folder_snapshot,
                delivery_mode_snapshot,
                delivery_target_snapshot
           FROM cron_runs
         """;
 
-    internal static CronMutationResult CreateJobRecord(CronJobRow job)
+    internal static CronMutationResult CreateJobRecord(CronJobRow job, string? dbPath = null)
     {
         try
         {
-            using var connection = OpenDefaultConnection();
+            using var connection = OpenJobConnection(dbPath);
             using var transaction = connection.BeginTransaction();
+            ValidateJobScope(connection, transaction, job);
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
                 """
                 INSERT INTO cron_jobs (
                   id, name, session_id, schedule_kind, schedule_at, schedule_every, schedule_expr, schedule_tz,
-                  prompt, agent_id, model, working_folder, ssh_connection_id,
+                  prompt, agent_id, model, model_source, working_folder, ssh_connection_id,
                   source_session_title, source_project_id, source_project_name, source_provider_id,
                   delivery_mode, delivery_target, plugin_id, plugin_chat_id,
                   enabled, delete_after_run, max_iterations, deleted_at,
-                  last_fired_at, fire_count, created_at, updated_at
+                  last_fired_at, fire_count, created_at, updated_at, workspace_id
                 )
                 VALUES (
                   $id, $name, $sessionId, $scheduleKind, $scheduleAt, $scheduleEvery, $scheduleExpr, $scheduleTz,
-                  $prompt, $agentId, $model, $workingFolder, $sshConnectionId,
+                  $prompt, $agentId, $model, $modelSource, $workingFolder, $sshConnectionId,
                   $sourceSessionTitle, $sourceProjectId, $sourceProjectName, $sourceProviderId,
                   $deliveryMode, $deliveryTarget, $pluginId, $pluginChatId,
                   $enabled, $deleteAfterRun, $maxIterations, $deletedAt,
-                  $lastFiredAt, $fireCount, $createdAt, $updatedAt
+                  $lastFiredAt, $fireCount, $createdAt, $updatedAt, $workspaceId
                 )
                 """,
                 JobParams(job));
@@ -105,12 +111,16 @@ internal static class DbCronTools
         }
     }
 
-    internal static CronMutationResult UpdateJobRecord(CronJobRow job)
+    internal static CronMutationResult UpdateJobRecord(CronJobRow job, string? dbPath = null, string? workspaceId = null)
     {
         try
         {
-            using var connection = OpenDefaultConnection();
+            using var connection = OpenJobConnection(dbPath);
             using var transaction = connection.BeginTransaction();
+            var existing = GetJob(connection, transaction, job.Id, workspaceId);
+            if (existing is null || existing.WorkspaceId != job.WorkspaceId)
+                throw new InvalidOperationException("The cron job is not available in this workspace.");
+            ValidateJobScope(connection, transaction, job);
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -126,6 +136,7 @@ internal static class DbCronTools
                   prompt = $prompt,
                   agent_id = $agentId,
                   model = $model,
+                  model_source = $modelSource,
                   working_folder = $workingFolder,
                   ssh_connection_id = $sshConnectionId,
                   source_session_title = $sourceSessionTitle,
@@ -155,12 +166,12 @@ internal static class DbCronTools
         }
     }
 
-    internal static CronJobFindResult FindJobRecord(string jobId)
+    internal static CronJobFindResult FindJobRecord(string jobId, string? dbPath = null, string? workspaceId = null)
     {
         try
         {
-            using var connection = OpenDefaultConnection();
-            var job = GetJob(connection, null, jobId);
+            using var connection = OpenJobConnection(dbPath);
+            var job = GetJob(connection, null, jobId, workspaceId);
             return new CronJobFindResult(true, job, null);
         }
         catch (Exception ex)
@@ -169,7 +180,11 @@ internal static class DbCronTools
         }
     }
 
-    internal static CronJobListResult ListJobRecords(string? sessionId = null, bool includeDeleted = false)
+    internal static CronJobListResult ListJobRecords(
+        string? sessionId = null,
+        bool includeDeleted = false,
+        string? workspaceId = null,
+        string? dbPath = null)
     {
         try
         {
@@ -181,12 +196,17 @@ internal static class DbCronTools
                 where.Add("session_id = $sessionId");
                 values.Add(new DbSql.SqlParam("$sessionId", sessionId));
             }
+            if (!string.IsNullOrEmpty(workspaceId))
+            {
+                where.Add("workspace_id = $workspaceId");
+                values.Add(new DbSql.SqlParam("$workspaceId", workspaceId));
+            }
             if (!includeDeleted)
             {
                 where.Add("deleted_at IS NULL");
             }
 
-            using var connection = OpenDefaultConnection();
+            using var connection = OpenJobConnection(dbPath);
             using var command = connection.CreateCommand();
             command.CommandText = $"""
                 {CronJobSelectSql}
@@ -202,21 +222,23 @@ internal static class DbCronTools
         }
     }
 
-    internal static CronMutationResult SoftDeleteJobRecord(string jobId, long? deletedAt = null, long? updatedAt = null)
+    internal static CronMutationResult SoftDeleteJobRecord(string jobId, long? deletedAt = null, long? updatedAt = null, string? dbPath = null, string? workspaceId = null)
     {
         try
         {
             var resolvedDeletedAt = deletedAt ?? Now();
             var resolvedUpdatedAt = updatedAt ?? resolvedDeletedAt;
-            using var connection = OpenDefaultConnection();
+            using var connection = OpenJobConnection(dbPath);
             using var transaction = connection.BeginTransaction();
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "UPDATE cron_jobs SET enabled = 0, deleted_at = $deletedAt, updated_at = $updatedAt WHERE id = $jobId",
+                "UPDATE cron_jobs SET enabled = 0, deleted_at = $deletedAt, updated_at = $updatedAt WHERE id = $jobId" +
+                    (string.IsNullOrEmpty(workspaceId) ? string.Empty : " AND workspace_id = $workspaceId"),
                 new DbSql.SqlParam("$deletedAt", resolvedDeletedAt),
                 new DbSql.SqlParam("$updatedAt", resolvedUpdatedAt),
-                new DbSql.SqlParam("$jobId", jobId));
+                new DbSql.SqlParam("$jobId", jobId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return new CronMutationResult(true, changed, null);
         }
@@ -226,17 +248,19 @@ internal static class DbCronTools
         }
     }
 
-    internal static CronMutationResult DeleteJobRecord(string jobId)
+    internal static CronMutationResult DeleteJobRecord(string jobId, string? dbPath = null, string? workspaceId = null)
     {
         try
         {
-            using var connection = OpenDefaultConnection();
+            using var connection = OpenJobConnection(dbPath);
             using var transaction = connection.BeginTransaction();
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM cron_jobs WHERE id = $jobId",
-                new DbSql.SqlParam("$jobId", jobId));
+                "DELETE FROM cron_jobs WHERE id = $jobId" +
+                    (string.IsNullOrEmpty(workspaceId) ? string.Empty : " AND workspace_id = $workspaceId"),
+                new DbSql.SqlParam("$jobId", jobId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return new CronMutationResult(true, changed, null);
         }
@@ -250,7 +274,11 @@ internal static class DbCronTools
     {
         try
         {
-            return Mutation(CreateJobRecord(ReadJobInput(GetObject(parameters, "job"))));
+            var job = ReadJobInput(GetObject(parameters, "job"));
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
+            if (!string.IsNullOrEmpty(workspaceId) && workspaceId != job.WorkspaceId)
+                return MutationError("The cron job is not available in this workspace.");
+            return Mutation(CreateJobRecord(job, DbConnectionFactory.ResolveDbPath(parameters)));
         }
         catch (Exception ex)
         {
@@ -262,7 +290,10 @@ internal static class DbCronTools
     {
         try
         {
-            return Mutation(UpdateJobRecord(ReadJobInput(GetObject(parameters, "job"))));
+            return Mutation(UpdateJobRecord(
+                ReadJobInput(GetObject(parameters, "job")),
+                DbConnectionFactory.ResolveDbPath(parameters),
+                JsonHelpers.GetString(parameters, "workspaceId")));
         }
         catch (Exception ex)
         {
@@ -275,7 +306,10 @@ internal static class DbCronTools
         try
         {
             return WorkerResponse.Json(
-                FindJobRecord(RequireString(parameters, "jobId")),
+                FindJobRecord(
+                    RequireString(parameters, "jobId"),
+                    DbConnectionFactory.ResolveDbPath(parameters),
+                    JsonHelpers.GetString(parameters, "workspaceId")),
                 WorkerJsonContext.Default.CronJobFindResult);
         }
         catch (Exception ex)
@@ -291,7 +325,9 @@ internal static class DbCronTools
         return WorkerResponse.Json(
             ListJobRecords(
                 JsonHelpers.GetString(parameters, "sessionId"),
-                JsonHelpers.GetBool(parameters, "includeDeleted", false)),
+                JsonHelpers.GetBool(parameters, "includeDeleted", false),
+                JsonHelpers.GetString(parameters, "workspaceId"),
+                DbConnectionFactory.ResolveDbPath(parameters)),
             WorkerJsonContext.Default.CronJobListResult);
     }
 
@@ -301,7 +337,10 @@ internal static class DbCronTools
         {
             var deletedAt = JsonHelpers.GetLong(parameters, "deletedAt", Now());
             var updatedAt = JsonHelpers.GetLong(parameters, "updatedAt", deletedAt);
-            return Mutation(SoftDeleteJobRecord(RequireString(parameters, "jobId"), deletedAt, updatedAt));
+            return Mutation(SoftDeleteJobRecord(
+                RequireString(parameters, "jobId"), deletedAt, updatedAt,
+                DbConnectionFactory.ResolveDbPath(parameters),
+                JsonHelpers.GetString(parameters, "workspaceId")));
         }
         catch (Exception ex)
         {
@@ -313,7 +352,10 @@ internal static class DbCronTools
     {
         try
         {
-            return Mutation(DeleteJobRecord(RequireString(parameters, "jobId")));
+            return Mutation(DeleteJobRecord(
+                RequireString(parameters, "jobId"),
+                DbConnectionFactory.ResolveDbPath(parameters),
+                JsonHelpers.GetString(parameters, "workspaceId")));
         }
         catch (Exception ex)
         {
@@ -333,10 +375,12 @@ internal static class DbCronTools
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "UPDATE cron_jobs SET enabled = $enabled, updated_at = $updatedAt WHERE id = $jobId",
+                "UPDATE cron_jobs SET enabled = $enabled, updated_at = $updatedAt WHERE id = $jobId" +
+                    (string.IsNullOrEmpty(JsonHelpers.GetString(parameters, "workspaceId")) ? string.Empty : " AND workspace_id = $workspaceId"),
                 new DbSql.SqlParam("$enabled", enabled),
                 new DbSql.SqlParam("$updatedAt", updatedAt),
-                new DbSql.SqlParam("$jobId", jobId));
+                new DbSql.SqlParam("$jobId", jobId),
+                new DbSql.SqlParam("$workspaceId", JsonHelpers.GetString(parameters, "workspaceId")));
             transaction.Commit();
             return Mutation(changed);
         }
@@ -428,17 +472,23 @@ internal static class DbCronTools
             var filters = new List<string>();
             var values = new List<DbSql.SqlParam>();
             var sessionId = JsonHelpers.GetString(parameters, "sessionId");
-            var needsSessionJoin = !string.IsNullOrEmpty(sessionId);
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
+            var needsSessionJoin = !string.IsNullOrEmpty(sessionId) || !string.IsNullOrEmpty(workspaceId);
 
             if (JsonHelpers.GetString(parameters, "jobId") is { Length: > 0 } jobId)
             {
                 filters.Add("r.job_id = $jobId");
                 values.Add(new DbSql.SqlParam("$jobId", jobId));
             }
-            if (needsSessionJoin)
+            if (!string.IsNullOrEmpty(sessionId))
             {
                 filters.Add("COALESCE(r.source_session_id_snapshot, j.session_id) = $sessionId");
                 values.Add(new DbSql.SqlParam("$sessionId", sessionId));
+            }
+            if (!string.IsNullOrEmpty(workspaceId))
+            {
+                filters.Add("j.workspace_id = $workspaceId");
+                values.Add(new DbSql.SqlParam("$workspaceId", workspaceId));
             }
             if (JsonHelpers.GetLongNullable(parameters, "start") is { } start)
             {
@@ -476,6 +526,7 @@ internal static class DbCronTools
                        r.source_project_name_snapshot,
                        r.source_provider_id_snapshot,
                        r.model_snapshot,
+                       r.model_source_snapshot,
                        r.working_folder_snapshot,
                        r.delivery_mode_snapshot,
                        r.delivery_target_snapshot
@@ -504,6 +555,11 @@ internal static class DbCronTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
+            var job = GetJob(connection, transaction, RequireString(parameters, "jobId"));
+            if (job is null || (!string.IsNullOrEmpty(workspaceId) && job.WorkspaceId != workspaceId))
+                return MutationError("Cron job is not available in this workspace");
+            ValidateRunSnapshotScope(connection, transaction, parameters, job.WorkspaceId);
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -513,14 +569,14 @@ internal static class DbCronTools
                   scheduled_for, job_name_snapshot, prompt_snapshot,
                   source_session_id_snapshot, source_session_title_snapshot,
                   source_project_id_snapshot, source_project_name_snapshot, source_provider_id_snapshot,
-                  model_snapshot, working_folder_snapshot,
+                  model_snapshot, model_source_snapshot, working_folder_snapshot,
                   delivery_mode_snapshot, delivery_target_snapshot
                 ) VALUES (
                   $runId, $jobId, $startedAt, NULL, 'running', 0, NULL, NULL,
                   $scheduledFor, $jobNameSnapshot, $promptSnapshot,
                   $sourceSessionIdSnapshot, $sourceSessionTitleSnapshot,
                   $sourceProjectIdSnapshot, $sourceProjectNameSnapshot, $sourceProviderIdSnapshot,
-                  $modelSnapshot, $workingFolderSnapshot,
+                  $modelSnapshot, $modelSourceSnapshot, $workingFolderSnapshot,
                   $deliveryModeSnapshot, $deliveryTargetSnapshot
                 )
                 """,
@@ -536,6 +592,7 @@ internal static class DbCronTools
                 new DbSql.SqlParam("$sourceProjectNameSnapshot", JsonHelpers.GetString(parameters, "sourceProjectNameSnapshot")),
                 new DbSql.SqlParam("$sourceProviderIdSnapshot", JsonHelpers.GetString(parameters, "sourceProviderIdSnapshot")),
                 new DbSql.SqlParam("$modelSnapshot", JsonHelpers.GetString(parameters, "modelSnapshot")),
+                new DbSql.SqlParam("$modelSourceSnapshot", JsonHelpers.GetString(parameters, "modelSourceSnapshot")),
                 new DbSql.SqlParam("$workingFolderSnapshot", JsonHelpers.GetString(parameters, "workingFolderSnapshot")),
                 new DbSql.SqlParam("$deliveryModeSnapshot", JsonHelpers.GetString(parameters, "deliveryModeSnapshot")),
                 new DbSql.SqlParam("$deliveryTargetSnapshot", JsonHelpers.GetString(parameters, "deliveryTargetSnapshot")));
@@ -569,6 +626,10 @@ internal static class DbCronTools
             values.Add(new DbSql.SqlParam("$runId", runId));
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
+            if (!string.IsNullOrEmpty(workspaceId)
+                && GetRun(connection, transaction, runId, workspaceId) is null)
+                return MutationError("Cron run is not available in this workspace");
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = $"UPDATE cron_runs SET {string.Join(", ", sets)} WHERE id = $runId";
@@ -589,7 +650,7 @@ internal static class DbCronTools
         {
             var runId = RequireString(parameters, "runId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var run = GetRun(connection, null, runId);
+            var run = GetRun(connection, null, runId, JsonHelpers.GetString(parameters, "workspaceId"));
             return WorkerResponse.Json(
                 new CronRunFindResult(true, run, null),
                 WorkerJsonContext.Default.CronRunFindResult);
@@ -610,6 +671,10 @@ internal static class DbCronTools
             var messages = GetArray(parameters, "messages");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
+            if (!string.IsNullOrEmpty(workspaceId)
+                && GetRun(connection, transaction, runId, workspaceId) is null)
+                return MutationError("Cron run is not available in this workspace");
             DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -654,6 +719,10 @@ internal static class DbCronTools
             var runId = RequireString(parameters, "runId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
+            if (!string.IsNullOrEmpty(workspaceId)
+                && GetRun(connection, transaction, runId, workspaceId) is null)
+                return MutationError("Cron run is not available in this workspace");
             var nextSortOrder = GetNextLogSortOrder(connection, transaction, runId);
             var changed = DbSql.ExecuteNonQuery(
                 connection,
@@ -682,8 +751,9 @@ internal static class DbCronTools
         try
         {
             var runId = RequireString(parameters, "runId");
+            var workspaceId = JsonHelpers.GetString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
-            var run = GetRun(connection, null, runId);
+            var run = GetRun(connection, null, runId, workspaceId);
             if (run is null)
             {
                 return WorkerResponse.Json(
@@ -691,7 +761,7 @@ internal static class DbCronTools
                     WorkerJsonContext.Default.CronRunDetailResult);
             }
 
-            var job = GetJob(connection, null, run.JobId);
+            var job = GetJob(connection, null, run.JobId, workspaceId);
             var messages = ListRunMessages(connection, runId);
             var logs = ListRunLogs(connection, runId);
             return WorkerResponse.Json(
@@ -706,27 +776,112 @@ internal static class DbCronTools
         }
     }
 
+    private static void ValidateJobScope(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        CronJobRow job)
+    {
+        if (string.IsNullOrWhiteSpace(job.WorkspaceId))
+            throw new InvalidOperationException("The cron workspace is required.");
+        ValidateModelSourceScope(job.ModelSource, job.WorkspaceId);
+        ValidateManagedProviderScope(job.SourceProviderId, job.WorkspaceId);
+        if (!string.IsNullOrWhiteSpace(job.SessionId))
+        {
+            using var session = connection.CreateCommand();
+            session.Transaction = transaction;
+            session.CommandText = "SELECT 1 FROM sessions WHERE id = $id AND workspace_id = $workspaceId LIMIT 1";
+            session.Parameters.AddWithValue("$id", job.SessionId);
+            session.Parameters.AddWithValue("$workspaceId", job.WorkspaceId);
+            if (session.ExecuteScalar() is null)
+                throw new InvalidOperationException("The source session is not available in this workspace.");
+        }
+        if (!string.IsNullOrWhiteSpace(job.SourceProjectId))
+        {
+            using var project = connection.CreateCommand();
+            project.Transaction = transaction;
+            project.CommandText = "SELECT 1 FROM projects WHERE id = $id AND workspace_id = $workspaceId LIMIT 1";
+            project.Parameters.AddWithValue("$id", job.SourceProjectId);
+            project.Parameters.AddWithValue("$workspaceId", job.WorkspaceId);
+            if (project.ExecuteScalar() is null)
+                throw new InvalidOperationException("The source project is not available in this workspace.");
+        }
+    }
+
+    private static void ValidateRunSnapshotScope(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        JsonElement parameters,
+        string workspaceId)
+    {
+        ValidateModelSourceScope(JsonHelpers.GetString(parameters, "modelSourceSnapshot"), workspaceId);
+        ValidateManagedProviderScope(JsonHelpers.GetString(parameters, "sourceProviderIdSnapshot"), workspaceId);
+        foreach (var (parameter, table) in new[] {
+            ("sourceSessionIdSnapshot", "sessions"),
+            ("sourceProjectIdSnapshot", "projects")
+        })
+        {
+            var id = JsonHelpers.GetString(parameters, parameter);
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = $"SELECT workspace_id FROM {table} WHERE id = $id LIMIT 1";
+            command.Parameters.AddWithValue("$id", id);
+            if (command.ExecuteScalar() is string owner && owner != workspaceId)
+                throw new InvalidOperationException("The cron run source is not available in this workspace.");
+        }
+    }
+
+    private static void ValidateModelSourceScope(string? modelSourceJson, string workspaceId)
+    {
+        if (string.IsNullOrEmpty(modelSourceJson)) return;
+        using var modelSource = JsonDocument.Parse(modelSourceJson);
+        var source = modelSource.RootElement;
+        if (JsonHelpers.GetString(source, "kind") != "local"
+            && JsonHelpers.GetString(source, "workspaceId") != workspaceId)
+            throw new InvalidOperationException("The cron model source is not available in this workspace.");
+    }
+
+    private static void ValidateManagedProviderScope(string? providerId, string workspaceId)
+    {
+        if (providerId?.StartsWith("ola-managed:", StringComparison.Ordinal) == true
+            && providerId["ola-managed:".Length..] != workspaceId)
+            throw new InvalidOperationException("The cron source provider is not available in this workspace.");
+    }
+
     private static CronJobRow? GetJob(
         SqliteConnection connection,
         SqliteTransaction? transaction,
-        string jobId)
+        string jobId,
+        string? workspaceId = null)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{CronJobSelectSql} WHERE id = $jobId LIMIT 1";
+        command.CommandText = $"{CronJobSelectSql} WHERE id = $jobId" +
+            (string.IsNullOrEmpty(workspaceId) ? string.Empty : " AND workspace_id = $workspaceId") +
+            " LIMIT 1";
         command.Parameters.AddWithValue("$jobId", jobId);
+        if (!string.IsNullOrEmpty(workspaceId)) command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadJobRows(command).FirstOrDefault();
     }
 
     private static CronRunRow? GetRun(
         SqliteConnection connection,
         SqliteTransaction? transaction,
-        string runId)
+        string runId,
+        string? workspaceId = null)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = $"{CronRunSelectSql} WHERE id = $runId LIMIT 1";
+        command.CommandText = string.IsNullOrEmpty(workspaceId)
+            ? $"{CronRunSelectSql} WHERE id = $runId LIMIT 1"
+            : $"""
+                {CronRunSelectSql}
+                 WHERE id = $runId
+                   AND EXISTS (SELECT 1 FROM cron_jobs WHERE cron_jobs.id = cron_runs.job_id AND workspace_id = $workspaceId)
+                 LIMIT 1
+                """;
         command.Parameters.AddWithValue("$runId", runId);
+        if (!string.IsNullOrEmpty(workspaceId)) command.Parameters.AddWithValue("$workspaceId", workspaceId);
         return ReadRunRows(command).FirstOrDefault();
     }
 
@@ -748,25 +903,27 @@ internal static class DbCronTools
                 Prompt = reader.GetString(7),
                 AgentId = reader.IsDBNull(8) ? null : reader.GetString(8),
                 Model = reader.IsDBNull(9) ? null : reader.GetString(9),
-                WorkingFolder = reader.IsDBNull(10) ? null : reader.GetString(10),
-                SshConnectionId = reader.IsDBNull(11) ? null : reader.GetString(11),
-                SessionId = reader.IsDBNull(12) ? null : reader.GetString(12),
-                SourceSessionTitle = reader.IsDBNull(13) ? null : reader.GetString(13),
-                SourceProjectId = reader.IsDBNull(14) ? null : reader.GetString(14),
-                SourceProjectName = reader.IsDBNull(15) ? null : reader.GetString(15),
-                SourceProviderId = reader.IsDBNull(16) ? null : reader.GetString(16),
-                DeliveryMode = reader.IsDBNull(17) ? "desktop" : reader.GetString(17),
-                DeliveryTarget = reader.IsDBNull(18) ? null : reader.GetString(18),
-                PluginId = reader.IsDBNull(19) ? null : reader.GetString(19),
-                PluginChatId = reader.IsDBNull(20) ? null : reader.GetString(20),
-                Enabled = reader.GetInt32(21),
-                DeleteAfterRun = reader.GetInt32(22),
-                MaxIterations = reader.GetInt32(23),
-                DeletedAt = reader.IsDBNull(24) ? null : reader.GetInt64(24),
-                LastFiredAt = reader.IsDBNull(25) ? null : reader.GetInt64(25),
-                FireCount = reader.GetInt32(26),
-                CreatedAt = reader.GetInt64(27),
-                UpdatedAt = reader.GetInt64(28)
+                ModelSource = reader.IsDBNull(10) ? null : reader.GetString(10),
+                WorkingFolder = reader.IsDBNull(11) ? null : reader.GetString(11),
+                SshConnectionId = reader.IsDBNull(12) ? null : reader.GetString(12),
+                SessionId = reader.IsDBNull(13) ? null : reader.GetString(13),
+                SourceSessionTitle = reader.IsDBNull(14) ? null : reader.GetString(14),
+                SourceProjectId = reader.IsDBNull(15) ? null : reader.GetString(15),
+                SourceProjectName = reader.IsDBNull(16) ? null : reader.GetString(16),
+                SourceProviderId = reader.IsDBNull(17) ? null : reader.GetString(17),
+                DeliveryMode = reader.IsDBNull(18) ? "desktop" : reader.GetString(18),
+                DeliveryTarget = reader.IsDBNull(19) ? null : reader.GetString(19),
+                PluginId = reader.IsDBNull(20) ? null : reader.GetString(20),
+                PluginChatId = reader.IsDBNull(21) ? null : reader.GetString(21),
+                Enabled = reader.GetInt32(22),
+                DeleteAfterRun = reader.GetInt32(23),
+                MaxIterations = reader.GetInt32(24),
+                DeletedAt = reader.IsDBNull(25) ? null : reader.GetInt64(25),
+                LastFiredAt = reader.IsDBNull(26) ? null : reader.GetInt64(26),
+                FireCount = reader.GetInt32(27),
+                CreatedAt = reader.GetInt64(28),
+                UpdatedAt = reader.GetInt64(29),
+                WorkspaceId = reader.GetString(30)
             });
         }
 
@@ -798,9 +955,10 @@ internal static class DbCronTools
                 SourceProjectNameSnapshot = reader.IsDBNull(14) ? null : reader.GetString(14),
                 SourceProviderIdSnapshot = reader.IsDBNull(15) ? null : reader.GetString(15),
                 ModelSnapshot = reader.IsDBNull(16) ? null : reader.GetString(16),
-                WorkingFolderSnapshot = reader.IsDBNull(17) ? null : reader.GetString(17),
-                DeliveryModeSnapshot = reader.IsDBNull(18) ? null : reader.GetString(18),
-                DeliveryTargetSnapshot = reader.IsDBNull(19) ? null : reader.GetString(19)
+                ModelSourceSnapshot = reader.IsDBNull(17) ? null : reader.GetString(17),
+                WorkingFolderSnapshot = reader.IsDBNull(18) ? null : reader.GetString(18),
+                DeliveryModeSnapshot = reader.IsDBNull(19) ? null : reader.GetString(19),
+                DeliveryTargetSnapshot = reader.IsDBNull(20) ? null : reader.GetString(20)
             });
         }
 
@@ -878,6 +1036,7 @@ internal static class DbCronTools
     {
         return new CronJobRow
         {
+            WorkspaceId = JsonHelpers.GetString(element, "workspace_id") ?? "local-personal",
             Id = RequireString(element, "id"),
             Name = RequireString(element, "name"),
             ScheduleKind = RequireString(element, "schedule_kind"),
@@ -888,6 +1047,7 @@ internal static class DbCronTools
             Prompt = RequireString(element, "prompt"),
             AgentId = JsonHelpers.GetString(element, "agent_id"),
             Model = JsonHelpers.GetString(element, "model"),
+            ModelSource = NormalizeModelSource(JsonHelpers.GetString(element, "model_source")),
             WorkingFolder = JsonHelpers.GetString(element, "working_folder"),
             SshConnectionId = JsonHelpers.GetString(element, "ssh_connection_id"),
             SessionId = JsonHelpers.GetString(element, "session_id"),
@@ -910,10 +1070,37 @@ internal static class DbCronTools
         };
     }
 
+    // Cron records retain public model bindings only. Provider keys, account
+    // tickets and arbitrary JSON are rejected before a scheduled job can be
+    // persisted or later replayed by an unattended runtime.
+    private static string? NormalizeModelSource(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (value.Length > 4096) throw new InvalidOperationException("Invalid cron model source.");
+        using var document = JsonDocument.Parse(value);
+        var root = document.RootElement;
+        if (root.ValueKind != JsonValueKind.Object) throw new InvalidOperationException("Invalid cron model source.");
+        var kind = JsonHelpers.GetString(root, "kind");
+        var keys = root.EnumerateObject().Select(property => property.Name).OrderBy(name => name).ToArray();
+        var local = kind == "local" && keys.SequenceEqual(["kind", "modelId", "providerId"])
+            && IsModelSourceIdentifier(JsonHelpers.GetString(root, "providerId"))
+            && IsModelSourceIdentifier(JsonHelpers.GetString(root, "modelId"));
+        var managed = (kind == "ola-personal" || kind == "ola-team")
+            && keys.SequenceEqual(["kind", "resourceId", "workspaceId"])
+            && IsModelSourceIdentifier(JsonHelpers.GetString(root, "workspaceId"))
+            && IsModelSourceIdentifier(JsonHelpers.GetString(root, "resourceId"));
+        if (!local && !managed) throw new InvalidOperationException("Invalid cron model source.");
+        return root.GetRawText();
+    }
+
+    private static bool IsModelSourceIdentifier(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= 1024 && value.All(character => !char.IsControl(character));
+
     private static DbSql.SqlParam[] JobParams(CronJobRow job)
     {
         return
         [
+            new DbSql.SqlParam("$workspaceId", job.WorkspaceId),
             new DbSql.SqlParam("$id", job.Id),
             new DbSql.SqlParam("$name", job.Name),
             new DbSql.SqlParam("$sessionId", job.SessionId),
@@ -925,6 +1112,7 @@ internal static class DbCronTools
             new DbSql.SqlParam("$prompt", job.Prompt),
             new DbSql.SqlParam("$agentId", job.AgentId),
             new DbSql.SqlParam("$model", job.Model),
+            new DbSql.SqlParam("$modelSource", job.ModelSource),
             new DbSql.SqlParam("$workingFolder", job.WorkingFolder),
             new DbSql.SqlParam("$sshConnectionId", job.SshConnectionId),
             new DbSql.SqlParam("$sourceSessionTitle", job.SourceSessionTitle),

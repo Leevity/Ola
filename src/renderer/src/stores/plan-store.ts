@@ -10,6 +10,7 @@ import {
   DB_PLANS_UPDATE_MSGPACK_CHANNEL
 } from '../../../shared/messagepack/binary-ipc'
 import { useChatStore } from './chat-store'
+import { useWorkspaceStore } from './workspace-store'
 
 // --- Types ---
 
@@ -31,6 +32,7 @@ export interface Plan {
   specJson?: string
   createdAt: number
   updatedAt: number
+  workspaceId?: string
 }
 
 // --- DB persistence helpers (fire-and-forget) ---
@@ -45,16 +47,19 @@ function dbCreatePlan(plan: Plan): void {
     content: plan.content ?? null,
     specJson: plan.specJson ?? null,
     createdAt: plan.createdAt,
-    updatedAt: plan.updatedAt
+    updatedAt: plan.updatedAt,
+    workspaceId: plan.workspaceId
   }).catch(() => {})
 }
 
-function dbUpdatePlan(id: string, patch: Record<string, unknown>): void {
-  invokeMessagePackBinary(DB_PLANS_UPDATE_MSGPACK_CHANNEL, { id, patch }).catch(() => {})
+function dbUpdatePlan(id: string, workspaceId: string, patch: Record<string, unknown>): void {
+  invokeMessagePackBinary(DB_PLANS_UPDATE_MSGPACK_CHANNEL, { id, workspaceId, patch }).catch(
+    () => {}
+  )
 }
 
-function dbDeletePlan(id: string): void {
-  invokeMessagePackBinary(DB_PLANS_DELETE_MSGPACK_CHANNEL, id).catch(() => {})
+function dbDeletePlan(id: string, workspaceId: string): void {
+  invokeMessagePackBinary(DB_PLANS_DELETE_MSGPACK_CHANNEL, { id, workspaceId }).catch(() => {})
 }
 
 // --- Row → Plan conversion ---
@@ -69,6 +74,7 @@ interface PlanRow {
   spec_json: string | null
   created_at: number
   updated_at: number
+  workspace_id?: string | null
 }
 
 function rowToPlan(row: PlanRow): Plan {
@@ -81,7 +87,8 @@ function rowToPlan(row: PlanRow): Plan {
     content: row.content ?? undefined,
     specJson: row.spec_json ?? undefined,
     createdAt: row.created_at,
-    updatedAt: row.updated_at
+    updatedAt: row.updated_at,
+    workspaceId: row.workspace_id ?? undefined
   }
 }
 
@@ -163,8 +170,14 @@ export const usePlanStore = create<PlanStore>()(
     _loaded: false,
 
     loadPlansFromDb: async () => {
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
       try {
-        const rows = await invokeMessagePackBinary<PlanRow[]>(DB_PLANS_LIST_MSGPACK_CHANNEL, {})
+        const rows = await invokeMessagePackBinary<PlanRow[]>(DB_PLANS_LIST_MSGPACK_CHANNEL, {
+          workspaceId
+        })
+        // A workspace switch may complete while SQLite is responding. Never
+        // replace the newly selected workspace with a stale async result.
+        if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
         const plansBySession: Record<string, Plan> = {}
         const plans: Record<string, Plan> = {}
 
@@ -200,17 +213,19 @@ export const usePlanStore = create<PlanStore>()(
     },
 
     loadPlanForSession: async (sessionId, force = false) => {
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
       const cached = get().plansBySession[sessionId]
       const activeCached = cached ? get().plans[cached.id] : undefined
-      if (cached && !force) {
+      if (cached?.workspaceId === workspaceId && !force) {
         return activeCached ?? cached
       }
 
       try {
         const row = await invokeMessagePackBinary<PlanRow | null>(
           DB_PLANS_GET_BY_SESSION_MSGPACK_CHANNEL,
-          sessionId
+          { sessionId, workspaceId }
         )
+        if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return undefined
         if (!row) {
           set((state) => {
             const existing = state.plansBySession[sessionId]
@@ -254,10 +269,13 @@ export const usePlanStore = create<PlanStore>()(
         title,
         status: options.status ?? 'drafting',
         filePath: options.filePath,
-        content: undefined,
+        content: options.content,
         specJson: options.specJson,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        workspaceId:
+          useChatStore.getState().sessions.find((session) => session.id === sessionId)
+            ?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId
       }
       set((state) => {
         state.plans[id] = plan
@@ -285,7 +303,7 @@ export const usePlanStore = create<PlanStore>()(
       if (patch.status !== undefined) dbPatch.status = patch.status
       if (patch.filePath !== undefined) dbPatch.filePath = patch.filePath
       if (patch.specJson !== undefined) dbPatch.specJson = patch.specJson
-      dbUpdatePlan(planId, dbPatch)
+      dbUpdatePlan(planId, get().plans[planId]?.workspaceId ?? 'local-personal', dbPatch)
       const plan = get().plans[planId]
       if (plan?.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(plan.sessionId)
@@ -303,7 +321,10 @@ export const usePlanStore = create<PlanStore>()(
           releaseDormantPlanMemory(state, plan.sessionId)
         }
       })
-      dbUpdatePlan(planId, { status: 'approved', updatedAt: now })
+      dbUpdatePlan(planId, get().plans[planId]?.workspaceId ?? 'local-personal', {
+        status: 'approved',
+        updatedAt: now
+      })
       const plan = get().plans[planId]
       if (plan?.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(plan.sessionId)
@@ -321,7 +342,10 @@ export const usePlanStore = create<PlanStore>()(
           releaseDormantPlanMemory(state, plan.sessionId)
         }
       })
-      dbUpdatePlan(planId, { status: 'rejected', updatedAt: now })
+      dbUpdatePlan(planId, get().plans[planId]?.workspaceId ?? 'local-personal', {
+        status: 'rejected',
+        updatedAt: now
+      })
       const plan = get().plans[planId]
       if (plan?.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(plan.sessionId)
@@ -339,7 +363,10 @@ export const usePlanStore = create<PlanStore>()(
           releaseDormantPlanMemory(state, plan.sessionId)
         }
       })
-      dbUpdatePlan(planId, { status: 'implementing', updatedAt: now })
+      dbUpdatePlan(planId, get().plans[planId]?.workspaceId ?? 'local-personal', {
+        status: 'implementing',
+        updatedAt: now
+      })
       const plan = get().plans[planId]
       if (plan?.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(plan.sessionId)
@@ -357,7 +384,10 @@ export const usePlanStore = create<PlanStore>()(
           releaseDormantPlanMemory(state, plan.sessionId)
         }
       })
-      dbUpdatePlan(planId, { status: 'completed', updatedAt: now })
+      dbUpdatePlan(planId, get().plans[planId]?.workspaceId ?? 'local-personal', {
+        status: 'completed',
+        updatedAt: now
+      })
       const plan = get().plans[planId]
       if (plan?.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(plan.sessionId)
@@ -376,7 +406,7 @@ export const usePlanStore = create<PlanStore>()(
         }
         releaseDormantPlanMemory(state)
       })
-      dbDeletePlan(planId)
+      dbDeletePlan(planId, existingPlan?.workspaceId ?? 'local-personal')
       if (existingPlan?.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(existingPlan.sessionId)
       }

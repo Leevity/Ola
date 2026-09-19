@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 internal sealed class CronJobRow
 {
+    [JsonPropertyName("workspace_id")]
+    public string WorkspaceId { get; set; } = "local-personal";
+
     [JsonPropertyName("id")]
     public string Id { get; set; } = string.Empty;
 
@@ -36,6 +39,10 @@ internal sealed class CronJobRow
     [JsonPropertyName("model")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string? Model { get; set; }
+
+    [JsonPropertyName("model_source")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? ModelSource { get; set; }
 
     [JsonPropertyName("working_folder")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
@@ -171,6 +178,10 @@ internal sealed class CronRunRow
     [JsonPropertyName("model_snapshot")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
     public string? ModelSnapshot { get; set; }
+
+    [JsonPropertyName("model_source_snapshot")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+    public string? ModelSourceSnapshot { get; set; }
 
     [JsonPropertyName("working_folder_snapshot")]
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]

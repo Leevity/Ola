@@ -208,10 +208,10 @@ internal static class DbUsageAnalyticsTools
               COALESCE(SUM(total_cost_usd), 0) AS total_cost_usd,
               NULL AS avg_ttft_ms,
               NULL AS avg_total_ms
-            FROM usage_activity_daily
-            WHERE day >= $fromDay AND day <= $toDay
+            FROM usage_activity_daily_v2
+            WHERE workspace_id = $workspaceId AND day >= $fromDay AND day <= $toDay
             """,
-            new List<SqlParam> { new("$fromDay", range.FromDay), new("$toDay", range.ToDay) });
+            new List<SqlParam> { new("$workspaceId", range.WorkspaceId), new("$fromDay", range.FromDay), new("$toDay", range.ToDay) });
     }
 
     private static List<UsageAnalyticsRow> GetActivityDaily(SqliteConnection connection, JsonElement parameters)
@@ -233,11 +233,11 @@ internal static class DbUsageAnalyticsTools
               total_cost_usd,
               NULL AS avg_ttft_ms,
               NULL AS avg_total_ms
-            FROM usage_activity_daily
-            WHERE day >= $fromDay AND day <= $toDay
+            FROM usage_activity_daily_v2
+            WHERE workspace_id = $workspaceId AND day >= $fromDay AND day <= $toDay
             ORDER BY day DESC
             """,
-            new List<SqlParam> { new("$fromDay", range.FromDay), new("$toDay", range.ToDay) });
+            new List<SqlParam> { new("$workspaceId", range.WorkspaceId), new("$fromDay", range.FromDay), new("$toDay", range.ToDay) });
     }
 
     private static List<UsageAnalyticsRow> GetActivityByModel(SqliteConnection connection, JsonElement parameters)
@@ -262,8 +262,8 @@ internal static class DbUsageAnalyticsTools
               COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
               COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
               COALESCE(SUM(total_cost_usd), 0) AS total_cost_usd
-            FROM usage_activity_daily_models
-            WHERE day >= $fromDay AND day <= $toDay
+            FROM usage_activity_daily_models_v2
+            WHERE workspace_id = $workspaceId AND day >= $fromDay AND day <= $toDay
             GROUP BY model_id, provider_id
             ORDER BY
               COALESCE(SUM(input_tokens), 0) + COALESCE(SUM(output_tokens), 0) +
@@ -273,6 +273,7 @@ internal static class DbUsageAnalyticsTools
             """,
             new List<SqlParam>
             {
+                new("$workspaceId", range.WorkspaceId),
                 new("$fromDay", range.FromDay),
                 new("$toDay", range.ToDay),
                 new("$limit", limit),
@@ -303,8 +304,8 @@ internal static class DbUsageAnalyticsTools
               COALESCE(SUM(cache_read_tokens), 0) AS cache_read_tokens,
               COALESCE(SUM(reasoning_tokens), 0) AS reasoning_tokens,
               COALESCE(SUM(total_cost_usd), 0) AS total_cost_usd
-            FROM usage_activity_daily_providers
-            WHERE day >= $fromDay AND day <= $toDay
+            FROM usage_activity_daily_providers_v2
+            WHERE workspace_id = $workspaceId AND day >= $fromDay AND day <= $toDay
             GROUP BY provider_id
             ORDER BY
               COALESCE(SUM(input_tokens), 0) + COALESCE(SUM(output_tokens), 0) +
@@ -314,6 +315,7 @@ internal static class DbUsageAnalyticsTools
             """,
             new List<SqlParam>
             {
+                new("$workspaceId", range.WorkspaceId),
                 new("$fromDay", range.FromDay),
                 new("$toDay", range.ToDay),
                 new("$limit", limit),
@@ -396,6 +398,7 @@ internal static class DbUsageAnalyticsTools
             JsonHelpers.GetString(parameters, "providerId"),
             JsonHelpers.GetString(parameters, "modelId"),
             JsonHelpers.GetString(parameters, "sourceKind"),
+            JsonHelpers.GetString(parameters, "workspaceId") ?? "local-personal",
             JsonHelpers.GetIntNullable(parameters, "limit"),
             JsonHelpers.GetIntNullable(parameters, "offset"));
     }
@@ -403,17 +406,19 @@ internal static class DbUsageAnalyticsTools
     private static ActivityRange ReadActivityRange(JsonElement parameters)
     {
         return new ActivityRange(
+            JsonHelpers.GetString(parameters, "workspaceId") ?? "local-personal",
             FormatActivityDay(JsonHelpers.GetLong(parameters, "from", 0)),
             FormatActivityDay(JsonHelpers.GetLong(parameters, "to", DateTimeOffset.Now.ToUnixTimeMilliseconds())));
     }
 
     private static (string Clause, List<SqlParam> Parameters) BuildRawWhere(UsageQuery query)
     {
-        var where = new List<string> { "created_at >= $from", "created_at <= $to" };
+        var where = new List<string> { "created_at >= $from", "created_at <= $to", "workspace_id = $workspaceId" };
         var parameters = new List<SqlParam>
         {
             new("$from", query.From),
-            new("$to", query.To)
+            new("$to", query.To),
+            new("$workspaceId", query.WorkspaceId)
         };
 
         if (!string.IsNullOrWhiteSpace(query.ProviderId))
@@ -555,10 +560,11 @@ internal static class DbUsageAnalyticsTools
         string? ProviderId,
         string? ModelId,
         string? SourceKind,
+        string WorkspaceId,
         int? Limit,
         int? Offset);
 
-    private sealed record ActivityRange(string FromDay, string ToDay);
+    private sealed record ActivityRange(string WorkspaceId, string FromDay, string ToDay);
 
     private sealed record SqlParam(string Name, object? Value);
 }

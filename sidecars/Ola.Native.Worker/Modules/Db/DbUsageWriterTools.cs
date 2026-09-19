@@ -18,8 +18,9 @@ internal static class DbUsageWriterTools
             using var connection = DbConnectionFactory.OpenReadWrite(dbPath);
             using var transaction = connection.BeginTransaction();
 
-            InsertUsageEvent(connection, transaction, usageEvent);
-            UpsertUsageActivity(connection, transaction, usageEvent);
+            var workspaceId = ResolveUsageWorkspace(connection, transaction, parameters, usageEvent);
+            InsertUsageEvent(connection, transaction, usageEvent, workspaceId);
+            UpsertUsageActivity(connection, transaction, usageEvent, workspaceId);
 
             transaction.Commit();
 
@@ -83,7 +84,8 @@ internal static class DbUsageWriterTools
     private static void InsertUsageEvent(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        UsageEventInput usageEvent)
+        UsageEventInput usageEvent,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -96,7 +98,8 @@ internal static class DbUsageWriterTools
               reasoning_tokens, context_tokens,
               input_price, output_price, cache_creation_price, cache_hit_price,
               input_cost_usd, output_cost_usd, cache_creation_cost_usd, cache_hit_cost_usd, total_cost_usd,
-              ttft_ms, total_ms, tps, provider_response_id, request_debug_json, usage_raw_json, meta_json
+              ttft_ms, total_ms, tps, provider_response_id, request_debug_json, usage_raw_json, meta_json,
+              workspace_id
             ) VALUES (
               $id, $createdAt, $requestStartedAt, $requestFinishedAt, $sessionId, $messageId, $projectId,
               $sourceKind, $providerId, $providerName, $providerType, $providerBuiltinId, $providerBaseUrl,
@@ -105,18 +108,55 @@ internal static class DbUsageWriterTools
               $reasoningTokens, $contextTokens,
               $inputPrice, $outputPrice, $cacheCreationPrice, $cacheHitPrice,
               $inputCostUsd, $outputCostUsd, $cacheCreationCostUsd, $cacheHitCostUsd, $totalCostUsd,
-              $ttftMs, $totalMs, $tps, $providerResponseId, $requestDebugJson, $usageRawJson, $metaJson
+              $ttftMs, $totalMs, $tps, $providerResponseId, $requestDebugJson, $usageRawJson, $metaJson,
+              $workspaceId
             )
             """;
 
         AddUsageEventParameters(command, usageEvent);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         command.ExecuteNonQuery();
+    }
+
+    private static string ResolveUsageWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        JsonElement parameters,
+        UsageEventInput usageEvent)
+    {
+        var requested = JsonHelpers.GetString(parameters, "workspace_id")?.Trim();
+        string? owner = null;
+        if (usageEvent.SessionId is { Length: > 0 } sessionId)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT workspace_id FROM sessions WHERE id = $id LIMIT 1";
+            command.Parameters.AddWithValue("$id", sessionId);
+            owner = command.ExecuteScalar() as string
+                ?? throw new InvalidOperationException("Usage source session not found.");
+        }
+        if (usageEvent.ProjectId is { Length: > 0 } projectId)
+        {
+            using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandText = "SELECT workspace_id FROM projects WHERE id = $id LIMIT 1";
+            command.Parameters.AddWithValue("$id", projectId);
+            var projectOwner = command.ExecuteScalar() as string
+                ?? throw new InvalidOperationException("Usage source project not found.");
+            if (owner is not null && owner != projectOwner)
+                throw new InvalidOperationException("Usage session and project belong to different workspaces.");
+            owner = projectOwner;
+        }
+        if (requested is { Length: > 0 } && owner is not null && requested != owner)
+            throw new InvalidOperationException("Usage source belongs to another workspace.");
+        return owner ?? requested ?? "local-personal";
     }
 
     private static void UpsertUsageActivity(
         SqliteConnection connection,
         SqliteTransaction transaction,
-        UsageEventInput usageEvent)
+        UsageEventInput usageEvent,
+        string workspaceId)
     {
         var day = FormatActivityDay(usageEvent.CreatedAt);
         var updatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -133,14 +173,14 @@ internal static class DbUsageWriterTools
             connection,
             transaction,
             """
-            INSERT INTO usage_activity_daily (
-              day, first_at, last_at, request_count, input_tokens, output_tokens,
+            INSERT INTO usage_activity_daily_v2 (
+              workspace_id, day, first_at, last_at, request_count, input_tokens, output_tokens,
               cache_creation_tokens, cache_read_tokens, reasoning_tokens, total_cost_usd, updated_at
             ) VALUES (
-              $day, $createdAt, $createdAt, 1, $inputTokens, $outputTokens,
+              $workspaceId, $day, $createdAt, $createdAt, 1, $inputTokens, $outputTokens,
               $cacheCreationTokens, $cacheReadTokens, $reasoningTokens, $totalCostUsd, $updatedAt
             )
-            ON CONFLICT(day) DO UPDATE SET
+            ON CONFLICT(workspace_id, day) DO UPDATE SET
               first_at = MIN(first_at, excluded.first_at),
               last_at = MAX(last_at, excluded.last_at),
               request_count = request_count + excluded.request_count,
@@ -152,6 +192,7 @@ internal static class DbUsageWriterTools
               total_cost_usd = total_cost_usd + excluded.total_cost_usd,
               updated_at = excluded.updated_at
             """,
+            new("$workspaceId", workspaceId),
             new("$day", day),
             new("$createdAt", usageEvent.CreatedAt),
             new("$inputTokens", inputTokens),
@@ -166,16 +207,16 @@ internal static class DbUsageWriterTools
             connection,
             transaction,
             """
-            INSERT INTO usage_activity_daily_models (
-              day, provider_id, provider_name, model_id, model_name, request_count,
+            INSERT INTO usage_activity_daily_models_v2 (
+              workspace_id, day, provider_id, provider_name, model_id, model_name, request_count,
               input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
               reasoning_tokens, total_cost_usd, updated_at
             ) VALUES (
-              $day, $providerId, $providerName, $modelId, $modelName, 1,
+              $workspaceId, $day, $providerId, $providerName, $modelId, $modelName, 1,
               $inputTokens, $outputTokens, $cacheCreationTokens, $cacheReadTokens,
               $reasoningTokens, $totalCostUsd, $updatedAt
             )
-            ON CONFLICT(day, provider_id, model_id) DO UPDATE SET
+            ON CONFLICT(workspace_id, day, provider_id, model_id) DO UPDATE SET
               provider_name = COALESCE(excluded.provider_name, provider_name),
               model_name = COALESCE(excluded.model_name, model_name),
               request_count = request_count + excluded.request_count,
@@ -187,6 +228,7 @@ internal static class DbUsageWriterTools
               total_cost_usd = total_cost_usd + excluded.total_cost_usd,
               updated_at = excluded.updated_at
             """,
+            new("$workspaceId", workspaceId),
             new("$day", day),
             new("$providerId", providerId),
             new("$providerName", usageEvent.ProviderName),
@@ -204,16 +246,16 @@ internal static class DbUsageWriterTools
             connection,
             transaction,
             """
-            INSERT INTO usage_activity_daily_providers (
-              day, provider_id, provider_name, provider_type, provider_builtin_id, provider_base_url,
+            INSERT INTO usage_activity_daily_providers_v2 (
+              workspace_id, day, provider_id, provider_name, provider_type, provider_builtin_id, provider_base_url,
               request_count, input_tokens, output_tokens, cache_creation_tokens, cache_read_tokens,
               reasoning_tokens, total_cost_usd, updated_at
             ) VALUES (
-              $day, $providerId, $providerName, $providerType, $providerBuiltinId, $providerBaseUrl,
+              $workspaceId, $day, $providerId, $providerName, $providerType, $providerBuiltinId, $providerBaseUrl,
               1, $inputTokens, $outputTokens, $cacheCreationTokens, $cacheReadTokens,
               $reasoningTokens, $totalCostUsd, $updatedAt
             )
-            ON CONFLICT(day, provider_id) DO UPDATE SET
+            ON CONFLICT(workspace_id, day, provider_id) DO UPDATE SET
               provider_name = COALESCE(excluded.provider_name, provider_name),
               provider_type = COALESCE(excluded.provider_type, provider_type),
               provider_builtin_id = COALESCE(excluded.provider_builtin_id, provider_builtin_id),
@@ -227,6 +269,7 @@ internal static class DbUsageWriterTools
               total_cost_usd = total_cost_usd + excluded.total_cost_usd,
               updated_at = excluded.updated_at
             """,
+            new("$workspaceId", workspaceId),
             new("$day", day),
             new("$providerId", providerId),
             new("$providerName", usageEvent.ProviderName),

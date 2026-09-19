@@ -1,5 +1,8 @@
 ﻿import { ipcMain } from 'electron'
 import { initializeDatabase } from '../db/database'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { authorizeMessageSearchWorkspace } from './message-search-workspace'
+import { authorizeDbWorkspace } from './db-workspace-authorization'
 import * as sessionsDao from '../db/sessions-dao'
 import * as projectsDao from '../db/projects-dao'
 import * as messagesDao from '../db/messages-dao'
@@ -234,19 +237,29 @@ function normalizeGoalEventMetadata(value: unknown): Record<string, unknown> | n
 export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}): Promise<void> {
   await initializeDatabase()
 
-  async function addMessagesBatch(msgs: messagesDao.MessageInput[]): Promise<{ success: boolean }> {
+  async function addMessagesBatch(
+    msgs: messagesDao.MessageInput[]
+  ): Promise<{ success: boolean; error?: string }> {
     if (!Array.isArray(msgs) || msgs.length === 0) return { success: true }
     const sessionIds = new Set(msgs.map((m) => m.sessionId))
     for (const sessionId of sessionIds) {
-      const existing = await sessionsDao.getSession(sessionId)
+      const sessionMessages = msgs.filter((message) => message.sessionId === sessionId)
+      const workspaceId = sessionMessages[0]?.workspaceId?.trim()
+      if (!workspaceId || sessionMessages.some((message) => message.workspaceId !== workspaceId)) {
+        return { success: false, error: 'session-workspace-required' }
+      }
+      const existing = await sessionsDao.getSession(sessionId, workspaceId)
       if (!existing) {
-        const earliest = msgs.filter((m) => m.sessionId === sessionId)[0]
+        const anyWorkspaceSession = await sessionsDao.getSession(sessionId)
+        if (anyWorkspaceSession) return { success: false, error: 'session-workspace-mismatch' }
+        const earliest = sessionMessages[0]
         await sessionsDao.createSession({
           id: sessionId,
           title: 'New Conversation',
           mode: 'chat',
           createdAt: earliest.createdAt,
-          updatedAt: earliest.createdAt
+          updatedAt: earliest.createdAt,
+          workspaceId
         })
       }
     }
@@ -264,28 +277,53 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
     // Upsert is used by streaming/final persistence. It is intentionally silent:
     // the renderer already has the live state, and emitting structural updates here
     // can trigger DB reloads that race against in-memory streaming.
-    const existing = await sessionsDao.getSession(msg.sessionId)
+    if (!msg.workspaceId?.trim()) return { success: false, error: 'session-workspace-required' }
+    const existing = await sessionsDao.getSession(msg.sessionId, msg.workspaceId)
     if (!existing) {
-      return { success: false, error: 'session-not-found' }
+      return { success: false, error: 'session-workspace-mismatch' }
     }
     recordDbUpsertTrace(msg)
     await messagesDao.upsertMessage(msg)
     return { success: true }
   }
 
+  async function requireSessionWorkspace(sessionId: string, workspaceId: unknown): Promise<string> {
+    const authorizedWorkspaceId = await requireDbWorkspace(workspaceId)
+    if (!(await sessionsDao.getSession(sessionId, authorizedWorkspaceId))) {
+      throw new Error('session-workspace-mismatch')
+    }
+    await requireDbWorkspace(authorizedWorkspaceId)
+    return authorizedWorkspaceId
+  }
+
+  async function requireDbWorkspace(workspaceId: unknown): Promise<string> {
+    return authorizeDbWorkspace(workspaceId, loadOfflineWorkspaceIds)
+  }
+
   // --- Projects ---
 
-  ipcMain.handle(DB_PROJECTS_LIST_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await projectsDao.listProjects())
+  ipcMain.handle(DB_PROJECTS_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const input = decodeMessagePackPayload<{ workspaceId?: string } | null>(bytes)
+    const workspaceId = await requireDbWorkspace(input?.workspaceId)
+    const projects = await projectsDao.listProjects(workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(projects)
   })
 
   ipcMain.handle(DB_PROJECTS_GET_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload((await projectsDao.getProject(id)) ?? null)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const project = await projectsDao.getProject(id, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(project ?? null)
   })
 
-  ipcMain.handle(DB_PROJECTS_ENSURE_DEFAULT_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await projectsDao.ensureDefaultProject())
+  ipcMain.handle(DB_PROJECTS_ENSURE_DEFAULT_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const input = decodeMessagePackPayload<{ workspaceId?: string } | null>(bytes)
+    const workspaceId = await requireDbWorkspace(input?.workspaceId)
+    return encodeMessagePackPayload(await projectsDao.ensureDefaultProject(workspaceId))
   })
 
   ipcMain.handle(DB_PROJECTS_CREATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
@@ -298,13 +336,17 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
       pinned?: boolean
       createdAt?: number
       updatedAt?: number
+      workspaceId?: string
+      modelSource?: string | null
     }>(bytes)
-    return encodeMessagePackPayload(await projectsDao.createProject(project))
+    const workspaceId = await requireDbWorkspace(project.workspaceId)
+    return encodeMessagePackPayload(await projectsDao.createProject({ ...project, workspaceId }))
   })
 
   ipcMain.handle(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       id: string
+      workspaceId: string
       patch: Partial<{
         name: string
         workingFolder: string | null
@@ -312,15 +354,20 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
         pluginId: string | null
         pinned: boolean
         updatedAt: number
+        modelSource: string | null
       }>
     }>(bytes)
-    await projectsDao.updateProject(args.id, args.patch)
+    const workspaceId = await requireDbWorkspace(args.workspaceId)
+    await projectsDao.updateProject(args.id, workspaceId, args.patch)
     return encodeMessagePackPayload({ success: true })
   })
 
   ipcMain.handle(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    const result = await projectsDao.deleteProject(id)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const result = await projectsDao.deleteProject(id, workspaceId)
     for (const sessionId of result?.sessionIds ?? []) {
       emitSessionDeleted(sessionId, 'project-deleted', options)
     }
@@ -329,15 +376,27 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
 
   // --- Sessions ---
 
-  ipcMain.handle(DB_SESSIONS_LIST_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await sessionsDao.listSessions())
+  ipcMain.handle(DB_SESSIONS_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const input = decodeMessagePackPayload<{
+      workspaceId?: string
+      limit?: number
+      offset?: number
+    } | null>(bytes)
+    const workspaceId = await requireDbWorkspace(input?.workspaceId)
+    const sessions = await sessionsDao.listSessions(input?.limit, input?.offset, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(sessions)
   })
 
   ipcMain.handle(DB_SESSIONS_GET_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    const session = await sessionsDao.getSession(id)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const session = await sessionsDao.getSession(id, workspaceId)
     if (!session) return encodeMessagePackPayload(null)
-    const messages = await messagesDao.getMessages(id)
+    const messages = await messagesDao.getMessages(id, session.workspace_id)
+    await requireDbWorkspace(workspaceId)
     return encodeMessagePackPayload({ session, messages })
   })
 
@@ -357,8 +416,11 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
       providerId?: string
       modelId?: string
       modelSelectionMode?: string
+      modelSource?: string
+      workspaceId?: string
     }>(bytes)
-    await sessionsDao.createSession(session)
+    const workspaceId = await requireDbWorkspace(session.workspaceId)
+    await sessionsDao.createSession({ ...session, workspaceId })
     await emitSessionUpdated(session.id, 'session-created')
     return encodeMessagePackPayload({ success: true })
   })
@@ -366,6 +428,7 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_SESSIONS_UPDATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       id: string
+      workspaceId?: string
       patch: Partial<{
         title: string
         mode: string
@@ -379,22 +442,30 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
         providerId: string | null
         modelId: string | null
         modelSelectionMode: string | null
+        modelSource: string | null
+        workspaceId: string | null
       }>
     }>(bytes)
-    await sessionsDao.updateSession(args.id, args.patch)
+    const workspaceId = await requireDbWorkspace(args.workspaceId)
+    await sessionsDao.updateSession(args.id, workspaceId, args.patch)
     await emitSessionUpdated(args.id, 'session-updated')
     return encodeMessagePackPayload({ success: true })
   })
 
   ipcMain.handle(DB_SESSIONS_DELETE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    await sessionsDao.deleteSession(id)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    await sessionsDao.deleteSession(id, workspaceId)
     emitSessionDeleted(id, 'session-deleted', options)
     return encodeMessagePackPayload({ success: true })
   })
 
-  ipcMain.handle(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, async () => {
-    const result = await sessionsDao.clearAllSessions()
+  ipcMain.handle(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const args = decodeMessagePackPayload<{ workspaceId?: string }>(bytes)
+    const workspaceId = await requireDbWorkspace(args?.workspaceId)
+    const result = await sessionsDao.clearAllSessions(workspaceId)
     const sessionIds = result.sessionIds
     for (const sessionId of sessionIds) {
       emitSessionDeleted(sessionId, 'session-cleared', options)
@@ -405,57 +476,119 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   // --- Messages ---
 
   ipcMain.handle(DB_MESSAGES_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getMessages(sessionId))
+    const input = decodeMessagePackPayload<string | { sessionId: string; workspaceId?: string }>(
+      bytes
+    )
+    const { sessionId, workspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    await requireSessionWorkspace(sessionId, workspaceId)
+    const messages = await messagesDao.getMessages(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(messages)
   })
 
   ipcMain.handle(DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getUserMessages(sessionId))
+    const input = decodeMessagePackPayload<string | { sessionId: string; workspaceId?: string }>(
+      bytes
+    )
+    const { sessionId, workspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    await requireSessionWorkspace(sessionId, workspaceId)
+    const messages = await messagesDao.getUserMessages(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(messages)
   })
 
   ipcMain.handle(DB_MESSAGES_LIST_MARKERS_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getMessageMarkers(sessionId))
+    const input = decodeMessagePackPayload<string | { sessionId: string; workspaceId?: string }>(
+      bytes
+    )
+    const { sessionId, workspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    await requireSessionWorkspace(sessionId, workspaceId)
+    const markers = await messagesDao.getMessageMarkers(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(markers)
   })
 
   ipcMain.handle(DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getMessageLocatorRows(sessionId))
+    const input = decodeMessagePackPayload<string | { sessionId: string; workspaceId?: string }>(
+      bytes
+    )
+    const { sessionId, workspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    await requireSessionWorkspace(sessionId, workspaceId)
+    const rows = await messagesDao.getMessageLocatorRows(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(rows)
   })
 
   ipcMain.handle(DB_MESSAGES_LIST_PAGE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const args = decodeMessagePackPayload<{ sessionId: string; limit: number; offset: number }>(
-      bytes
+    const args = decodeMessagePackPayload<{
+      sessionId: string
+      workspaceId?: string
+      limit: number
+      offset: number
+    }>(bytes)
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const rows = await messagesDao.getMessagesPage(
+      args.sessionId,
+      args.limit,
+      args.offset,
+      args.workspaceId
     )
-    return encodeMessagePackPayload(
-      await messagesDao.getMessagesPage(args.sessionId, args.limit, args.offset)
-    )
+    await requireDbWorkspace(args.workspaceId)
+    return encodeMessagePackPayload(rows)
   })
 
   ipcMain.handle(DB_MESSAGES_REQUEST_CONTEXT_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       maxMessages: number
       headLimit?: number
     }>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getMessagesRequestContext(args))
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const rows = await messagesDao.getMessagesRequestContext(args)
+    await requireDbWorkspace(args.workspaceId)
+    return encodeMessagePackPayload(rows)
   })
 
   ipcMain.handle(DB_MESSAGES_WINDOW_AROUND_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       messageId?: string | null
       sortOrder?: number | null
       limit: number
     }>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getMessagesWindowAround(args))
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const window = await messagesDao.getMessagesWindowAround(args)
+    await requireDbWorkspace(args.workspaceId)
+    return encodeMessagePackPayload(window)
   })
 
   ipcMain.handle(DB_MESSAGES_SEARCH_CONTENT_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const args = decodeMessagePackPayload<{ query: string; limit?: number }>(bytes)
+    const args = decodeMessagePackPayload<{ query: string; limit?: number; workspaceId?: string }>(
+      bytes
+    )
+    const workspaceId = await authorizeMessageSearchWorkspace(
+      args.workspaceId,
+      loadOfflineWorkspaceIds
+    )
+    const matches = await messagesDao.searchMessageContent(
+      args.query,
+      args.limit ?? 50,
+      workspaceId
+    )
+    const scoped = await Promise.all(
+      matches.map(async (match) =>
+        (await sessionsDao.getSession(match.session_id, workspaceId)) ? match : null
+      )
+    )
+    await authorizeMessageSearchWorkspace(workspaceId, loadOfflineWorkspaceIds)
     return encodeMessagePackPayload(
-      await messagesDao.searchMessageContent(args.query, args.limit ?? 50)
+      scoped.filter((match): match is messagesDao.MessageContentMatch => !!match)
     )
   })
 
@@ -468,6 +601,7 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
     async (_event, bytes: Uint8Array) => {
       const args =
         decodeMessagePackPayload<Parameters<typeof messagesDao.insertMessageArtifacts>[0]>(bytes)
+      await requireSessionWorkspace(args.sessionId, (args as { workspaceId?: unknown }).workspaceId)
       const result = await messagesDao.insertMessageArtifacts(args)
       await emitSessionUpdated(args.sessionId, 'messages-artifacts-inserted')
       return result
@@ -481,22 +615,35 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_MESSAGES_UPDATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       id: string
+      sessionId: string
+      workspaceId: string
       patch: Partial<{ content: string; meta: string | null; usage: string | null }>
     }>(bytes)
-    await messagesDao.updateMessage(args.id, args.patch)
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    await messagesDao.updateMessage(args.id, args.patch, args.workspaceId)
     return { success: true }
   })
 
   ipcMain.handle(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    await messagesDao.clearMessages(sessionId)
-    await emitSessionUpdated(sessionId, 'messages-cleared')
+    const args = decodeMessagePackPayload<{ sessionId: string; workspaceId: string }>(bytes)
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    await messagesDao.clearMessages(args.sessionId, args.workspaceId)
+    await emitSessionUpdated(args.sessionId, 'messages-cleared')
     return { success: true }
   })
 
   ipcMain.handle(DB_MESSAGES_DELETE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const args = decodeMessagePackPayload<{ sessionId: string; messageId: string }>(bytes)
-    const deleted = await messagesDao.deleteMessage(args.sessionId, args.messageId)
+    const args = decodeMessagePackPayload<{
+      sessionId: string
+      messageId: string
+      workspaceId: string
+    }>(bytes)
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const deleted = await messagesDao.deleteMessage(
+      args.sessionId,
+      args.messageId,
+      args.workspaceId
+    )
     if (deleted) await emitSessionUpdated(args.sessionId, 'message-deleted')
     return { success: true, deleted }
   })
@@ -504,6 +651,7 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_MESSAGES_REPLACE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId: string
       messages: Array<{
         id: string
         role: string
@@ -514,46 +662,71 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
         sortOrder: number
       }>
     }>(bytes)
-    await messagesDao.replaceMessages(args.sessionId, args.messages)
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    await messagesDao.replaceMessages(args.sessionId, args.messages, args.workspaceId)
     await emitSessionUpdated(args.sessionId, 'messages-replaced')
     return { success: true }
   })
 
   ipcMain.handle(DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const args = decodeMessagePackPayload<{ sessionId: string; fromSortOrder: number }>(bytes)
-    await messagesDao.truncateMessagesFrom(args.sessionId, args.fromSortOrder)
+    const args = decodeMessagePackPayload<{
+      sessionId: string
+      workspaceId: string
+      fromSortOrder: number
+    }>(bytes)
+    await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    await messagesDao.truncateMessagesFrom(args.sessionId, args.fromSortOrder, args.workspaceId)
     await emitSessionUpdated(args.sessionId, 'messages-truncated')
     return { success: true }
   })
 
   ipcMain.handle(DB_MESSAGES_COUNT_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload(await messagesDao.getMessageCount(sessionId))
+    const input = decodeMessagePackPayload<string | { sessionId: string; workspaceId?: string }>(
+      bytes
+    )
+    const { sessionId, workspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    await requireSessionWorkspace(sessionId, workspaceId)
+    const count = await messagesDao.getMessageCount(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(count)
   })
 
   // --- Goals ---
 
-  ipcMain.handle(DB_GOALS_LIST_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await goalsDao.listGoals())
+  ipcMain.handle(DB_GOALS_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const input = decodeMessagePackPayload<{ workspaceId?: string }>(bytes)
+    const workspaceId = await requireDbWorkspace(input?.workspaceId)
+    const goals = await goalsDao.listGoals(workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(goals)
   })
 
   ipcMain.handle(DB_GOALS_GET_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload((await goalsDao.getGoal(sessionId)) ?? null)
+    const args = decodeMessagePackPayload<{ sessionId: string; workspaceId?: string }>(bytes)
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const goal = (await goalsDao.getGoal(args.sessionId, workspaceId)) ?? null
+    await requireDbWorkspace(args.workspaceId)
+    return encodeMessagePackPayload(goal)
   })
 
   ipcMain.handle(DB_GOALS_CREATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       objective: unknown
       tokenBudget?: unknown
     }>(bytes)
-    const previousGoal = (await goalsDao.getGoal(args.sessionId)) ?? null
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const previousGoal = (await goalsDao.getGoal(args.sessionId, workspaceId)) ?? null
+    await requireDbWorkspace(args.workspaceId)
     const goal = await goalsDao.createGoal({
       sessionId: args.sessionId,
+      workspaceId,
       objective: normalizeGoalObjective(args.objective),
       tokenBudget: normalizeGoalTokenBudget(args.tokenBudget) ?? null
     })
+    await requireDbWorkspace(args.workspaceId)
     if (!goal) {
       return encodeMessagePackPayload({
         success: false,
@@ -573,17 +746,22 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_GOALS_SET_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       objective: unknown
       status?: unknown
       tokenBudget?: unknown
     }>(bytes)
-    const previousGoal = (await goalsDao.getGoal(args.sessionId)) ?? null
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const previousGoal = (await goalsDao.getGoal(args.sessionId, workspaceId)) ?? null
+    await requireDbWorkspace(args.workspaceId)
     const goal = await goalsDao.replaceGoal({
       sessionId: args.sessionId,
+      workspaceId,
       objective: normalizeGoalObjective(args.objective),
       status: normalizeGoalStatus(args.status) ?? 'active',
       tokenBudget: normalizeGoalTokenBudget(args.tokenBudget) ?? null
     })
+    await requireDbWorkspace(args.workspaceId)
     emitGoalUpdated(goal, 'goal-set')
     void getGoalRuntimeService().handleGoalMutation({
       sessionId: args.sessionId,
@@ -597,12 +775,14 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_GOALS_UPDATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       patch: {
         objective?: unknown
         status?: unknown
         tokenBudget?: unknown
       }
     }>(bytes)
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
     const patch: goalsDao.SessionGoalUpdate = {}
     if (args.patch.objective !== undefined) {
       patch.objective = normalizeGoalObjective(args.patch.objective)
@@ -618,8 +798,10 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
       patch.tokenBudget = normalizeGoalTokenBudget(args.patch.tokenBudget) ?? null
     }
 
-    const previousGoal = (await goalsDao.getGoal(args.sessionId)) ?? null
-    const goal = await goalsDao.updateGoal(args.sessionId, patch)
+    const previousGoal = (await goalsDao.getGoal(args.sessionId, workspaceId)) ?? null
+    await requireDbWorkspace(args.workspaceId)
+    const goal = await goalsDao.updateGoal(args.sessionId, patch, workspaceId)
+    await requireDbWorkspace(args.workspaceId)
     if (!goal) {
       return encodeMessagePackPayload({
         success: false,
@@ -637,9 +819,15 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   })
 
   ipcMain.handle(DB_GOALS_CLEAR_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    const previousGoal = (await goalsDao.getGoal(sessionId)) ?? null
-    const cleared = await goalsDao.clearGoal(sessionId)
+    const { sessionId, workspaceId } = decodeMessagePackPayload<{
+      sessionId: string
+      workspaceId?: string
+    }>(bytes)
+    const authorizedWorkspaceId = await requireSessionWorkspace(sessionId, workspaceId)
+    const previousGoal = (await goalsDao.getGoal(sessionId, authorizedWorkspaceId)) ?? null
+    await requireDbWorkspace(workspaceId)
+    const cleared = await goalsDao.clearGoal(sessionId, authorizedWorkspaceId)
+    await requireDbWorkspace(workspaceId)
     if (cleared) {
       emitGoalCleared(sessionId, 'goal-cleared')
       void getGoalRuntimeService().handleGoalMutation({
@@ -655,11 +843,14 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_GOALS_ACCOUNT_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       timeDeltaSeconds: number
       tokenDelta: number
       expectedGoalId?: string | null
     }>(bytes)
-    const goal = await goalsDao.accountGoalUsage(args)
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const goal = await goalsDao.accountGoalUsage({ ...args, workspaceId })
+    await requireDbWorkspace(args.workspaceId)
     if (goal) {
       emitGoalUpdated(goal, 'goal-accounted')
     }
@@ -669,27 +860,35 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_GOAL_EVENTS_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       goalId?: string | null
       limit?: number
     }>(bytes)
-    return encodeMessagePackPayload(await goalsDao.listGoalEvents(args))
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
+    const events = await goalsDao.listGoalEvents({ ...args, workspaceId })
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(events)
   })
 
   ipcMain.handle(DB_GOAL_EVENTS_ADD_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       sessionId: string
+      workspaceId?: string
       goalId?: string | null
       eventType: unknown
       message?: unknown
       metadata?: unknown
     }>(bytes)
+    const workspaceId = await requireSessionWorkspace(args.sessionId, args.workspaceId)
     const event = await goalsDao.addGoalEvent({
       sessionId: args.sessionId,
+      workspaceId,
       goalId: args.goalId,
       eventType: normalizeGoalEventType(args.eventType),
       message: normalizeGoalEventMessage(args.message),
       metadata: normalizeGoalEventMetadata(args.metadata)
     })
+    await requireDbWorkspace(args.workspaceId)
     emitGoalEventAdded(event, 'goal-event-added')
     return encodeMessagePackPayload({ success: true, event })
   })
@@ -763,13 +962,15 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
 
   // --- Draw Runs ---
 
-  ipcMain.handle(DB_DRAW_RUNS_LIST_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await drawRunsDao.listDrawRuns())
+  ipcMain.handle(DB_DRAW_RUNS_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const workspaceId = decodeMessagePackPayload<string>(bytes)
+    return encodeMessagePackPayload(await drawRunsDao.listDrawRuns(workspaceId))
   })
 
   ipcMain.handle(DB_DRAW_RUNS_SAVE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const run = decodeMessagePackPayload<{
       id: string
+      workspaceId: string
       prompt: string
       providerName: string
       modelName: string
@@ -786,30 +987,47 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   })
 
   ipcMain.handle(DB_DRAW_RUNS_DELETE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    await drawRunsDao.deleteDrawRun(id)
+    const { id, workspaceId } = decodeMessagePackPayload<{ id: string; workspaceId: string }>(bytes)
+    await drawRunsDao.deleteDrawRun(id, workspaceId)
     return encodeMessagePackPayload({ success: true })
   })
 
-  ipcMain.handle(DB_DRAW_RUNS_CLEAR_MSGPACK_CHANNEL, async () => {
-    await drawRunsDao.clearDrawRuns()
+  ipcMain.handle(DB_DRAW_RUNS_CLEAR_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const workspaceId = decodeMessagePackPayload<string>(bytes)
+    await drawRunsDao.clearDrawRuns(workspaceId)
     return encodeMessagePackPayload({ success: true })
   })
 
   // --- Plans ---
 
-  ipcMain.handle(DB_PLANS_LIST_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await plansDao.listPlans())
+  ipcMain.handle(DB_PLANS_LIST_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const input = decodeMessagePackPayload<{ workspaceId?: string } | null>(bytes)
+    const workspaceId = await requireDbWorkspace(input?.workspaceId)
+    const plans = await plansDao.listPlans(workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(plans)
   })
 
   ipcMain.handle(DB_PLANS_GET_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload((await plansDao.getPlan(id)) ?? null)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const plan = await plansDao.getPlan(id, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(plan ?? null)
   })
 
   ipcMain.handle(DB_PLANS_GET_BY_SESSION_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload((await plansDao.getPlanBySession(sessionId)) ?? null)
+    const input = decodeMessagePackPayload<{ sessionId: string; workspaceId?: string } | string>(
+      bytes
+    )
+    const { sessionId, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const plan = await plansDao.getPlanBySession(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(plan ?? null)
   })
 
   ipcMain.handle(DB_PLANS_CREATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
@@ -821,9 +1039,11 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
       filePath?: string
       content?: string
       specJson?: string
+      workspaceId?: string
       createdAt: number
       updatedAt: number
     }>(bytes)
+    await requireSessionWorkspace(plan.sessionId, plan.workspaceId)
     await plansDao.createPlan(plan)
     return encodeMessagePackPayload({ success: true })
   })
@@ -831,6 +1051,7 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_PLANS_UPDATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       id: string
+      workspaceId?: string
       patch: Partial<{
         title: string
         status: string
@@ -840,36 +1061,57 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
         updatedAt: number
       }>
     }>(bytes)
-    await plansDao.updatePlan(args.id, args.patch)
+    const workspaceId = await requireDbWorkspace(args.workspaceId)
+    await plansDao.updatePlan(args.id, workspaceId, args.patch)
     return encodeMessagePackPayload({ success: true })
   })
 
   ipcMain.handle(DB_PLANS_DELETE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    await plansDao.deletePlan(id)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    await plansDao.deletePlan(id, workspaceId)
     return encodeMessagePackPayload({ success: true })
   })
 
   // --- Tasks (session-bound) ---
 
   ipcMain.handle(DB_TASKS_LIST_BY_SESSION_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload(await tasksDao.listTasksBySession(sessionId))
+    const input = decodeMessagePackPayload<{ sessionId: string; workspaceId?: string } | string>(
+      bytes
+    )
+    const { sessionId, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const tasks = await tasksDao.listTasksBySession(sessionId, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(tasks)
   })
 
-  ipcMain.handle(DB_TASKS_LIST_ALL_MSGPACK_CHANNEL, async () => {
-    return encodeMessagePackPayload(await tasksDao.listAllTasks())
+  ipcMain.handle(DB_TASKS_LIST_ALL_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
+    const input = decodeMessagePackPayload<{ workspaceId?: string } | null>(bytes)
+    const workspaceId = await requireDbWorkspace(input?.workspaceId)
+    const tasks = await tasksDao.listAllTasks(workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(tasks)
   })
 
   ipcMain.handle(DB_TASKS_GET_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    return encodeMessagePackPayload((await tasksDao.getTask(id)) ?? null)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    const task = await tasksDao.getTask(id, workspaceId)
+    await requireDbWorkspace(workspaceId)
+    return encodeMessagePackPayload(task ?? null)
   })
 
   ipcMain.handle(DB_TASKS_CREATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const task = decodeMessagePackPayload<{
       id: string
       sessionId: string
+      workspaceId: string
       planId?: string
       subject: string
       description: string
@@ -883,6 +1125,7 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
       createdAt: number
       updatedAt: number
     }>(bytes)
+    await requireSessionWorkspace(task.sessionId, task.workspaceId)
     await tasksDao.createTask(task)
     return encodeMessagePackPayload({ success: true })
   })
@@ -890,6 +1133,7 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
   ipcMain.handle(DB_TASKS_UPDATE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<{
       id: string
+      workspaceId: string
       patch: Partial<{
         subject: string
         description: string
@@ -903,19 +1147,29 @@ export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}
         updatedAt: number
       }>
     }>(bytes)
-    await tasksDao.updateTask(args.id, args.patch)
+    const workspaceId = await requireDbWorkspace(args.workspaceId)
+    await tasksDao.updateTask(args.id, workspaceId, args.patch)
     return encodeMessagePackPayload({ success: true })
   })
 
   ipcMain.handle(DB_TASKS_DELETE_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const id = decodeMessagePackPayload<string>(bytes)
-    await tasksDao.deleteTask(id)
+    const input = decodeMessagePackPayload<{ id: string; workspaceId?: string } | string>(bytes)
+    const { id, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { id: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    await tasksDao.deleteTask(id, workspaceId)
     return encodeMessagePackPayload({ success: true })
   })
 
   ipcMain.handle(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, async (_event, bytes: Uint8Array) => {
-    const sessionId = decodeMessagePackPayload<string>(bytes)
-    await tasksDao.deleteTasksBySession(sessionId)
+    const input = decodeMessagePackPayload<{ sessionId: string; workspaceId?: string } | string>(
+      bytes
+    )
+    const { sessionId, workspaceId: rawWorkspaceId } =
+      typeof input === 'string' ? { sessionId: input, workspaceId: undefined } : input
+    const workspaceId = await requireDbWorkspace(rawWorkspaceId)
+    await requireSessionWorkspace(sessionId, workspaceId)
+    await tasksDao.deleteTasksBySession(sessionId, workspaceId)
     return encodeMessagePackPayload({ success: true })
   })
 }

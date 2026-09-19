@@ -104,7 +104,11 @@
     "chats": "Chat",
     "noChats": "Ancora nessuna chiacchierata",
     "smartRename": "Rinominare intelligente",
-    "smartRenaming": "Rinominazione intelligente"
+    "smartRenaming": "Rinominazione intelligente",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sessione cancellata",

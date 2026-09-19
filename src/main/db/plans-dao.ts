@@ -1,4 +1,6 @@
 import { getNativeWorker } from '../lib/native-worker'
+import { canaryGetPlan, canaryGetPlanBySession, canaryListPlans } from './legacy-read-canary'
+import { businessWriteCanary } from './business-write-canary'
 
 export interface PlanRow {
   id: string
@@ -10,6 +12,7 @@ export interface PlanRow {
   spec_json: string | null
   created_at: number
   updated_at: number
+  workspace_id: string | null
 }
 
 interface PlanFindResult {
@@ -32,22 +35,38 @@ async function requestMutation(method: string, params: object): Promise<PlanMuta
   return result
 }
 
-export function listPlans(): Promise<PlanRow[]> {
-  return getNativeWorker().request<PlanRow[]>('db/plans-list', {}, 120_000)
+export async function listPlans(workspaceId = 'local-personal'): Promise<PlanRow[]> {
+  const migrated = await canaryListPlans(workspaceId)
+  if (migrated !== undefined) return migrated
+  return getNativeWorker().request<PlanRow[]>('db/plans-list', { workspaceId }, 120_000)
 }
 
-export async function getPlan(id: string): Promise<PlanRow | undefined> {
-  const result = await getNativeWorker().request<PlanFindResult>('db/plans-get', { id }, 120_000)
+export async function getPlan(
+  id: string,
+  workspaceId = 'local-personal'
+): Promise<PlanRow | undefined> {
+  const migrated = await canaryGetPlan(id, workspaceId)
+  if (migrated !== undefined) return migrated ?? undefined
+  const result = await getNativeWorker().request<PlanFindResult>(
+    'db/plans-get',
+    { id, workspaceId },
+    120_000
+  )
   if (!result.success) {
     throw new Error(result.error || 'Native plan get failed')
   }
   return result.plan ?? undefined
 }
 
-export async function getPlanBySession(sessionId: string): Promise<PlanRow | undefined> {
+export async function getPlanBySession(
+  sessionId: string,
+  workspaceId = 'local-personal'
+): Promise<PlanRow | undefined> {
+  const migrated = await canaryGetPlanBySession(sessionId, workspaceId)
+  if (migrated !== undefined) return migrated ?? undefined
   const result = await getNativeWorker().request<PlanFindResult>(
     'db/plans-get-by-session',
-    { sessionId },
+    { sessionId, workspaceId },
     120_000
   )
   if (!result.success) {
@@ -64,14 +83,36 @@ export async function createPlan(plan: {
   filePath?: string
   content?: string
   specJson?: string
+  workspaceId?: string
   createdAt: number
   updatedAt: number
 }): Promise<void> {
-  await requestMutation('db/plans-create', plan)
+  const writer = businessWriteCanary()
+  if (writer) {
+    const workspaceId = plan.workspaceId ?? 'local-personal'
+    await writer.createPlan<PlanRow>({
+      id: plan.id,
+      sessionId: plan.sessionId,
+      workspaceId,
+      title: plan.title,
+      status: plan.status ?? 'drafting',
+      filePath: plan.filePath ?? null,
+      content: plan.content ?? null,
+      spec: plan.specJson ? JSON.parse(plan.specJson) : null,
+      createdAt: plan.createdAt,
+      updatedAt: plan.updatedAt
+    })
+    return
+  }
+  await requestMutation('db/plans-create', {
+    ...plan,
+    workspaceId: plan.workspaceId ?? 'local-personal'
+  })
 }
 
 export async function updatePlan(
   id: string,
+  workspaceId: string,
   patch: Partial<{
     title: string
     status: string
@@ -81,9 +122,25 @@ export async function updatePlan(
     updatedAt: number
   }>
 ): Promise<void> {
-  await requestMutation('db/plans-update', { id, patch })
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.updatePlan<PlanRow>({
+      id,
+      workspaceId,
+      ...patch,
+      spec: patch.specJson ? JSON.parse(patch.specJson) : patch.specJson,
+      updatedAt: patch.updatedAt ?? Date.now()
+    })
+    return
+  }
+  await requestMutation('db/plans-update', { id, workspaceId, patch })
 }
 
-export async function deletePlan(id: string): Promise<void> {
-  await requestMutation('db/plans-delete', { id })
+export async function deletePlan(id: string, workspaceId = 'local-personal'): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.deletePlan({ id, workspaceId })
+    return
+  }
+  await requestMutation('db/plans-delete', { id, workspaceId })
 }

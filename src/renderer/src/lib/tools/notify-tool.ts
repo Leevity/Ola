@@ -1,15 +1,39 @@
 import { toolRegistry } from '../agent/tool-registry'
 import type { ToolHandler } from './tool-types'
+import { IPC } from '../ipc/channels'
 
 /**
  * Notify tool — sends desktop toast notifications and/or injects messages into sessions.
  * Designed for use by any agent (especially CronAgent) to surface results to the user.
  */
 
-function nativeOnlyNotifyResult(): string {
-  return JSON.stringify({
-    error: 'Notify execution has migrated to .NET Native Worker.'
-  })
+export interface NotifyToolInput {
+  title: string
+  body: string
+  type?: 'info' | 'success' | 'warning' | 'error'
+  duration?: number
+}
+
+/** Execute the desktop notification through the Main-owned TS IPC boundary. */
+export async function executeNotifyTool(
+  input: Record<string, unknown>,
+  ipc: { invoke(channel: string, ...args: unknown[]): Promise<unknown> }
+): Promise<string> {
+  const title = typeof input.title === 'string' ? input.title.trim() : ''
+  const body = typeof input.body === 'string' ? input.body.trim() : ''
+  if (!title || !body) return JSON.stringify({ error: 'Notify requires title and body.' })
+  const type =
+    input.type === 'success' || input.type === 'warning' || input.type === 'error'
+      ? input.type
+      : 'info'
+  const duration =
+    typeof input.duration === 'number' && Number.isFinite(input.duration)
+      ? Math.min(60_000, Math.max(500, Math.trunc(input.duration)))
+      : undefined
+  const result = await ipc.invoke(IPC.NOTIFY_DESKTOP, { title, body, type, duration })
+  if (result && typeof result === 'object' && 'success' in result && result.success === false)
+    return JSON.stringify({ error: 'Desktop notification failed.' })
+  return JSON.stringify({ success: true })
 }
 
 const notifyHandler: ToolHandler = {
@@ -48,7 +72,7 @@ const notifyHandler: ToolHandler = {
     }
   },
 
-  execute: async () => nativeOnlyNotifyResult(),
+  execute: async (input, ctx) => executeNotifyTool(input, ctx.ipc),
 
   requiresApproval: () => false
 }

@@ -1,16 +1,19 @@
-import { getNativeWorker } from '../lib/native-worker'
-import type { SshConfigConnection, SshConfigGroup } from './ssh-config'
+import { readFile } from 'node:fs/promises'
+import type { SshConfigConnection } from './ssh-config'
+import { currentSshWorkspaceGeneration, getSshConfigPath, reloadSshConfigCache } from './ssh-config'
+import {
+  mutateSshConfigFile,
+  normalizeSshConfigDocument,
+  readSshConfigDocument
+} from './ssh-config-json'
+import { writeSshExportFile } from './ssh-export'
+import { applySshImportPreview, previewOlaSshImport } from './ssh-import-ola'
+import { loadOpenSshKnownHosts, previewOpenSshImport } from './ssh-import-openssh'
 
 export type SshImportSource = 'ola' | 'openssh'
 export type SshImportAction = 'create' | 'skip' | 'replace' | 'duplicate'
 
-export interface SshExportPayload {
-  schemaVersion: 1
-  source: 'ola-ssh'
-  exportedAt: number
-  groups: SshConfigGroup[]
-  connections: SshConfigConnection[]
-}
+export type { SshExportPayload } from './ssh-export'
 
 export interface SshImportPreviewConnection {
   importId: string
@@ -55,35 +58,23 @@ export interface SshImportApplyResult {
   error?: string
 }
 
-type NativeMutationResult = {
-  success?: boolean
-  error?: string
-}
-
-async function nativeRequest<T>(method: string, params: unknown, timeoutMs = 60_000): Promise<T> {
-  return await getNativeWorker().request<T>(method, params, timeoutMs)
-}
-
 export async function exportSshConfig(filePath: string, connectionIds?: string[]): Promise<void> {
-  const result = await nativeRequest<NativeMutationResult>(
-    'ssh/config-export',
-    { filePath, connectionIds: connectionIds ?? [] },
-    120_000
-  )
-  if (result?.error || result?.success === false) {
-    throw new Error(result.error || 'SSH export failed')
-  }
+  const config = normalizeSshConfigDocument(await readSshConfigDocument(getSshConfigPath()))
+  await writeSshExportFile(filePath, config, connectionIds)
 }
 
 export async function previewSshImport(
   filePath: string,
   source: SshImportSource
 ): Promise<SshImportPreviewResult> {
-  return await nativeRequest<SshImportPreviewResult>(
-    'ssh/import-preview',
-    { filePath, source },
-    120_000
-  )
+  if (source !== 'ola' && source !== 'openssh') throw new Error('INVALID_SSH_IMPORT_SOURCE')
+  const text = await readFile(filePath, 'utf8')
+  const current = normalizeSshConfigDocument(await readSshConfigDocument(getSshConfigPath()))
+  if (source === 'ola') {
+    const raw: unknown = JSON.parse(text)
+    return previewOlaSshImport(raw, current, filePath)
+  }
+  return previewOpenSshImport(text, current, filePath, await loadOpenSshKnownHosts(filePath))
 }
 
 export async function applySshImport(
@@ -91,9 +82,29 @@ export async function applySshImport(
   source: SshImportSource,
   decisions: Array<{ importId: string; action: SshImportAction }>
 ): Promise<SshImportApplyResult> {
-  return await nativeRequest<SshImportApplyResult>(
-    'ssh/import-apply',
-    { filePath, source, decisions },
-    120_000
+  const generation = currentSshWorkspaceGeneration()
+  const canCommit = (): boolean => currentSshWorkspaceGeneration() === generation
+  if (source !== 'ola' && source !== 'openssh') throw new Error('INVALID_SSH_IMPORT_SOURCE')
+  const text = await readFile(filePath, 'utf8')
+  const raw: unknown = source === 'ola' ? JSON.parse(text) : null
+  const knownHosts =
+    source === 'openssh' ? await loadOpenSshKnownHosts(filePath) : new Set<string>()
+  let result: SshImportApplyResult | undefined
+  await mutateSshConfigFile(
+    getSshConfigPath(),
+    (current) => {
+      const preview =
+        source === 'ola'
+          ? previewOlaSshImport(raw, current, filePath)
+          : previewOpenSshImport(text, current, filePath, knownHosts)
+      const applied = applySshImportPreview(current, preview, decisions)
+      result = applied.result
+      return applied.config
+    },
+    canCommit
   )
+  if (!canCommit()) throw new Error('SSH_WORKSPACE_REVOKED')
+  await reloadSshConfigCache()
+  if (!result) throw new Error('SSH_IMPORT_APPLY_FAILED')
+  return result
 }

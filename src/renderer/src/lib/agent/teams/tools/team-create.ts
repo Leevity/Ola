@@ -1,5 +1,7 @@
 import type { ToolHandler } from '../../../tools/tool-types'
-import { nativeOnlyTeamResult } from './team-native-guard'
+import { encodeStructuredToolResult, encodeToolError } from '../../../tools/tool-result-format'
+import { createTeamRuntime, getTeamRuntimeSnapshot } from '../runtime-client'
+import { useTeamStore } from '@renderer/stores/team-store'
 
 export const teamCreateTool: ToolHandler = {
   definition: {
@@ -20,13 +22,32 @@ export const teamCreateTool: ToolHandler = {
         default_backend: {
           type: 'string',
           enum: ['in-process'],
-          description:
-            'Optional default backend for teammate execution. Teams execute in the .NET Native Worker.'
+          description: 'Optional default backend for teammate execution.'
         }
       },
       required: ['team_name', 'description']
     }
   },
-  execute: async () => nativeOnlyTeamResult('TeamCreate'),
+  execute: async (input, ctx) => {
+    const teamName = typeof input.team_name === 'string' ? input.team_name.trim() : ''
+    const description = typeof input.description === 'string' ? input.description.trim() : ''
+    if (!teamName) return encodeToolError('team_name is required')
+    if (!description) return encodeToolError('description is required')
+    try {
+      const result = await createTeamRuntime({
+        teamName,
+        description,
+        sessionId: ctx.sessionId ?? undefined,
+        workingFolder: ctx.workingFolder,
+        defaultBackend: 'in-process'
+      })
+      const snapshot = await getTeamRuntimeSnapshot({ teamName, limit: 10 })
+      if (snapshot)
+        useTeamStore.getState().syncRuntimeSnapshot(snapshot, ctx.sessionId ?? undefined)
+      return encodeStructuredToolResult({ ...result })
+    } catch (error) {
+      return encodeToolError(error instanceof Error ? error.message : String(error))
+    }
+  },
   requiresApproval: () => false
 }

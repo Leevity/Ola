@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { AppPluginPanel } from './AppPluginPanel'
 import { ExtensionPanel } from './ExtensionPanel'
+import { SettingsPageHeader } from './settings-primitives'
 
 export function CapabilityCenterPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
@@ -12,25 +13,21 @@ export function CapabilityCenterPanel(): React.JSX.Element {
   const tabs = [
     {
       id: 'builtin' as const,
-      label: t('plugin.defaultPlugins', { defaultValue: '默认插件' })
+      label: t('plugin.defaultPlugins')
     },
     {
       id: 'custom' as const,
-      label: t('plugin.customPlugins', { defaultValue: '自定义插件' })
+      label: t('plugin.customPlugins')
     }
   ]
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-5">
       <section aria-labelledby="capability-center-title" className="shrink-0">
-        <h2 id="capability-center-title" className="text-lg font-semibold">
-          {t('plugin.title')}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('capabilityCenter.description', {
-            defaultValue: '管理 Ola 的默认插件和自定义插件能力。'
-          })}
-        </p>
+        <SettingsPageHeader
+          title={t('plugin.title')}
+          description={t('capabilityCenter.description')}
+        />
       </section>
 
       <div
@@ -57,7 +54,7 @@ export function CapabilityCenterPanel(): React.JSX.Element {
       </div>
 
       <div className="min-h-0 min-w-0 flex-1">
-        {activeTab === 'custom' ? <ExtensionPanel /> : <AppPluginPanel />}
+        {activeTab === 'custom' ? <ExtensionPanel embedded /> : <AppPluginPanel embedded />}
       </div>
     </div>
   )

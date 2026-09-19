@@ -19,6 +19,7 @@ import type { ToolResultContent } from '@renderer/lib/api/types'
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import type { AgentRunFileChange } from '@renderer/stores/agent-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { MONO_FONT } from '@renderer/lib/constants'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
@@ -976,7 +977,8 @@ function TrackedEditDiff({
           toMessagePackChannel(IPC.AGENT_CHANGES_DIFF_CONTENT),
           {
             runId: change.runId,
-            changeId: change.id
+            changeId: change.id,
+            workspaceId: useWorkspaceStore.getState().activeWorkspaceId
           }
         )
         if (cancelled) return

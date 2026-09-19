@@ -41,11 +41,20 @@ export type TodoItem = TaskItem
 
 // --- DB persistence helpers (fire-and-forget) ---
 
+function workspaceForSession(sessionId: string | undefined): string {
+  if (!sessionId) return 'local-personal'
+  return (
+    useChatStore.getState().sessions.find((session) => session.id === sessionId)?.workspaceId ??
+    'local-personal'
+  )
+}
+
 function dbCreateTask(task: TaskItem, sortOrder: number): void {
   if (!task.sessionId) return
   invokeMessagePackBinary(DB_TASKS_CREATE_MSGPACK_CHANNEL, {
     id: task.id,
     sessionId: task.sessionId,
+    workspaceId: workspaceForSession(task.sessionId),
     planId: task.planId,
     subject: task.subject,
     description: task.description,
@@ -61,16 +70,21 @@ function dbCreateTask(task: TaskItem, sortOrder: number): void {
   }).catch(() => {})
 }
 
-function dbUpdateTask(id: string, patch: Record<string, unknown>): void {
-  invokeMessagePackBinary(DB_TASKS_UPDATE_MSGPACK_CHANNEL, { id, patch }).catch(() => {})
+function dbUpdateTask(id: string, workspaceId: string, patch: Record<string, unknown>): void {
+  invokeMessagePackBinary(DB_TASKS_UPDATE_MSGPACK_CHANNEL, { id, workspaceId, patch }).catch(
+    () => {}
+  )
 }
 
-function dbDeleteTask(id: string): void {
-  invokeMessagePackBinary(DB_TASKS_DELETE_MSGPACK_CHANNEL, id).catch(() => {})
+function dbDeleteTask(id: string, workspaceId: string): void {
+  invokeMessagePackBinary(DB_TASKS_DELETE_MSGPACK_CHANNEL, { id, workspaceId }).catch(() => {})
 }
 
-function dbDeleteTasksBySession(sessionId: string): void {
-  invokeMessagePackBinary(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, sessionId).catch(() => {})
+function dbDeleteTasksBySession(sessionId: string, workspaceId: string): void {
+  invokeMessagePackBinary(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, {
+    sessionId,
+    workspaceId
+  }).catch(() => {})
 }
 
 export interface TaskRow {
@@ -230,7 +244,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     try {
       const rows = await invokeMessagePackBinary<TaskRow[]>(
         DB_TASKS_LIST_BY_SESSION_MSGPACK_CHANNEL,
-        sessionId
+        { sessionId, workspaceId: workspaceForSession(sessionId) }
       )
       const tasks = rows.map(taskRowToItem)
       set((state) => {
@@ -344,7 +358,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
 
     // Persist even when task is currently off-screen (another active session).
     if (updatedTask) {
-      dbUpdateTask(id, buildDbPatch(patch, now))
+      dbUpdateTask(id, workspaceForSession(updatedTask.sessionId), buildDbPatch(patch, now))
       if (updatedTask.sessionId) {
         useChatStore.getState().clearSessionPromptSnapshot(updatedTask.sessionId)
       }
@@ -390,7 +404,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     })
 
     if (!deleted) return false
-    dbDeleteTask(id)
+    dbDeleteTask(id, workspaceForSession(existingTask?.sessionId))
     if (existingTask?.sessionId) {
       useChatStore.getState().clearSessionPromptSnapshot(existingTask.sessionId)
     }
@@ -469,7 +483,7 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
         tasksBySession: nextTasksBySession
       }
     })
-    dbDeleteTasksBySession(sessionId)
+    dbDeleteTasksBySession(sessionId, workspaceForSession(sessionId))
     useChatStore.getState().clearSessionPromptSnapshot(sessionId)
     if (!isAgentRuntimeSyncSuppressed()) {
       emitAgentRuntimeSync({ kind: 'task_delete_session', sessionId })

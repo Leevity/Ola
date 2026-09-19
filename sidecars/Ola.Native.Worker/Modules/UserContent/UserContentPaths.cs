@@ -6,10 +6,7 @@ internal static class UserContentPaths
 {
     public static string GetUserDirectory(string name)
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
-            name);
+        return Path.Combine(OlaDataRoot.DirectoryPath, name);
     }
 
     public static string GetBundledDirectory(JsonElement parameters, string fallbackName)

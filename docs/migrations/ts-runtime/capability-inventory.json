@@ -1,0 +1,2246 @@
+{
+  "schemaVersion": 1,
+  "notes": "Static registrations plus resolved AgentRuntimeContract route constants. staged-ts means a route literal also appears in Main IPC source; it is not proof of parity or production cutover. Compare with live worker/routes before cutover.",
+  "routes": [
+    {
+      "method": "agent-changes/diff-local",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentChanges/AgentChangeModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "agent-changes/get-hydrated",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentChanges/AgentChangeModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "agent-changes/list-session-hydrated",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentChanges/AgentChangeModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "agent-changes/rollback-local-change",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentChanges/AgentChangeModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/active-runs",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 13,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/append-messages",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 18,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/cancel",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 16,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/compress-context",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 19,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/debug-body-read",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 20,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/request-stop",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 17,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/reverse-cancel",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 22,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/reverse-response",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 21,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/run",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 12,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/run-snapshot",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 15,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/run-status",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 14,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/session-visibility",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 23,
+      "status": "legacy"
+    },
+    {
+      "method": "agent/tool-results-lookup",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 24,
+      "status": "legacy"
+    },
+    {
+      "method": "agents/ensure",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 18,
+      "status": "legacy"
+    },
+    {
+      "method": "agents/list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 17,
+      "status": "staged-ts"
+    },
+    {
+      "method": "agents/load",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 19,
+      "status": "staged-ts"
+    },
+    {
+      "method": "agents/manage-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 20,
+      "status": "staged-ts"
+    },
+    {
+      "method": "agents/manage-read",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 21,
+      "status": "staged-ts"
+    },
+    {
+      "method": "agents/manage-save",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 22,
+      "status": "staged-ts"
+    },
+    {
+      "method": "capabilities/check",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/config-add",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/config-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/config-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/config-remove",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 12,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/config-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/config-write",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/qq-session-clear",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 15,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/qq-session-load",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 13,
+      "status": "legacy"
+    },
+    {
+      "method": "channel/qq-session-save",
+      "source": "sidecars/Ola.Native.Worker/Modules/Channels/ChannelConfigModule.cs",
+      "line": 14,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/analytics",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 42,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/callees",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 33,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/callers",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 32,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/db-smoke",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 17,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/explore",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 29,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/file-symbols",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 46,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/files",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 35,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/files-tree",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 45,
+      "status": "staged-ts"
+    },
+    {
+      "method": "codegraph/impact",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 34,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/index",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 24,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/index-status",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 40,
+      "status": "staged-ts"
+    },
+    {
+      "method": "codegraph/instructions",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 54,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/list-projects",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 50,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/node",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 31,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/prompt-context",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 43,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/query-neighbors",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 44,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/remove-project",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 51,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/search",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 30,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/stats",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 41,
+      "status": "staged-ts"
+    },
+    {
+      "method": "codegraph/status",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 28,
+      "status": "staged-ts"
+    },
+    {
+      "method": "codegraph/sync",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 25,
+      "status": "legacy"
+    },
+    {
+      "method": "codegraph/tools-list",
+      "source": "sidecars/Ola.CodeGraph.Core/CodeGraphModule.cs",
+      "line": 53,
+      "status": "legacy"
+    },
+    {
+      "method": "commands/ensure",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "commands/list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "commands/load",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 12,
+      "status": "staged-ts"
+    },
+    {
+      "method": "commands/manage-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 15,
+      "status": "staged-ts"
+    },
+    {
+      "method": "commands/manage-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 13,
+      "status": "staged-ts"
+    },
+    {
+      "method": "commands/manage-read",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 14,
+      "status": "staged-ts"
+    },
+    {
+      "method": "commands/manage-save",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 16,
+      "status": "staged-ts"
+    },
+    {
+      "method": "config/delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Config/ConfigModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "config/get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Config/ConfigModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "config/read",
+      "source": "sidecars/Ola.Native.Worker/Modules/Config/ConfigModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "config/set",
+      "source": "sidecars/Ola.Native.Worker/Modules/Config/ConfigModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "config/write",
+      "source": "sidecars/Ola.Native.Worker/Modules/Config/ConfigModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "db/agent-changes-append-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 39,
+      "status": "legacy"
+    },
+    {
+      "method": "db/agent-changes-delete-finalized-before",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 42,
+      "status": "legacy"
+    },
+    {
+      "method": "db/agent-changes-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 37,
+      "status": "legacy"
+    },
+    {
+      "method": "db/agent-changes-list-session",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 38,
+      "status": "legacy"
+    },
+    {
+      "method": "db/agent-changes-mark-reverted",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 40,
+      "status": "legacy"
+    },
+    {
+      "method": "db/agent-changes-recompute",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 41,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 62,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 67,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 64,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 65,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-mark-fired",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 69,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-set-enabled",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 68,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-soft-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 66,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-jobs-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 63,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-load-persisted-jobs",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 70,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-run-detail",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 77,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-run-log-append",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 76,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-run-messages-replace",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 75,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-runs-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 72,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-runs-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 74,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-runs-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 71,
+      "status": "legacy"
+    },
+    {
+      "method": "db/cron-runs-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 73,
+      "status": "legacy"
+    },
+    {
+      "method": "db/desktop-flow-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 152,
+      "status": "legacy"
+    },
+    {
+      "method": "db/desktop-flow-run-finish",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 154,
+      "status": "legacy"
+    },
+    {
+      "method": "db/desktop-flow-run-start",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 153,
+      "status": "legacy"
+    },
+    {
+      "method": "db/desktop-flow-runs-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 155,
+      "status": "legacy"
+    },
+    {
+      "method": "db/desktop-flow-save",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 151,
+      "status": "legacy"
+    },
+    {
+      "method": "db/desktop-flows-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 150,
+      "status": "legacy"
+    },
+    {
+      "method": "db/draw-runs-clear",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 61,
+      "status": "legacy"
+    },
+    {
+      "method": "db/draw-runs-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 60,
+      "status": "legacy"
+    },
+    {
+      "method": "db/draw-runs-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 58,
+      "status": "legacy"
+    },
+    {
+      "method": "db/draw-runs-save",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 59,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goal-events-add",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 85,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goal-events-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 86,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-account",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 84,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-clear",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 83,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 80,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 79,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 78,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-replace",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 81,
+      "status": "legacy"
+    },
+    {
+      "method": "db/goals-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 82,
+      "status": "legacy"
+    },
+    {
+      "method": "db/initialize",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-automation-add",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 98,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-automation-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 99,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-automation-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 100,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-automation-mark-undo",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 101,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-automation-rollup-has",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 102,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-automation-rollup-mark",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 103,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-citation-record",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 96,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-jobs-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 90,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-jobs-finish",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 92,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-jobs-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 91,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-jobs-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 93,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-root-clear",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 97,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-roots-ensure",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 87,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-roots-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 88,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-roots-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 89,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-stage1-add",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 94,
+      "status": "legacy"
+    },
+    {
+      "method": "db/memory-stage1-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 95,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-add",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 125,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-add-batch",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 126,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-clear",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 130,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-compact-session",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 136,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-count",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 134,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 131,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-delete-last",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 135,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-insert-artifacts",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 127,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 117,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-list-locator",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 120,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-list-markers",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 119,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-list-page",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 121,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-list-user",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 118,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-replace",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 132,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-request-context",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 122,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-search-content",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 124,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-truncate-from",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 133,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 129,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-upsert",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 128,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-usage-stats",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 137,
+      "status": "legacy"
+    },
+    {
+      "method": "db/messages-window-around",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 123,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plans-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 27,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plans-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 29,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plans-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 25,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plans-get-by-session",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 26,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plans-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 24,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plans-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 28,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plugin-normal-projects",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 104,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-remove-data",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 107,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-route-session",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 116,
+      "status": "legacy"
+    },
+    {
+      "method": "db/plugin-sessions-clear",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 113,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 109,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 114,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-find-by-chat",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 110,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 108,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-list-all",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 111,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-messages",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 112,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sessions-rename",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 115,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sync-session-models",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 105,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/plugin-sync-session-project",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 106,
+      "status": "staged-ts"
+    },
+    {
+      "method": "db/projects-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 19,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 21,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-ensure-default",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 22,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-ensure-plugin",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 23,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-find-by-plugin",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 18,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 17,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 16,
+      "status": "legacy"
+    },
+    {
+      "method": "db/projects-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 20,
+      "status": "legacy"
+    },
+    {
+      "method": "db/qq-wakeup-mark-sent",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 146,
+      "status": "legacy"
+    },
+    {
+      "method": "db/qq-wakeup-record-source",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 145,
+      "status": "legacy"
+    },
+    {
+      "method": "db/qq-wakeup-resolve",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 144,
+      "status": "legacy"
+    },
+    {
+      "method": "db/session-reset-conversation",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "db/session-status",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sessions-clear-all",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 15,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sessions-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 12,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sessions-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 14,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sessions-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sessions-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sessions-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 13,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-connections-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 55,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-connections-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 57,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-connections-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 54,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-connections-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 53,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-connections-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 56,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-groups-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 50,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-groups-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 52,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-groups-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 49,
+      "status": "legacy"
+    },
+    {
+      "method": "db/ssh-groups-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 51,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sub-agent-history-apply",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 45,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sub-agent-history-index",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 43,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sub-agent-history-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 44,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sub-agent-history-migration-mark",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 48,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sub-agent-history-migration-status",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 47,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sub-agent-history-replace",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 46,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sync-apply-db-merge",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 142,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sync-capture-local",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 141,
+      "status": "legacy"
+    },
+    {
+      "method": "db/sync-save-metadata",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 143,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 33,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 35,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-delete-by-session",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 36,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 32,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-list-all",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 31,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-list-by-session",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 30,
+      "status": "legacy"
+    },
+    {
+      "method": "db/tasks-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 34,
+      "status": "legacy"
+    },
+    {
+      "method": "db/usage-add-event",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 138,
+      "status": "legacy"
+    },
+    {
+      "method": "db/usage-maintenance",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 139,
+      "status": "legacy"
+    },
+    {
+      "method": "db/usage-query",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 140,
+      "status": "legacy"
+    },
+    {
+      "method": "db/wiki-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 149,
+      "status": "legacy"
+    },
+    {
+      "method": "db/wiki-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 147,
+      "status": "legacy"
+    },
+    {
+      "method": "db/wiki-save",
+      "source": "sidecars/Ola.Native.Worker/Modules/Db/DbModule.cs",
+      "line": 148,
+      "status": "legacy"
+    },
+    {
+      "method": "extension/execute-tool",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 16,
+      "status": "legacy"
+    },
+    {
+      "method": "extension/install-from-folder",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/read-asset",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 12,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/remove",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/resolve-path",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "extension/storage-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 15,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/storage-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 13,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/storage-set",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 14,
+      "status": "staged-ts"
+    },
+    {
+      "method": "extension/update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Extensions/ExtensionModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 14,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/glob",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 18,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/grep",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 20,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/list-dir",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 17,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/mkdir",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 13,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/move",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 15,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/read-document",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/read-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/read-file-binary",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/read-text-file-lines",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 16,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/search-files",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 19,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/stat-path",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 12,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/write-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "fs/write-file-binary",
+      "source": "sidecars/Ola.Native.Worker/Modules/File/FileModule.cs",
+      "line": 11,
+      "status": "staged-ts"
+    },
+    {
+      "method": "git/exec",
+      "source": "sidecars/Ola.Native.Worker/Modules/Git/GitModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "git/exec-local",
+      "source": "sidecars/Ola.Native.Worker/Modules/Git/GitModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "git/query",
+      "source": "sidecars/Ola.Native.Worker/Modules/Git/GitModule.cs",
+      "line": 11,
+      "status": "staged-ts"
+    },
+    {
+      "method": "git/query-local",
+      "source": "sidecars/Ola.Native.Worker/Modules/Git/GitModule.cs",
+      "line": 12,
+      "status": "legacy"
+    },
+    {
+      "method": "git/scan-repositories",
+      "source": "sidecars/Ola.Native.Worker/Modules/Git/GitModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "git/status-detailed",
+      "source": "sidecars/Ola.Native.Worker/Modules/Git/GitModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "initialize",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "mcp/config-add",
+      "source": "sidecars/Ola.Native.Worker/Modules/Mcp/McpConfigModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "mcp/config-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Mcp/McpConfigModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "mcp/config-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Mcp/McpConfigModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "mcp/config-remove",
+      "source": "sidecars/Ola.Native.Worker/Modules/Mcp/McpConfigModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "mcp/config-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Mcp/McpConfigModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "openai-audio/speech",
+      "source": "sidecars/Ola.Native.Worker/Modules/OpenAIAudio/OpenAIAudioModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "openai-audio/transcribe",
+      "source": "sidecars/Ola.Native.Worker/Modules/OpenAIAudio/OpenAIAudioModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "openai-images/generate",
+      "source": "sidecars/Ola.Native.Worker/Modules/OpenAIImages/OpenAIImagesModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "ping",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "prompts/ensure",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "prompts/list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "prompts/load",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "runtime/jobs-cancel",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 11,
+      "status": "staged-ts"
+    },
+    {
+      "method": "runtime/jobs-events",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 12,
+      "status": "legacy"
+    },
+    {
+      "method": "runtime/jobs-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 13,
+      "status": "legacy"
+    },
+    {
+      "method": "runtime/jobs-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "runtime/jobs-reap-stale",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 14,
+      "status": "legacy"
+    },
+    {
+      "method": "runtime/jobs-state",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "runtime/jobs-submit",
+      "source": "sidecars/Ola.Native.Worker/Modules/RuntimeJobs/RuntimeJobModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "settings/delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Settings/SettingsModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "settings/get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Settings/SettingsModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "settings/read",
+      "source": "sidecars/Ola.Native.Worker/Modules/Settings/SettingsModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "settings/set",
+      "source": "sidecars/Ola.Native.Worker/Modules/Settings/SettingsModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "settings/write",
+      "source": "sidecars/Ola.Native.Worker/Modules/Settings/SettingsModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "shell/abort",
+      "source": "sidecars/Ola.Native.Worker/Modules/Shell/ShellModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "shell/exec",
+      "source": "sidecars/Ola.Native.Worker/Modules/Shell/ShellModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "shutdown",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "skills/add-from-folder",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 15,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/cleanup-temp",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 20,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 13,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/download-remote",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 19,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/ensure-builtin",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/ensure-builtins",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "skills/list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/list-files",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 12,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/load",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/market-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 18,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/read",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 11,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/resolve-path",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 14,
+      "status": "legacy"
+    },
+    {
+      "method": "skills/save",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 16,
+      "status": "staged-ts"
+    },
+    {
+      "method": "skills/scan",
+      "source": "sidecars/Ola.Native.Worker/Modules/Skills/SkillModule.cs",
+      "line": 17,
+      "status": "staged-ts"
+    },
+    {
+      "method": "souls/builtin-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 23,
+      "status": "staged-ts"
+    },
+    {
+      "method": "souls/categories",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 25,
+      "status": "staged-ts"
+    },
+    {
+      "method": "souls/download-remote",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 26,
+      "status": "staged-ts"
+    },
+    {
+      "method": "souls/get-target-paths",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 27,
+      "status": "staged-ts"
+    },
+    {
+      "method": "souls/install",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 28,
+      "status": "staged-ts"
+    },
+    {
+      "method": "souls/market-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/UserContent/UserContentModule.cs",
+      "line": 24,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/config-connection-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 17,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-connection-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 19,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-connection-get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 16,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-connection-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 18,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-connections-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 15,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-export",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 21,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-group-create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 12,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-group-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 14,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-group-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 13,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-groups-list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-openssh-host",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 20,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-snapshot",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/config-write-snapshot",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 10,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/exec",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 41,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-download",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 24,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-download-abort",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 25,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-glob",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 47,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-grep",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 48,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-home-dir",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 31,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-list-dir",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 39,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-mkdir",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 40,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-move",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 42,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-read-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 34,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-read-file-binary",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 37,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-read-text-file-lines",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 35,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-remote-copy-abort",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 30,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-remote-copy-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 29,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/fs-resolve-path",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 32,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-stat-path",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 33,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-transfer-download",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 45,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-transfer-remote-copy",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 46,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-transfer-scan",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 43,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/fs-transfer-upload",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 44,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-upload-abort",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 28,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-upload-directory",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 27,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-upload-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 26,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-write-file",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 36,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/fs-write-file-binary",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 38,
+      "status": "staged-ts"
+    },
+    {
+      "method": "ssh/import-apply",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 23,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/import-preview",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 22,
+      "status": "legacy"
+    },
+    {
+      "method": "ssh/test-connection",
+      "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "sync/files-apply",
+      "source": "sidecars/Ola.Native.Worker/Modules/Sync/SyncModule.cs",
+      "line": 8,
+      "status": "legacy"
+    },
+    {
+      "method": "sync/files-capture",
+      "source": "sidecars/Ola.Native.Worker/Modules/Sync/SyncModule.cs",
+      "line": 7,
+      "status": "legacy"
+    },
+    {
+      "method": "sync/files-delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/Sync/SyncModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "team-runtime/create",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 25,
+      "status": "staged-ts"
+    },
+    {
+      "method": "team-runtime/delete",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 26,
+      "status": "staged-ts"
+    },
+    {
+      "method": "team-runtime/manifest-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 30,
+      "status": "legacy"
+    },
+    {
+      "method": "team-runtime/member-update",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 29,
+      "status": "legacy"
+    },
+    {
+      "method": "team-runtime/message-append",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 27,
+      "status": "legacy"
+    },
+    {
+      "method": "team-runtime/messages-consume",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 31,
+      "status": "legacy"
+    },
+    {
+      "method": "team-runtime/snapshot",
+      "source": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
+      "line": 28,
+      "status": "staged-ts"
+    },
+    {
+      "method": "terminal/create",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "terminal/get",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 12,
+      "status": "staged-ts"
+    },
+    {
+      "method": "terminal/input",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "terminal/kill",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 10,
+      "status": "staged-ts"
+    },
+    {
+      "method": "terminal/kill-all",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 11,
+      "status": "legacy"
+    },
+    {
+      "method": "terminal/list",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 13,
+      "status": "staged-ts"
+    },
+    {
+      "method": "terminal/resize",
+      "source": "sidecars/Ola.Native.Worker/Modules/Terminal/TerminalModule.cs",
+      "line": 9,
+      "status": "staged-ts"
+    },
+    {
+      "method": "web/fetch",
+      "source": "sidecars/Ola.Native.Worker/Modules/Web/WebModule.cs",
+      "line": 8,
+      "status": "staged-ts"
+    },
+    {
+      "method": "web/search",
+      "source": "sidecars/Ola.Native.Worker/Modules/Web/WebModule.cs",
+      "line": 7,
+      "status": "staged-ts"
+    },
+    {
+      "method": "worker/memory",
+      "source": "sidecars/Ola.Native.Worker/Modules/SystemModule.cs",
+      "line": 17,
+      "status": "staged-ts"
+    },
+    {
+      "method": "worker/ping",
+      "source": "sidecars/Ola.Native.Worker/Modules/SystemModule.cs",
+      "line": 9,
+      "status": "legacy"
+    },
+    {
+      "method": "worker/routes",
+      "source": "sidecars/Ola.Native.Worker/Modules/SystemModule.cs",
+      "line": 13,
+      "status": "legacy"
+    }
+  ],
+  "codegraphLanguages": [
+    {
+      "id": "typescript",
+      "library": "tree-sitter-typescript",
+      "status": "legacy"
+    },
+    {
+      "id": "tsx",
+      "library": "tree-sitter-tsx",
+      "status": "legacy"
+    },
+    {
+      "id": "javascript",
+      "library": "tree-sitter-javascript",
+      "status": "legacy"
+    },
+    {
+      "id": "jsx",
+      "library": "tree-sitter-javascript",
+      "status": "legacy"
+    },
+    {
+      "id": "python",
+      "library": "tree-sitter-python",
+      "status": "legacy"
+    },
+    {
+      "id": "go",
+      "library": "tree-sitter-go",
+      "status": "legacy"
+    },
+    {
+      "id": "java",
+      "library": "tree-sitter-java",
+      "status": "legacy"
+    },
+    {
+      "id": "csharp",
+      "library": "tree-sitter-c-sharp",
+      "status": "legacy"
+    },
+    {
+      "id": "rust",
+      "library": "tree-sitter-rust",
+      "status": "legacy"
+    },
+    {
+      "id": "c",
+      "library": "tree-sitter-c",
+      "status": "legacy"
+    },
+    {
+      "id": "cpp",
+      "library": "tree-sitter-cpp",
+      "status": "legacy"
+    },
+    {
+      "id": "php",
+      "library": "tree-sitter-php",
+      "status": "legacy"
+    },
+    {
+      "id": "ruby",
+      "library": "tree-sitter-ruby",
+      "status": "legacy"
+    },
+    {
+      "id": "scala",
+      "library": "tree-sitter-scala",
+      "status": "legacy"
+    },
+    {
+      "id": "bash",
+      "library": "tree-sitter-bash",
+      "status": "legacy"
+    },
+    {
+      "id": "haskell",
+      "library": "tree-sitter-haskell",
+      "status": "legacy"
+    },
+    {
+      "id": "julia",
+      "library": "tree-sitter-julia",
+      "status": "legacy"
+    },
+    {
+      "id": "razor",
+      "library": "tree-sitter-razor",
+      "status": "legacy"
+    }
+  ]
+}

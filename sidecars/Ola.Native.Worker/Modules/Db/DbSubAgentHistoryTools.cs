@@ -10,6 +10,7 @@ internal static class DbSubAgentHistoryTools
             var sessionId = RequireString(parameters, "sessionId");
             var limit = Math.Clamp(JsonHelpers.GetInt(parameters, "limit", 100), 1, 500);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            RequireSessionWorkspace(connection, null, parameters, sessionId);
             using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT id, session_id, sub_agent_id, tool_use_id, name, status,
@@ -39,6 +40,7 @@ internal static class DbSubAgentHistoryTools
             var limit = Math.Clamp(JsonHelpers.GetInt(parameters, "limit", 50), 1, 200);
             var offset = Math.Max(0, JsonHelpers.GetInt(parameters, "offset", 0));
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            RequireSessionWorkspace(connection, null, parameters, sessionId);
             using var command = connection.CreateCommand();
             command.CommandText = """
                 SELECT id, session_id, sub_agent_id, tool_use_id, name, status,
@@ -70,6 +72,8 @@ internal static class DbSubAgentHistoryTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var sessionId = RequireString(parameters, "sessionId");
+            RequireSessionWorkspace(connection, transaction, parameters, sessionId);
             var changed = Upsert(connection, transaction, parameters);
             transaction.Commit();
             return Mutation(changed);
@@ -89,6 +93,7 @@ internal static class DbSubAgentHistoryTools
                 throw new InvalidOperationException("items must be an array");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireSessionWorkspace(connection, transaction, parameters, sessionId);
             DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -185,6 +190,21 @@ internal static class DbSubAgentHistoryTools
             new DbSql.SqlParam("$updatedAt", JsonHelpers.GetLong(item, "updatedAt", 0)),
             new DbSql.SqlParam("$sortOrder", JsonHelpers.GetInt(item, "sortOrder", 0)),
             new DbSql.SqlParam("$snapshotJson", RequireString(item, "snapshotJson")));
+    }
+
+    private static void RequireSessionWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        JsonElement parameters,
+        string sessionId)
+    {
+        var workspaceId = RequireString(parameters, "workspaceId");
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT workspace_id FROM sessions WHERE id = $sessionId LIMIT 1";
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        if (command.ExecuteScalar() is not string owner || owner != workspaceId)
+            throw new InvalidOperationException("Sub-agent history session belongs to another workspace or does not exist.");
     }
 
     private static List<SubAgentHistoryRow> ReadRows(SqliteCommand command, bool includeSnapshot)

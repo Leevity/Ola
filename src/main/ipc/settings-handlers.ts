@@ -1,5 +1,5 @@
 import { session } from 'electron'
-import { getNativeWorker } from '../lib/native-worker'
+import { SettingsStore } from '../settings/settings-store'
 import { registerMessagePackHandler } from './messagepack-handler'
 import {
   sanitizePermissionPolicy,
@@ -7,24 +7,14 @@ import {
   type PermissionPolicySnapshot
 } from '../../shared/permission-policy'
 
-const SETTINGS_NATIVE_TIMEOUT_MS = 60_000
-
-type MutationResult = {
-  success: boolean
-  error?: string | null
-}
-
 let settingsCache: Record<string, unknown> | null = null
 let settingsHydrated = false
 let hydratePromise: Promise<Record<string, unknown>> | null = null
 let pendingWrite: Promise<unknown> | null = null
+const settingsStore = new SettingsStore()
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
-async function nativeSettingsRequest<T>(method: string, params?: unknown): Promise<T> {
-  return await getNativeWorker().request<T>(method, params ?? {}, SETTINGS_NATIVE_TIMEOUT_MS)
 }
 
 export async function initializeSettingsCache(): Promise<Record<string, unknown>> {
@@ -37,7 +27,8 @@ export async function initializeSettingsCache(): Promise<Record<string, unknown>
 export async function reloadSettingsCache(): Promise<Record<string, unknown>> {
   if (hydratePromise) return hydratePromise
 
-  hydratePromise = nativeSettingsRequest<Record<string, unknown>>('settings/read')
+  hydratePromise = settingsStore
+    .read()
     .then((settings) => {
       settingsCache = isPlainRecord(settings) ? settings : {}
       settingsHydrated = true
@@ -45,7 +36,7 @@ export async function reloadSettingsCache(): Promise<Record<string, unknown>> {
     })
     .catch((err) => {
       if (!settingsCache) settingsCache = {}
-      console.error('[Settings] Native read error:', err)
+      console.error('[Settings] TS read error:', err)
       return settingsCache
     })
     .finally(() => {
@@ -86,6 +77,33 @@ export function decodePersistedStoreState<T>(raw: unknown): T | null {
 export function readPersistedSettingsState(): Record<string, unknown> {
   const root = readSettings()
   return decodePersistedStoreState<Record<string, unknown>>(root['ola-settings']) ?? {}
+}
+
+/**
+ * Read the one legacy secret that was historically persisted with the
+ * renderer's Zustand settings. New code must use the encrypted Main store;
+ * this is intentionally only a migration seam.
+ */
+export async function readLegacyWebSearchApiKey(): Promise<string> {
+  await initializeSettingsCache()
+  const value = readPersistedSettingsState().webSearchApiKey
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/** Remove the legacy plaintext value after it has been safely imported. */
+export async function clearLegacyWebSearchApiKey(): Promise<void> {
+  const root = await initializeSettingsCache()
+  const persisted = decodePersistedStoreState<Record<string, unknown>>(root['ola-settings'])
+  if (!persisted || !Object.prototype.hasOwnProperty.call(persisted, 'webSearchApiKey')) return
+
+  const nextState = { ...persisted }
+  delete nextState.webSearchApiKey
+  const raw = root['ola-settings']
+  const nextPersisted =
+    isPlainRecord(raw) && Object.prototype.hasOwnProperty.call(raw, 'state')
+      ? { ...raw, state: nextState }
+      : nextState
+  await setSettingsValue('ola-settings', nextPersisted)
 }
 
 export function readShellEnvironmentVariablesText(): string {
@@ -140,10 +158,11 @@ export async function setSettingsValue(key: string, value: unknown): Promise<voi
   }
   settingsCache = settings
 
-  pendingWrite = nativeSettingsRequest<MutationResult>('settings/set', { key, value })
+  pendingWrite = settingsStore
+    .set(key, value)
     .then((result) => {
       if (!result.success) {
-        throw new Error(result.error || 'Native settings set failed')
+        throw new Error(result.error || 'Settings set failed')
       }
     })
     .finally(() => {

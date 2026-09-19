@@ -33,5 +33,6 @@ export interface SubAgentHistoryMutation {
 
 export interface SubAgentHistoryMigrationStatus {
   applied: boolean
-  appliedAt: number | null
+  /** Native omits this field when no marker exists; the IPC fallback may return null. */
+  appliedAt?: number | null
 }

@@ -1,11 +1,11 @@
 import { toolRegistry } from '../agent/tool-registry'
-import { encodeStructuredToolResult } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import { useTaskStore, type TaskStatus } from '@renderer/stores/task-store'
 
-function encodeNativeOnlyTaskResult(toolName: string): string {
-  return encodeStructuredToolResult({
-    error: `${toolName} execution has migrated to .NET Native Worker.`
-  })
+function sessionIdFor(ctx: Parameters<ToolHandler['execute']>[1]): string | null {
+  const sessionId = ctx.sessionId?.trim()
+  return sessionId || null
 }
 
 // ── TaskCreate ──
@@ -36,7 +36,32 @@ const taskCreateHandler: ToolHandler = {
       required: ['title']
     }
   },
-  execute: async () => encodeNativeOnlyTaskResult('TaskCreate'),
+  execute: async (input, ctx) => {
+    const sessionId = sessionIdFor(ctx)
+    if (!sessionId) return encodeToolError('A session is required to create a task')
+    const title = typeof input.title === 'string' ? input.title.trim() : ''
+    if (!title) return encodeToolError('title is required')
+    const now = Date.now()
+    const task = useTaskStore.getState().addTask({
+      id: crypto.randomUUID(),
+      sessionId,
+      subject: title,
+      description: title,
+      ...(typeof input.activeForm === 'string' && input.activeForm.trim()
+        ? { activeForm: input.activeForm.trim() }
+        : {}),
+      status: 'pending',
+      owner: null,
+      blocks: [],
+      blockedBy: [],
+      ...(input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+        ? { metadata: input.metadata as Record<string, unknown> }
+        : {}),
+      createdAt: now,
+      updatedAt: now
+    })
+    return encodeStructuredToolResult({ task: { ...task } })
+  },
   requiresApproval: () => false
 }
 
@@ -58,7 +83,15 @@ const taskGetHandler: ToolHandler = {
       required: ['taskId']
     }
   },
-  execute: async () => encodeNativeOnlyTaskResult('TaskGet'),
+  execute: async (input, ctx) => {
+    const sessionId = sessionIdFor(ctx)
+    if (!sessionId) return encodeToolError('A session is required to read a task')
+    const taskId = typeof input.taskId === 'string' ? input.taskId.trim() : ''
+    if (!taskId) return encodeToolError('taskId is required')
+    const task = useTaskStore.getState().getTask(taskId)
+    if (!task || task.sessionId !== sessionId) return encodeToolError('Task not found')
+    return encodeStructuredToolResult({ task: { ...task } })
+  },
   requiresApproval: () => false
 }
 
@@ -107,7 +140,52 @@ const taskUpdateHandler: ToolHandler = {
       required: ['taskId']
     }
   },
-  execute: async () => encodeNativeOnlyTaskResult('TaskUpdate'),
+  execute: async (input, ctx) => {
+    const sessionId = sessionIdFor(ctx)
+    if (!sessionId) return encodeToolError('A session is required to update a task')
+    const taskId = typeof input.taskId === 'string' ? input.taskId.trim() : ''
+    if (!taskId) return encodeToolError('taskId is required')
+    const current = useTaskStore.getState().getTask(taskId)
+    if (!current || current.sessionId !== sessionId) return encodeToolError('Task not found')
+    if (input.status === 'deleted') {
+      useTaskStore.getState().deleteTask(taskId)
+      return encodeStructuredToolResult({ success: true, deleted: taskId })
+    }
+    const statusValue = input.status
+    if (
+      statusValue !== undefined &&
+      statusValue !== 'pending' &&
+      statusValue !== 'in_progress' &&
+      statusValue !== 'in_review' &&
+      statusValue !== 'blocked' &&
+      statusValue !== 'completed'
+    )
+      return encodeToolError(`Unsupported task status: ${String(statusValue)}`)
+    const status = statusValue as TaskStatus | undefined
+    const patch = {
+      ...(typeof input.title === 'string' ? { subject: input.title.trim() } : {}),
+      ...(typeof input.activeForm === 'string' ? { activeForm: input.activeForm.trim() } : {}),
+      ...(status ? { status } : {}),
+      ...(typeof input.owner === 'string' ? { owner: input.owner } : {}),
+      ...(Array.isArray(input.addBlocks)
+        ? { blocks: input.addBlocks.filter((value): value is string => typeof value === 'string') }
+        : {}),
+      ...(Array.isArray(input.addBlockedBy)
+        ? {
+            blockedBy: input.addBlockedBy.filter(
+              (value): value is string => typeof value === 'string'
+            )
+          }
+        : {}),
+      ...(input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+        ? { metadata: input.metadata as Record<string, unknown> }
+        : {})
+    }
+    const task = useTaskStore.getState().updateTask(taskId, patch)
+    return task
+      ? encodeStructuredToolResult({ task: { ...task } })
+      : encodeToolError('Task was not updated')
+  },
   requiresApproval: () => false
 }
 
@@ -123,7 +201,12 @@ const taskListHandler: ToolHandler = {
       properties: {}
     }
   },
-  execute: async () => encodeNativeOnlyTaskResult('TaskList'),
+  execute: async (_input, ctx) => {
+    const sessionId = sessionIdFor(ctx)
+    if (!sessionId) return encodeToolError('A session is required to list tasks')
+    const tasks = useTaskStore.getState().getTasksBySession(sessionId)
+    return encodeStructuredToolResult({ tasks: tasks.map((task) => ({ ...task })) })
+  },
   requiresApproval: () => false
 }
 

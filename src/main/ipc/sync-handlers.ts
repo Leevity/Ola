@@ -8,6 +8,7 @@ import type {
 import { getActiveRunJobIds } from '../cron/cron-scheduler'
 import { readSyncConfig, writeSyncConfig } from '../sync/sync-config'
 import { syncEngine } from '../sync/sync-engine'
+import { assertLegacySyncIpcOwner } from '../sync/sync-ipc-authorization'
 import { getSidecarManager } from './sidecar-manager'
 import {
   decodeMessagePackPayload,
@@ -16,6 +17,7 @@ import {
 } from '../../shared/messagepack/binary-ipc'
 
 let autoSyncTimer: ReturnType<typeof setInterval> | null = null
+let handoverQuiescing = false
 
 function normalizeRunMode(value: unknown): SyncRunMode {
   return value === 'push' || value === 'pull' || value === 'sync' ? value : 'sync'
@@ -38,7 +40,8 @@ function registerSyncMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertLegacySyncIpcOwner(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args))
   })
@@ -46,17 +49,29 @@ function registerSyncMessagePackHandler<TArgs>(
 
 export async function configureAutoSyncTimer(): Promise<void> {
   stopAutoSyncTimer()
+  if (handoverQuiescing) return
   const config = await readSyncConfig()
+  if (handoverQuiescing) return
   const provider = config.providers.find((item) => item.id === config.activeProviderId)
   if (!provider?.enabled || !provider.webdav.autoSyncEnabled) return
 
   const intervalMs = Math.max(5, provider.webdav.syncIntervalMinutes) * 60 * 1000
   autoSyncTimer = setInterval(() => {
     void (async () => {
+      if (handoverQuiescing) return
       if (await shouldDeferAutoSync()) return
+      if (handoverQuiescing) return
       await syncEngine.run('sync')
-    })()
+    })().catch((error) => {
+      console.warn('[SyncEngine] automatic run failed', error)
+    })
   }, intervalMs)
+}
+
+export async function quiesceLegacySyncForHandover(): Promise<void> {
+  handoverQuiescing = true
+  stopAutoSyncTimer()
+  await syncEngine.quiesceForHandover()
 }
 
 export function registerSyncHandlers(): void {
@@ -92,5 +107,7 @@ export function registerSyncHandlers(): void {
     }
   )
 
-  void configureAutoSyncTimer()
+  void configureAutoSyncTimer().catch((error) => {
+    console.warn('[SyncEngine] automatic timer setup failed', error)
+  })
 }

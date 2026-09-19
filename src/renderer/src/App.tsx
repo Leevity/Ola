@@ -32,6 +32,7 @@ import { useSshStore } from './stores/ssh-store'
 import { useTaskStore } from './stores/task-store'
 import { useTeamStore } from './stores/team-store'
 import { useUIStore } from './stores/ui-store'
+import { useWorkspaceStore } from './stores/workspace-store'
 import {
   registerAllTools,
   updateCanvasToolRegistration,
@@ -52,11 +53,16 @@ import { toast } from 'sonner'
 import i18n from './locales'
 import { cronEvents } from './lib/tools/cron-events'
 import { useCronStore, type CronAgentLogEntry } from './stores/cron-store'
+import { isCronWorkspaceEventFor } from './lib/cron-workspace-event'
 import { ipcClient } from './lib/ipc/ipc-client'
 import { IPC } from './lib/ipc/channels'
 import { attachRendererToolBridge } from './lib/ipc/renderer-tool-bridge'
 import { agentStream } from './lib/ipc/agent-stream-receiver'
-import { reattachActiveAgentRuns } from './lib/agent/runtime-reattach'
+import { reattachActiveAgentRuns, reattachActiveTsRuntimeRuns } from './lib/agent/runtime-reattach'
+import {
+  ensureWindowWorkspaceRegistered,
+  invalidateWindowWorkspaceRegistration
+} from './lib/window-workspace-registration'
 import { nanoid } from 'nanoid'
 import type { UnifiedMessage } from './lib/api/types'
 import { NotifyToastContainer } from './components/notify/NotifyWindow'
@@ -220,45 +226,48 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
+    const register = (workspaceId: string, refresh = false, reloadSessions = false): void => {
+      if (refresh) invalidateWindowWorkspaceRegistration()
+      void ensureWindowWorkspaceRegistered(workspaceId)
+        .then(async () => {
+          if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
+          if (reloadSessions) await useChatStore.getState().loadFromDb()
+          if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
+          void useCronStore.getState().loadJobs()
+          void useCronStore.getState().loadRuns()
+        })
+        .catch((error) => {
+          console.warn('[App] Failed to register window workspace', error)
+        })
+    }
+    register(useWorkspaceStore.getState().activeWorkspaceId)
+    return useWorkspaceStore.subscribe((state, previous) => {
+      if (state.activeWorkspaceId !== previous.activeWorkspaceId) {
+        useCronStore.getState().clearWorkspace()
+        cronLogBufferRef.current = []
+        if (cronLogFlushTimerRef.current !== null) {
+          window.clearTimeout(cronLogFlushTimerRef.current)
+          cronLogFlushTimerRef.current = null
+        }
+      }
+      if (
+        state.activeWorkspaceId !== previous.activeWorkspaceId ||
+        state.olaWorkspaces !== previous.olaWorkspaces
+      )
+        register(
+          state.activeWorkspaceId,
+          state.activeWorkspaceId === previous.activeWorkspaceId,
+          state.activeWorkspaceId !== previous.activeWorkspaceId
+        )
+    })
+  }, [])
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       const state = useRemoteAccountStore.getState()
       if (state.account && state.device) {
         void state.heartbeatDevice().catch(() => undefined)
-        void state
-          .syncModelConfig()
-          .then((result) => {
-            const model = result.model as
-              | { provider?: string; model?: string; baseUrl?: string; enabled?: boolean }
-              | undefined
-            if (!result.configured || !model?.model || model.enabled === false || !state.token)
-              return
-
-            const providerId = 'ola-account-gateway'
-            const provider = useProviderStore
-              .getState()
-              .providers.find((item) => item.id === providerId)
-            const syncedProvider = {
-              name: 'Ola 云端模型',
-              type: 'openai-chat' as const,
-              apiKey: state.token,
-              baseUrl: model.baseUrl?.trim() || `${state.apiBaseUrl}/v1`,
-              enabled: true,
-              requiresApiKey: true,
-              models: [
-                { id: model.model, name: model.model, enabled: true, category: 'chat' as const }
-              ],
-              defaultModel: model.model,
-              createdAt: provider?.createdAt ?? Date.now()
-            }
-            if (provider) {
-              useProviderStore.getState().updateProvider(providerId, syncedProvider)
-            } else {
-              useProviderStore.getState().addProvider({ id: providerId, ...syncedProvider })
-            }
-            useProviderStore.getState().setActiveProvider(providerId)
-            useProviderStore.getState().setActiveModel(model.model)
-          })
-          .catch(() => undefined)
+        void state.syncWorkspaces().catch(() => undefined)
       }
     }, 30_000)
     return () => window.clearInterval(timer)
@@ -271,6 +280,14 @@ function App(): React.JSX.Element {
         error instanceof Error ? error.message : String(error)
       )
     })
+    void reattachActiveTsRuntimeRuns(useWorkspaceStore.getState().activeWorkspaceId).catch(
+      (error) => {
+        console.warn(
+          '[App] Failed to recover active TS runtime runs',
+          error instanceof Error ? error.message : String(error)
+        )
+      }
+    )
   }, [])
 
   useEffect(() => {
@@ -303,7 +320,10 @@ function App(): React.JSX.Element {
     void (async () => {
       // The window always opens on the default home view (a fresh new-session
       // compose screen) rather than restoring the previously opened route.
-      await useChatStore.getState().loadFromDb()
+      const initialWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId
+      await ensureWindowWorkspaceRegistered(initialWorkspaceId)
+      if (useWorkspaceStore.getState().activeWorkspaceId === initialWorkspaceId)
+        await useChatStore.getState().loadFromDb()
       // Plans/goals full-table loads only feed downstream panels, not the
       // homepage first paint — load them concurrently off the critical path.
       void Promise.all([
@@ -442,7 +462,7 @@ function App(): React.JSX.Element {
     if (sessionWindowView || sshWindowView) return
     return ipcClient.on('pet:sync-event', (payload) => {
       if ((payload as { kind?: string } | null)?.kind === 'open-studio') {
-        useUIStore.getState().openSettingsPage('pet')
+        useUIStore.getState().openPetStudioPage()
       }
     })
   }, [sessionWindowView, sshWindowView])
@@ -532,7 +552,7 @@ function App(): React.JSX.Element {
     let baselineVersion = 0
 
     const init = async (): Promise<void> => {
-      await loadGlobalMemorySnapshot(ipcClient)
+      await loadGlobalMemorySnapshot(ipcClient, useWorkspaceStore.getState().activeWorkspaceId)
       const snapshot = getGlobalMemorySnapshot()
       baselineVersion = snapshot.version
       ready = true
@@ -560,15 +580,10 @@ function App(): React.JSX.Element {
     }
   }, [])
 
-  // Cron data is global: load once on mount.
-  useEffect(() => {
-    void useCronStore.getState().loadJobs()
-    void useCronStore.getState().loadRuns()
-  }, [])
-
   // Forward cron:fired IPC events to the renderer-side event bus
   useEffect(() => {
     const offFired = ipcClient.on('cron:fired', (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
       const d = data as {
         jobId: string
         sessionId?: string | null
@@ -591,6 +606,7 @@ function App(): React.JSX.Element {
     })
 
     const offRemoved = ipcClient.on('cron:job-removed', (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
       const d = data as { jobId: string; reason: string }
       cronEvents.emit({
         type: 'job_removed',
@@ -601,11 +617,13 @@ function App(): React.JSX.Element {
     })
 
     const offRunStarted = ipcClient.on('cron:run-started', (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
       const d = data as { jobId: string; runId: string }
       useCronStore.getState().setExecutionStarted(d.jobId)
     })
 
     const offRunProgress = ipcClient.on('cron:run-progress', (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
       const d = data as {
         jobId: string
         runId: string
@@ -641,6 +659,7 @@ function App(): React.JSX.Element {
     }
 
     const offRunLog = ipcClient.on('cron:run-log-appended', (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
       const d = data as {
         jobId: string
         timestamp: number
@@ -652,6 +671,7 @@ function App(): React.JSX.Element {
     })
 
     const offRunFinishedIpc = ipcClient.on('cron:run-finished', (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
       flushCronLogBuffer()
       const d = data as {
         jobId: string

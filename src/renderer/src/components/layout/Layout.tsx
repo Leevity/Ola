@@ -16,10 +16,13 @@ import { KeyboardShortcutsDialog } from '@renderer/components/settings/KeyboardS
 import { PermissionDialog } from '@renderer/components/cowork/PermissionDialog'
 import { ConversationGuideDialog } from '@renderer/components/chat/ConversationGuideDialog'
 import { SettingsPage } from '@renderer/components/settings/SettingsPage'
+import { UsagePage } from '@renderer/components/settings/UsagePage'
+import { PetStudioPage } from '@renderer/components/settings/PetStudioPage'
 import { AccountAuthPage } from '@renderer/components/account/AccountAuthPage'
 import { CommandPalette } from './CommandPalette'
 import { initializeWorkbenchRegistry } from '@renderer/lib/workbench'
 import { SessionConversationPane } from './SessionConversationPane'
+import { SessionTabStrip } from './SessionTabStrip'
 import { WorkingFolderSheet } from './WorkingFolderSheet'
 import { ErrorBoundary } from '@renderer/components/error-boundary'
 import { useUIStore, type AppMode } from '@renderer/stores/ui-store'
@@ -300,6 +303,8 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
 
   const activeSurface = useUIStore((s) => s.activeSurface)
   const settingsPageOpen = activeSurface === 'settings'
+  const usagePageOpen = activeSurface === 'usage'
+  const petStudioPageOpen = activeSurface === 'petStudio'
   const accountAuthPageOpen = activeSurface === 'account'
   const conversationGuideOpen = useUIStore((s) => s.conversationGuideOpen)
   const setConversationGuideOpen = useUIStore((s) => s.setConversationGuideOpen)
@@ -665,7 +670,8 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     handleModeChange
   ])
 
-  const showEmbeddedSidebar = leftSidebarOpen && !settingsPageOpen
+  const showEmbeddedSidebar =
+    leftSidebarOpen && !settingsPageOpen && !usagePageOpen && !petStudioPageOpen
   const mainContent = accountAuthPageOpen ? (
     <div className="h-screen overflow-hidden bg-background">
       <PageTransition
@@ -681,6 +687,18 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
         <Suspense fallback={<LazyPageFallback />}>
           <SettingsPage />
         </Suspense>
+      </PageTransition>
+    </div>
+  ) : usagePageOpen ? (
+    <div className="h-screen overflow-hidden bg-background">
+      <PageTransition key="usage-page-shell" className="h-full min-h-0 w-full overflow-hidden">
+        <UsagePage />
+      </PageTransition>
+    </div>
+  ) : petStudioPageOpen ? (
+    <div className="h-screen overflow-hidden bg-background">
+      <PageTransition key="pet-studio-page-shell" className="h-full min-h-0 w-full overflow-hidden">
+        <PetStudioPage />
       </PageTransition>
     </div>
   ) : (
@@ -703,6 +721,8 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
           showSidebarToggle={!showEmbeddedSidebar}
           insetForMacTrafficLights={!showEmbeddedSidebar}
         />
+
+        {activeSurface === 'workspace' && <SessionTabStrip />}
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
           <AnimatePresence mode="wait">

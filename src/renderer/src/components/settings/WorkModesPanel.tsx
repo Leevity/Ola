@@ -12,6 +12,11 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import {
+  SETTINGS_CARD_CLASS,
+  SETTINGS_PANEL_CLASS,
+  SettingsPageHeader
+} from './settings-primitives'
+import {
   DEFAULT_CODE_PROFILE,
   DEFAULT_WORK_PROFILE,
   type TaskProfile
@@ -89,17 +94,8 @@ export function WorkModesPanel(): React.JSX.Element {
   }
 
   return (
-    <section className="space-y-5">
-      <div>
-        <h2 className="text-lg font-semibold">
-          {t('workModes.title', { defaultValue: 'Work modes' })}
-        </h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('workModes.subtitle', {
-            defaultValue: 'Choose how Ola prioritizes everyday work and software projects.'
-          })}
-        </p>
-      </div>
+    <section className={SETTINGS_PANEL_CLASS}>
+      <SettingsPageHeader title={t('workModes.title')} description={t('workModes.subtitle')} />
 
       <div className="flex gap-1 border-b border-border/60" role="tablist">
         {(
@@ -122,35 +118,23 @@ export function WorkModesPanel(): React.JSX.Element {
             }`}
           >
             <Icon className="size-4" />
-            {t(key, {
-              defaultValue: value === 'work' ? 'Work' : value === 'code' ? 'Code' : 'Shared'
-            })}
+            {t(key)}
           </button>
         ))}
       </div>
 
       {activeTab === 'shared' ? (
         <div className="space-y-4">
-          <div className="rounded-lg border border-border/60 bg-background/50 p-4">
-            <p className="text-sm font-medium">
-              {t('workModes.shared.securityTitle', { defaultValue: 'Security stays global' })}
-            </p>
+          <div className={SETTINGS_CARD_CLASS}>
+            <p className="text-sm font-medium">{t('workModes.shared.securityTitle')}</p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              {t('workModes.shared.securityDesc', {
-                defaultValue:
-                  'Permissions, approvals, credentials, MCP, Extensions and desktop automation are shared by both profiles.'
-              })}
+              {t('workModes.shared.securityDesc')}
             </p>
           </div>
-          <div className="rounded-lg border border-border/60 bg-background/50 p-4">
-            <p className="text-sm font-medium">
-              {t('workModes.shared.defaultTitle', { defaultValue: 'Default profile' })}
-            </p>
+          <div className={SETTINGS_CARD_CLASS}>
+            <p className="text-sm font-medium">{t('workModes.shared.defaultTitle')}</p>
             <p className="mt-1 text-xs text-muted-foreground">
-              {t('workModes.shared.defaultDesc', {
-                defaultValue:
-                  'New conversations start with this profile. You can override it before sending.'
-              })}
+              {t('workModes.shared.defaultDesc')}
             </p>
             <div className="mt-3 flex gap-2">
               {(['work', 'code'] as const).map((value) => (
@@ -165,36 +149,28 @@ export function WorkModesPanel(): React.JSX.Element {
                       : 'border-border/60 text-muted-foreground hover:text-foreground'
                   }`}
                 >
-                  {value === 'work'
-                    ? t('workModes.work', { defaultValue: 'Work' })
-                    : t('workModes.code', { defaultValue: 'Code' })}
+                  {value === 'work' ? t('workModes.work') : t('workModes.code')}
                 </button>
               ))}
             </div>
           </div>
         </div>
       ) : (
-        <div className="rounded-lg border border-border/60 bg-background/50 px-4">
+        <div className={SETTINGS_CARD_CLASS}>
           <div className="grid gap-4 border-b border-border/50 py-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor={`${activeTab}-main-model`}>
-                {t('workModes.mainModel', { defaultValue: 'Main model' })}
+                {t('workModes.mainModel')}
               </label>
               <Select
                 value={profileModelValue(profile.mainProviderId, profile.mainModelId)}
                 onValueChange={(value) => updateProfileModel(activeTab, 'main', value)}
               >
                 <SelectTrigger id={`${activeTab}-main-model`}>
-                  <SelectValue
-                    placeholder={t('workModes.inheritModel', {
-                      defaultValue: 'Inherit global model'
-                    })}
-                  />
+                  <SelectValue placeholder={t('workModes.inheritModel')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="inherit">
-                    {t('workModes.inheritModel', { defaultValue: 'Inherit global model' })}
-                  </SelectItem>
+                  <SelectItem value="inherit">{t('workModes.inheritModel')}</SelectItem>
                   {modelOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -205,23 +181,17 @@ export function WorkModesPanel(): React.JSX.Element {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium" htmlFor={`${activeTab}-fast-model`}>
-                {t('workModes.fastModel', { defaultValue: 'Fast model' })}
+                {t('workModes.fastModel')}
               </label>
               <Select
                 value={profileModelValue(profile.fastProviderId, profile.fastModelId)}
                 onValueChange={(value) => updateProfileModel(activeTab, 'fast', value)}
               >
                 <SelectTrigger id={`${activeTab}-fast-model`}>
-                  <SelectValue
-                    placeholder={t('workModes.inheritFastModel', {
-                      defaultValue: 'Inherit global fast model'
-                    })}
-                  />
+                  <SelectValue placeholder={t('workModes.inheritFastModel')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="inherit">
-                    {t('workModes.inheritFastModel', { defaultValue: 'Inherit global fast model' })}
-                  </SelectItem>
+                  <SelectItem value="inherit">{t('workModes.inheritFastModel')}</SelectItem>
                   {modelOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -232,48 +202,35 @@ export function WorkModesPanel(): React.JSX.Element {
             </div>
           </div>
           <SettingToggle
-            label={t('workModes.autoSummarize', { defaultValue: 'Generate a structured result' })}
-            description={t('workModes.autoSummarizeDesc', {
-              defaultValue:
-                'After tool work, summarize what changed, what was verified and what remains.'
-            })}
+            label={t('workModes.autoSummarize')}
+            description={t('workModes.autoSummarizeDesc')}
             checked={profile.autoSummarize}
             onCheckedChange={(checked) => updateProfile(activeTab, { autoSummarize: checked })}
           />
           <SettingToggle
-            label={t('workModes.preferBrowser', { defaultValue: 'Prioritize browser actions' })}
-            description={t('workModes.preferBrowserDesc', {
-              defaultValue:
-                'Place browser and desktop research capabilities near the top of the tool picker.'
-            })}
+            label={t('workModes.preferBrowser')}
+            description={t('workModes.preferBrowserDesc')}
             checked={profile.preferBrowser}
             onCheckedChange={(checked) => updateProfile(activeTab, { preferBrowser: checked })}
             disabled={activeTab === 'code'}
           />
           <SettingToggle
-            label={t('workModes.preferWebSearch', { defaultValue: 'Prioritize web research' })}
-            description={t('workModes.preferWebSearchDesc', {
-              defaultValue: 'Prefer search and source gathering for research-oriented tasks.'
-            })}
+            label={t('workModes.preferWebSearch')}
+            description={t('workModes.preferWebSearchDesc')}
             checked={profile.preferWebSearch}
             onCheckedChange={(checked) => updateProfile(activeTab, { preferWebSearch: checked })}
             disabled={activeTab === 'code'}
           />
           <SettingToggle
-            label={t('workModes.autoIndex', { defaultValue: 'Keep project intelligence ready' })}
-            description={t('workModes.autoIndexDesc', {
-              defaultValue: 'Prefer CodeGraph and Wiki indexing when a project is selected.'
-            })}
+            label={t('workModes.autoIndex')}
+            description={t('workModes.autoIndexDesc')}
             checked={profile.autoIndex}
             onCheckedChange={(checked) => updateProfile(activeTab, { autoIndex: checked })}
             disabled={activeTab === 'work'}
           />
           <SettingToggle
-            label={t('workModes.allowShell', { defaultValue: 'Show shell capabilities' })}
-            description={t('workModes.allowShellDesc', {
-              defaultValue:
-                'Expose terminal and command tools as preferred Code capabilities; approvals still apply.'
-            })}
+            label={t('workModes.allowShell')}
+            description={t('workModes.allowShellDesc')}
             checked={profile.allowShell}
             onCheckedChange={(checked) => updateProfile(activeTab, { allowShell: checked })}
             disabled={activeTab === 'work'}
@@ -282,90 +239,73 @@ export function WorkModesPanel(): React.JSX.Element {
             <div className="grid gap-4 border-t border-border/50 py-4 sm:grid-cols-2">
               <ProfileSelect
                 id="code-shell-type"
-                label={t('workModes.shellType', { defaultValue: 'Shell type' })}
+                label={t('workModes.shellType')}
                 value={profile.shellType ?? 'default'}
                 onValueChange={(value) => updateProfile(activeTab, { shellType: value })}
                 options={[
-                  ['default', t('workModes.shellDefault', { defaultValue: 'System default' })],
+                  ['default', t('workModes.shellDefault')],
                   ['powershell', 'PowerShell'],
                   ['bash', 'Bash']
                 ]}
               />
               <ProfileSelect
                 id="code-git-policy"
-                label={t('workModes.gitPolicy', { defaultValue: 'Git policy' })}
+                label={t('workModes.gitPolicy')}
                 value={profile.gitPolicy ?? 'ask-before-write'}
                 onValueChange={(value) => updateProfile(activeTab, { gitPolicy: value })}
                 options={[
-                  ['inspect-only', t('workModes.gitInspect', { defaultValue: 'Inspect only' })],
-                  ['ask-before-write', t('workModes.gitAsk', { defaultValue: 'Ask before write' })],
-                  [
-                    'allow-with-approval',
-                    t('workModes.gitApproval', { defaultValue: 'Allow with approval' })
-                  ]
+                  ['inspect-only', t('workModes.gitInspect')],
+                  ['ask-before-write', t('workModes.gitAsk')],
+                  ['allow-with-approval', t('workModes.gitApproval')]
                 ]}
               />
               <ProfileSelect
                 id="code-verification-policy"
-                label={t('workModes.verificationPolicy', { defaultValue: 'Verification policy' })}
+                label={t('workModes.verificationPolicy')}
                 value={profile.verificationPolicy ?? 'tests-and-build'}
                 onValueChange={(value) => updateProfile(activeTab, { verificationPolicy: value })}
                 options={[
-                  [
-                    'none',
-                    t('workModes.verifyNone', { defaultValue: 'No automatic verification' })
-                  ],
-                  [
-                    'lint-and-typecheck',
-                    t('workModes.verifyStatic', { defaultValue: 'Lint and typecheck' })
-                  ],
-                  [
-                    'tests-and-build',
-                    t('workModes.verifyFull', { defaultValue: 'Tests and build' })
-                  ]
+                  ['none', t('workModes.verifyNone')],
+                  ['lint-and-typecheck', t('workModes.verifyStatic')],
+                  ['tests-and-build', t('workModes.verifyFull')]
                 ]}
               />
               <ProfileSelect
                 id="code-diff-style"
-                label={t('workModes.diffStyle', { defaultValue: 'Diff display' })}
+                label={t('workModes.diffStyle')}
                 value={profile.diffStyle ?? 'side-panel'}
                 onValueChange={(value) => updateProfile(activeTab, { diffStyle: value })}
                 options={[
-                  ['inline', t('workModes.diffInline', { defaultValue: 'Inline in conversation' })],
-                  [
-                    'side-panel',
-                    t('workModes.diffSidePanel', { defaultValue: 'Open in side panel' })
-                  ]
+                  ['inline', t('workModes.diffInline')],
+                  ['side-panel', t('workModes.diffSidePanel')]
                 ]}
               />
               <ProfileSelect
                 id="code-file-approval"
-                label={t('workModes.fileApproval', { defaultValue: 'File approval' })}
+                label={t('workModes.fileApproval')}
                 value={profile.fileApprovalPolicy ?? 'ask-on-risk'}
                 onValueChange={(value) => updateProfile(activeTab, { fileApprovalPolicy: value })}
                 options={[
-                  ['always-ask', t('workModes.approvalAlways', { defaultValue: 'Always ask' })],
-                  ['ask-on-risk', t('workModes.approvalRisk', { defaultValue: 'Ask on risk' })],
-                  [
-                    'use-global',
-                    t('workModes.approvalGlobal', { defaultValue: 'Use global policy' })
-                  ]
+                  ['always-ask', t('workModes.approvalAlways')],
+                  ['ask-on-risk', t('workModes.approvalRisk')],
+                  ['use-global', t('workModes.approvalGlobal')]
                 ]}
               />
               <SettingToggle
-                label={t('workModes.useTeams', { defaultValue: 'Prefer Team delegation' })}
-                description={t('workModes.useTeamsDesc', {
-                  defaultValue:
-                    'Suggest sub-agents and Team workflows for larger engineering tasks.'
-                })}
+                label={t('workModes.useTeams')}
+                description={t('workModes.useTeamsDesc')}
                 checked={profile.useTeams ?? false}
                 onCheckedChange={(checked) => updateProfile(activeTab, { useTeams: checked })}
               />
             </div>
           )}
           <div className="border-t border-border/50 py-4 text-xs text-muted-foreground">
-            {t('workModes.defaultsHint', {
-              defaultValue: `Defaults: ${profileDefaults.defaultSessionMode === 'chat' ? 'starts with conversation' : 'starts with execution'}. Profile changes apply to new conversations.`
+            {t('workModes.defaultsDescription', {
+              mode: t(
+                profileDefaults.defaultSessionMode === 'chat'
+                  ? 'workModes.defaultsChat'
+                  : 'workModes.defaultsExecution'
+              )
             })}
           </div>
         </div>

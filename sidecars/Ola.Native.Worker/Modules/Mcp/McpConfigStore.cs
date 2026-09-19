@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 
 internal static class McpConfigStore
 {
-    private const string DataDirectoryName = ".ola";
     private const string ConfigFileName = "mcp-servers.json";
     private static readonly object Sync = new();
     private static readonly JsonSerializerOptions WriteOptions = new()
@@ -164,10 +163,7 @@ internal static class McpConfigStore
 
     private static string GetConfigPath()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            DataDirectoryName,
-            ConfigFileName);
+        return Path.Combine(OlaDataRoot.DirectoryPath, ConfigFileName);
     }
 
     private static JsonNode? CloneElement(JsonElement element)

@@ -440,7 +440,10 @@ async function main() {
     assert(headTailBody.includes('plain message 0'), 'request context omitted DB head task')
     assert(headTailBody.includes('plain message 79'), 'request context omitted DB tail')
     assert(!headTailBody.includes('plain message 10'), 'request context leaked middle history')
-    await client.request('agent/cancel', { runId: 'head-tail-run' }).catch(() => {})
+    assert(
+      (await client.request('agent/cancel', { runId: 'head-tail-run' })).cancelled,
+      'head-tail run cancellation failed'
+    )
 
     const directDebugPromise = waitForRequestDebug(client, 'direct-bounded-run')
     await client.request('agent/run', {
@@ -483,7 +486,10 @@ async function main() {
     )
     assert(directBody.includes('direct renderer bounded task context'), 'direct messages omitted')
     assert(!directBody.includes('plain message 79'), 'direct messages were replaced by DB context')
-    await client.request('agent/cancel', { runId: 'direct-bounded-run' }).catch(() => {})
+    assert(
+      (await client.request('agent/cancel', { runId: 'direct-bounded-run' })).cancelled,
+      'direct bounded run cancellation failed'
+    )
 
     const insert = await client.request('db/messages-insert-artifacts', {
       dbPath,
@@ -580,7 +586,10 @@ async function main() {
       'request context leaked old pre-summary history'
     )
 
-    await client.request('agent/cancel', { runId: 'windowing-run' }).catch(() => {})
+    assert(
+      (await client.request('agent/cancel', { runId: 'windowing-run' })).cancelled,
+      'windowing run cancellation failed'
+    )
     console.log('message-windowing verification passed')
   } finally {
     client?.close()

@@ -1,3 +1,4 @@
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useState, useRef, useCallback, useMemo, useEffect, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { formatTokens, getBillableTotalTokens } from '@renderer/lib/format-tokens'
@@ -173,19 +174,22 @@ function deriveProjectNameFromFolder(folderPath?: string | null): string {
 
 export function SessionListPanel(): React.JSX.Element {
   const { t } = useTranslation('layout')
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const projectsRaw = useChatStore((s) => s.projects)
   const projects = useMemo<ProjectListItem[]>(
     () =>
-      projectsRaw.map((project) => ({
-        id: project.id,
-        name: project.name,
-        updatedAt: project.updatedAt,
-        workingFolder: project.workingFolder,
-        sshConnectionId: project.sshConnectionId,
-        pluginId: project.pluginId,
-        pinned: project.pinned
-      })),
-    [projectsRaw]
+      projectsRaw
+        .filter((project) => (project.workspaceId ?? 'local-personal') === workspaceId)
+        .map((project) => ({
+          id: project.id,
+          name: project.name,
+          updatedAt: project.updatedAt,
+          workingFolder: project.workingFolder,
+          sshConnectionId: project.sshConnectionId,
+          pluginId: project.pluginId,
+          pinned: project.pinned
+        })),
+    [projectsRaw, workspaceId]
   )
   const sessionDigest = useChatStore((s) =>
     s.sessions
@@ -208,21 +212,24 @@ export function SessionListPanel(): React.JSX.Element {
   )
   const sessions = useMemo<SessionListItem[]>(() => {
     void sessionDigest
-    return useChatStore.getState().sessions.map((session) => ({
-      id: session.id,
-      title: session.title,
-      icon: session.icon,
-      mode: session.mode,
-      taskProfile: session.taskProfile,
-      taskProfileLocked: session.taskProfileLocked,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-      pinned: session.pinned,
-      messageCount: session.messageCount,
-      pluginId: session.pluginId,
-      projectId: session.projectId
-    }))
-  }, [sessionDigest])
+    return useChatStore
+      .getState()
+      .sessions.filter((session) => (session.workspaceId ?? 'local-personal') === workspaceId)
+      .map((session) => ({
+        id: session.id,
+        title: session.title,
+        icon: session.icon,
+        mode: session.mode,
+        taskProfile: session.taskProfile,
+        taskProfileLocked: session.taskProfileLocked,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+        pinned: session.pinned,
+        messageCount: session.messageCount,
+        pluginId: session.pluginId,
+        projectId: session.projectId
+      }))
+  }, [sessionDigest, workspaceId])
   const activeProjectId = useChatStore((s) => s.activeProjectId)
   const activeSessionId = useChatStore((s) => s.activeSessionId)
   const streamingSessionIdsSig = useChatStore((s) =>
@@ -926,7 +933,8 @@ export function SessionListPanel(): React.JSX.Element {
           const rows = await invokeMessagePackBinary<{ session_id: string; snippet: string }[]>(
             DB_MESSAGES_SEARCH_CONTENT_MSGPACK_CHANNEL,
             {
-              query: searchQuery
+              query: searchQuery,
+              workspaceId
             }
           )
           if (cancelled) return
@@ -947,7 +955,7 @@ export function SessionListPanel(): React.JSX.Element {
       cancelled = true
       clearTimeout(handle)
     }
-  }, [searchQuery])
+  }, [searchQuery, workspaceId])
 
   const filteredSessions = searchQuery
     ? sortedSessions.filter((session) => {

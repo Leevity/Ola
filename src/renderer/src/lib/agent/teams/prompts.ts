@@ -35,7 +35,7 @@ export function buildLeadCoordinatorPrompt(team: ActiveTeam): string {
   }
 
   if (team.defaultBackend) {
-    parts.push('Default team backend: .NET Native Worker.')
+    parts.push('Default team backend: TS in-process team runtime.')
   }
 
   if (members.length > 0) {

@@ -9,6 +9,7 @@ import type {
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import {
   getBillableInputTokens,
   getCacheCreationTokens,
@@ -34,6 +35,7 @@ import {
 export interface UsageAnalyticsQuery {
   from: number
   to: number
+  workspaceId?: string
   providerId?: string | null
   modelId?: string | null
   sourceKind?: string | null
@@ -44,6 +46,7 @@ export interface UsageAnalyticsQuery {
 export interface UsageActivityQuery {
   from: number
   to: number
+  workspaceId?: string
   limit?: number
   offset?: number
 }
@@ -251,6 +254,7 @@ export async function recordUsageEvent(input: {
 
   await invokeMessagePackBinary(USAGE_EVENTS_ADD_MSGPACK_CHANNEL, {
     id: nanoid(),
+    workspace_id: session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
     created_at: createdAt,
     request_started_at:
       input.timing && typeof input.timing.totalMs === 'number'

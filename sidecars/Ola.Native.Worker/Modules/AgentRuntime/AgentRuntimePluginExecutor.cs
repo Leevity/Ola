@@ -204,7 +204,9 @@ internal static class AgentRuntimePluginExecutor
             return EncodeError("Tool \"PluginGetCurrentChatMessages\" is disabled for this channel.");
         }
 
-        var sessionResult = DbPluginSessionTools.FindPluginSessionRecordByChat($"plugin:{pluginId}:chat:{chatId}");
+        var workspaceId = JsonHelpers.GetString(parameters, "workspaceId") ?? "local-personal";
+        var sessionResult = DbPluginSessionTools.FindPluginSessionRecordByChat(
+            $"plugin:{pluginId}:chat:{chatId}", workspaceId);
         if (!sessionResult.Success)
         {
             return EncodeError($"DB error: {sessionResult.Error ?? "failed to load channel session"}");
@@ -220,7 +222,8 @@ internal static class AgentRuntimePluginExecutor
         List<PluginSessionMessageRow> rows;
         try
         {
-            rows = DbPluginSessionTools.ListPluginSessionMessageRecords(sessionId, count);
+            rows = DbPluginSessionTools.ListPluginSessionMessageRecords(
+                sessionId, count, workspaceId: workspaceId);
         }
         catch (Exception ex)
         {

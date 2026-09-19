@@ -1,0 +1,67 @@
+[
+  {
+    "name": "verify:mcp-ipc-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:mcp-ipc-authorization\n> node --experimental-strip-types tools/verify-mcp-ipc-authorization.ts\n\nMCP IPC authorization verification passed\n(node:4923) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-mcp-ipc-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:webview-security",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:webview-security\n> node --experimental-strip-types tools/verify-webview-security.ts\n\nwebview security verification passed\n(node:4946) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-webview-security.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:agent-run-owner-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:agent-run-owner-authorization\n> node --experimental-strip-types tools/verify-agent-run-owner-authorization.ts\n\nagent run owner authorization verification passed\n(node:4967) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-agent-run-owner-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:terminal-owner-isolation",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:terminal-owner-isolation\n> node --experimental-strip-types tools/verify-terminal-owner-isolation.ts\n\nterminal owner isolation verification passed\n(node:4988) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-terminal-owner-isolation.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:credential-injection-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:credential-injection-authorization\n> node --experimental-strip-types tools/verify-credential-injection-authorization.ts\n\ncredential injection authorization verification passed\n(node:5009) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-credential-injection-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:desktop-ipc-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:desktop-ipc-authorization\n> node --experimental-strip-types tools/verify-desktop-ipc-authorization.ts\n\ndesktop IPC authorization verification passed\n(node:5030) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-desktop-ipc-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:fs-shell-ipc-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:fs-shell-ipc-authorization\n> node --experimental-strip-types tools/verify-fs-shell-ipc-authorization.ts\n\nfilesystem and shell IPC authorization verification passed\n(node:5051) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-fs-shell-ipc-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:api-oauth-ipc-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:api-oauth-ipc-authorization\n> node --experimental-strip-types tools/verify-api-oauth-ipc-authorization.ts\n\nAPI and OAuth IPC authorization verification passed\n(node:5072) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-api-oauth-ipc-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:credential-ssh-remote-ipc-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:credential-ssh-remote-ipc-authorization\n> node --experimental-strip-types tools/verify-credential-ssh-remote-ipc-authorization.ts\n\ncredential, SSH, and remote IPC authorization verification passed\n(node:5093) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-credential-ssh-remote-ipc-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:permission-policy",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:permission-policy\n> node --experimental-strip-types tools/verify-permission-policy.ts\n\npermission policy verification passed\n(node:5114) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-permission-policy.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:release-gates",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:release-gates\n> node --experimental-strip-types tools/verify-release-gates.ts\n\nrelease gates verification passed\n(node:5135) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-release-gates.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:remote-authorization",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:remote-authorization\n> node --experimental-strip-types tools/verify-remote-authorization.ts\n\nremote authorization verifier passed\n(node:5156) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-remote-authorization.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  },
+  {
+    "name": "verify:remote-credential-lease",
+    "status": 0,
+    "output": "\n> ola@1.0.4 verify:remote-credential-lease\n> node --experimental-strip-types tools/verify-remote-credential-lease.ts\n\nremote credential lease verifier passed\n(node:5177) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///Users/lqy-macmini/Desktop/vibecoding/Ola/tools/verify-remote-credential-lease.ts is not specified and it doesn't parse as CommonJS.\nReparsing as ES module because module syntax was detected. This incurs a performance overhead.\nTo eliminate this warning, add \"type\": \"module\" to /Users/lqy-macmini/Desktop/vibecoding/Ola/package.json.\n(Use `node --trace-warnings ...` to show where the warning was created)\n"
+  }
+]

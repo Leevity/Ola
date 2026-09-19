@@ -26,7 +26,13 @@ export class ChannelManager {
   private parsers = new Map<string, ChannelWsMessageParser>()
   private parserLoaders = new Map<string, ChannelWsMessageParserLoader>()
   private services = new Map<string, MessagingChannelService>()
+  private resumableInstances = new Map<
+    string,
+    { instance: ChannelInstance; notify: (event: ChannelEvent) => void }
+  >()
   private statuses = new Map<string, 'running' | 'stopped' | 'error'>()
+  private quiescingForHandover = false
+  private startsInFlight = new Set<Promise<void>>()
   private readonly seenMessageIds = new Map<string, Map<string, number>>()
   private readonly messageDedupTtlMs: number
   private readonly messageDedupMaxPerPlugin: number
@@ -46,6 +52,11 @@ export class ChannelManager {
         ? String((event.data as { messageId?: unknown }).messageId ?? '').trim()
         : ''
     if (!messageId) return true
+    const chatId =
+      event.data && typeof event.data === 'object' && 'chatId' in event.data
+        ? String((event.data as { chatId?: unknown }).chatId ?? '')
+        : ''
+    const messageKey = JSON.stringify([chatId, messageId])
 
     const now = this.now()
     const expiry = now - this.messageDedupTtlMs
@@ -54,9 +65,9 @@ export class ChannelManager {
       if (receivedAt > expiry) break
       seen.delete(id)
     }
-    if (seen.has(messageId)) return false
+    if (seen.has(messageKey)) return false
 
-    seen.set(messageId, now)
+    seen.set(messageKey, now)
     while (seen.size > this.messageDedupMaxPerPlugin) {
       const oldest = seen.keys().next().value
       if (oldest === undefined) break
@@ -86,6 +97,20 @@ export class ChannelManager {
     instance: ChannelInstance,
     notify: (event: ChannelEvent) => void
   ): Promise<void> {
+    if (this.quiescingForHandover) throw new Error('CHANNEL_HANDOVER_QUIESCED')
+    const started = this.startPluginCore(instance, notify)
+    this.startsInFlight.add(started)
+    try {
+      await started
+    } finally {
+      this.startsInFlight.delete(started)
+    }
+  }
+
+  private async startPluginCore(
+    instance: ChannelInstance,
+    notify: (event: ChannelEvent) => void
+  ): Promise<void> {
     // Stop existing service if running
     if (this.services.has(instance.id)) {
       await this.stopPlugin(instance.id)
@@ -99,6 +124,7 @@ export class ChannelManager {
     }
 
     const service = await factory(instance, (event) => {
+      if (this.quiescingForHandover) return
       if (this.shouldNotify(event)) notify(event)
     })
 
@@ -111,6 +137,7 @@ export class ChannelManager {
     }
 
     this.services.set(instance.id, service)
+    this.resumableInstances.set(instance.id, { instance, notify })
     this.statuses.set(instance.id, 'stopped')
 
     try {
@@ -120,23 +147,37 @@ export class ChannelManager {
     } catch (err) {
       console.error(`[ChannelManager] Failed to start channel ${instance.id}:`, err)
       this.statuses.set(instance.id, 'error')
-      this.services.delete(instance.id)
+      try {
+        await service.stop()
+        this.services.delete(instance.id)
+      } catch (cleanupError) {
+        // A partially started provider may still receive messages. Keep it
+        // visible so a handover cannot assume its socket is gone.
+        console.error(`[ChannelManager] Failed to clean up channel ${instance.id}:`, cleanupError)
+      }
       throw err
     }
   }
 
   async stopPlugin(id: string): Promise<void> {
     const service = this.services.get(id)
-    if (!service) return
+    if (!service) {
+      this.resumableInstances.delete(id)
+      return
+    }
 
     try {
       await service.stop()
       console.log(`[ChannelManager] Stopped channel: ${id}`)
+      this.services.delete(id)
+      this.resumableInstances.delete(id)
+      this.statuses.set(id, 'stopped')
     } catch (err) {
       console.error(`[ChannelManager] Error stopping channel ${id}:`, err)
-    } finally {
-      this.services.delete(id)
-      this.statuses.set(id, 'stopped')
+      // Keep the service visible: it may still own a live socket and must be
+      // retried or rejected by a later handover gate.
+      this.statuses.set(id, 'error')
+      throw err
     }
   }
 
@@ -164,5 +205,48 @@ export class ChannelManager {
     const ids = Array.from(this.services.keys())
     await Promise.allSettled(ids.map((id) => this.stopPlugin(id)))
     console.log(`[ChannelManager] All channels stopped`)
+  }
+
+  /** Resume providers stopped by a successful business handover. */
+  async resumeAfterHandover(): Promise<void> {
+    this.quiescingForHandover = false
+    const instances = [...this.resumableInstances.values()]
+    for (const { instance, notify } of instances) {
+      if (this.services.has(instance.id)) continue
+      try {
+        await this.startPluginCore(instance, notify)
+      } catch (error) {
+        this.statuses.set(instance.id, 'error')
+        console.error(`[ChannelManager] Failed to resume channel ${instance.id}:`, error)
+      }
+    }
+  }
+
+  /** Stop inbound providers without hiding a failed stop before database handover. */
+  async quiesceForHandover(timeoutMs = 30_000): Promise<void> {
+    this.quiescingForHandover = true
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    const drain = async () => {
+      const starts = await Promise.allSettled([...this.startsInFlight])
+      const stopped = await Promise.allSettled(
+        [...this.services.entries()].map(async ([id, service]) => {
+          await service.stop()
+          this.services.delete(id)
+          this.statuses.set(id, 'stopped')
+        })
+      )
+      return { starts, stopped }
+    }
+    const { starts, stopped } = await Promise.race([
+      drain(),
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error('CHANNEL_HANDOVER_STOP_TIMEOUT')), timeoutMs)
+      })
+    ]).finally(() => clearTimeout(timeout))
+    if (
+      starts.some((result) => result.status === 'rejected') ||
+      stopped.some((result) => result.status === 'rejected')
+    )
+      throw new Error('CHANNEL_HANDOVER_STOP_FAILED')
   }
 }

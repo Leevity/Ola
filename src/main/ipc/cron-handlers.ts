@@ -1,13 +1,17 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { nanoid } from 'nanoid'
 import cron from 'node-cron'
-import { safeSendMessagePackToWindow } from '../window-ipc'
+import { getRegisteredWindowWorkspace, getTrustedWorkspaceRegistrationWindow } from '../window-ipc'
+import { sendCronWorkspaceEvent } from '../cron/cron-workspace-events'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { authorizeCronWorkspace } from './cron-workspace-authorization'
 import {
   scheduleJob,
   cancelJob,
   getScheduledJobIds,
   getActiveRunJobIds,
   markRunning,
+  isCronWorkspaceSwitchPending,
   markFinished,
   recordSkippedCronRun
 } from '../cron/cron-scheduler'
@@ -17,6 +21,7 @@ import {
   createCronRun,
   deleteCronJob,
   getCronJob,
+  getCronRun,
   getCronRunDetail,
   listCronJobs,
   listCronRuns,
@@ -39,8 +44,18 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
+import { parseModelSource, type ModelSource } from '../../shared/runtime/model-source'
+import { parseCronModelBinding } from '../../shared/runtime/cron-model-binding'
+import { desktopRuntime } from '../runtime/desktop-runtime'
+import { canRunCronInTsRuntime } from '../cron/ts-cron-selection'
+import {
+  abortTsCronAgentRun,
+  getTsCronExecutionState,
+  runTsCronAgentInBackground
+} from '../cron/ts-cron-agent-background'
 
 export interface CronAddArgs {
+  workspaceId?: string
   name: string
   sessionId?: string
   schedule: {
@@ -53,6 +68,7 @@ export interface CronAddArgs {
   prompt: string
   agentId?: string
   model?: string
+  modelSource?: ModelSource | null
   workingFolder?: string
   sshConnectionId?: string | null
   deliveryMode?: 'desktop' | 'session' | 'none'
@@ -69,6 +85,7 @@ export interface CronAddArgs {
 
 export interface CronUpdateArgs {
   jobId: string
+  workspaceId?: string
   patch: Partial<{
     name: string
     schedule: {
@@ -81,6 +98,7 @@ export interface CronUpdateArgs {
     prompt: string
     agentId: string | null
     model: string | null
+    modelSource: ModelSource | null
     workingFolder: string | null
     sshConnectionId: string | null
     deliveryMode: 'desktop' | 'session' | 'none'
@@ -97,6 +115,7 @@ export interface CronUpdateArgs {
 }
 
 interface CronRunCreateArgs {
+  workspaceId: string
   runId: string
   jobId: string
   startedAt: number
@@ -115,6 +134,7 @@ interface CronRunCreateArgs {
 }
 
 interface CronRunUpdateArgs {
+  workspaceId: string
   runId: string
   patch: Partial<{
     finishedAt: number | null
@@ -135,11 +155,13 @@ interface CronRunMessageInput {
 }
 
 interface CronRunMessagesReplaceArgs {
+  workspaceId: string
   runId: string
   messages: CronRunMessageInput[]
 }
 
 interface CronRunLogAppendArgs {
+  workspaceId: string
   runId: string
   timestamp: number
   type: 'start' | 'text' | 'tool_call' | 'tool_result' | 'error' | 'end'
@@ -150,10 +172,34 @@ function registerCronMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<TArgs>(bytes)
-    return encodeMessagePackPayload(await handler(args))
+    try {
+      await authorizeCronRequestWorkspace(event, args)
+    } catch (error) {
+      return encodeMessagePackPayload({
+        error: error instanceof Error ? error.message : 'cron-workspace-unavailable'
+      })
+    }
+    const result = await handler(args)
+    try {
+      await authorizeCronRequestWorkspace(event, args)
+    } catch (error) {
+      return encodeMessagePackPayload({
+        error: error instanceof Error ? error.message : 'cron-workspace-unavailable'
+      })
+    }
+    return encodeMessagePackPayload(result)
   })
+}
+
+async function authorizeCronRequestWorkspace(
+  event: IpcMainInvokeEvent,
+  args: unknown
+): Promise<string> {
+  const win = getTrustedWorkspaceRegistrationWindow(event)
+  if (!win) throw new Error('cron-window-untrusted')
+  return authorizeCronWorkspace(args, getRegisteredWindowWorkspace(win), loadOfflineWorkspaceIds)
 }
 
 function resolveTimestamp(value: number | string | undefined): number | null {
@@ -196,6 +242,15 @@ function validateSchedule(schedule: CronAddArgs['schedule']): string | null {
   return null
 }
 
+function parsePersistedModelSource(value: string | null | undefined): ModelSource | null {
+  if (!value) return null
+  try {
+    return parseModelSource(JSON.parse(value))
+  } catch {
+    return null
+  }
+}
+
 interface CronJobApi {
   id: string
   sessionId: string | null
@@ -210,6 +265,7 @@ interface CronJobApi {
   prompt: string
   agentId: string | null
   model: string | null
+  modelSource: ModelSource | null
   workingFolder: string | null
   sshConnectionId: string | null
   deliveryMode: 'desktop' | 'session' | 'none'
@@ -228,6 +284,7 @@ interface CronJobApi {
   sourceProjectId: string | null
   sourceProjectName: string | null
   sourceProviderId: string | null
+  workspaceId?: string
   scheduled: boolean
   executing: boolean
   executionStartedAt: number | null
@@ -252,6 +309,7 @@ interface CronRunApi {
   sourceProjectNameSnapshot: string | null
   sourceProviderIdSnapshot: string | null
   modelSnapshot: string | null
+  modelSourceSnapshot: string | null
   workingFolderSnapshot: string | null
   deliveryModeSnapshot: string | null
   deliveryTargetSnapshot: string | null
@@ -287,7 +345,7 @@ function jobToApi(
   scheduledIds: Set<string>,
   runningIds: Set<string>
 ): CronJobApi {
-  const runtimeState = getCronExecutionState(r.id)
+  const runtimeState = getCronExecutionState(r.id) ?? getTsCronExecutionState(r.id)
   return {
     id: r.id,
     sessionId: r.session_id,
@@ -302,6 +360,7 @@ function jobToApi(
     prompt: r.prompt,
     agentId: r.agent_id,
     model: r.model,
+    modelSource: parsePersistedModelSource(r.model_source),
     workingFolder: r.working_folder,
     sshConnectionId: r.ssh_connection_id,
     deliveryMode: r.delivery_mode,
@@ -320,6 +379,7 @@ function jobToApi(
     sourceProjectId: r.source_project_id,
     sourceProjectName: r.source_project_name,
     sourceProviderId: r.source_provider_id,
+    workspaceId: r.workspace_id ?? 'local-personal',
     scheduled: scheduledIds.has(r.id),
     executing: runningIds.has(r.id),
     executionStartedAt: runtimeState?.startedAt ?? null,
@@ -346,6 +406,7 @@ function runToApi(r: CronRunRecord): CronRunApi {
     sourceProjectNameSnapshot: r.source_project_name_snapshot,
     sourceProviderIdSnapshot: r.source_provider_id_snapshot,
     modelSnapshot: r.model_snapshot,
+    modelSourceSnapshot: r.model_source_snapshot,
     workingFolderSnapshot: r.working_folder_snapshot,
     deliveryModeSnapshot: r.delivery_mode_snapshot,
     deliveryTargetSnapshot: r.delivery_target_snapshot
@@ -363,7 +424,20 @@ export async function handleCronAdd(args: CronAddArgs): Promise<unknown> {
   const now = Date.now()
   const kind = args.schedule.kind
 
+  let modelSource: string | null = null
+  try {
+    modelSource = args.modelSource ? JSON.stringify(parseModelSource(args.modelSource)) : null
+  } catch {
+    return { error: 'modelSource is invalid' }
+  }
+  if (
+    args.modelSource &&
+    args.modelSource.kind !== 'local' &&
+    args.modelSource.workspaceId !== (args.workspaceId ?? 'local-personal')
+  )
+    return { error: 'modelSource does not belong to workspace' }
   const record: CronJobRecord = {
+    workspace_id: args.workspaceId ?? 'local-personal',
     id,
     name: args.name,
     session_id: args.sessionId ?? null,
@@ -375,6 +449,7 @@ export async function handleCronAdd(args: CronAddArgs): Promise<unknown> {
     prompt: args.prompt,
     agent_id: args.agentId ?? null,
     model: args.model ?? null,
+    model_source: modelSource,
     working_folder: args.workingFolder ?? null,
     ssh_connection_id: args.sshConnectionId ?? null,
     source_session_title: args.sourceSessionTitle ?? null,
@@ -419,8 +494,11 @@ export async function handleCronUpdate(args: CronUpdateArgs): Promise<unknown> {
   if (!args.patch || Object.keys(args.patch).length === 0) return { error: 'patch is required' }
 
   try {
-    const row = await getCronJob(args.jobId)
+    const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
     if (!row) return { error: `Job "${args.jobId}" not found` }
+    if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal')) {
+      return { error: `Job "${args.jobId}" not found` }
+    }
 
     const p = args.patch
     const updated: CronJobRecord = { ...row }
@@ -429,6 +507,16 @@ export async function handleCronUpdate(args: CronUpdateArgs): Promise<unknown> {
     if (p.prompt !== undefined) updated.prompt = p.prompt
     if (p.agentId !== undefined) updated.agent_id = p.agentId
     if (p.model !== undefined) updated.model = p.model
+    if (p.modelSource !== undefined) {
+      try {
+        const source = p.modelSource ? parseModelSource(p.modelSource) : null
+        if (source && source.kind !== 'local' && source.workspaceId !== updated.workspace_id)
+          return { error: 'modelSource does not belong to workspace' }
+        updated.model_source = source ? JSON.stringify(source) : null
+      } catch {
+        return { error: 'modelSource is invalid' }
+      }
+    }
     if (p.workingFolder !== undefined) updated.working_folder = p.workingFolder
     if (p.sshConnectionId !== undefined) updated.ssh_connection_id = p.sshConnectionId
     if (p.deliveryMode !== undefined) updated.delivery_mode = p.deliveryMode
@@ -454,7 +542,7 @@ export async function handleCronUpdate(args: CronUpdateArgs): Promise<unknown> {
 
     updated.updated_at = Date.now()
 
-    await updateCronJob(updated)
+    await updateCronJob(updated, args.workspaceId ?? 'local-personal')
 
     cancelJob(updated.id)
     if (updated.enabled && !updated.deleted_at) {
@@ -470,31 +558,41 @@ export async function handleCronUpdate(args: CronUpdateArgs): Promise<unknown> {
   }
 }
 
-export async function handleCronRemove(args: { jobId: string }): Promise<unknown> {
+export async function handleCronRemove(args: {
+  jobId: string
+  workspaceId?: string
+}): Promise<unknown> {
   if (!args.jobId) return { error: 'jobId is required' }
 
   try {
-    const row = await getCronJob(args.jobId)
+    const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
     if (!row) return { error: `Job "${args.jobId}" not found` }
+    if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal'))
+      return { error: `Job "${args.jobId}" not found` }
 
     cancelJob(args.jobId)
-    await softDeleteCronJob(args.jobId)
+    await softDeleteCronJob(args.jobId, Date.now(), args.workspaceId ?? 'local-personal')
     return { success: true, jobId: args.jobId }
   } catch (err) {
     return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
   }
 }
 
-export async function handleCronDelete(args: { jobId: string }): Promise<unknown> {
+export async function handleCronDelete(args: {
+  jobId: string
+  workspaceId?: string
+}): Promise<unknown> {
   if (!args.jobId) return { error: 'jobId is required' }
 
   try {
-    const row = await getCronJob(args.jobId)
+    const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
     if (!row) return { error: `Job "${args.jobId}" not found` }
+    if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal'))
+      return { error: `Job "${args.jobId}" not found` }
 
     cancelJob(args.jobId)
     // Hard delete: cascading FK constraints remove related cron run rows.
-    await deleteCronJob(args.jobId)
+    await deleteCronJob(args.jobId, args.workspaceId ?? 'local-personal')
     return { success: true, jobId: args.jobId }
   } catch (err) {
     return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
@@ -502,14 +600,15 @@ export async function handleCronDelete(args: { jobId: string }): Promise<unknown
 }
 
 export async function handleCronList(
-  args?: { sessionId?: string | null; includeDeleted?: boolean } | null
+  args?: { sessionId?: string | null; includeDeleted?: boolean; workspaceId?: string } | null
 ): Promise<unknown> {
   try {
     const scheduledIds = new Set(getScheduledJobIds())
     const runningIds = new Set(getActiveRunJobIds())
     const rows = await listCronJobs({
       sessionId: args?.sessionId,
-      includeDeleted: Boolean(args?.includeDeleted)
+      includeDeleted: Boolean(args?.includeDeleted),
+      workspaceId: args?.workspaceId
     })
 
     return rows.map((r) => jobToApi(r, scheduledIds, runningIds))
@@ -527,28 +626,37 @@ export function registerCronHandlers(): void {
     return await handleCronUpdate(args)
   })
 
-  registerCronMessagePackHandler<{ jobId: string }>('cron:remove', async (args) => {
-    return await handleCronRemove(args)
-  })
+  registerCronMessagePackHandler<{ jobId: string; workspaceId?: string }>(
+    'cron:remove',
+    async (args) => {
+      return await handleCronRemove(args)
+    }
+  )
 
-  registerCronMessagePackHandler<{ jobId: string }>('cron:delete', async (args) => {
-    return await handleCronDelete(args)
-  })
+  registerCronMessagePackHandler<{ jobId: string; workspaceId?: string }>(
+    'cron:delete',
+    async (args) => {
+      return await handleCronDelete(args)
+    }
+  )
 
   registerCronMessagePackHandler<
-    { sessionId?: string | null; includeDeleted?: boolean } | undefined
+    { sessionId?: string | null; includeDeleted?: boolean; workspaceId?: string } | undefined
   >('cron:list', async (args) => {
     return await handleCronList(args)
   })
 
-  registerCronMessagePackHandler<{ jobId: string; enabled: boolean }>(
+  registerCronMessagePackHandler<{ jobId: string; enabled: boolean; workspaceId?: string }>(
     'cron:toggle',
     async (args) => {
       if (!args.jobId) return { error: 'jobId is required' }
 
       try {
-        const row = await getCronJob(args.jobId)
+        const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
         if (!row) return { error: `Job "${args.jobId}" not found` }
+        if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal')) {
+          return { error: `Job "${args.jobId}" not found` }
+        }
         if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
 
         const now = Date.now()
@@ -562,12 +670,17 @@ export function registerCronHandlers(): void {
           })
           if (schedErr) return { error: schedErr }
         }
-        await setCronJobEnabled(args.jobId, args.enabled, now)
+        await setCronJobEnabled(args.jobId, args.enabled, now, args.workspaceId ?? 'local-personal')
 
         if (args.enabled) {
           const scheduled = scheduleJob({ ...row, enabled: 1, updated_at: now })
           if (!scheduled) {
-            await setCronJobEnabled(args.jobId, false, Date.now())
+            await setCronJobEnabled(
+              args.jobId,
+              false,
+              Date.now(),
+              args.workspaceId ?? 'local-personal'
+            )
             return { error: `Failed to schedule job (kind=${row.schedule_kind})` }
           }
         } else {
@@ -581,21 +694,25 @@ export function registerCronHandlers(): void {
     }
   )
 
-  registerCronMessagePackHandler<{ jobId: string }>('cron:run-now', async (args) => {
-    if (!args.jobId) return { error: 'jobId is required' }
+  registerCronMessagePackHandler<{ jobId: string; workspaceId?: string }>(
+    'cron:run-now',
+    async (args) => {
+      if (!args.jobId) return { error: 'jobId is required' }
 
-    try {
-      const row = await getCronJob(args.jobId)
-      if (!row) return { error: `Job "${args.jobId}" not found` }
-      if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
+      try {
+        const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
+        if (!row) return { error: `Job "${args.jobId}" not found` }
+        if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal')) {
+          return { error: `Job "${args.jobId}" not found` }
+        }
+        if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
 
-      const firedAt = Date.now()
-      if (!markRunning(row.id)) {
-        const reason = await recordSkippedCronRun(row, firedAt)
-        return { error: reason }
-      }
-      const win = BrowserWindow.getAllWindows()[0]
-      if (win) {
+        const firedAt = Date.now()
+        if (!markRunning(row.id)) {
+          if (isCronWorkspaceSwitchPending()) return { error: 'WORKSPACE_BUSY_CRON' }
+          const reason = await recordSkippedCronRun(row, firedAt)
+          return { error: reason }
+        }
         const firedPayload = {
           jobId: row.id,
           name: row.name,
@@ -613,19 +730,19 @@ export function registerCronHandlers(): void {
           pluginId: row.plugin_id,
           pluginChatId: row.plugin_chat_id
         }
-        safeSendMessagePackToWindow(win, 'cron:fired', firedPayload)
-      }
+        sendCronWorkspaceEvent(row.workspace_id ?? 'local-personal', 'cron:fired', firedPayload)
 
-      await markCronJobFired(row.id, firedAt)
+        await markCronJobFired(row.id, firedAt)
 
-      runCronAgentInBackground(
-        {
+        const runOptions = {
           jobId: row.id,
           name: row.name,
           sessionId: row.session_id,
           prompt: row.prompt,
           agentId: row.agent_id,
           model: row.model,
+          modelSource: parseCronModelBinding(row.model_source, row.workspace_id),
+          workspaceId: row.workspace_id ?? 'local-personal',
           sourceProviderId: row.source_provider_id,
           workingFolder: row.working_folder,
           sshConnectionId: row.ssh_connection_id,
@@ -636,29 +753,38 @@ export function registerCronHandlers(): void {
           pluginId: row.plugin_id,
           pluginChatId: row.plugin_chat_id,
           getScheduledState: () => getScheduledJobIds().includes(row.id)
-        },
-        () => {
+        }
+        const finished = () => {
           void markFinished(row.id)
         }
-      )
+        if (canRunCronInTsRuntime(runOptions, desktopRuntime.isAvailable))
+          runTsCronAgentInBackground(runOptions, finished)
+        else runCronAgentInBackground(runOptions, finished)
 
-      return { success: true, jobId: args.jobId }
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) }
+        return { success: true, jobId: args.jobId }
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : String(err) }
+      }
     }
-  })
+  )
 
-  registerCronMessagePackHandler<{ jobId: string }>('cron:abort-run', async (args) => {
-    if (!args?.jobId) return { error: 'jobId is required' }
-    const aborted = abortCronAgentRun(args.jobId)
-    return aborted
-      ? { success: true, jobId: args.jobId }
-      : { error: `Job "${args.jobId}" is not running` }
-  })
+  registerCronMessagePackHandler<{ jobId: string; workspaceId: string }>(
+    'cron:abort-run',
+    async (args) => {
+      if (!args?.jobId) return { error: 'jobId is required' }
+      if (!(await getCronJob(args.jobId, args.workspaceId)))
+        return { error: `Job "${args.jobId}" not found` }
+      const aborted = abortTsCronAgentRun(args.jobId) || abortCronAgentRun(args.jobId)
+      return aborted
+        ? { success: true, jobId: args.jobId }
+        : { error: `Job "${args.jobId}" is not running` }
+    }
+  )
 
   registerCronMessagePackHandler<{
     jobId?: string
     sessionId?: string | null
+    workspaceId?: string
     start?: number
     end?: number
     limit?: number
@@ -674,6 +800,8 @@ export function registerCronHandlers(): void {
   registerCronMessagePackHandler<CronRunCreateArgs>('cron:run:create', async (args) => {
     if (!args.runId || !args.jobId) return { error: 'runId and jobId are required' }
     try {
+      if (!(await getCronJob(args.jobId, args.workspaceId)))
+        return { error: `Job "${args.jobId}" not found` }
       await createCronRun(args)
       return { success: true }
     } catch (err) {
@@ -684,6 +812,8 @@ export function registerCronHandlers(): void {
   registerCronMessagePackHandler<CronRunUpdateArgs>('cron:run:update', async (args) => {
     if (!args.runId) return { error: 'runId is required' }
     try {
+      if (!(await getCronRun(args.runId, args.workspaceId)))
+        return { error: `Run "${args.runId}" not found` }
       if (!args.patch || Object.keys(args.patch).length === 0) return { success: true }
       await updateCronRun(args)
       return { success: true }
@@ -697,7 +827,9 @@ export function registerCronHandlers(): void {
     async (args) => {
       if (!args.runId) return { error: 'runId is required' }
       try {
-        await replaceCronRunMessages(args.runId, args.messages)
+        if (!(await getCronRun(args.runId, args.workspaceId)))
+          return { error: `Run "${args.runId}" not found` }
+        await replaceCronRunMessages(args.runId, args.messages, args.workspaceId)
         return { success: true }
       } catch (err) {
         return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
@@ -708,53 +840,63 @@ export function registerCronHandlers(): void {
   registerCronMessagePackHandler<CronRunLogAppendArgs>('cron:run-log:append', async (args) => {
     if (!args.runId) return { error: 'runId is required' }
     try {
-      await appendCronRunLog(args.runId, args.timestamp, args.type, args.content)
+      if (!(await getCronRun(args.runId, args.workspaceId)))
+        return { error: `Run "${args.runId}" not found` }
+      await appendCronRunLog(args.runId, args.timestamp, args.type, args.content, args.workspaceId)
       return { success: true }
     } catch (err) {
       return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
     }
   })
 
-  registerCronMessagePackHandler<{ runId: string }>('cron:run-detail', async (args) => {
-    if (!args.runId) return { error: 'runId is required' }
-    try {
-      const detail = await getCronRunDetail(args.runId)
+  registerCronMessagePackHandler<{ runId: string; workspaceId?: string }>(
+    'cron:run-detail',
+    async (args) => {
+      if (!args.runId) return { error: 'runId is required' }
+      try {
+        const detail = await getCronRunDetail(args.runId, args.workspaceId)
 
-      const scheduledIds = new Set(getScheduledJobIds())
-      const runningIds = new Set(getActiveRunJobIds())
+        const scheduledIds = new Set(getScheduledJobIds())
+        const runningIds = new Set(getActiveRunJobIds())
 
-      return {
-        run: runToApi(detail.run),
-        job: detail.job ? jobToApi(detail.job, scheduledIds, runningIds) : null,
-        messages: detail.messages.map(
-          (row): CronRunMessageApi => ({
-            id: row.id,
-            role: row.role,
-            content: parseJsonValue(row.content),
-            usage: parseJsonValue(row.usage),
-            source: row.message_source,
-            createdAt: row.created_at
-          })
-        ),
-        logs: detail.logs.map(
-          (row): CronRunLogApi => ({
-            id: row.id,
-            timestamp: row.timestamp,
-            type: row.type,
-            content: row.content
-          })
-        )
+        return {
+          run: runToApi(detail.run),
+          job: detail.job ? jobToApi(detail.job, scheduledIds, runningIds) : null,
+          messages: detail.messages.map(
+            (row): CronRunMessageApi => ({
+              id: row.id,
+              role: row.role,
+              content: parseJsonValue(row.content),
+              usage: parseJsonValue(row.usage),
+              source: row.message_source,
+              createdAt: row.created_at
+            })
+          ),
+          logs: detail.logs.map(
+            (row): CronRunLogApi => ({
+              id: row.id,
+              timestamp: row.timestamp,
+              type: row.type,
+              content: row.content
+            })
+          )
+        }
+      } catch (err) {
+        return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
       }
-    } catch (err) {
-      return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
     }
-  })
+  )
 
-  registerCronMessagePackHandler<{ jobId: string }>('cron:run-finished', async (args) => {
-    if (args?.jobId) {
-      await markFinished(args.jobId)
-      console.log(`[CronHandlers] Marked job ${args.jobId} as finished`)
+  registerCronMessagePackHandler<{ jobId: string; workspaceId: string }>(
+    'cron:run-finished',
+    async (args) => {
+      if (args?.jobId && !(await getCronJob(args.jobId, args.workspaceId)))
+        return { error: `Job "${args.jobId}" not found` }
+      if (args?.jobId) {
+        await markFinished(args.jobId)
+        console.log(`[CronHandlers] Marked job ${args.jobId} as finished`)
+      }
+      return { success: true }
     }
-    return { success: true }
-  })
+  )
 }

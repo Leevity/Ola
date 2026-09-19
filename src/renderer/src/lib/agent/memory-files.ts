@@ -29,8 +29,10 @@ export interface DailyMemoryEntry extends MemoryLayerEntry {
 }
 
 export interface LayeredMemorySnapshot {
+  workspaceId: string
   globalHomePath?: string
   projectRootPath?: string
+  projectMemoryHomePath?: string
   agents?: MemoryLayerEntry
   globalSoul?: MemoryLayerEntry
   projectSoul?: MemoryLayerEntry
@@ -61,16 +63,19 @@ export interface ResolvedProjectMemoryFile {
 
 let cachedGlobalHomePath: string | undefined
 let cachedLayeredSnapshot: LayeredMemorySnapshot = {
+  workspaceId: 'local-personal',
   globalDailyMemory: [],
   projectDailyMemory: [],
   version: 0
 }
 let cachedLayerSshConnectionId: string | undefined
+let cachedLayerWorkspaceId = 'local-personal'
 let watchedLayerPath: string | undefined
 let watchedLayerPathKey: string | undefined
 let cachedLayerScope: SessionMemoryScope = 'main'
 let layeredMemoryWatchCleanup: (() => void) | null = null
 let layeredMemoryVersion = 0
+let layeredMemoryRequestId = 0
 let layeredMemoryUpdatedAt: number | undefined
 const layeredMemoryListeners = new Set<(snapshot: LayeredMemorySnapshot) => void>()
 
@@ -157,16 +162,20 @@ async function loadDailyMemoryEntries(
 async function loadProjectDailyMemoryEntries(
   ipc: IPCClient,
   projectRootPath: string | undefined,
-  sshConnectionId?: string | null
+  sshConnectionId?: string | null,
+  workspaceId = 'local-personal',
+  globalHomePath?: string
 ): Promise<DailyMemoryEntry[]> {
   if (!projectRootPath) return []
 
   const entries = await Promise.all(
     buildDailyMemoryDates().map(async (date) => {
-      const resolved = await resolveProjectMemoryTextFileForTarget(
+      const resolved = await resolveScopedProjectMemoryTextFileForTarget(
         ipc,
         projectRootPath,
         sshConnectionId,
+        workspaceId,
+        globalHomePath,
         'memory',
         `${date}.md`
       )
@@ -220,6 +229,46 @@ export function getProjectMemoryCandidatePaths(
   return {
     preferredPath: joinFsPath(projectRootPath, PROJECT_MEMORY_DIRNAME, ...segments),
     fallbackPath: joinFsPath(projectRootPath, ...segments)
+  }
+}
+
+export function projectMemoryHomePath(
+  projectRootPath: string,
+  workspaceId: string,
+  globalHomePath?: string
+): string | undefined {
+  if (workspaceId === 'local-personal') return joinFsPath(projectRootPath, PROJECT_MEMORY_DIRNAME)
+  const key = globalHomePath?.split(/[\\/]/).pop()
+  if (!key || !/^[0-9a-f]{64}$/.test(key)) return undefined
+  return joinFsPath(projectRootPath, PROJECT_MEMORY_DIRNAME, 'workspaces', key)
+}
+
+async function resolveScopedProjectMemoryTextFileForTarget(
+  ipc: IPCClient,
+  projectRootPath: string,
+  sshConnectionId: string | null | undefined,
+  workspaceId: string,
+  globalHomePath: string | undefined,
+  ...segments: string[]
+): Promise<ResolvedProjectMemoryFile> {
+  if (workspaceId === 'local-personal')
+    return resolveProjectMemoryTextFileForTarget(ipc, projectRootPath, sshConnectionId, ...segments)
+  const scopedRoot = projectMemoryHomePath(projectRootPath, workspaceId, globalHomePath)
+  if (!scopedRoot)
+    return {
+      path: '',
+      error: 'Workspace memory home is unavailable',
+      missingFile: false,
+      source: 'agents-dir'
+    }
+  const path = joinFsPath(scopedRoot, ...segments)
+  const read = await readTextFile(ipc, path, sshConnectionId)
+  return {
+    path,
+    content: read.content,
+    error: read.error && !isMissingFileErrorMessage(read.error) ? read.error : undefined,
+    missingFile: Boolean(read.error && isMissingFileErrorMessage(read.error)),
+    source: 'agents-dir'
   }
 }
 
@@ -375,63 +424,63 @@ export function subscribeGlobalMemoryUpdates(
   })
 }
 
-async function invokeStringIpc(ipc: IPCClient, channel: string): Promise<string | undefined> {
+async function invokeStringIpc(
+  ipc: IPCClient,
+  channel: string,
+  payload?: unknown
+): Promise<string | undefined> {
   try {
-    const result = await ipc.invoke(channel)
+    const result =
+      payload === undefined ? await ipc.invoke(channel) : await ipc.invoke(channel, payload)
     return typeof result === 'string' && result.trim() ? result.trim() : undefined
   } catch {
     return undefined
   }
 }
 
-function getRendererEnvHomeDir(): string | undefined {
-  if (typeof window === 'undefined') return undefined
-
-  const env = window.electron?.process?.env
-  const homeDir = env?.HOME || env?.USERPROFILE
-  if (homeDir?.trim()) return homeDir.trim()
-
-  const homeDrive = env?.HOMEDRIVE?.trim()
-  const homePath = env?.HOMEPATH?.trim()
-  return homeDrive && homePath ? `${homeDrive}${homePath}` : undefined
-}
-
-export async function resolveGlobalMemoryHomePath(ipc: IPCClient): Promise<string | undefined> {
-  if (cachedGlobalHomePath) {
+export async function resolveGlobalMemoryHomePath(
+  ipc: IPCClient,
+  workspaceId = 'local-personal'
+): Promise<string | undefined> {
+  if (workspaceId === 'local-personal' && cachedGlobalHomePath) {
     return cachedGlobalHomePath
   }
 
-  const globalMemoryHomePath = await invokeStringIpc(ipc, IPC.APP_GLOBAL_MEMORY_HOME)
+  const globalMemoryHomePath = await invokeStringIpc(ipc, IPC.APP_GLOBAL_MEMORY_HOME, {
+    workspaceId
+  })
   if (globalMemoryHomePath) {
-    cachedGlobalHomePath = globalMemoryHomePath
-    return cachedGlobalHomePath
+    if (workspaceId === 'local-personal') cachedGlobalHomePath = globalMemoryHomePath
+    return globalMemoryHomePath
   }
 
-  const homeDirResult = await invokeStringIpc(ipc, IPC.APP_HOMEDIR)
-  const homeDir = homeDirResult ?? getRendererEnvHomeDir()
-  if (homeDir) {
-    cachedGlobalHomePath = joinFsPath(homeDir, '.ola')
-    return cachedGlobalHomePath
-  }
-
+  // Main owns this path for every workspace. Guessing ~/.ola can cross an isolated data root.
   return undefined
 }
 
-export async function resolveGlobalMemoryPath(ipc: IPCClient): Promise<string | undefined> {
-  const homePath = await resolveGlobalMemoryHomePath(ipc)
+export async function resolveGlobalMemoryPath(
+  ipc: IPCClient,
+  workspaceId = 'local-personal'
+): Promise<string | undefined> {
+  const homePath = await resolveGlobalMemoryHomePath(ipc, workspaceId)
   return homePath ? joinFsPath(homePath, 'MEMORY.md') : undefined
 }
 
 async function buildLayeredMemorySnapshot(
   ipc: IPCClient,
   options: {
+    workspaceId?: string
     workingFolder?: string
     sshConnectionId?: string | null
     scope?: SessionMemoryScope
   } = {}
 ): Promise<LayeredMemorySnapshot> {
-  const globalHomePath = await resolveGlobalMemoryHomePath(ipc)
+  const globalHomePath = await resolveGlobalMemoryHomePath(ipc, options.workspaceId)
   const projectRootPath = options.workingFolder?.trim() || undefined
+  const workspaceId = options.workspaceId ?? 'local-personal'
+  const projectScopedRootPath = projectRootPath
+    ? projectMemoryHomePath(projectRootPath, workspaceId, globalHomePath)
+    : undefined
   const projectSshConnectionId = options.sshConnectionId?.trim() || undefined
   const scope = options.scope ?? 'main'
 
@@ -467,10 +516,12 @@ async function buildLayeredMemorySnapshot(
       ? loadOptionalMemoryFile(ipc, globalSoulPath)
       : Promise.resolve(undefined),
     scope !== 'shared' && projectRootPath
-      ? resolveProjectMemoryTextFileForTarget(
+      ? resolveScopedProjectMemoryTextFileForTarget(
           ipc,
           projectRootPath,
           projectSshConnectionId,
+          workspaceId,
+          globalHomePath,
           'SOUL.md'
         )
       : Promise.resolve(undefined),
@@ -478,10 +529,12 @@ async function buildLayeredMemorySnapshot(
       ? loadOptionalMemoryFile(ipc, globalUserPath)
       : Promise.resolve(undefined),
     scope === 'main' && projectRootPath
-      ? resolveProjectMemoryTextFileForTarget(
+      ? resolveScopedProjectMemoryTextFileForTarget(
           ipc,
           projectRootPath,
           projectSshConnectionId,
+          workspaceId,
+          globalHomePath,
           'USER.md'
         )
       : Promise.resolve(undefined),
@@ -489,10 +542,12 @@ async function buildLayeredMemorySnapshot(
       ? loadOptionalMemoryFile(ipc, globalMemoryPath)
       : Promise.resolve(undefined),
     scope === 'main' && projectRootPath
-      ? resolveProjectMemoryTextFileForTarget(
+      ? resolveScopedProjectMemoryTextFileForTarget(
           ipc,
           projectRootPath,
           projectSshConnectionId,
+          workspaceId,
+          globalHomePath,
           'MEMORY.md'
         )
       : Promise.resolve(undefined),
@@ -500,22 +555,32 @@ async function buildLayeredMemorySnapshot(
       ? loadOptionalMemoryFile(ipc, globalMemorySummaryPath)
       : Promise.resolve(undefined),
     scope === 'main' && projectRootPath
-      ? resolveProjectMemoryTextFileForTarget(
+      ? resolveScopedProjectMemoryTextFileForTarget(
           ipc,
           projectRootPath,
           projectSshConnectionId,
+          workspaceId,
+          globalHomePath,
           'memory_summary.md'
         )
       : Promise.resolve(undefined),
     scope === 'main' ? loadDailyMemoryEntries(ipc, globalHomePath) : Promise.resolve([]),
     scope === 'main'
-      ? loadProjectDailyMemoryEntries(ipc, projectRootPath, projectSshConnectionId)
+      ? loadProjectDailyMemoryEntries(
+          ipc,
+          projectRootPath,
+          projectSshConnectionId,
+          workspaceId,
+          globalHomePath
+        )
       : Promise.resolve([])
   ])
 
   return {
+    workspaceId,
     globalHomePath,
     projectRootPath,
+    projectMemoryHomePath: projectScopedRootPath,
     agents:
       projectAgentsFile && !projectAgentsFile.error
         ? toOptionalEntry(projectAgentsFile.path, projectAgentsFile.content)
@@ -578,6 +643,7 @@ async function ensurePrimaryMemoryWatcher(
     if (!data?.path) return
     if (normalizeWatchPath(data.path) !== normalizedPath) return
     void loadLayeredMemorySnapshot(ipc, {
+      workspaceId: cachedLayerWorkspaceId,
       workingFolder: cachedLayeredSnapshot.projectRootPath,
       sshConnectionId: cachedLayerSshConnectionId,
       scope: cachedLayerScope
@@ -588,14 +654,23 @@ async function ensurePrimaryMemoryWatcher(
 export async function loadLayeredMemorySnapshot(
   ipc: IPCClient,
   options: {
+    workspaceId?: string
     workingFolder?: string
     sshConnectionId?: string | null
     scope?: SessionMemoryScope
   } = {}
 ): Promise<LayeredMemorySnapshot> {
+  const requestId = ++layeredMemoryRequestId
   const nextSnapshot = await buildLayeredMemorySnapshot(ipc, options)
+  if (requestId !== layeredMemoryRequestId)
+    return {
+      ...nextSnapshot,
+      version: cachedLayeredSnapshot.version,
+      updatedAt: cachedLayeredSnapshot.updatedAt
+    }
   const previousSnapshot = cachedLayeredSnapshot
   cachedLayerSshConnectionId = options.sshConnectionId?.trim() || undefined
+  cachedLayerWorkspaceId = options.workspaceId ?? 'local-personal'
   cachedLayerScope = options.scope ?? 'main'
 
   const materializedSnapshot: LayeredMemorySnapshot = {
@@ -633,15 +708,17 @@ export async function loadLayeredMemorySnapshot(
       cachedLayeredSnapshot.globalUser?.path ||
       cachedLayeredSnapshot.agents?.path
 
+  const resultSnapshot = cachedLayeredSnapshot
   await ensurePrimaryMemoryWatcher(ipc, primaryWatchPath)
 
-  return cachedLayeredSnapshot
+  return resultSnapshot
 }
 
 export async function loadGlobalMemorySnapshot(
-  ipc: IPCClient
+  ipc: IPCClient,
+  workspaceId = 'local-personal'
 ): Promise<{ path?: string; content?: string }> {
-  const snapshot = await loadLayeredMemorySnapshot(ipc, { scope: 'main' })
+  const snapshot = await loadLayeredMemorySnapshot(ipc, { scope: 'main', workspaceId })
   return {
     path: snapshot.globalMemory?.path,
     content: snapshot.globalMemory?.content

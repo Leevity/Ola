@@ -14,6 +14,7 @@ export default defineConfig(
       '**/build',
       '**/.next/**',
       'docs/**',
+      'security-review/**',
       'tmp/**',
       '.tmp-*.cjs',
       '**/.claude/**'
@@ -55,6 +56,25 @@ export default defineConfig(
       'react-hooks/refs': 'off',
       'react-hooks/set-state-in-effect': 'off'
     }
+  },
+  {
+    files: [
+      'src/runtime/{core,providers,tools,scheduler,storage}/**/*.ts',
+      'src/shared/runtime/**/*.ts'
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: ['electron', 'react', 'zustand'],
+          patterns: ['@renderer/*', '**/renderer/**', '**/main/**']
+        }
+      ]
+    }
+  },
+  {
+    files: ['src/runtime/**/*.mjs', 'scripts/{build-ts-runtime,run-ts-runtime-cli}.mjs'],
+    rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   eslintConfigPrettier
 )

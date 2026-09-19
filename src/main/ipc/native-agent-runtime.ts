@@ -8,6 +8,10 @@ import {
   type RuntimeJobEventRecord,
   type RuntimeJobRecord
 } from '../../shared/runtime-job-contract'
+import { getSession } from '../db/sessions-dao'
+import { canaryLookupRuntimeToolResults } from '../db/legacy-read-canary'
+import { businessWriteCanary } from '../db/business-write-canary'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
 
 type RawEventHandler = (frame: NativeWorkerRawEventFrame) => void
 type RequestHandler = (id: number | string, method: string, params: unknown) => Promise<unknown>
@@ -24,6 +28,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
+async function requireRuntimeJobWorkspace(workspaceId: string): Promise<string> {
+  if (!workspaceId || workspaceId !== workspaceId.trim())
+    throw new Error('Runtime job workspace is invalid')
+  if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
+    throw new Error('Runtime job workspace is not available')
+  return workspaceId
+}
+
 export class NativeAgentRuntimeManager {
   private running = false
   private rawEventHandler: RawEventHandler | null = null
@@ -34,6 +46,9 @@ export class NativeAgentRuntimeManager {
   private unsubscribeWorkerLifecycle: (() => void) | null = null
   private activeRuns = new Map<string, InterruptedRun>()
   private runInterruptedHandlers = new Set<RunInterruptedHandler>()
+  private quiescingForHandover = false
+  private runAdmissionsInFlight = 0
+  private workspaceSwitchPending = false
 
   get isRunning(): boolean {
     return this.running && getNativeWorker().isRunning
@@ -63,12 +78,46 @@ export class NativeAgentRuntimeManager {
     return this.activeRuns.size > 0
   }
 
+  hasRunAdmissionOrActiveRuns(): boolean {
+    return this.runAdmissionsInFlight > 0 || this.activeRuns.size > 0
+  }
+
+  /** Temporarily closes Agent admission while Main checks and switches workspaces. */
+  beginWorkspaceSwitch(): () => void {
+    if (this.workspaceSwitchPending || this.hasRunAdmissionOrActiveRuns())
+      throw new Error('WORKSPACE_BUSY_AGENT')
+    this.workspaceSwitchPending = true
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.workspaceSwitchPending = false
+    }
+  }
+
+  /** Irreversible in this process: failed handovers must not resume legacy writes. */
+  async quiesceForHandover(): Promise<void> {
+    this.quiescingForHandover = true
+    // A successful or failed handover is irreversible in this process. Mark
+    // the Agent bridge unavailable immediately so status/cleanup calls cannot
+    // implicitly restart or reuse the parked Native Worker.
+    this.running = false
+    if (this.runAdmissionsInFlight > 0 || this.activeRuns.size > 0)
+      throw new Error('NATIVE_AGENT_RUNS_ACTIVE_DURING_HANDOVER')
+    const worker = getNativeWorker()
+    if (!worker.isRunning) return
+    const active = await worker.request<unknown>('agent/active-runs', {}, 10_000)
+    if (!Array.isArray(active)) throw new Error('NATIVE_AGENT_RUN_STATE_UNAVAILABLE')
+    if (active.length > 0) throw new Error('NATIVE_AGENT_RUNS_ACTIVE_DURING_HANDOVER')
+  }
+
   onRunInterrupted(handler: RunInterruptedHandler): () => void {
     this.runInterruptedHandlers.add(handler)
     return () => this.runInterruptedHandlers.delete(handler)
   }
 
   async start(): Promise<boolean> {
+    if (this.quiescingForHandover) throw new Error('NATIVE_AGENT_HANDOVER_QUIESCED')
     await getNativeWorker().ensureStarted()
     this.installEventBridge()
     await getNativeWorker().request('initialize', { runtime: 'agent' }, 30_000)
@@ -122,69 +171,153 @@ export class NativeAgentRuntimeManager {
 
   async lookupToolResults(sessionId: string, toolUseIds: string[]): Promise<unknown> {
     await this.ensureStarted()
-    return await getNativeWorker().request(
-      'agent/tool-results-lookup',
-      {
-        sessionId,
-        toolUseIds
-      },
-      10_000
-    )
+    const session = await getSession(sessionId)
+    if (!session) throw new Error('Tool result session not found')
+    const workspaceId = session.workspace_id
+    if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
+      throw new Error('Tool result workspace is not available')
+    const canary = await canaryLookupRuntimeToolResults({ sessionId, workspaceId, toolUseIds })
+    const result =
+      canary !== undefined
+        ? canary
+        : await getNativeWorker().request(
+            'agent/tool-results-lookup',
+            { sessionId, workspaceId, toolUseIds },
+            10_000
+          )
+    const currentSession = await getSession(sessionId)
+    if (currentSession?.workspace_id !== workspaceId)
+      throw new Error('Tool result session workspace changed during lookup')
+    if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
+      throw new Error('Tool result workspace is not available')
+    return result
   }
 
-  async getRuntimeJob(jobId: string): Promise<RuntimeJobRecord | null> {
+  async getRuntimeJob(jobId: string, workspaceId: string): Promise<RuntimeJobRecord | null> {
     await this.ensureStarted()
+    const scopedWorkspaceId = await requireRuntimeJobWorkspace(workspaceId)
+    const writer = businessWriteCanary()
+    if (writer) return writer.runtimeJob(jobId, scopedWorkspaceId)
     const result = await getNativeWorker().request<{ found?: boolean; job?: RuntimeJobRecord }>(
       RUNTIME_JOB_ROUTES.get,
-      { jobId },
+      { jobId, workspaceId: scopedWorkspaceId },
       10_000
     )
     return result.found === true ? (result.job ?? null) : null
   }
 
-  async listRuntimeJobs(limit = 100): Promise<RuntimeJobRecord[]> {
+  async listRuntimeJobs(workspaceId: string, limit = 100): Promise<RuntimeJobRecord[]> {
     await this.ensureStarted()
+    const scopedWorkspaceId = await requireRuntimeJobWorkspace(workspaceId)
+    const writer = businessWriteCanary()
+    if (writer) return writer.runtimeJobs(scopedWorkspaceId, limit)
     return await getNativeWorker().request<RuntimeJobRecord[]>(
       RUNTIME_JOB_ROUTES.list,
-      { limit },
+      { workspaceId: scopedWorkspaceId, limit },
       10_000
     )
   }
 
-  async cancelRuntimeJob(jobId: string): Promise<RuntimeJobRecord | null> {
+  async cancelRuntimeJob(jobId: string, workspaceId: string): Promise<RuntimeJobRecord | null> {
     await this.ensureStarted()
+    const scopedWorkspaceId = await requireRuntimeJobWorkspace(workspaceId)
+    const writer = businessWriteCanary()
+    if (writer) return writer.cancelRuntimeJob(jobId, scopedWorkspaceId, Date.now())
     return await getNativeWorker().request<RuntimeJobRecord | null>(
       'runtime/jobs-cancel',
-      { jobId },
+      { jobId, workspaceId: scopedWorkspaceId },
       10_000
     )
   }
 
-  async replayRuntimeJobEvents(jobId: string, afterSeq = 0): Promise<RuntimeJobEventRecord[]> {
+  async replayRuntimeJobEvents(
+    jobId: string,
+    workspaceId: string,
+    afterSeq = 0
+  ): Promise<RuntimeJobEventRecord[]> {
     await this.ensureStarted()
+    const scopedWorkspaceId = await requireRuntimeJobWorkspace(workspaceId)
+    const writer = businessWriteCanary()
+    if (writer) return writer.runtimeJobEvents(jobId, scopedWorkspaceId, afterSeq)
     return await getNativeWorker().request<RuntimeJobEventRecord[]>(
       RUNTIME_JOB_ROUTES.events,
-      { jobId, afterSeq },
+      { jobId, workspaceId: scopedWorkspaceId, afterSeq },
       10_000
     )
   }
 
   async request(method: string, params?: unknown, timeoutMs = 30_000): Promise<unknown> {
-    await this.ensureStarted()
-    const result = await getNativeWorker().request(method, params ?? {}, timeoutMs)
-    if (
-      method === 'agent/run' &&
-      isRecord(result) &&
-      result.started === true &&
-      typeof result.runId === 'string'
-    ) {
-      const runParams = isRecord(params) ? params : {}
-      this.activeRuns.set(result.runId, {
-        runId: result.runId,
-        ...(typeof runParams.sessionId === 'string' ? { sessionId: runParams.sessionId } : {})
-      })
+    const submittingRun = method === 'agent/run'
+    if (submittingRun) {
+      if (this.quiescingForHandover) throw new Error('NATIVE_AGENT_HANDOVER_QUIESCED')
+      if (this.workspaceSwitchPending) throw new Error('WORKSPACE_BUSY_AGENT')
+      this.runAdmissionsInFlight++
     }
-    return result
+    try {
+      const writer = businessWriteCanary()
+      if (writer && isRecord(params)) {
+        if (method === RUNTIME_JOB_ROUTES.submit) {
+          const workspaceId = await requireRuntimeJobWorkspace(String(params.workspaceId ?? ''))
+          return writer.submitRuntimeJob({
+            jobId: String(params.jobId ?? ''),
+            workspaceId,
+            method: String(params.method ?? ''),
+            paramsJson: String(params.paramsJson ?? '{}'),
+            createdAt: Number(params.createdAt ?? Date.now()),
+            runId: typeof params.runId === 'string' ? params.runId : null,
+            sessionId: typeof params.sessionId === 'string' ? params.sessionId : null,
+            idempotencyKey:
+              typeof params.idempotencyKey === 'string' ? params.idempotencyKey : null,
+            laneKey: typeof params.laneKey === 'string' ? params.laneKey : null
+          })
+        }
+        if (method === RUNTIME_JOB_ROUTES.setState) {
+          const workspaceId = await requireRuntimeJobWorkspace(String(params.workspaceId ?? ''))
+          return writer.setRuntimeJobState({
+            jobId: String(params.jobId ?? ''),
+            workspaceId,
+            state: params.state as import('../../shared/runtime-job-contract').RuntimeJobState,
+            updatedAt: Number(params.updatedAt ?? Date.now()),
+            errorCode: typeof params.errorCode === 'string' ? params.errorCode : null,
+            errorMessage: typeof params.errorMessage === 'string' ? params.errorMessage : null
+          })
+        }
+        if (method === RUNTIME_JOB_ROUTES.cancel) {
+          const workspaceId = await requireRuntimeJobWorkspace(String(params.workspaceId ?? ''))
+          return writer.cancelRuntimeJob(
+            String(params.jobId ?? ''),
+            workspaceId,
+            Number(params.updatedAt ?? Date.now())
+          )
+        }
+        if (method === RUNTIME_JOB_ROUTES.reapStale) {
+          return writer.reapStaleRuntimeJobs(
+            Date.now(),
+            typeof params.maxAgeMs === 'number' ? params.maxAgeMs : undefined
+          )
+        }
+      }
+      await this.ensureStarted()
+      if (submittingRun && this.quiescingForHandover)
+        throw new Error('NATIVE_AGENT_HANDOVER_QUIESCED')
+      if (submittingRun && this.workspaceSwitchPending) throw new Error('WORKSPACE_BUSY_AGENT')
+      const result = await getNativeWorker().request(method, params ?? {}, timeoutMs)
+      if (
+        submittingRun &&
+        isRecord(result) &&
+        result.started === true &&
+        typeof result.runId === 'string'
+      ) {
+        const runParams = isRecord(params) ? params : {}
+        this.activeRuns.set(result.runId, {
+          runId: result.runId,
+          ...(typeof runParams.sessionId === 'string' ? { sessionId: runParams.sessionId } : {})
+        })
+      }
+      return result
+    } finally {
+      if (submittingRun) this.runAdmissionsInFlight--
+    }
   }
 
   notify(method: string, params?: unknown): void {

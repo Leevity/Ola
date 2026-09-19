@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "اكتب رسالة",
     "placeholderClarify": "اشرحي فكرتك وسأظل أراقبك حتى تكون المتطلبات واضحة",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "الخطأ الأخير",
       "stackTrace": "تعقب",
       "copy": "نسخ",
-      "copied": "Copied"
+      "copied": "Copied",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

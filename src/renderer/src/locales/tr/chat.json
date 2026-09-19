@@ -1,4 +1,4 @@
-﻿{
+{
   "input": {
     "placeholder": "Bir mesaj yazın...",
     "placeholderClarify": "Fikrinizi açıklayın ve gerekliliklerin açık olana kadar hayal edeceğim...",
@@ -922,7 +922,8 @@
       "lastErrorLabel": "Son hata",
       "stackTrace": "Stack izler",
       "copy": "Kopya kopya",
-      "copied": "Copied"
+      "copied": "Copied",
+      "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
     }
   },
   "messageActions": {

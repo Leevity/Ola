@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { FileText } from 'lucide-react'
+import DOMPurify from 'dompurify'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import type { ViewerProps } from '../viewer-registry'
@@ -9,7 +10,43 @@ async function convertDocxToHtml(base64: string): Promise<string> {
   const mammoth = await import('mammoth')
   const buffer = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
   const result = await mammoth.convertToHtml({ arrayBuffer: buffer.buffer })
-  return result.value
+  return DOMPurify.sanitize(result.value, {
+    ALLOWED_TAGS: [
+      'a',
+      'b',
+      'blockquote',
+      'br',
+      'code',
+      'div',
+      'em',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'hr',
+      'i',
+      'li',
+      'ol',
+      'p',
+      'pre',
+      'span',
+      'strong',
+      'table',
+      'tbody',
+      'td',
+      'th',
+      'thead',
+      'tr',
+      'u',
+      'ul'
+    ],
+    ALLOWED_ATTR: ['colspan', 'href', 'rowspan', 'title'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|#)/i,
+    FORBID_TAGS: ['base', 'form', 'iframe', 'img', 'style', 'svg'],
+    FORBID_ATTR: ['style']
+  })
 }
 
 export function DocxViewer({

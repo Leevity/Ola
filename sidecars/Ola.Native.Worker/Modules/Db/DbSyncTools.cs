@@ -13,6 +13,7 @@ internal static class DbSyncTools
             var providerId = RequireString(parameters, "providerId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             var schemas = ListSyncTableSchemas(connection);
+            AssertLegacySyncHasNoTeamData(connection, schemas);
             var records = CaptureDbRecords(connection, schemas);
             var baseline = LoadBaseline(connection, providerId);
             var tombstones = LoadTombstones(connection, providerId);
@@ -47,9 +48,21 @@ internal static class DbSyncTools
             var schemas = ListSyncTableSchemas(connection).ToDictionary(
                 schema => schema.Name,
                 StringComparer.Ordinal);
+            AssertLegacySyncHasNoTeamData(connection, schemas.Values.ToList());
             var tableOrder = SortTablesForUpsert(schemas);
             var recordsToApply = ReadRecordDrafts(parameters, "recordsToApply");
             var recordsToDelete = ReadTombstones(parameters, "recordsToDelete");
+            foreach (var record in recordsToApply)
+            {
+                if (record.Value.ValueKind != JsonValueKind.Object
+                    || !record.Value.TryGetProperty("row", out var row)
+                    || row.ValueKind != JsonValueKind.Object)
+                    continue;
+                if (row.TryGetProperty("workspace_id", out var workspace)
+                    && (workspace.ValueKind != JsonValueKind.String
+                        || workspace.GetString() != "local-personal"))
+                    throw new InvalidOperationException("LEGACY_SYNC_TEAM_WORKSPACE_UNSUPPORTED");
+            }
             var changed = 0;
 
             using var transaction = connection.BeginTransaction();
@@ -198,6 +211,22 @@ internal static class DbSyncTools
             });
         }
         return schemas;
+    }
+
+    private static void AssertLegacySyncHasNoTeamData(
+        SqliteConnection connection,
+        IReadOnlyList<DbSyncTableSchema> schemas)
+    {
+        // The v1 WebDAV bundle has no workspace identity. Until it is replaced with
+        // scoped bundles, never put an existing team row into that global bundle.
+        foreach (var schema in schemas)
+        {
+            if (!schema.Columns.Contains("workspace_id", StringComparer.Ordinal)) continue;
+            using var command = connection.CreateCommand();
+            command.CommandText = $"SELECT 1 FROM {QuoteIdent(schema.Name)} WHERE workspace_id IS NULL OR workspace_id <> 'local-personal' LIMIT 1";
+            if (command.ExecuteScalar() is not null)
+                throw new InvalidOperationException("LEGACY_SYNC_TEAM_WORKSPACE_UNSUPPORTED");
+        }
     }
 
     private static List<ColumnInfo> ReadColumns(SqliteConnection connection, string tableName)

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { ipcClient } from '../lib/ipc/ipc-client'
 import { invokeMessagePackBinary } from '../lib/ipc/messagepack-ipc-client'
+import { useWorkspaceStore } from './workspace-store'
 import {
   DB_GOALS_ACCOUNT_MSGPACK_CHANNEL,
   DB_GOALS_CLEAR_MSGPACK_CHANNEL,
@@ -208,6 +209,10 @@ function mutationError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function activeWorkspaceId(): string {
+  return useWorkspaceStore.getState().activeWorkspaceId
+}
+
 let goalEventsIpcUnavailable = false
 let goalEventsIpcUnavailableWarned = false
 
@@ -262,11 +267,12 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   _loaded: false,
 
   loadGoalsFromDb: async () => {
+    const workspaceId = activeWorkspaceId()
     try {
-      const rows = await invokeMessagePackBinary<SessionGoalRow[]>(
-        DB_GOALS_LIST_MSGPACK_CHANNEL,
-        {}
-      )
+      const rows = await invokeMessagePackBinary<SessionGoalRow[]>(DB_GOALS_LIST_MSGPACK_CHANNEL, {
+        workspaceId
+      })
+      if (activeWorkspaceId() !== workspaceId) return
       const goalsBySession: Record<string, SessionGoal> = {}
       for (const row of rows) {
         const goal = rowToGoal(row)
@@ -274,20 +280,23 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       }
       set({ goalsBySession, _loaded: true })
     } catch (error) {
+      if (activeWorkspaceId() !== workspaceId) return
       console.error('[GoalStore] Failed to load goals:', error)
       set({ _loaded: true })
     }
   },
 
   loadGoalForSession: async (sessionId, force = false) => {
+    const workspaceId = activeWorkspaceId()
     const cached = get().goalsBySession[sessionId]
     if (cached && !force) return cached
 
     try {
       const row = await invokeMessagePackBinary<SessionGoalRow | null>(
         DB_GOALS_GET_MSGPACK_CHANNEL,
-        sessionId
+        { sessionId, workspaceId }
       )
+      if (activeWorkspaceId() !== workspaceId) return undefined
       const goal = row ? rowToGoal(row) : undefined
       set((state) => {
         const next = { ...state.goalsBySession }
@@ -300,12 +309,14 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       })
       return goal
     } catch (error) {
+      if (activeWorkspaceId() !== workspaceId) return undefined
       console.error('[GoalStore] Failed to load goal:', error)
       return cached
     }
   },
 
   loadGoalEventsForSession: async (sessionId, options = {}) => {
+    const workspaceId = activeWorkspaceId()
     const cached = get().goalEventsBySession[sessionId]
     if (cached && !options.force) return cached
     if (goalEventsIpcUnavailable) return cached ?? EMPTY_SESSION_GOAL_EVENTS
@@ -315,10 +326,12 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
         DB_GOAL_EVENTS_LIST_MSGPACK_CHANNEL,
         {
           sessionId,
+          workspaceId,
           goalId: options.goalId,
           limit: options.limit ?? 40
         }
       )
+      if (activeWorkspaceId() !== workspaceId) return EMPTY_SESSION_GOAL_EVENTS
       const events = rows.map(rowToEvent)
       set((state) => ({
         goalEventsBySession: {
@@ -328,6 +341,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
       }))
       return events
     } catch (error) {
+      if (activeWorkspaceId() !== workspaceId) return EMPTY_SESSION_GOAL_EVENTS
       if (markGoalEventsIpcUnavailable(error)) {
         return cached ?? EMPTY_SESSION_GOAL_EVENTS
       }
@@ -341,11 +355,13 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     get().goalEventsBySession[sessionId] ?? EMPTY_SESSION_GOAL_EVENTS,
 
   createGoal: async (args) => {
+    const workspaceId = activeWorkspaceId()
     try {
       const result = await invokeMessagePackBinary<GoalMutationResult>(
         DB_GOALS_CREATE_MSGPACK_CHANNEL,
-        args
+        { ...args, workspaceId }
       )
+      if (activeWorkspaceId() !== workspaceId) return { success: false, error: 'Workspace changed' }
       if (result.error) return { success: false, error: result.error }
       const goal = asGoal(result)
       if (!goal) return { success: false, error: 'Goal was not created' }
@@ -358,11 +374,13 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   setGoal: async (args) => {
+    const workspaceId = activeWorkspaceId()
     try {
       const result = await invokeMessagePackBinary<GoalMutationResult>(
         DB_GOALS_SET_MSGPACK_CHANNEL,
-        args
+        { ...args, workspaceId }
       )
+      if (activeWorkspaceId() !== workspaceId) return { success: false, error: 'Workspace changed' }
       if (result.error) return { success: false, error: result.error }
       const goal = asGoal(result)
       if (!goal) return { success: false, error: 'Goal was not set' }
@@ -375,14 +393,17 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   updateGoal: async (sessionId, patch) => {
+    const workspaceId = activeWorkspaceId()
     try {
       const result = await invokeMessagePackBinary<GoalMutationResult>(
         DB_GOALS_UPDATE_MSGPACK_CHANNEL,
         {
           sessionId,
+          workspaceId,
           patch
         }
       )
+      if (activeWorkspaceId() !== workspaceId) return { success: false, error: 'Workspace changed' }
       if (result.error) return { success: false, error: result.error }
       const goal = asGoal(result)
       if (!goal) return { success: false, error: 'Goal was not updated' }
@@ -395,11 +416,14 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   clearGoal: async (sessionId) => {
+    const workspaceId = activeWorkspaceId()
     try {
       const result = await invokeMessagePackBinary<GoalMutationResult>(
         DB_GOALS_CLEAR_MSGPACK_CHANNEL,
-        sessionId
+        { sessionId, workspaceId }
       )
+      if (activeWorkspaceId() !== workspaceId)
+        return { success: false, cleared: false, error: 'Workspace changed' }
       if (result.error) return { success: false, cleared: false, error: result.error }
       set((state) => {
         const next = { ...state.goalsBySession }
@@ -414,11 +438,13 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   accountGoalUsage: async (input) => {
+    const workspaceId = activeWorkspaceId()
     try {
       const result = await invokeMessagePackBinary<GoalMutationResult>(
         DB_GOALS_ACCOUNT_MSGPACK_CHANNEL,
-        input
+        { ...input, workspaceId }
       )
+      if (activeWorkspaceId() !== workspaceId) return { success: false, error: 'Workspace changed' }
       if (result.error) return { success: false, error: result.error }
       const goal = asGoal(result)
       if (goal) upsertGoal(set, goal)
@@ -432,6 +458,7 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   },
 
   addGoalEvent: async (args) => {
+    const workspaceId = activeWorkspaceId()
     if (goalEventsIpcUnavailable) {
       return { success: false, error: 'Goal event IPC is unavailable until Electron restarts' }
     }
@@ -439,8 +466,9 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
     try {
       const result = await invokeMessagePackBinary<GoalEventMutationResult>(
         DB_GOAL_EVENTS_ADD_MSGPACK_CHANNEL,
-        args
+        { ...args, workspaceId }
       )
+      if (activeWorkspaceId() !== workspaceId) return { success: false, error: 'Workspace changed' }
       if (result.error) return { success: false, error: result.error }
       if (!result.event) return { success: false, error: 'Goal event was not recorded' }
       const event = rowToEvent(result.event)
@@ -495,8 +523,25 @@ export const useGoalStore = create<GoalStore>((set, get) => ({
   }
 }))
 
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.activeWorkspaceId === previous.activeWorkspaceId) return
+  useGoalStore.setState({
+    goalsBySession: {},
+    goalEventsBySession: {},
+    activeGoalRunsBySession: {},
+    _loaded: false
+  })
+})
+
+function isCurrentGoalSyncPayload(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false
+  const workspaceId = (payload as { workspaceId?: unknown }).workspaceId
+  return typeof workspaceId === 'string' && workspaceId === activeWorkspaceId()
+}
+
 export function installGoalSyncListener(): () => void {
   const offUpdated = ipcClient.on('goal:updated', (payload: unknown) => {
+    if (!isCurrentGoalSyncPayload(payload)) return
     const row =
       payload && typeof payload === 'object' ? (payload as { goal?: SessionGoalRow }).goal : null
     if (!row) return
@@ -504,6 +549,7 @@ export function installGoalSyncListener(): () => void {
   })
 
   const offCleared = ipcClient.on('goal:cleared', (payload: unknown) => {
+    if (!isCurrentGoalSyncPayload(payload)) return
     const sessionId =
       payload && typeof payload === 'object'
         ? (payload as { sessionId?: unknown }).sessionId
@@ -514,6 +560,7 @@ export function installGoalSyncListener(): () => void {
   })
 
   const offEventAdded = ipcClient.on('goal:event-added', (payload: unknown) => {
+    if (!isCurrentGoalSyncPayload(payload)) return
     const row =
       payload && typeof payload === 'object'
         ? (payload as { event?: SessionGoalEventRow }).event
@@ -523,6 +570,7 @@ export function installGoalSyncListener(): () => void {
   })
 
   const offRunState = ipcClient.on('goal:run-state', (payload: unknown) => {
+    if (!isCurrentGoalSyncPayload(payload)) return
     const record =
       payload && typeof payload === 'object'
         ? (payload as {

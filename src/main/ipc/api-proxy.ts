@@ -1,15 +1,7 @@
-import {
-  BrowserWindow,
-  ipcMain,
-  net,
-  session,
-  type IpcMainInvokeEvent,
-  type WebContents
-} from 'electron'
+import { BrowserWindow, ipcMain, net, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
-import { readSettings } from './settings-handlers'
 import { applyDefaultApiUserAgent } from '../lib/api-user-agent'
 import {
   decodeMessagePackPayload,
@@ -162,50 +154,6 @@ function buildForwardHeaders(
   return forwarded
 }
 
-const INSECURE_PROXY_SESSION_PARTITION = 'persist:ola-provider-insecure-tls-proxy'
-let insecureProxySessionState: {
-  promise: Promise<Electron.Session>
-  proxyRules: string | null
-} | null = null
-
-function getConfiguredSystemProxyUrl(): string | null {
-  const saved = readSettings().systemProxyUrl
-  if (typeof saved === 'string' && saved.trim()) return saved.trim()
-  for (const key of [
-    'HTTPS_PROXY',
-    'https_proxy',
-    'HTTP_PROXY',
-    'http_proxy',
-    'ALL_PROXY',
-    'all_proxy'
-  ]) {
-    const value = process.env[key]?.trim()
-    if (value) return value
-  }
-  return null
-}
-
-async function getInsecureProxySession(): Promise<Electron.Session> {
-  const proxyRules = getConfiguredSystemProxyUrl()
-  if (insecureProxySessionState && insecureProxySessionState.proxyRules === proxyRules) {
-    return await insecureProxySessionState.promise
-  }
-
-  const promise = (async () => {
-    const proxySession = session.fromPartition(INSECURE_PROXY_SESSION_PARTITION, { cache: false })
-    proxySession.setCertificateVerifyProc((_, callback) => callback(0))
-    if (proxyRules) {
-      await proxySession.setProxy({ mode: 'fixed_servers', proxyRules })
-    } else {
-      await proxySession.setProxy({ mode: 'system' })
-    }
-    return proxySession
-  })()
-
-  insecureProxySessionState = { promise, proxyRules }
-  return await promise
-}
-
 interface CodexQuotaWindow {
   usedPercent?: number
   windowMinutes?: number
@@ -308,9 +256,9 @@ async function requestViaSystemProxy(args: {
   body?: string
   headers?: Record<string, string | string[] | undefined>
 }> {
-  const { url, method, headers, body, allowInsecureTls } = args
+  const { url, method, headers, body } = args
   const requestUrl = url.trim()
-  const requestSession = allowInsecureTls ? await getInsecureProxySession() : undefined
+  const requestSession = undefined
   const bodyBuffer = body ? Buffer.from(body, 'utf-8') : null
   const reqHeaders = buildForwardHeaders(headers, bodyBuffer, { includeContentLength: false })
 
@@ -381,7 +329,7 @@ async function handleApiRequest(
     headers,
     body,
     useSystemProxy,
-    allowInsecureTls,
+    allowInsecureTls: _allowInsecureTls,
     providerId,
     providerBuiltinId
   } = req
@@ -409,7 +357,9 @@ async function handleApiRequest(
         path: parsedUrl.pathname + parsedUrl.search,
         method,
         headers: reqHeaders,
-        ...(isHttps && allowInsecureTls === true ? { rejectUnauthorized: false } : {})
+        // Provider credentials must not be sent over a connection with a
+        // bypassed certificate check. Kept independent of renderer settings.
+        ...(isHttps ? { rejectUnauthorized: true } : {})
       }
 
       const httpReq = httpModule.request(options, (res) => {
@@ -455,7 +405,7 @@ async function handleApiRequest(
             method,
             headers: requestHeaders,
             body,
-            allowInsecureTls
+            allowInsecureTls: false
           })
         : await runDirectAttempt()
       const status = result.statusCode ?? 0

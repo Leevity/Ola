@@ -1,3 +1,9 @@
+import { useProviderStore } from './provider-store'
+import {
+  legacyModelSource,
+  parseModelSource,
+  type ModelSource
+} from '../../../shared/runtime/model-source'
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
@@ -38,6 +44,8 @@ import {
 import { useAgentStore } from './agent-store'
 import { useTeamStore } from './team-store'
 import { useTaskStore } from './task-store'
+import { useWorkspaceStore } from './workspace-store'
+import { WorkspaceLoadGate } from '@renderer/lib/workbench/workspace-load-gate'
 import { usePlanStore } from './plan-store'
 import { useUIStore } from './ui-store'
 import { useBackgroundSessionStore } from './background-session-store'
@@ -104,6 +112,8 @@ export interface Project {
   pinned?: boolean
   providerId?: string
   modelId?: string
+  modelSource?: ModelSource
+  workspaceId?: string
 }
 
 export interface Session {
@@ -142,6 +152,9 @@ export interface Session {
   providerId?: string
   /** Bound model ID when modelSelectionMode is manual. */
   modelId?: string
+  /** Typed, public binding. It supersedes the legacy provider/model pair. */
+  modelSource?: ModelSource
+  workspaceId?: string
   /** In-memory prompt snapshot reused within the current app session */
   promptSnapshot?: SessionPromptSnapshot
 }
@@ -176,6 +189,8 @@ export function createRestorableSessionSnapshot(session: Session): Session {
     modelSelectionMode: session.modelSelectionMode,
     providerId: session.providerId,
     modelId: session.modelId,
+    modelSource: session.modelSource,
+    workspaceId: session.workspaceId,
     promptSnapshot: undefined
   }
 }
@@ -225,6 +240,7 @@ interface PendingMessageUpsert {
 interface MessageUpsertPayload {
   id: string
   sessionId: string
+  workspaceId: string
   role: UnifiedMessage['role']
   content: string
   meta: string | null
@@ -418,20 +434,33 @@ function dbCreateSession(s: Session): void {
     pinned: s.pinned,
     providerId: s.providerId,
     modelId: s.modelId,
-    modelSelectionMode: s.modelSelectionMode ?? (s.providerId && s.modelId ? 'manual' : 'inherit')
+    modelSource: s.modelSource ? JSON.stringify(s.modelSource) : undefined,
+    modelSelectionMode: s.modelSelectionMode ?? (s.providerId && s.modelId ? 'manual' : 'inherit'),
+    workspaceId: s.workspaceId ?? 'local-personal'
+  }).finally(() => {
+    if (_pendingSessionCreates.get(s.id) === pending) {
+      _pendingSessionCreates.delete(s.id)
+    }
   })
-    .catch(() => {})
-    .finally(() => {
-      if (_pendingSessionCreates.get(s.id) === pending) {
-        _pendingSessionCreates.delete(s.id)
-      }
-    })
 
   _pendingSessionCreates.set(s.id, pending)
+  void pending.catch((error) => {
+    console.warn('[ChatStore] Session creation failed', error)
+  })
+}
+
+/** TS desktop runs require the Native-owned session row to exist before submission. */
+export async function awaitPendingSessionCreate(sessionId: string): Promise<void> {
+  await _pendingSessionCreates.get(sessionId)
 }
 
 function dbUpdateSession(id: string, patch: Record<string, unknown>): void {
-  invokeMessagePack(DB_SESSIONS_UPDATE_MSGPACK_CHANNEL, { id, patch }).catch(() => {})
+  const session = useChatStore.getState().sessions.find((entry) => entry.id === id)
+  invokeMessagePack(DB_SESSIONS_UPDATE_MSGPACK_CHANNEL, {
+    id,
+    workspaceId: session?.workspaceId ?? 'local-personal',
+    patch
+  }).catch(() => {})
 }
 
 function dbDeleteSession(id: string): void {
@@ -439,17 +468,23 @@ function dbDeleteSession(id: string): void {
   _sessionMessageWriteQueues.delete(id)
   void (_pendingSessionCreates.get(id) ?? Promise.resolve())
     .catch(() => {})
-    .then(() => invokeMessagePack(DB_SESSIONS_DELETE_MSGPACK_CHANNEL, id))
+    .then(() => {
+      const session = useChatStore.getState().sessions.find((entry) => entry.id === id)
+      return invokeMessagePack(DB_SESSIONS_DELETE_MSGPACK_CHANNEL, {
+        id,
+        workspaceId: session?.workspaceId ?? 'local-personal'
+      })
+    })
     .catch(() => {})
 }
 
-function dbClearAllSessions(sessionIds: string[] = []): void {
+function dbClearAllSessions(workspaceId: string, sessionIds: string[] = []): void {
   const pendingWrites = sessionIds.map((sessionId) => {
     bumpMessageWriteGeneration(sessionId)
     return _sessionMessageWriteQueues.get(sessionId)?.catch(() => {}) ?? Promise.resolve()
   })
   void Promise.all(pendingWrites)
-    .then(() => invokeMessagePack(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, {}))
+    .then(() => invokeMessagePack(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, { workspaceId }))
     .catch(() => {})
 }
 
@@ -462,16 +497,33 @@ function dbCreateProject(project: Project): void {
     pluginId: project.pluginId,
     pinned: project.pinned,
     createdAt: project.createdAt,
-    updatedAt: project.updatedAt
+    updatedAt: project.updatedAt,
+    workspaceId: project.workspaceId ?? 'local-personal'
   }).catch(() => {})
 }
 
 function dbUpdateProject(id: string, patch: Record<string, unknown>): void {
-  invokeMessagePack(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, { id, patch }).catch(() => {})
+  const project = useChatStore.getState().projects.find((entry) => entry.id === id)
+  invokeMessagePack(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, {
+    id,
+    workspaceId: project?.workspaceId ?? 'local-personal',
+    patch
+  }).catch(() => {})
+}
+
+function workspaceForSession(sessionId: string): string {
+  return (
+    useChatStore.getState().sessions.find((session) => session.id === sessionId)?.workspaceId ??
+    'local-personal'
+  )
 }
 
 function dbDeleteProject(id: string): void {
-  invokeMessagePack(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, id).catch(() => {})
+  const project = useChatStore.getState().projects.find((entry) => entry.id === id)
+  invokeMessagePack(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, {
+    id,
+    workspaceId: project?.workspaceId ?? 'local-personal'
+  }).catch(() => {})
 }
 
 function sanitizeMessageContentForPersistence(
@@ -494,6 +546,7 @@ function dbAddMessage(sessionId: string, msg: UnifiedMessage, sortOrder: number)
         {
           id: msg.id,
           sessionId,
+          workspaceId: workspaceForSession(sessionId),
           role: msg.role,
           content: JSON.stringify(sanitizeMessageContentForPersistence(msg.content)),
           meta: msg.meta ? JSON.stringify(msg.meta) : null,
@@ -521,6 +574,7 @@ function dbAddMessageBatch(
         items.map(({ msg, sortOrder }) => ({
           id: msg.id,
           sessionId,
+          workspaceId: workspaceForSession(sessionId),
           role: msg.role,
           content: JSON.stringify(sanitizeMessageContentForPersistence(msg.content)),
           meta: msg.meta ? JSON.stringify(msg.meta) : null,
@@ -635,6 +689,7 @@ function dbUpsertMessage(
   const payload: MessageUpsertPayload = {
     id: msg.id,
     sessionId,
+    workspaceId: workspaceForSession(sessionId),
     role: msg.role,
     content: JSON.stringify(normalizedContent),
     meta: msg.meta ? JSON.stringify(msg.meta) : null,
@@ -705,7 +760,10 @@ function dbClearMessages(sessionId: string): void {
   bumpMessageWriteGeneration(sessionId)
   clearPendingMessageUpsertsForSession(sessionId)
   enqueueSessionMessageWrite(sessionId, () =>
-    invokeMessagePack(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, sessionId)
+    invokeMessagePack(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, {
+      sessionId,
+      workspaceId: workspaceForSession(sessionId)
+    })
   )
 }
 
@@ -714,7 +772,12 @@ function dbDeleteMessage(sessionId: string, messageId: string): void {
   const generation = getMessageWriteGeneration(sessionId)
   const pending = enqueueSessionMessageWrite(
     sessionId,
-    () => invokeMessagePack(DB_MESSAGES_DELETE_MSGPACK_CHANNEL, { sessionId, messageId }),
+    () =>
+      invokeMessagePack(DB_MESSAGES_DELETE_MSGPACK_CHANNEL, {
+        sessionId,
+        messageId,
+        workspaceId: workspaceForSession(sessionId)
+      }),
     generation
   )
   trackPendingMessageWrite([messageId], pending)
@@ -724,16 +787,24 @@ function dbTruncateMessagesFrom(sessionId: string, fromSortOrder: number): void 
   bumpMessageWriteGeneration(sessionId)
   clearPendingMessageUpsertsForSession(sessionId, fromSortOrder)
   enqueueSessionMessageWrite(sessionId, () =>
-    invokeMessagePack(DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL, { sessionId, fromSortOrder })
+    invokeMessagePack(DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL, {
+      sessionId,
+      fromSortOrder,
+      workspaceId: workspaceForSession(sessionId)
+    })
   )
 }
 
-function dbListMessages(sessionId: string): Promise<MessageRow[]> {
-  return invokeMessagePackBinary<MessageRow[]>(DB_MESSAGES_LIST_MSGPACK_CHANNEL, sessionId)
+function dbListMessages(session: Pick<Session, 'id' | 'workspaceId'>): Promise<MessageRow[]> {
+  return invokeMessagePackBinary<MessageRow[]>(DB_MESSAGES_LIST_MSGPACK_CHANNEL, {
+    sessionId: session.id,
+    workspaceId: session.workspaceId ?? 'local-personal'
+  })
 }
 
 function dbListMessagesPage(args: {
   sessionId: string
+  workspaceId?: string
   limit: number
   offset: number
 }): Promise<MessageRow[]> {
@@ -742,6 +813,7 @@ function dbListMessagesPage(args: {
 
 function dbListMessagesRequestContext(args: {
   sessionId: string
+  workspaceId?: string
   maxMessages: number
   headLimit?: number
 }): Promise<MessageRow[]> {
@@ -750,6 +822,7 @@ function dbListMessagesRequestContext(args: {
 
 function dbListMessagesWindowAround(args: {
   sessionId: string
+  workspaceId?: string
   messageId?: string | null
   sortOrder?: number | null
   limit: number
@@ -786,6 +859,7 @@ async function dbInsertCompactArtifacts(
         DB_MESSAGES_INSERT_ARTIFACTS_MSGPACK_CHANNEL,
         {
           sessionId,
+          workspaceId: workspaceForSession(sessionId),
           insertBeforeMessageId: options.insertBeforeMessageId ?? null,
           insertSortOrder: Math.max(0, Math.floor(options.insertSortOrder)),
           messages: artifacts.map((msg, index) => ({
@@ -1143,6 +1217,7 @@ function cleanupDeletedSessionMessages(messageIds: string[]): void {
 let _deferredSessionMaintenanceToken = 0
 let _deferredSessionMaintenanceTimer: ReturnType<typeof setTimeout> | null = null
 let _activeSessionHydrationToken = 0
+const workspaceSessionLoadGate = new WorkspaceLoadGate()
 
 function scheduleDeferredSessionMaintenance(getState: () => ChatStore, delayMs = 160): void {
   const token = ++_deferredSessionMaintenanceToken
@@ -1487,6 +1562,8 @@ interface ProjectRow {
   ssh_connection_id: string | null
   plugin_id?: string | null
   pinned: number
+  workspace_id?: string | null
+  model_source?: string | null
 }
 
 interface SessionRow {
@@ -1509,6 +1586,8 @@ interface SessionRow {
   provider_id?: string | null
   model_id?: string | null
   model_selection_mode?: string | null
+  model_source?: string | null
+  workspace_id?: string | null
 }
 
 interface MessageRow {
@@ -1566,6 +1645,32 @@ function normalizeSessionModelSelectionMode(
   return 'inherit'
 }
 
+function parseSessionModelSource(value?: string | null): ModelSource | undefined {
+  if (!value) return undefined
+  try {
+    return parseModelSource(JSON.parse(value))
+  } catch {
+    return undefined
+  }
+}
+
+function sourceForSessionSelection(
+  workspaceId: string,
+  providerId?: string,
+  modelId?: string
+): ModelSource | undefined {
+  if (!providerId || !modelId) return undefined
+  const workspace = useWorkspaceStore
+    .getState()
+    .getWorkspaces()
+    .find((item) => item.id === workspaceId)
+  try {
+    return legacyModelSource(providerId, modelId, workspace?.kind)
+  } catch {
+    return undefined
+  }
+}
+
 function rowToProject(row: ProjectRow): Project {
   return {
     id: row.id,
@@ -1575,7 +1680,9 @@ function rowToProject(row: ProjectRow): Project {
     workingFolder: row.working_folder ?? undefined,
     sshConnectionId: row.ssh_connection_id ?? undefined,
     pluginId: row.plugin_id ?? undefined,
-    pinned: row.pinned === 1
+    pinned: row.pinned === 1,
+    modelSource: parseSessionModelSource(row.model_source),
+    workspaceId: row.workspace_id ?? 'local-personal'
   }
 }
 
@@ -1618,7 +1725,9 @@ function rowToSession(row: SessionRow, messages: UnifiedMessage[] = []): Session
       row.model_id
     ),
     providerId: row.provider_id ?? undefined,
-    modelId: row.model_id ?? undefined
+    modelId: row.model_id ?? undefined,
+    modelSource: parseSessionModelSource(row.model_source),
+    workspaceId: row.workspace_id ?? 'local-personal'
   }
 }
 
@@ -1648,6 +1757,8 @@ function mergeSessionSummary(
   session.modelSelectionMode = next.modelSelectionMode
   session.providerId = next.providerId
   session.modelId = next.modelId
+  session.modelSource = next.modelSource
+  session.workspaceId = next.workspaceId
   // When preserveLoadedMessages is true the in-memory state may already be
   // ahead of the DB snapshot (e.g. beginUserTurn appended messages that the
   // fire-and-forget persist hasn't landed yet). Accepting a stale lower count
@@ -2203,6 +2314,7 @@ async function loadRequestContextMessages(
   if (maxMessages === null) {
     const msgRows = await dbListMessagesPage({
       sessionId: session.id,
+      workspaceId: session.workspaceId ?? 'local-personal',
       limit: knownCount,
       offset: 0
     })
@@ -2213,6 +2325,7 @@ async function loadRequestContextMessages(
   try {
     const requestRows = await dbListMessagesRequestContext({
       sessionId: session.id,
+      workspaceId: session.workspaceId ?? 'local-personal',
       maxMessages,
       headLimit: REQUEST_CONTEXT_HEAD_MESSAGES
     })
@@ -2267,6 +2380,7 @@ async function loadRequestContextMessages(
 
   const msgRows = await dbListMessagesPage({
     sessionId: session.id,
+    workspaceId: session.workspaceId ?? 'local-personal',
     limit: fetchLimit,
     offset: tailOffset
   })
@@ -2584,12 +2698,16 @@ export const useChatStore = create<ChatStore>()(
     _loaded: false,
 
     ensureDefaultProject: async () => {
+      // The historical default project belongs only to the offline local workspace.
+      // Remote personal/team spaces must never inherit it implicitly.
+      if (useWorkspaceStore.getState().activeWorkspaceId !== 'local-personal') return null
       try {
         const row = await invokeMessagePackBinary<ProjectRow | null>(
           DB_PROJECTS_ENSURE_DEFAULT_MSGPACK_CHANNEL,
-          {}
+          { workspaceId: 'local-personal' }
         )
         if (!row) return null
+        if (useWorkspaceStore.getState().activeWorkspaceId !== 'local-personal') return null
         const project = rowToProject(row)
         set((state) => {
           const existing = state.projects.find((item) => item.id === project.id)
@@ -2610,6 +2728,16 @@ export const useChatStore = create<ChatStore>()(
     },
 
     setActiveProject: (id) => {
+      if (
+        id &&
+        !get().projects.some(
+          (project) =>
+            project.id === id &&
+            (project.workspaceId ?? 'local-personal') ===
+              useWorkspaceStore.getState().activeWorkspaceId
+        )
+      )
+        return
       const prevSessionId = get().activeSessionId
       let nextSessionId: string | null = null
       set((state) => {
@@ -2683,7 +2811,8 @@ export const useChatStore = create<ChatStore>()(
         pluginId: input?.pluginId ?? null,
         pinned: false,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        workspaceId: useWorkspaceStore.getState().activeWorkspaceId
       }
 
       try {
@@ -2707,7 +2836,8 @@ export const useChatStore = create<ChatStore>()(
           workingFolder: payload.workingFolder ?? undefined,
           sshConnectionId: payload.sshConnectionId ?? undefined,
           pluginId: payload.pluginId ?? undefined,
-          pinned: false
+          pinned: false,
+          workspaceId: payload.workspaceId
         }
         set((state) => {
           state.projects.unshift(fallbackProject)
@@ -2748,7 +2878,12 @@ export const useChatStore = create<ChatStore>()(
         const result = await invokeMessagePackBinary<{
           projectId: string
           sessionIds: string[]
-        } | null>(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, projectId)
+        } | null>(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, {
+          id: projectId,
+          workspaceId:
+            get().projects.find((project) => project.id === projectId)?.workspaceId ??
+            'local-personal'
+        })
         if (result?.sessionIds) {
           deletedSessionIds = Array.from(new Set([...localSessionIds, ...result.sessionIds]))
         }
@@ -2969,6 +3104,7 @@ export const useChatStore = create<ChatStore>()(
         let windowStart = Math.max(0, effectiveKnownCount - nextLimit)
         let msgRows = await dbListMessagesPage({
           sessionId,
+          workspaceId: session.workspaceId ?? 'local-personal',
           limit: nextLimit,
           offset: windowStart
         })
@@ -2976,13 +3112,14 @@ export const useChatStore = create<ChatStore>()(
         if (msgRows.length === 0) {
           const actualCount = await invokeMessagePackBinary<number>(
             DB_MESSAGES_COUNT_MSGPACK_CHANNEL,
-            sessionId
+            { sessionId, workspaceId: session.workspaceId ?? 'local-personal' }
           )
           if (actualCount !== effectiveKnownCount) {
             effectiveKnownCount = actualCount
             windowStart = Math.max(0, effectiveKnownCount - nextLimit)
             msgRows = await dbListMessagesPage({
               sessionId,
+              workspaceId: session.workspaceId ?? 'local-personal',
               limit: nextLimit,
               offset: windowStart
             })
@@ -3001,6 +3138,7 @@ export const useChatStore = create<ChatStore>()(
           const prependOffset = Math.max(0, windowStart - prependCount)
           const prependRows = await dbListMessagesPage({
             sessionId,
+            workspaceId: session.workspaceId ?? 'local-personal',
             limit: prependCount,
             offset: prependOffset
           })
@@ -3067,6 +3205,7 @@ export const useChatStore = create<ChatStore>()(
       try {
         const msgRows = await dbListMessagesPage({
           sessionId,
+          workspaceId: session.workspaceId ?? 'local-personal',
           limit: nextCount,
           offset
         })
@@ -3081,6 +3220,7 @@ export const useChatStore = create<ChatStore>()(
           const prependOffset = Math.max(0, offset - prependCount)
           const prependRows = await dbListMessagesPage({
             sessionId,
+            workspaceId: session.workspaceId ?? 'local-personal',
             limit: prependCount,
             offset: prependOffset
           })
@@ -3127,6 +3267,7 @@ export const useChatStore = create<ChatStore>()(
         const nextCount = Math.min(limit, newerCount)
         const msgRows = await dbListMessagesPage({
           sessionId,
+          workspaceId: latest.workspaceId ?? 'local-personal',
           limit: nextCount,
           offset: latest.loadedRangeEnd
         })
@@ -3169,6 +3310,7 @@ export const useChatStore = create<ChatStore>()(
       try {
         const result = await dbListMessagesWindowAround({
           sessionId,
+          workspaceId: session.workspaceId ?? 'local-personal',
           messageId: anchor.messageId,
           sortOrder: anchor.sortOrder,
           limit: safeLimit
@@ -3339,7 +3481,7 @@ export const useChatStore = create<ChatStore>()(
         knownCount <= session.messages.length
       if (shouldSkip) return
       try {
-        const msgRows = await dbListMessages(sessionId)
+        const msgRows = await dbListMessages(session)
         const messages = msgRows.map(rowToMessage)
         const messageSortOrders = msgRows.map((row) => row.sort_order)
         const latestSession = get().sessions.find((s) => s.id === sessionId)
@@ -3383,6 +3525,7 @@ export const useChatStore = create<ChatStore>()(
       try {
         const msgRows = await dbListMessagesPage({
           sessionId,
+          workspaceId: session.workspaceId ?? 'local-personal',
           limit: safeLimit,
           offset: safeOffset
         })
@@ -3462,6 +3605,10 @@ export const useChatStore = create<ChatStore>()(
     },
 
     loadFromDb: async () => {
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+      const loadToken = workspaceSessionLoadGate.begin(workspaceId)
+      const isCurrentLoad = (): boolean =>
+        workspaceSessionLoadGate.accepts(loadToken, useWorkspaceStore.getState().activeWorkspaceId)
       try {
         const isInitialLoad = !get()._loaded
         const initialRoute =
@@ -3469,35 +3616,47 @@ export const useChatStore = create<ChatStore>()(
             ? parseChatRoute(window.location.hash)
             : null
         const [projectRows, sessionRows] = await Promise.all([
-          invokeMessagePackBinary<ProjectRow[]>(DB_PROJECTS_LIST_MSGPACK_CHANNEL, {}),
-          invokeMessagePackBinary<SessionRow[]>(DB_SESSIONS_LIST_MSGPACK_CHANNEL, {})
+          invokeMessagePackBinary<ProjectRow[]>(DB_PROJECTS_LIST_MSGPACK_CHANNEL, {
+            workspaceId
+          }),
+          invokeMessagePackBinary<SessionRow[]>(DB_SESSIONS_LIST_MSGPACK_CHANNEL, {
+            workspaceId
+          })
         ])
-        let projects = projectRows.map(rowToProject)
+        if (!isCurrentLoad()) return
+        let projects = projectRows
+          .filter((row) => (row.workspace_id ?? 'local-personal') === workspaceId)
+          .map(rowToProject)
 
         if (projects.length === 0) {
           const ensured = await get().ensureDefaultProject()
+          if (!isCurrentLoad()) return
           projects = ensured ? [ensured] : []
         }
 
         const projectMap = new Map(projects.map((project) => [project.id, project]))
 
-        const sessions: Session[] = sessionRows.map((row) => {
-          const session = rowToSession(row, [])
-          if (session.projectId) {
-            const project = projectMap.get(session.projectId)
-            if (project) {
-              session.workingFolder = project.workingFolder
-              session.sshConnectionId = project.sshConnectionId
+        const sessions: Session[] = sessionRows
+          .filter((row) => (row.workspace_id ?? 'local-personal') === workspaceId)
+          .map((row) => {
+            const session = rowToSession(row, [])
+            if (session.projectId) {
+              const project = projectMap.get(session.projectId)
+              if (project) {
+                session.workingFolder = project.workingFolder
+                session.sshConnectionId = project.sshConnectionId
+              }
             }
-          }
-          if (session.messageCount === 0) {
-            session.messagesLoaded = true
-            session.loadedRangeStart = 0
-            session.loadedRangeEnd = 0
-            session.lastKnownMessageCount = 0
-          }
-          return session
-        })
+            if (session.messageCount === 0) {
+              session.messagesLoaded = true
+              session.loadedRangeStart = 0
+              session.loadedRangeEnd = 0
+              session.lastKnownMessageCount = 0
+            }
+            return session
+          })
+
+        if (!isCurrentLoad()) return
 
         let nextActiveSessionId: string | null = null
         let nextActiveProjectId: string | null = null
@@ -3543,6 +3702,10 @@ export const useChatStore = create<ChatStore>()(
           state.activeProjectId = nextActiveProjectId
         })
 
+        useUIStore
+          .getState()
+          .pruneWorkspaceSessionTabs(workspaceId, new Set(sessions.map((session) => session.id)))
+
         if (nextActiveSessionId) {
           const planStore = usePlanStore.getState()
           const [, , activePlan] = await Promise.all([
@@ -3555,9 +3718,11 @@ export const useChatStore = create<ChatStore>()(
           useTaskStore.getState().clearTasks()
           usePlanStore.getState().setActivePlan(null)
         }
+        if (!isCurrentLoad()) return
         useUIStore.getState().syncSessionScopedState(nextActiveSessionId, nextActiveProjectId)
         scheduleDeferredSessionMaintenance(get)
       } catch (err) {
+        if (!isCurrentLoad()) return
         console.error('[ChatStore] Failed to load from DB:', err)
         set({ _loaded: true })
       }
@@ -3569,6 +3734,7 @@ export const useChatStore = create<ChatStore>()(
       const { newSessionDefaultModel } = useSettingsStore.getState()
       const preserveProjectless = options?.preserveProjectless === true
 
+      const activeWorkspaceId = useWorkspaceStore.getState().activeWorkspaceId
       let targetProjectId = preserveProjectless
         ? (projectId ?? null)
         : (projectId ??
@@ -3577,7 +3743,12 @@ export const useChatStore = create<ChatStore>()(
           get().projects[0]?.id ??
           null)
 
-      const targetProject = get().projects.find((project) => project.id === targetProjectId)
+      const requestedProject = get().projects.find((project) => project.id === targetProjectId)
+      const targetProject =
+        requestedProject && (requestedProject.workspaceId ?? 'local-personal') === activeWorkspaceId
+          ? requestedProject
+          : undefined
+      if (!targetProject) targetProjectId = null
       const taskProfile =
         options?.taskProfile ??
         inferTaskProfile(
@@ -3591,26 +3762,41 @@ export const useChatStore = create<ChatStore>()(
         targetProjectId = targetProject.id
       }
 
-      const projectHasModelBinding = Boolean(targetProject?.providerId && targetProject?.modelId)
+      const projectModelSource = targetProject?.modelSource
+      const projectHasLegacyModelBinding = Boolean(
+        targetProject?.providerId && targetProject?.modelId
+      )
+      const projectHasModelBinding = Boolean(projectModelSource || projectHasLegacyModelBinding)
       const hasFixedDefaultModel = Boolean(
         !projectHasModelBinding &&
         newSessionDefaultModel?.useGlobalActiveModel === false &&
         newSessionDefaultModel.providerId &&
         newSessionDefaultModel.modelId
       )
-      const sessionProviderId = projectHasModelBinding
+      const localSelection = useProviderStore.getState()
+      const workspaceSelection =
+        useWorkspaceStore.getState().getModelSelection(activeWorkspaceId) ??
+        (useSettingsStore.getState().mainModelSelectionMode !== 'auto' &&
+        localSelection.activeProviderId &&
+        localSelection.activeModelId
+          ? { providerId: localSelection.activeProviderId, modelId: localSelection.activeModelId }
+          : undefined)
+      const sessionProviderId = projectHasLegacyModelBinding
         ? targetProject?.providerId
         : hasFixedDefaultModel
           ? newSessionDefaultModel?.providerId
-          : undefined
-      const sessionModelId = projectHasModelBinding
+          : workspaceSelection?.providerId
+      const sessionModelId = projectHasLegacyModelBinding
         ? targetProject?.modelId
         : hasFixedDefaultModel
           ? newSessionDefaultModel?.modelId
-          : undefined
+          : workspaceSelection?.modelId
       const modelSelectionMode: SessionModelSelectionMode =
-        projectHasModelBinding || hasFixedDefaultModel ? 'manual' : 'inherit'
+        projectHasModelBinding || hasFixedDefaultModel || workspaceSelection ? 'manual' : 'inherit'
 
+      const modelSource =
+        projectModelSource ??
+        sourceForSessionSelection(activeWorkspaceId, sessionProviderId, sessionModelId)
       const newSession: Session = {
         id,
         title: 'New Conversation',
@@ -3632,7 +3818,9 @@ export const useChatStore = create<ChatStore>()(
         planId: options?.planId ?? undefined,
         modelSelectionMode,
         providerId: sessionProviderId,
-        modelId: sessionModelId
+        modelId: sessionModelId,
+        modelSource,
+        workspaceId: activeWorkspaceId
       }
       set((state) => {
         state.sessions.push(newSession)
@@ -3749,6 +3937,16 @@ export const useChatStore = create<ChatStore>()(
     },
 
     setActiveSession: (id) => {
+      if (
+        id &&
+        !get().sessions.some(
+          (session) =>
+            session.id === id &&
+            (session.workspaceId ?? 'local-personal') ===
+              useWorkspaceStore.getState().activeWorkspaceId
+        )
+      )
+        return
       const prevId = get().activeSessionId
       invalidateVisibleSessionCache()
       if (prevId && prevId !== id) {
@@ -3903,12 +4101,22 @@ export const useChatStore = create<ChatStore>()(
 
     setSessionModelManual: (sessionId, providerId, modelId) => {
       const now = Date.now()
+      const current = get().sessions.find((item) => item.id === sessionId)
+      if (!current) return
+      const modelSource = sourceForSessionSelection(
+        current.workspaceId ?? 'local-personal',
+        providerId,
+        modelId
+      )
+      if (!modelSource) return
+      if (modelSource.kind !== 'local' && modelSource.workspaceId !== current.workspaceId) return
       set((state) => {
         const session = state.sessions.find((s) => s.id === sessionId)
         if (session) {
           session.modelSelectionMode = 'manual'
           session.providerId = providerId
           session.modelId = modelId
+          session.modelSource = modelSource
           delete session.promptSnapshot
           session.updatedAt = now
         }
@@ -3917,6 +4125,7 @@ export const useChatStore = create<ChatStore>()(
         modelSelectionMode: 'manual',
         providerId,
         modelId,
+        modelSource: JSON.stringify(modelSource),
         updatedAt: now
       })
     },
@@ -3929,6 +4138,7 @@ export const useChatStore = create<ChatStore>()(
           session.modelSelectionMode = 'auto'
           delete session.providerId
           delete session.modelId
+          delete session.modelSource
           delete session.promptSnapshot
           session.updatedAt = now
         }
@@ -3937,6 +4147,7 @@ export const useChatStore = create<ChatStore>()(
         modelSelectionMode: 'auto',
         providerId: null,
         modelId: null,
+        modelSource: null,
         updatedAt: now
       })
     },
@@ -3949,6 +4160,7 @@ export const useChatStore = create<ChatStore>()(
           session.modelSelectionMode = 'inherit'
           delete session.providerId
           delete session.modelId
+          delete session.modelSource
           delete session.promptSnapshot
           session.updatedAt = now
         }
@@ -3957,6 +4169,7 @@ export const useChatStore = create<ChatStore>()(
         modelSelectionMode: 'inherit',
         providerId: null,
         modelId: null,
+        modelSource: null,
         updatedAt: now
       })
     },
@@ -4199,14 +4412,28 @@ export const useChatStore = create<ChatStore>()(
     },
 
     clearAllSessions: () => {
-      const ids = get().sessions.map((s) => s.id)
-      const deletedMessageIds = get().sessions.flatMap((s) =>
-        s.messages.map((message) => message.id)
+      const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+      const sessions = get().sessions.filter(
+        (session) => (session.workspaceId ?? 'local-personal') === workspaceId
       )
+      const ids = sessions.map((s) => s.id)
+      const activeSessionWasCleared = Boolean(
+        get().activeSessionId && ids.includes(get().activeSessionId as string)
+      )
+      const activeProject = get().activeProjectId
+        ? get().projects.find((project) => project.id === get().activeProjectId)
+        : null
+      const activeProjectWasCleared = Boolean(
+        activeProject && (activeProject.workspaceId ?? 'local-personal') === workspaceId
+      )
+      const deletedMessageIds = sessions.flatMap((s) => s.messages.map((message) => message.id))
       set((state) => {
-        state.sessions = []
-        state.sessionsById = {}
-        state.activeSessionId = null
+        state.sessions = state.sessions.filter(
+          (session) => (session.workspaceId ?? 'local-personal') !== workspaceId
+        )
+        syncSessionsById(state)
+        if (activeSessionWasCleared) state.activeSessionId = null
+        if (activeProjectWasCleared) state.activeProjectId = null
       })
       // Clean up agent-store, team-store, plan-store, task-store for all sessions
       const agentState = useAgentStore.getState()
@@ -4229,9 +4456,13 @@ export const useChatStore = create<ChatStore>()(
       for (const messageId of deletedMessageIds) {
         _streamingDirtyMessageIds.delete(messageId)
       }
-      agentState.clearToolCalls()
-      useUIStore.getState().syncSessionScopedState(null, null)
-      dbClearAllSessions(ids)
+      useUIStore
+        .getState()
+        .syncSessionScopedState(
+          activeSessionWasCleared ? null : get().activeSessionId,
+          activeProjectWasCleared ? null : get().activeProjectId
+        )
+      dbClearAllSessions(workspaceId, ids)
     },
 
     upsertSessionFromSync: (row, options) => {
@@ -4389,7 +4620,8 @@ export const useChatStore = create<ChatStore>()(
           source.modelId
         ),
         providerId: source.providerId,
-        modelId: source.modelId
+        modelId: source.modelId,
+        workspaceId: source.workspaceId ?? 'local-personal'
       }
       set((state) => {
         state.sessions.push(newSession)
@@ -4443,7 +4675,8 @@ export const useChatStore = create<ChatStore>()(
           source.modelId
         ),
         providerId: source.providerId,
-        modelId: source.modelId
+        modelId: source.modelId,
+        workspaceId: source.workspaceId ?? 'local-personal'
       }
 
       set((state) => {
@@ -4596,6 +4829,7 @@ export const useChatStore = create<ChatStore>()(
       enqueueSessionMessageWrite(sessionId, () =>
         invokeMessagePack(DB_MESSAGES_REPLACE_MSGPACK_CHANNEL, {
           sessionId,
+          workspaceId: workspaceForSession(sessionId),
           messages: revisedMessages.map((msg, i) => ({
             id: msg.id,
             role: msg.role,
@@ -5438,3 +5672,17 @@ _scheduleStreamDeltaFlush = () => {
   if (_streamDeltaRafId !== null) return
   _streamDeltaRafId = requestAnimationFrame(flushStreamDeltas)
 }
+
+// Membership refresh and logout may remove the visible space without a user switch.
+useWorkspaceStore.subscribe((workspace, previous) => {
+  if (workspace.activeWorkspaceId === previous.activeWorkspaceId) return
+  const chat = useChatStore.getState()
+  const active = chat.sessions.find((session) => session.id === chat.activeSessionId)
+  if (active && (active.workspaceId ?? 'local-personal') !== workspace.activeWorkspaceId)
+    chat.setActiveSession(null)
+  const project = chat.projects.find((item) => item.id === chat.activeProjectId)
+  if (project && (project.workspaceId ?? 'local-personal') !== workspace.activeWorkspaceId) {
+    chat.setActiveProject(null)
+    chat.setActiveProjectHome(null)
+  }
+})

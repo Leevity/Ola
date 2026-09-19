@@ -166,6 +166,8 @@ export interface SidecarAgentRunRequest {
   workingFolder?: string
   maxIterations: number
   forceApproval: boolean
+  /** Explicit per-run snapshot of the user's full-access setting. */
+  autoApprove?: boolean
   providerRetryMaxAttempts?: number
   compressionProvider?: SidecarProviderConfig
   permissionPolicy?: PermissionPolicySnapshot
@@ -496,7 +498,6 @@ function mapSidecarWebSearchConfig(tools: ToolDefinition[]): SidecarWebSearchCon
   return {
     enabled: true,
     provider: settings.webSearchProvider,
-    ...(settings.webSearchApiKey ? { apiKey: settings.webSearchApiKey } : {}),
     ...(settings.webSearchEngine ? { searchEngine: settings.webSearchEngine } : {}),
     maxResults: settings.webSearchMaxResults,
     timeout: settings.webSearchTimeout
@@ -593,6 +594,7 @@ export function buildSidecarAgentRunRequest(args: {
     ...(args.compression ? { compression: args.compression } : {}),
     maxIterations: args.maxIterations,
     forceApproval: args.forceApproval,
+    autoApprove: settings.autoApprove,
     providerRetryMaxAttempts: settings.providerRetryMaxAttempts,
     ...(args.compression && compressionProvider ? { compressionProvider } : {}),
     ...(permissionPolicy ? { permissionPolicy } : {}),

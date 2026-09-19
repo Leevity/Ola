@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
+import i18n from '@renderer/locales'
 
 export type LocalTerminalStatus = 'running' | 'exited' | 'error'
 
@@ -191,8 +192,9 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
       | undefined
 
     if (!result?.id || result.error) {
-      toast.error('Failed to create terminal', {
-        description: result?.error || 'Unknown error'
+      toast.error(i18n.t('input.terminalCreateFailed', { ns: 'chat' }), {
+        description:
+          result?.error || i18n.t('assistantMessage.agentError.descUnknown', { ns: 'chat' })
       })
       return null
     }
@@ -287,14 +289,14 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
         | { success?: boolean; error?: string }
         | undefined
     } catch (error) {
-      toast.error('Failed to close terminal', {
+      toast.error(i18n.t('input.terminalCloseFailed', { ns: 'chat' }), {
         description: error instanceof Error ? error.message : String(error)
       })
       return
     }
 
     if (result?.error && !result.error.includes('Terminal not found')) {
-      toast.error('Failed to close terminal', {
+      toast.error(i18n.t('input.terminalCloseFailed', { ns: 'chat' }), {
         description: result.error
       })
       return

@@ -74,6 +74,12 @@ internal static class AgentRuntimePlanExecutor
             return EncodeError("No active session.");
         }
 
+        var workspaceId = GetWorkspaceId(parameters);
+        if (workspaceId.Length == 0)
+        {
+            return EncodeError("No active workspace.");
+        }
+
         var workingFolder = JsonHelpers.GetString(parameters, "workingFolder")?.Trim() ?? string.Empty;
         if (workingFolder.Length == 0)
         {
@@ -85,7 +91,7 @@ internal static class AgentRuntimePlanExecutor
         using (var connection = DbConnectionFactory.OpenReadWrite(parameters))
         using (var transaction = connection.BeginTransaction())
         {
-            var existingPlan = LoadPlanBySession(connection, transaction, sessionId);
+            var existingPlan = LoadPlanBySession(connection, transaction, sessionId, workspaceId);
             if (existingPlan is not null && string.IsNullOrWhiteSpace(existingPlan.FilePath))
             {
                 transaction.Commit();
@@ -120,7 +126,7 @@ internal static class AgentRuntimePlanExecutor
                     UpdatedAt = now
                 };
                 plan.FilePath = GetPlanFilePath(workingFolder, plan.Id);
-                InsertPlan(connection, transaction, plan);
+                InsertPlan(connection, transaction, plan, workspaceId);
                 status = "entered";
             }
 
@@ -168,10 +174,16 @@ internal static class AgentRuntimePlanExecutor
             return EncodeError("No active session.");
         }
 
+        var workspaceId = GetWorkspaceId(parameters);
+        if (workspaceId.Length == 0)
+        {
+            return EncodeError("No active workspace.");
+        }
+
         PlanRow? plan;
         using (var connection = DbConnectionFactory.OpenReadWrite(parameters))
         {
-            plan = LoadPlanBySession(connection, null, sessionId);
+            plan = LoadPlanBySession(connection, null, sessionId, workspaceId);
         }
 
         var isPlanMode = IsPlanModeActive(runId, parameters);
@@ -223,7 +235,7 @@ internal static class AgentRuntimePlanExecutor
         plan.Title = title;
         plan.Status = "awaiting_review";
         plan.UpdatedAt = now;
-        UpdatePlanForReview(parameters, plan.Id, title, now);
+        UpdatePlanForReview(parameters, plan.Id, workspaceId, title, now);
         RunStates[runId] = new PlanRunState(false, plan.FilePath);
         await NotifyPlanUiAsync("exit", plan, content, parameters, context, cancellationToken);
 
@@ -331,18 +343,24 @@ internal static class AgentRuntimePlanExecutor
         return await File.ReadAllTextAsync(planFilePath, cancellationToken);
     }
 
-    private static PlanRow? LoadPlanBySession(SqliteConnection connection, SqliteTransaction? transaction, string sessionId)
+    private static PlanRow? LoadPlanBySession(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        string sessionId,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            SELECT id, session_id, title, status, file_path, content, spec_json, created_at, updated_at
-              FROM plans
-             WHERE session_id = $sessionId
-             ORDER BY updated_at DESC
+            SELECT p.id, p.session_id, p.title, p.status, p.file_path, p.content, p.spec_json, p.created_at, p.updated_at
+              FROM plans p
+              JOIN sessions s ON s.id = p.session_id
+             WHERE p.session_id = $sessionId AND s.workspace_id = $workspaceId
+             ORDER BY p.updated_at DESC
              LIMIT 1
             """;
         command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         using var reader = command.ExecuteReader();
         return reader.Read() ? ReadPlan(reader) : null;
     }
@@ -363,16 +381,22 @@ internal static class AgentRuntimePlanExecutor
         };
     }
 
-    private static void InsertPlan(SqliteConnection connection, SqliteTransaction transaction, PlanRow plan)
+    private static void InsertPlan(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        PlanRow plan,
+        string workspaceId)
     {
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
             INSERT INTO plans (id, session_id, title, status, file_path, content, spec_json, created_at, updated_at)
-            VALUES ($id, $sessionId, $title, $status, $filePath, $content, $specJson, $createdAt, $updatedAt)
+            SELECT $id, $sessionId, $title, $status, $filePath, $content, $specJson, $createdAt, $updatedAt
+             WHERE EXISTS (SELECT 1 FROM sessions WHERE id = $sessionId AND workspace_id = $workspaceId)
             """;
         command.Parameters.AddWithValue("$id", plan.Id);
         command.Parameters.AddWithValue("$sessionId", plan.SessionId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         command.Parameters.AddWithValue("$title", plan.Title);
         command.Parameters.AddWithValue("$status", plan.Status);
         command.Parameters.AddWithValue("$filePath", plan.FilePath ?? (object)DBNull.Value);
@@ -380,10 +404,18 @@ internal static class AgentRuntimePlanExecutor
         command.Parameters.AddWithValue("$specJson", plan.SpecJson ?? (object)DBNull.Value);
         command.Parameters.AddWithValue("$createdAt", plan.CreatedAt);
         command.Parameters.AddWithValue("$updatedAt", plan.UpdatedAt);
-        command.ExecuteNonQuery();
+        if (command.ExecuteNonQuery() == 0)
+        {
+            throw new InvalidOperationException("Plan session is unavailable in this workspace.");
+        }
     }
 
-    private static void UpdatePlanForReview(JsonElement parameters, string planId, string title, long updatedAt)
+    private static void UpdatePlanForReview(
+        JsonElement parameters,
+        string planId,
+        string workspaceId,
+        string title,
+        long updatedAt)
     {
         using var connection = DbConnectionFactory.OpenReadWrite(parameters);
         using var transaction = connection.BeginTransaction();
@@ -394,11 +426,12 @@ internal static class AgentRuntimePlanExecutor
                SET title = $title,
                    status = 'awaiting_review',
                    updated_at = $updatedAt
-             WHERE id = $id
+             WHERE id = $id AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)
             """;
         command.Parameters.AddWithValue("$title", title);
         command.Parameters.AddWithValue("$updatedAt", updatedAt);
         command.Parameters.AddWithValue("$id", planId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
         command.ExecuteNonQuery();
         transaction.Commit();
     }
@@ -409,8 +442,13 @@ internal static class AgentRuntimePlanExecutor
         using var transaction = connection.BeginTransaction();
         using var command = connection.CreateCommand();
         command.Transaction = transaction;
-        command.CommandText = "DELETE FROM plans WHERE id = $id";
+        command.CommandText = """
+            DELETE FROM plans
+             WHERE id = $id
+               AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)
+            """;
         command.Parameters.AddWithValue("$id", planId);
+        command.Parameters.AddWithValue("$workspaceId", GetWorkspaceId(parameters));
         command.ExecuteNonQuery();
         transaction.Commit();
     }
@@ -460,6 +498,11 @@ internal static class AgentRuntimePlanExecutor
     private static string GetSessionId(JsonElement parameters)
     {
         return JsonHelpers.GetString(parameters, "sessionId")?.Trim() ?? string.Empty;
+    }
+
+    private static string GetWorkspaceId(JsonElement parameters)
+    {
+        return JsonHelpers.GetString(parameters, "workspaceId")?.Trim() ?? string.Empty;
     }
 
     private static long Now()

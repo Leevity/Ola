@@ -67,12 +67,18 @@ export async function handleNativePlanUiUpdate(params: unknown): Promise<NativeP
     return { ok: false, error: 'Invalid native plan UI update payload.' }
   }
 
+  const session = useChatStore.getState().sessions.find((item) => item.id === plan.sessionId)
+  if (!session) {
+    return { ok: false, error: 'Plan session is unavailable in this workspace.' }
+  }
+  // The native plan event is not an ownership authority. Bind it to the
+  // renderer's already scoped session before it can reach persistence.
+  plan.workspaceId = session.workspaceId
   usePlanStore.getState().syncPlanFromNative(plan)
 
   const uiStore = useUIStore.getState()
   if (action === 'enter') {
     uiStore.enterPlanMode(plan.sessionId)
-    const session = useChatStore.getState().sessions.find((item) => item.id === plan.sessionId)
     const autoSwitchTarget = useSettingsStore.getState().clarifyPlanModeAutoSwitchTarget
     if (session?.mode === 'clarify' && autoSwitchTarget !== 'off') {
       uiStore.setMode(autoSwitchTarget)

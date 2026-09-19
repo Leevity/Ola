@@ -71,6 +71,12 @@ internal sealed class SessionRow
     [JsonPropertyName("model_selection_mode")]
     public string? ModelSelectionMode { get; set; }
 
+    [JsonPropertyName("model_source")]
+    public string? ModelSource { get; set; }
+
+    [JsonPropertyName("workspace_id")]
+    public string WorkspaceId { get; set; } = "local-personal";
+
     [JsonPropertyName("message_count")]
     public int MessageCount { get; set; }
 }

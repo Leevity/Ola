@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
+import { useWorkspaceStore } from './workspace-store'
+import type { OlaModelResource, WorkspaceContext } from '@renderer/lib/workspace-context'
 
 export type RemoteAccount = {
   id: string
@@ -28,6 +30,28 @@ export type RemoteSessionAudit = {
   disconnectReason?: string
   transport?: 'p2p' | 'turn'
   bytesTransferred: number
+}
+
+type RemoteWorkspaceResponse = {
+  id: string
+  kind: 'personal' | 'team'
+  name: string
+  role?: 'owner' | 'team_admin' | 'member'
+  revision?: string
+}
+
+type RemoteModelResourceResponse = {
+  id: string
+  providerName?: string
+  provider?: string
+  model: string
+  displayName?: string
+  enabled?: boolean
+  isDefault?: boolean
+  supportsVision?: boolean
+  supportsFunctionCall?: boolean
+  category?: 'chat' | 'image' | 'embedding' | 'speech'
+  revision?: string
 }
 
 export type MeshNode = {
@@ -71,6 +95,7 @@ type RemoteAccountStore = {
   resolvedPairing: ResolvedPairing | null
   allowRemoteControl: boolean
   loading: boolean
+  workspaceSyncState: 'idle' | 'syncing' | 'unavailable'
   setApiBaseUrl: (apiBaseUrl: string) => void
   hydrate: () => Promise<void>
   register: (email: string, password: string) => Promise<void>
@@ -83,7 +108,7 @@ type RemoteAccountStore = {
   loadMeshNodes: () => Promise<void>
   loadSessionAudits: () => Promise<void>
   heartbeatDevice: () => Promise<void>
-  syncModelConfig: () => Promise<Record<string, unknown>>
+  syncWorkspaces: () => Promise<void>
   setAllowRemoteControl: (allow: boolean) => Promise<void>
   createPairingCode: () => Promise<void>
   revokePairingCode: () => Promise<void>
@@ -91,8 +116,16 @@ type RemoteAccountStore = {
   autoResolvePairing: (controlledDeviceId: string) => Promise<ResolvedPairing>
 }
 
+let workspaceSyncGeneration = 0
 const STORAGE_KEY = 'ola.remote.account'
-const DEFAULT_API_BASE_URL = 'http://100.64.0.6:7300'
+const DEFAULT_API_BASE_URL = 'https://lbxai.cn'
+const LEGACY_DEFAULT_API_BASE_URL = 'http://100.64.0.6:7300'
+
+function normalizeApiBaseUrl(value: string | null | undefined): string {
+  const normalized = value?.trim().replace(/\/$/, '')
+  if (!normalized || normalized === LEGACY_DEFAULT_API_BASE_URL) return DEFAULT_API_BASE_URL
+  return normalized
+}
 
 function loadPersistedState(): Pick<
   RemoteAccountStore,
@@ -105,7 +138,7 @@ function loadPersistedState(): Pick<
       Pick<RemoteAccountStore, 'apiBaseUrl' | 'token' | 'account' | 'device'>
     >
     return {
-      apiBaseUrl: parsed.apiBaseUrl || DEFAULT_API_BASE_URL,
+      apiBaseUrl: normalizeApiBaseUrl(parsed.apiBaseUrl),
       token: null,
       account: parsed.account ?? null,
       device: parsed.device ?? null
@@ -142,6 +175,7 @@ async function request<T>(
 }
 
 export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
+  window.localStorage.removeItem(`${STORAGE_KEY}.modelConfig`)
   const persisted = loadPersistedState()
   return {
     ...persisted,
@@ -152,9 +186,12 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
     resolvedPairing: null,
     allowRemoteControl: false,
     loading: false,
+    workspaceSyncState: 'idle',
     setApiBaseUrl: (apiBaseUrl) => {
-      const next = { ...get(), apiBaseUrl: apiBaseUrl.trim() || DEFAULT_API_BASE_URL }
-      set({ apiBaseUrl: next.apiBaseUrl })
+      workspaceSyncGeneration++
+      useWorkspaceStore.getState().clearOlaState()
+      const next = { ...get(), apiBaseUrl: normalizeApiBaseUrl(apiBaseUrl) }
+      set({ apiBaseUrl: next.apiBaseUrl, token: null, account: null, device: null })
       persist({
         apiBaseUrl: next.apiBaseUrl,
         token: next.token,
@@ -165,26 +202,42 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
     hydrate: async () => {
       const { apiBaseUrl } = get()
       try {
-        const result = await request<{ account: RemoteAccount; device: RemoteDevice | null }>(
-          apiBaseUrl,
-          'hydrate'
-        )
+        const result = await request<{
+          account: RemoteAccount
+          device: RemoteDevice | null
+          offline?: boolean
+        }>(apiBaseUrl, 'hydrate')
         // A browser session is not the same as an Ola desktop token. When
         // OAuth has not completed yet, stop here instead of trying to
         // register a device and masking the real login state with a second
         // "Remote login is required" error.
         if (!result.account) {
+          useWorkspaceStore.getState().clearOlaState()
           set({ token: null, account: null, device: null })
           return
         }
         set({ token: 'main-process', account: result.account, device: result.device })
+        if (result.offline) {
+          await get()
+            .syncWorkspaces()
+            .catch(() => undefined)
+          return
+        }
         if (!result.device) {
           await get().registerDevice('Ola Desktop')
         } else {
           await get().loadDevices()
           await get().loadMeshNodes()
         }
+        await get()
+          .syncWorkspaces()
+          .catch(() => undefined)
       } catch {
+        // A failed hydration can mean the desktop credential was revoked. Do
+        // not leave a previous account's directory visible while a new login
+        // is pending, and invalidate any requests that were started before it.
+        workspaceSyncGeneration++
+        useWorkspaceStore.getState().clearOlaState()
         set({ token: null, account: null, device: null })
       }
     },
@@ -199,6 +252,9 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         set({ token: 'main-process', account: result.account, device: null })
         persist({ apiBaseUrl, token: null, account: result.account, device: null })
         await get().registerDevice('Ola Desktop')
+        await get()
+          .syncWorkspaces()
+          .catch(() => undefined)
       } finally {
         set({ loading: false })
       }
@@ -214,6 +270,9 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         set({ token: 'main-process', account: result.account, device: null })
         persist({ apiBaseUrl, token: null, account: result.account, device: null })
         await get().registerDevice('Ola Desktop')
+        await get()
+          .syncWorkspaces()
+          .catch(() => undefined)
       } finally {
         set({ loading: false })
       }
@@ -228,6 +287,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       }
     },
     logout: () => {
+      workspaceSyncGeneration++
       const { apiBaseUrl } = get()
       void request(apiBaseUrl, 'logout').catch(() => undefined)
       set({
@@ -242,6 +302,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         allowRemoteControl: false
       })
       persist({ apiBaseUrl, token: null, account: null, device: null })
+      useWorkspaceStore.getState().clearOlaState()
     },
     registerDevice: async (deviceName) => {
       const { apiBaseUrl, token } = get()
@@ -297,11 +358,80 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       set({ device: result.device })
       await request(apiBaseUrl, 'mesh-node-heartbeat', { nodeId: `node-${device.id}` })
     },
-    syncModelConfig: async () => {
-      const { apiBaseUrl } = get()
-      const result = await request<Record<string, unknown>>(apiBaseUrl, 'model-config')
-      window.localStorage.setItem(`${STORAGE_KEY}.modelConfig`, JSON.stringify(result))
-      return result
+    syncWorkspaces: async () => {
+      const generation = ++workspaceSyncGeneration
+      let directoryVerified = false
+      const { apiBaseUrl, token, account } = get()
+      const isCurrent = (): boolean =>
+        generation === workspaceSyncGeneration &&
+        get().account?.id === account?.id &&
+        get().apiBaseUrl === apiBaseUrl &&
+        !!get().token
+      if (!token) {
+        useWorkspaceStore.getState().clearOlaState()
+        set({ workspaceSyncState: 'idle' })
+        return
+      }
+      set({ workspaceSyncState: 'syncing' })
+      try {
+        const result = await request<{
+          workspaces?: RemoteWorkspaceResponse[]
+          offline?: boolean
+        }>(apiBaseUrl, 'workspace-list')
+        directoryVerified = true
+        const workspaces: WorkspaceContext[] = (result.workspaces ?? []).map((workspace) => ({
+          id: workspace.id,
+          kind: workspace.kind === 'team' ? 'ola-team' : 'ola-personal',
+          name: workspace.name,
+          role: workspace.role,
+          revision: workspace.revision
+        }))
+        if (!isCurrent()) return
+        useWorkspaceStore.getState().replaceOlaWorkspaces(workspaces)
+        if (result.offline) {
+          const workspaceStore = useWorkspaceStore.getState()
+          for (const workspace of workspaces) workspaceStore.setResources(workspace.id, [])
+          set({ workspaceSyncState: 'unavailable' })
+          return
+        }
+        const resourceEntries = await Promise.all(
+          workspaces.map(async (workspace) => {
+            const resources = await request<{ resources?: RemoteModelResourceResponse[] }>(
+              apiBaseUrl,
+              'workspace-model-resources',
+              { workspaceId: workspace.id }
+            )
+            const normalized: OlaModelResource[] = (resources.resources ?? []).map((resource) => ({
+              id: resource.id,
+              workspaceId: workspace.id,
+              providerName: resource.providerName ?? resource.provider ?? 'Ola',
+              model: resource.model,
+              displayName: resource.displayName,
+              enabled: resource.enabled !== false,
+              isDefault: resource.isDefault === true,
+              supportsVision: resource.supportsVision,
+              supportsFunctionCall: resource.supportsFunctionCall,
+              category: resource.category,
+              revision: resource.revision
+            }))
+            return [workspace.id, normalized] as const
+          })
+        )
+        if (!isCurrent()) return
+        const workspaceStore = useWorkspaceStore.getState()
+        workspaceStore.replaceOlaWorkspaces(workspaces)
+        for (const [workspaceId, resources] of resourceEntries) {
+          workspaceStore.setResources(workspaceId, resources)
+        }
+        set({ workspaceSyncState: 'idle' })
+      } catch (error) {
+        if (!isCurrent()) return
+        const workspace = useWorkspaceStore.getState()
+        if (!directoryVerified) workspace.clearOlaState()
+        for (const entry of workspace.olaWorkspaces) workspace.setResources(entry.id, [])
+        set({ workspaceSyncState: 'unavailable' })
+        throw error
+      }
     },
     setAllowRemoteControl: async (allow) => {
       if (allow) {

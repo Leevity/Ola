@@ -95,23 +95,30 @@ internal static class DbCapabilityTools
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-            var changed = DbSql.ExecuteNonQuery(connection, transaction, """
-                INSERT INTO desktop_flows(id, name, flow_json, created_at, updated_at)
-                VALUES($id, $name, $flow, $createdAt, $updatedAt)
-                ON CONFLICT(id) DO UPDATE SET name = excluded.name, flow_json = excluded.flow_json,
-                  updated_at = excluded.updated_at
-                """,
-                new DbSql.SqlParam("$id", Required(parameters, "id")),
-                new DbSql.SqlParam("$name", Required(parameters, "name")),
-                new DbSql.SqlParam("$flow", Required(parameters, "flowJson")),
-                new DbSql.SqlParam("$createdAt", JsonHelpers.GetLong(parameters, "createdAt", now)),
-                new DbSql.SqlParam("$updatedAt", now));
+            var workspaceId = RequiredWorkspace(parameters);
+            var flowId = Required(parameters, "id");
             var flowJson = Required(parameters, "flowJson");
             if (flowJson.Length > 5 * 1024 * 1024) throw new InvalidOperationException("Desktop flow is too large.");
-            var flowId = Required(parameters, "id");
+            using var flow = JsonDocument.Parse(flowJson);
+            if (flow.RootElement.TryGetProperty("workspaceId", out var flowWorkspace)
+                && flowWorkspace.GetString() != workspaceId)
+                throw new InvalidOperationException("Desktop flow workspace mismatch.");
+            var changed = DbSql.ExecuteNonQuery(connection, transaction, """
+                INSERT INTO desktop_flows(id, name, flow_json, created_at, updated_at, workspace_id)
+                VALUES($id, $name, $flow, $createdAt, $updatedAt, $workspaceId)
+                ON CONFLICT(id) DO UPDATE SET name = excluded.name, flow_json = excluded.flow_json,
+                  updated_at = excluded.updated_at
+                WHERE desktop_flows.workspace_id = excluded.workspace_id
+                """,
+                new DbSql.SqlParam("$id", flowId),
+                new DbSql.SqlParam("$name", Required(parameters, "name")),
+                new DbSql.SqlParam("$flow", flowJson),
+                new DbSql.SqlParam("$createdAt", JsonHelpers.GetLong(parameters, "createdAt", now)),
+                new DbSql.SqlParam("$updatedAt", now),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
+            if (changed == 0) throw new InvalidOperationException("Desktop flow belongs to another workspace.");
             DbSql.ExecuteNonQuery(connection, transaction, "DELETE FROM desktop_flow_steps WHERE flow_id = $flowId",
                 new DbSql.SqlParam("$flowId", flowId));
-            using var flow = JsonDocument.Parse(flowJson);
             if (flow.RootElement.TryGetProperty("steps", out var steps) && steps.ValueKind == JsonValueKind.Array)
             {
                 var sortOrder = 0;
@@ -134,7 +141,102 @@ internal static class DbCapabilityTools
         catch (Exception ex) { return MutationError(ex.Message); }
     }
 
-    public static WorkerResponse FlowDelete(JsonElement parameters) => DeleteByKey(parameters, "desktop_flows", "id", "id");
+    public static WorkerResponse FlowDelete(JsonElement parameters)
+    {
+        try
+        {
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            using var transaction = connection.BeginTransaction();
+            var flowId = Required(parameters, "id");
+            var workspaceId = RequiredWorkspace(parameters);
+            var changed = DbSql.ExecuteNonQuery(connection, transaction,
+                "DELETE FROM desktop_flows WHERE id = $id AND workspace_id = $workspaceId",
+                new DbSql.SqlParam("$id", flowId), new DbSql.SqlParam("$workspaceId", workspaceId));
+            if (changed > 0)
+            {
+                DbSql.ExecuteNonQuery(connection, transaction, "DELETE FROM desktop_flow_steps WHERE flow_id = $id",
+                    new DbSql.SqlParam("$id", flowId));
+                DbSql.ExecuteNonQuery(connection, transaction, "DELETE FROM desktop_flow_runs WHERE flow_id = $id",
+                    new DbSql.SqlParam("$id", flowId));
+            }
+            transaction.Commit();
+            return Mutation(changed);
+        }
+        catch (Exception ex) { return MutationError(ex.Message); }
+    }
+
+    public static WorkerResponse FlowRunStart(JsonElement parameters)
+    {
+        try
+        {
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            using var transaction = connection.BeginTransaction();
+            var changed = DbSql.ExecuteNonQuery(connection, transaction, """
+                INSERT INTO desktop_flow_runs(id, flow_id, state, started_at)
+                SELECT $id, id, 'running', $startedAt FROM desktop_flows
+                WHERE id = $flowId AND workspace_id = $workspaceId
+                """,
+                new DbSql.SqlParam("$id", Required(parameters, "id")),
+                new DbSql.SqlParam("$flowId", Required(parameters, "flowId")),
+                new DbSql.SqlParam("$workspaceId", RequiredWorkspace(parameters)),
+                new DbSql.SqlParam("$startedAt", JsonHelpers.GetLong(parameters, "startedAt", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())));
+            if (changed == 0) throw new InvalidOperationException("Desktop flow belongs to another workspace or is missing.");
+            transaction.Commit();
+            return Mutation(changed);
+        }
+        catch (Exception ex) { return MutationError(ex.Message); }
+    }
+
+    public static WorkerResponse FlowRunFinish(JsonElement parameters)
+    {
+        try
+        {
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            using var transaction = connection.BeginTransaction();
+            var state = Required(parameters, "state");
+            if (state is not ("succeeded" or "failed" or "cancelled"))
+                throw new InvalidOperationException("Invalid desktop flow run state.");
+            var changed = DbSql.ExecuteNonQuery(connection, transaction, """
+                UPDATE desktop_flow_runs SET state = $state, error_message = $error,
+                  finished_at = $finishedAt
+                WHERE id = $id AND state = 'running' AND flow_id IN
+                  (SELECT id FROM desktop_flows WHERE workspace_id = $workspaceId)
+                """,
+                new DbSql.SqlParam("$state", state),
+                new DbSql.SqlParam("$error", JsonHelpers.GetString(parameters, "errorMessage")),
+                new DbSql.SqlParam("$finishedAt", JsonHelpers.GetLong(parameters, "finishedAt", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())),
+                new DbSql.SqlParam("$id", Required(parameters, "id")),
+                new DbSql.SqlParam("$workspaceId", RequiredWorkspace(parameters)));
+            transaction.Commit();
+            return Mutation(changed);
+        }
+        catch (Exception ex) { return MutationError(ex.Message); }
+    }
+
+    public static WorkerResponse FlowRunsList(JsonElement parameters)
+    {
+        try
+        {
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            using var command = connection.CreateCommand();
+            var limit = JsonHelpers.GetLong(parameters, "limit", 100);
+            if (limit < 1 || limit > 10000) throw new InvalidOperationException("Invalid desktop flow run limit.");
+            command.CommandText = """
+                SELECT json_object('id', r.id, 'flowId', r.flow_id, 'state', r.state,
+                  'errorMessage', r.error_message, 'startedAt', r.started_at,
+                  'finishedAt', r.finished_at)
+                FROM desktop_flow_runs r JOIN desktop_flows f ON f.id = r.flow_id
+                WHERE f.workspace_id = $workspaceId ORDER BY r.started_at DESC LIMIT $limit
+                """;
+            command.Parameters.AddWithValue("$workspaceId", RequiredWorkspace(parameters));
+            command.Parameters.AddWithValue("$limit", limit);
+            using var reader = command.ExecuteReader();
+            var rows = new List<string>();
+            while (reader.Read()) rows.Add(reader.GetString(0));
+            return WorkerResponse.Json(rows, WorkerJsonContext.Default.ListString);
+        }
+        catch (Exception ex) { return WorkerResponse.Error(ex.Message); }
+    }
 
     private static WorkerResponse ReadFlowRows(JsonElement parameters)
     {
@@ -142,10 +244,11 @@ internal static class DbCapabilityTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = "SELECT id, name, flow_json, created_at, updated_at FROM desktop_flows ORDER BY updated_at DESC LIMIT 100";
+            command.CommandText = "SELECT flow_json FROM desktop_flows WHERE workspace_id = $workspaceId ORDER BY updated_at DESC LIMIT 100";
+            command.Parameters.AddWithValue("$workspaceId", RequiredWorkspace(parameters));
             using var reader = command.ExecuteReader();
             var rows = new List<string>();
-            while (reader.Read()) rows.Add(reader.GetString(2));
+            while (reader.Read()) rows.Add(reader.GetString(0));
             return WorkerResponse.Json(rows, WorkerJsonContext.Default.ListString);
         }
         catch (Exception ex) { return WorkerResponse.Error(ex.Message); }
@@ -168,6 +271,14 @@ internal static class DbCapabilityTools
     private static string Required(JsonElement parameters, string name) =>
         JsonHelpers.GetString(parameters, name) is { Length: > 0 } value
             ? value : throw new InvalidOperationException($"Missing required field: {name}");
+
+    private static string RequiredWorkspace(JsonElement parameters)
+    {
+        var workspaceId = Required(parameters, "workspaceId");
+        if (workspaceId.Length > 1024 || workspaceId != workspaceId.Trim())
+            throw new InvalidOperationException("Invalid desktop flow workspace.");
+        return workspaceId;
+    }
 
     private static WorkerResponse Mutation(int changed) => WorkerResponse.Json(
         new CapabilityMutationResult(true, changed, null), WorkerJsonContext.Default.CapabilityMutationResult);

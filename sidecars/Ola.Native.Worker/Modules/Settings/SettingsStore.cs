@@ -4,7 +4,6 @@ using System.Text.Json.Nodes;
 
 internal static class SettingsStore
 {
-    private const string DataDirectoryName = ".ola";
     private const string SettingsFileName = "settings.json";
     private static readonly object Sync = new();
     private static readonly JsonSerializerOptions WriteOptions = new()
@@ -109,6 +108,14 @@ internal static class SettingsStore
         }
     }
 
+    internal static JsonObject ReadRootSnapshot()
+    {
+        lock (Sync)
+        {
+            return ReadRoot();
+        }
+    }
+
     private static JsonObject ReadRoot()
     {
         var filePath = GetSettingsPath();
@@ -147,10 +154,7 @@ internal static class SettingsStore
 
     private static string GetSettingsPath()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            DataDirectoryName,
-            SettingsFileName);
+        return Path.Combine(OlaDataRoot.DirectoryPath, SettingsFileName);
     }
 
     private static JsonNode? CloneElement(JsonElement element)

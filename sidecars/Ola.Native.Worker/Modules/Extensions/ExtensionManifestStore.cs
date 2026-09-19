@@ -3,7 +3,6 @@ using System.Text.RegularExpressions;
 
 internal static partial class ExtensionManifestStore
 {
-    private const string DataDirectoryName = ".ola";
     private const string ExtensionsDirectoryName = "extensions";
     private const string ExtensionsStateFileName = "extensions.json";
     private const string ConfigFileName = "config.json";
@@ -403,9 +402,7 @@ internal static partial class ExtensionManifestStore
 
     private static string DataDirectory()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            DataDirectoryName);
+        return OlaDataRoot.DirectoryPath;
     }
 
     private static string ExtensionsDirectory()

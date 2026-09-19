@@ -1,11 +1,12 @@
 import { toolRegistry } from '../agent/tool-registry'
-import { encodeToolError } from './tool-result-format'
+import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import { usePlanStore } from '@renderer/stores/plan-store'
+import { useUIStore } from '@renderer/stores/ui-store'
 
-function nativeOnlyPlanResult(toolName: string): string {
-  return encodeToolError(
-    `${toolName} executes in the .NET Native Worker and is unavailable through the renderer boundary.`
-  )
+function sessionIdFor(ctx: Parameters<ToolHandler['execute']>[1]): string | null {
+  const sessionId = ctx.sessionId?.trim()
+  return sessionId || null
 }
 
 export function createPlanModeInlineToolHandlers(): Record<string, ToolHandler> {
@@ -30,7 +31,22 @@ const enterPlanModeHandler: ToolHandler = {
       }
     }
   },
-  execute: async () => nativeOnlyPlanResult('EnterPlanMode'),
+  execute: async (input, ctx) => {
+    const sessionId = sessionIdFor(ctx)
+    if (!sessionId) return encodeToolError('A session is required to enter plan mode')
+    const existing = await usePlanStore.getState().loadPlanForSession(sessionId, true)
+    if (existing && existing.status !== 'rejected' && existing.status !== 'completed') {
+      usePlanStore.getState().setActivePlan(existing.id)
+      useUIStore.getState().enterPlanMode(sessionId)
+      return encodeStructuredToolResult({ plan: { ...existing }, reused: true })
+    }
+    const reason = typeof input.reason === 'string' ? input.reason.trim() : ''
+    const title = reason || 'Implementation plan'
+    const plan = usePlanStore.getState().createPlan(sessionId, title, { status: 'drafting' })
+    usePlanStore.getState().setActivePlan(plan.id)
+    useUIStore.getState().enterPlanMode(sessionId)
+    return encodeStructuredToolResult({ plan: { ...plan }, reused: false })
+  },
   requiresApproval: () => false
 }
 
@@ -45,7 +61,20 @@ const exitPlanModeHandler: ToolHandler = {
       properties: {}
     }
   },
-  execute: async () => nativeOnlyPlanResult('ExitPlanMode'),
+  execute: async (_input, ctx) => {
+    const sessionId = sessionIdFor(ctx)
+    if (!sessionId) return encodeToolError('A session is required to exit plan mode')
+    const plan =
+      usePlanStore.getState().getPlanBySession(sessionId) ??
+      (await usePlanStore.getState().loadPlanForSession(sessionId, true))
+    if (!plan) return encodeToolError('No plan exists for this session')
+    if (!plan.filePath && !plan.content)
+      return encodeToolError('Write the plan file before exiting Plan Mode')
+    usePlanStore.getState().updatePlan(plan.id, { status: 'awaiting_review' })
+    usePlanStore.getState().setActivePlan(plan.id)
+    useUIStore.getState().exitPlanMode(sessionId)
+    return encodeStructuredToolResult({ plan: { ...plan, status: 'awaiting_review' } })
+  },
   requiresApproval: () => false
 }
 

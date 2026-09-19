@@ -4,6 +4,8 @@ internal sealed class MemoryAutomationEntry
 {
     public string Id { get; set; } = string.Empty;
 
+    public string WorkspaceId { get; set; } = "local-personal";
+
     public string Scope { get; set; } = string.Empty;
 
     [JsonIgnore(Condition = JsonIgnoreCondition.Never)]

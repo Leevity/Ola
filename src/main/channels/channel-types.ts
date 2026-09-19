@@ -1,5 +1,7 @@
 // ── Plugin System — Shared Types ──
 
+import type { ModelSource } from '../../shared/runtime/model-source'
+
 /** Config field schema for descriptor-driven UI */
 export interface ConfigFieldSchema {
   key: string
@@ -56,12 +58,23 @@ export interface ChannelInstance {
   createdAt: number
   /** Bound project ID (null = unbound) */
   projectId?: string | null
+  /**
+   * Data and authorization boundary for channel-created sessions. Legacy
+   * configurations without this field belong to the offline personal space.
+   */
+  workspaceId?: string
   /** Per-tool enablement flags (missing = default enabled) */
   tools?: Record<string, boolean>
   /** Provider ID for this plugin's auto-reply agent (null = use global active provider) */
   providerId?: string | null
   /** Model override for this plugin's auto-reply agent (null = use global default) */
   model?: string | null
+  /**
+   * Explicit public model binding. Credentials, account tickets, and provider
+   * implementation details must never be stored in a channel configuration.
+   * `providerId/model` remain solely as a legacy compatibility projection.
+   */
+  modelSource?: ModelSource | null
   /** Feature toggles */
   features?: ChannelFeatures
   /** Security permissions (defaults applied if missing) */

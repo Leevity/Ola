@@ -3,11 +3,15 @@ import type { ProjectWikiGenerateRequest } from '../../shared/project-wiki'
 import {
   generateProjectWiki,
   loadProjectWiki,
+  validateProjectRoot,
   writeProjectWikiMarkdown,
   type SharedIndexedFile
 } from '../wiki/wiki-service'
 import { loadWikiDocument, saveWikiDocument } from '../db/capability-dao'
 import { getCodeGraphWorker } from '../lib/codegraph-worker'
+import { getRegisteredWindowWorkspace } from '../window-ipc'
+import { authorizeChannelSessionWorkspace } from '../channels/channel-session-workspace'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
 
 async function getSharedIndexedFiles(
   projectRoot: string
@@ -41,30 +45,52 @@ function isTrustedWikiIpcSender(event: IpcMainInvokeEvent): boolean {
   )
 }
 
+async function authorizeWikiWorkspace(
+  event: IpcMainInvokeEvent,
+  requestedWorkspaceId: unknown
+): Promise<string> {
+  if (!isTrustedWikiIpcSender(event)) throw new Error('Unauthorized Wiki IPC sender')
+  const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+  const registeredWorkspaceId = ownerWindow && getRegisteredWindowWorkspace(ownerWindow)
+  if (!registeredWorkspaceId || requestedWorkspaceId !== registeredWorkspaceId)
+    throw new Error('WIKI_WORKSPACE_UNAVAILABLE')
+  return authorizeChannelSessionWorkspace(registeredWorkspaceId, loadOfflineWorkspaceIds)
+}
+
 export function registerWikiHandlers(): void {
-  ipcMain.handle('wiki:generate', async (event, args: ProjectWikiGenerateRequest) => {
-    if (!isTrustedWikiIpcSender(event)) throw new Error('Unauthorized Wiki IPC sender')
-    const sharedFiles = await getSharedIndexedFiles(args.projectRoot)
-    const document = generateProjectWiki(args, sharedFiles)
-    await saveWikiDocument(document)
+  ipcMain.handle(
+    'wiki:generate',
+    async (event, args: ProjectWikiGenerateRequest & { workspaceId: string }) => {
+      const workspaceId = await authorizeWikiWorkspace(event, args?.workspaceId)
+      const projectRoot = validateProjectRoot(args.projectRoot)
+      const sharedFiles = await getSharedIndexedFiles(projectRoot)
+      const document = generateProjectWiki({ ...args, projectRoot }, sharedFiles, workspaceId)
+      await authorizeWikiWorkspace(event, workspaceId)
+      await saveWikiDocument(document, workspaceId)
+      return document
+    }
+  )
+  ipcMain.handle('wiki:get', async (event, args: { projectRoot: string; workspaceId: string }) => {
+    const workspaceId = await authorizeWikiWorkspace(event, args?.workspaceId)
+    const projectRoot = validateProjectRoot(args.projectRoot)
+    const document =
+      (await loadWikiDocument(projectRoot, workspaceId)) ??
+      loadProjectWiki(projectRoot, workspaceId)
+    await authorizeWikiWorkspace(event, workspaceId)
     return document
-  })
-  ipcMain.handle('wiki:get', async (event, args: { projectRoot: string }) => {
-    if (!isTrustedWikiIpcSender(event)) throw new Error('Unauthorized Wiki IPC sender')
-    return (await loadWikiDocument(args.projectRoot)) ?? loadProjectWiki(args.projectRoot)
   })
   ipcMain.handle(
     'wiki:export',
-    async (event, args: { projectRoot: string; destination: string }) => {
-      if (!isTrustedWikiIpcSender(event)) throw new Error('Unauthorized Wiki IPC sender')
+    async (event, args: { projectRoot: string; destination: string; workspaceId: string }) => {
+      const workspaceId = await authorizeWikiWorkspace(event, args?.workspaceId)
+      const projectRoot = validateProjectRoot(args.projectRoot)
       const document =
-        (await loadWikiDocument(args.projectRoot)) ??
-        loadProjectWiki(args.projectRoot) ??
-        generateProjectWiki(
-          { projectRoot: args.projectRoot },
-          await getSharedIndexedFiles(args.projectRoot)
-        )
-      await saveWikiDocument(document)
+        (await loadWikiDocument(projectRoot, workspaceId)) ??
+        loadProjectWiki(projectRoot, workspaceId) ??
+        generateProjectWiki({ projectRoot }, await getSharedIndexedFiles(projectRoot), workspaceId)
+      await authorizeWikiWorkspace(event, workspaceId)
+      await saveWikiDocument(document, workspaceId)
+      await authorizeWikiWorkspace(event, workspaceId)
       writeProjectWikiMarkdown(document, args.destination)
       return { success: true, destination: args.destination }
     }

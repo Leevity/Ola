@@ -26,10 +26,12 @@ internal static class DbTaskTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{TaskSelectSql} WHERE session_id = $sessionId ORDER BY sort_order ASC";
+            command.CommandText = $"{TaskSelectSql} WHERE session_id = $sessionId AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId) ORDER BY sort_order ASC";
             command.Parameters.AddWithValue("$sessionId", sessionId);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             return WorkerResponse.Json(ReadTaskRows(command), WorkerJsonContext.Default.ListTaskRow);
         }
         catch (Exception ex)
@@ -44,7 +46,9 @@ internal static class DbTaskTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{TaskSelectSql} ORDER BY updated_at DESC, sort_order ASC";
+            // Tasks inherit the immutable workspace of their owning session.
+            command.CommandText = $"{TaskSelectSql} WHERE session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId) ORDER BY updated_at DESC, sort_order ASC";
+            command.Parameters.AddWithValue("$workspaceId", JsonHelpers.GetString(parameters, "workspaceId") ?? "local-personal");
             return WorkerResponse.Json(ReadTaskRows(command), WorkerJsonContext.Default.ListTaskRow);
         }
         catch (Exception ex)
@@ -58,10 +62,12 @@ internal static class DbTaskTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{TaskSelectSql} WHERE id = $id LIMIT 1";
+            command.CommandText = $"{TaskSelectSql} WHERE id = $id AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId) LIMIT 1";
             command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             var task = ReadTaskRows(command).FirstOrDefault();
             return WorkerResponse.Json(
                 new TaskFindResult(true, task, null),
@@ -81,6 +87,15 @@ internal static class DbTaskTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
+            if (!SessionBelongsToWorkspace(connection, transaction, sessionId, workspaceId))
+            {
+                return MutationError("Session does not belong to the requested workspace");
+            }
+            var planId = JsonHelpers.GetString(parameters, "planId");
+            if (!PlanBelongsToSession(connection, transaction, planId, sessionId))
+                return MutationError("Plan does not belong to the task session");
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -95,8 +110,8 @@ internal static class DbTaskTools
                 )
                 """,
                 new DbSql.SqlParam("$id", RequireString(parameters, "id")),
-                new DbSql.SqlParam("$sessionId", RequireString(parameters, "sessionId")),
-                new DbSql.SqlParam("$planId", JsonHelpers.GetString(parameters, "planId")),
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$planId", planId),
                 new DbSql.SqlParam("$subject", RequireString(parameters, "subject")),
                 new DbSql.SqlParam("$description", JsonHelpers.GetString(parameters, "description") ?? string.Empty),
                 new DbSql.SqlParam("$activeForm", JsonHelpers.GetString(parameters, "activeForm")),
@@ -122,6 +137,7 @@ internal static class DbTaskTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = WorkspaceId(parameters);
             if (!parameters.TryGetProperty("patch", out var patch) || patch.ValueKind != JsonValueKind.Object)
             {
                 return Mutation(0);
@@ -150,13 +166,19 @@ internal static class DbTaskTools
             using var transaction = connection.BeginTransaction();
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = $"UPDATE tasks SET {string.Join(", ", sets)} WHERE id = $id";
+            command.CommandText = $"UPDATE tasks SET {string.Join(", ", sets)} WHERE id = $id AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)";
             foreach (var value in values)
             {
                 command.Parameters.AddWithValue(value.Name, value.Value ?? DBNull.Value);
             }
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
 
             var changed = command.ExecuteNonQuery();
+            if (changed == 0)
+            {
+                transaction.Rollback();
+                return MutationError("Task was not found in the requested workspace");
+            }
             transaction.Commit();
             return Mutation(changed);
         }
@@ -171,13 +193,20 @@ internal static class DbTaskTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM tasks WHERE id = $id",
-                new DbSql.SqlParam("$id", id));
+                "DELETE FROM tasks WHERE id = $id AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)",
+                new DbSql.SqlParam("$id", id),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
+            if (changed == 0)
+            {
+                transaction.Rollback();
+                return MutationError("Task was not found in the requested workspace");
+            }
             transaction.Commit();
             return Mutation(changed);
         }
@@ -192,13 +221,19 @@ internal static class DbTaskTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = WorkspaceId(parameters);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            if (!SessionBelongsToWorkspace(connection, transaction, sessionId, workspaceId))
+            {
+                return MutationError("Session does not belong to the requested workspace");
+            }
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM tasks WHERE session_id = $sessionId",
-                new DbSql.SqlParam("$sessionId", sessionId));
+                "DELETE FROM tasks WHERE session_id = $sessionId AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)",
+                new DbSql.SqlParam("$sessionId", sessionId),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed);
         }
@@ -234,6 +269,40 @@ internal static class DbTaskTools
         }
 
         return rows;
+    }
+
+    private static string WorkspaceId(JsonElement parameters)
+    {
+        return JsonHelpers.GetString(parameters, "workspaceId") ?? "local-personal";
+    }
+
+    private static bool SessionBelongsToWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string sessionId,
+        string workspaceId)
+    {
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM sessions WHERE id = $sessionId AND workspace_id = $workspaceId LIMIT 1";
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
+        return command.ExecuteScalar() is not null;
+    }
+
+    private static bool PlanBelongsToSession(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string? planId,
+        string sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(planId)) return true;
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM plans WHERE id = $planId AND session_id = $sessionId LIMIT 1";
+        command.Parameters.AddWithValue("$planId", planId);
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        return command.ExecuteScalar() is not null;
     }
 
     private static void AddPatchValue(

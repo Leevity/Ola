@@ -4,25 +4,29 @@ using Microsoft.Data.Sqlite;
 internal static class DbPlanTools
 {
     private const string PlanSelectSql = """
-        SELECT id,
-               session_id,
-               title,
-               status,
-               file_path,
-               content,
-               spec_json,
-               created_at,
-               updated_at
-          FROM plans
+        SELECT p.id,
+               p.session_id,
+               p.title,
+               p.status,
+               p.file_path,
+               p.content,
+               p.spec_json,
+               p.created_at,
+               p.updated_at,
+               s.workspace_id
+          FROM plans p
+          JOIN sessions s ON s.id = p.session_id
         """;
 
     public static WorkerResponse List(JsonElement parameters)
     {
         try
         {
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{PlanSelectSql} ORDER BY updated_at DESC";
+            command.CommandText = $"{PlanSelectSql} WHERE s.workspace_id = $workspaceId ORDER BY p.updated_at DESC";
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             return WorkerResponse.Json(ReadPlanRows(command), WorkerJsonContext.Default.ListPlanRow);
         }
         catch (Exception ex)
@@ -36,10 +40,12 @@ internal static class DbPlanTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{PlanSelectSql} WHERE id = $id LIMIT 1";
+            command.CommandText = $"{PlanSelectSql} WHERE p.id = $id AND s.workspace_id = $workspaceId LIMIT 1";
             command.Parameters.AddWithValue("$id", id);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             var plan = ReadPlanRows(command).FirstOrDefault();
             return WorkerResponse.Json(
                 new PlanFindResult(true, plan, null),
@@ -58,10 +64,12 @@ internal static class DbPlanTools
         try
         {
             var sessionId = RequireString(parameters, "sessionId");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{PlanSelectSql} WHERE session_id = $sessionId ORDER BY updated_at DESC LIMIT 1";
+            command.CommandText = $"{PlanSelectSql} WHERE p.session_id = $sessionId AND s.workspace_id = $workspaceId ORDER BY p.updated_at DESC LIMIT 1";
             command.Parameters.AddWithValue("$sessionId", sessionId);
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             var plan = ReadPlanRows(command).FirstOrDefault();
             return WorkerResponse.Json(
                 new PlanFindResult(true, plan, null),
@@ -79,8 +87,20 @@ internal static class DbPlanTools
     {
         try
         {
+            var workspaceId = RequireString(parameters, "workspaceId");
+            var sessionId = RequireString(parameters, "sessionId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            using var ownership = connection.CreateCommand();
+            ownership.Transaction = transaction;
+            ownership.CommandText = "SELECT COUNT(*) FROM sessions WHERE id = $sessionId AND workspace_id = $workspaceId";
+            ownership.Parameters.AddWithValue("$sessionId", sessionId);
+            ownership.Parameters.AddWithValue("$workspaceId", workspaceId);
+            if (Convert.ToInt64(ownership.ExecuteScalar()) == 0)
+            {
+                transaction.Rollback();
+                return MutationError("plan-session-workspace-mismatch");
+            }
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
@@ -89,7 +109,7 @@ internal static class DbPlanTools
                 VALUES ($id, $sessionId, $title, $status, $filePath, $content, $specJson, $createdAt, $updatedAt)
                 """,
                 new DbSql.SqlParam("$id", RequireString(parameters, "id")),
-                new DbSql.SqlParam("$sessionId", RequireString(parameters, "sessionId")),
+                new DbSql.SqlParam("$sessionId", sessionId),
                 new DbSql.SqlParam("$title", RequireString(parameters, "title")),
                 new DbSql.SqlParam("$status", JsonHelpers.GetString(parameters, "status") ?? "drafting"),
                 new DbSql.SqlParam("$filePath", JsonHelpers.GetString(parameters, "filePath")),
@@ -111,6 +131,7 @@ internal static class DbPlanTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = RequireString(parameters, "workspaceId");
             if (!parameters.TryGetProperty("patch", out var patch) || patch.ValueKind != JsonValueKind.Object)
             {
                 return Mutation(0);
@@ -131,11 +152,12 @@ internal static class DbPlanTools
             }
 
             values.Add(new DbSql.SqlParam("$id", id));
+            values.Add(new DbSql.SqlParam("$workspaceId", workspaceId));
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = $"UPDATE plans SET {string.Join(", ", sets)} WHERE id = $id";
+            command.CommandText = $"UPDATE plans SET {string.Join(", ", sets)} WHERE id = $id AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)";
             foreach (var value in values)
             {
                 command.Parameters.AddWithValue(value.Name, value.Value ?? DBNull.Value);
@@ -156,13 +178,15 @@ internal static class DbPlanTools
         try
         {
             var id = RequireString(parameters, "id");
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
             var changed = DbSql.ExecuteNonQuery(
                 connection,
                 transaction,
-                "DELETE FROM plans WHERE id = $id",
-                new DbSql.SqlParam("$id", id));
+                "DELETE FROM plans WHERE id = $id AND session_id IN (SELECT id FROM sessions WHERE workspace_id = $workspaceId)",
+                new DbSql.SqlParam("$id", id),
+                new DbSql.SqlParam("$workspaceId", workspaceId));
             transaction.Commit();
             return Mutation(changed);
         }
@@ -188,7 +212,8 @@ internal static class DbPlanTools
                 Content = reader.IsDBNull(5) ? null : reader.GetString(5),
                 SpecJson = reader.IsDBNull(6) ? null : reader.GetString(6),
                 CreatedAt = reader.GetInt64(7),
-                UpdatedAt = reader.GetInt64(8)
+                UpdatedAt = reader.GetInt64(8),
+                WorkspaceId = reader.IsDBNull(9) ? null : reader.GetString(9)
             });
         }
 

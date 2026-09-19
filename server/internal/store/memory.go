@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -365,9 +364,15 @@ func (s *MemoryStore) RevokePairingCodesForDevice(accountID string, deviceID str
 func randomID() string {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
-		return hex.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
+		// UUID columns back the production store. Keep the fallback parseable by
+		// PostgreSQL as well, rather than returning an arbitrary hex string.
+		return fmt.Sprintf("00000000-0000-4000-8000-%012x", time.Now().UnixNano()&0xffffffffffff)
 	}
-	return hex.EncodeToString(buf)
+	// RFC 4122 version 4 UUID. This is used by both the in-memory and
+	// PostgreSQL stores, whose primary and foreign-key columns are UUIDs.
+	buf[6] = (buf[6] & 0x0f) | 0x40
+	buf[8] = (buf[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x", buf[:4], buf[4:6], buf[6:8], buf[8:10], buf[10:])
 }
 
 func hashPassword(password string) (string, error) {

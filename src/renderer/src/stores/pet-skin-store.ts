@@ -34,11 +34,14 @@ interface PetSkinStore {
 
 let cachedPetsDir: string | null = null
 
-/** ~/.ola/pets — one subdirectory per pet skin. */
+/** Ask Main for the pet data root so scans and Main-owned writes use the same directory. */
 export async function getPetsDir(): Promise<string> {
   if (cachedPetsDir) return cachedPetsDir
-  const home = String(await ipcClient.invoke('app:homedir'))
-  cachedPetsDir = `${home}/.ola/pets`
+  const directory = await ipcClient.invoke('pet:data-dir')
+  if (typeof directory !== 'string' || !directory) {
+    throw new Error('The pet data directory is unavailable.')
+  }
+  cachedPetsDir = directory
   return cachedPetsDir
 }
 

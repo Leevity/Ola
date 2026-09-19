@@ -15,6 +15,7 @@ import {
 } from './NewSessionProjectSelector'
 import { ChatHomeInsights } from './ChatHomeInsights'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { TaskProfileConfig } from '@renderer/lib/task-profile'
 
 type HomeProjectSnapshot = NewSessionProjectOption
@@ -72,6 +73,7 @@ export function ChatHomePage(): React.JSX.Element {
   const codeProfileConfig = useSettingsStore((s) => s.codeProfileConfig)
   const taskProfile = defaultTaskProfile
   const profileConfig = taskProfile === 'code' ? codeProfileConfig : workProfileConfig
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
   const {
     activeProjectId,
     projects,
@@ -81,12 +83,15 @@ export function ChatHomePage(): React.JSX.Element {
     sshConnectionId
   } = useChatStore(
     useShallow((s) => {
+      const workspaceProjects = s.projects.filter(
+        (item) => (item.workspaceId ?? 'local-personal') === activeWorkspaceId
+      )
       const project = s.activeProjectId
-        ? (s.projects.find((item) => item.id === s.activeProjectId) ?? null)
+        ? (workspaceProjects.find((item) => item.id === s.activeProjectId) ?? null)
         : null
       return {
         activeProjectId: s.activeProjectId,
-        projects: s.projects,
+        projects: workspaceProjects,
         activeProjectHomeId: project?.id ?? null,
         activeProjectName: project?.name ?? null,
         workingFolder: project?.workingFolder,

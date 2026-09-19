@@ -19,7 +19,17 @@ import * as fs from 'fs'
 import * as os from 'os'
 import { app } from 'electron'
 import { getNativeWorker } from '../lib/native-worker'
+import { businessWriteCanary } from '../db/business-write-canary'
 import { readChannelPlugins } from './channel-config-store'
+import {
+  authorizeChannelSessionWorkspace,
+  runAuthorizedChannelCommand
+} from './channel-session-workspace'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import {
+  canaryChannelSessionStatus,
+  canaryChannelSessionUsageStats
+} from '../db/legacy-read-canary'
 import type { ChannelManager } from './channel-manager'
 import type { ChannelIncomingMessageData, ChannelInstance } from './channel-types'
 
@@ -33,6 +43,7 @@ export interface CommandContext {
   chatId: string
   data: ChannelIncomingMessageData
   sessionId: string | undefined
+  workspaceId: string
   pluginWorkDir: string
   pluginManager: ChannelManager
 }
@@ -222,12 +233,15 @@ export async function tryHandleCommand(ctx: CommandContext): Promise<boolean | s
   const handler = commands.get(cmd)
   if (!handler) return false
 
-  const result = await handler(ctx, args)
+  const result = await runAuthorizedChannelCommand(ctx.workspaceId, loadOfflineWorkspaceIds, () =>
+    handler(ctx, args)
+  )
 
   // Command wants to delegate to the agent loop with rewritten content
   if (result.rewriteContent) {
     // Send an optional acknowledgment reply before handing off to the agent
     if (result.reply) {
+      await authorizeChannelSessionWorkspace(ctx.workspaceId, loadOfflineWorkspaceIds)
       const service = ctx.pluginManager.getService(ctx.pluginId)
       if (service) {
         const send =
@@ -249,6 +263,7 @@ export async function tryHandleCommand(ctx: CommandContext): Promise<boolean | s
 
   // Send reply via plugin service
   if (result.reply) {
+    await authorizeChannelSessionWorkspace(ctx.workspaceId, loadOfflineWorkspaceIds)
     const service = ctx.pluginManager.getService(ctx.pluginId)
     if (service) {
       const send =
@@ -296,9 +311,23 @@ async function handleNew(ctx: CommandContext, args: string): Promise<CommandResu
   }
 
   try {
+    const writer = businessWriteCanary()
+    if (writer) {
+      const deletedMessages = await writer.clearChannelSession({
+        sessionId: ctx.sessionId,
+        workspaceId: ctx.workspaceId
+      })
+      console.log(
+        `[PluginCommand] Cleared session ${ctx.sessionId}, removed ${deletedMessages} messages`
+      )
+      return {
+        handled: true,
+        reply: '✅ Session cleared. Starting fresh.'
+      }
+    }
     const result = await getNativeWorker().request<NativeSessionResetResult>(
       'db/session-reset-conversation',
-      { sessionId: ctx.sessionId },
+      { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
       120_000
     )
     if (!result.success) {
@@ -424,11 +453,13 @@ async function handleStatus(ctx: CommandContext, args: string): Promise<CommandR
   lines.push('')
   if (ctx.sessionId) {
     try {
-      const session = await getNativeWorker().request<NativeSessionStatusResult>(
-        'db/session-status',
-        { sessionId: ctx.sessionId },
-        120_000
-      )
+      const session: NativeSessionStatusResult =
+        (await canaryChannelSessionStatus(ctx.sessionId, ctx.workspaceId)) ??
+        (await getNativeWorker().request<NativeSessionStatusResult>(
+          'db/session-status',
+          { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
+          120_000
+        ))
       if (!session.success) {
         throw new Error(session.error || 'Native session status failed')
       }
@@ -473,9 +504,27 @@ async function handleCompress(ctx: CommandContext, args: string): Promise<Comman
   }
 
   try {
+    const writer = businessWriteCanary()
+    if (writer) {
+      const result = await writer.compactSessionMessages({
+        sessionId: ctx.sessionId,
+        workspaceId: ctx.workspaceId
+      })
+      if (!result.success) throw new Error('TS message compaction failed')
+      if (result.totalMessages < 6) {
+        return { handled: true, reply: 'Too few messages to compress.' }
+      }
+      if (result.compacted === 0) {
+        return { handled: true, reply: 'Context is already compact.' }
+      }
+      return {
+        handled: true,
+        reply: `✅ Context compressed, cleaned ${result.compacted} messages (stale tool results and thinking blocks cleared). Compressed ${result.compacted} messages.`
+      }
+    }
     const result = await getNativeWorker().request<NativeMessageCompactResult>(
       'db/messages-compact-session',
-      { sessionId: ctx.sessionId },
+      { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
       120_000
     )
     if (!result.success) {
@@ -561,11 +610,13 @@ async function handleStats(ctx: CommandContext, args: string): Promise<CommandRe
   }
 
   try {
-    const stats = await getNativeWorker().request<NativeMessageUsageStatsResult>(
-      'db/messages-usage-stats',
-      { sessionId: ctx.sessionId },
-      120_000
-    )
+    const stats: NativeMessageUsageStatsResult =
+      (await canaryChannelSessionUsageStats(ctx.sessionId, ctx.workspaceId)) ??
+      (await getNativeWorker().request<NativeMessageUsageStatsResult>(
+        'db/messages-usage-stats',
+        { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
+        120_000
+      ))
     if (!stats.success) {
       throw new Error(stats.error || 'Native message usage stats failed')
     }

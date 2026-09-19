@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+	"time"
 
 	"ola-remote-server/internal/auth"
 	"ola-remote-server/internal/store"
@@ -22,12 +23,30 @@ type meshRegistrationPayload struct {
 	Capabilities   []map[string]string `json:"capabilities"`
 }
 
+var meshTestPrivateKeys = map[string]ed25519.PrivateKey{}
+
+func TestMeshStatusPayloadRejectsNestedAndSensitiveValues(t *testing.T) {
+	if !validMeshEventPayload(json.RawMessage(`{"node":"desktop","progress":50,"done":false}`)) {
+		t.Fatal("bounded scalar status payload should be accepted")
+	}
+	for _, payload := range []json.RawMessage{
+		json.RawMessage(`{"credentials":{"token":"secret"}}`),
+		json.RawMessage(`{"detail":"Authorization: Bearer secret"}`),
+		json.RawMessage(`{"items":["not status"]}`),
+	} {
+		if validMeshEventPayload(payload) {
+			t.Fatalf("unsafe Mesh status payload was accepted: %s", payload)
+		}
+	}
+}
+
 func meshRegistration(t *testing.T, deviceID, platform string, capabilities []map[string]string) map[string]any {
 	t.Helper()
 	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
 	}
+	meshTestPrivateKeys[deviceID] = privateKey
 	encodedPublicKey := base64.RawURLEncoding.EncodeToString(publicKey)
 	payload := meshRegistrationPayload{
 		DeviceID: deviceID, Platform: platform, Runtime: "ola-node", RuntimeVersion: "0.1.0",
@@ -43,6 +62,20 @@ func meshRegistration(t *testing.T, deviceID, platform string, capabilities []ma
 		"publicKey": encodedPublicKey, "capabilities": capabilities,
 		"proof": base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, digest[:])),
 	}
+}
+
+func signedMeshEvent(t *testing.T, deviceID string, eventID string, subjectNodeID string, targetNodeID string, sessionID string, sequence int, eventType string, payload map[string]any) string {
+	t.Helper()
+	privateKey := meshTestPrivateKeys[deviceID]
+	if len(privateKey) != ed25519.PrivateKeySize {
+		t.Fatalf("missing Mesh private key for device %s", deviceID)
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(meshEventSigningBytes(eventID, subjectNodeID, targetNodeID, sessionID, int64(sequence), eventType, payloadBytes))
+	return base64.RawURLEncoding.EncodeToString(ed25519.Sign(privateKey, digest[:]))
 }
 
 func registerMeshNode(t *testing.T, handler http.Handler, token, deviceID, platform string, capabilities []map[string]string) string {
@@ -76,8 +109,12 @@ func TestMeshNodeRegistrationIsAccountScopedAndValidatesManifest(t *testing.T) {
 	if invalid["_status"] != float64(http.StatusBadRequest) {
 		t.Fatalf("invalid key and capability manifest must be rejected: %#v", invalid)
 	}
+	highRisk := requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/nodes/register", meshRegistration(t, deviceA, "android", []map[string]string{{"id": "task.execute", "risk": "high"}}), tokenA)
+	if highRisk["_status"] != float64(http.StatusBadRequest) {
+		t.Fatalf("status-only Mesh must reject execution capabilities: %#v", highRisk)
+	}
 
-	nodeID := registerMeshNode(t, handler, tokenA, deviceA, "android", []map[string]string{{"id": "mobile.camera.capture", "risk": "medium"}})
+	nodeID := registerMeshNode(t, handler, tokenA, deviceA, "android", []map[string]string{{"id": "mesh.event.receive", "risk": "low"}})
 	listed := requestJSON(t, handler, http.MethodGet, "/api/mesh/v1/nodes", nil, tokenA)
 	nodes, _ := listed["nodes"].([]any)
 	if listed["_status"] != float64(http.StatusOK) || len(nodes) != 1 {
@@ -106,12 +143,12 @@ func TestMeshCapabilityTicketIsBoundToOwnedNodesAndTargetCapabilities(t *testing
 	if desktopRegistration["_status"] != float64(http.StatusOK) || desktopDevice == "" {
 		t.Fatalf("second device registration failed: %#v", desktopRegistration)
 	}
-	phoneNode := registerMeshNode(t, handler, token, phoneDevice, "android", []map[string]string{{"id": "mobile.camera.capture", "risk": "medium"}})
-	desktopNode := registerMeshNode(t, handler, token, desktopDevice, "windows", []map[string]string{{"id": "agent.run.readonly", "risk": "low"}})
+	phoneNode := registerMeshNode(t, handler, token, phoneDevice, "android", []map[string]string{{"id": "mesh.event.receive", "risk": "low"}})
+	desktopNode := registerMeshNode(t, handler, token, desktopDevice, "windows", []map[string]string{{"id": "system.info", "risk": "low"}})
 
 	issued := requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/capability-tickets", map[string]any{
 		"subjectNodeId": phoneNode, "targetNodeId": desktopNode, "sessionId": "session-1",
-		"capabilities": []string{"agent.run.readonly"},
+		"capabilities": []string{"system.info"},
 	}, token)
 	ticket, _ := issued["ticket"].(string)
 	if issued["_status"] != float64(http.StatusOK) || ticket == "" || issued["ticketFingerprint"] == ticket {
@@ -126,7 +163,7 @@ func TestMeshCapabilityTicketIsBoundToOwnedNodesAndTargetCapabilities(t *testing
 
 	deniedCapability := requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/capability-tickets", map[string]any{
 		"subjectNodeId": phoneNode, "targetNodeId": desktopNode, "sessionId": "session-2",
-		"capabilities": []string{"mobile.camera.capture"},
+		"capabilities": []string{"task.execute"},
 	}, token)
 	if deniedCapability["_status"] != float64(http.StatusForbidden) {
 		t.Fatalf("ticket must not grant a capability absent from target manifest: %#v", deniedCapability)
@@ -136,7 +173,7 @@ func TestMeshCapabilityTicketIsBoundToOwnedNodesAndTargetCapabilities(t *testing
 func TestMeshNodeRegistrationRejectsTamperedProof(t *testing.T) {
 	handler := NewRouter(testConfig(), store.NewMemoryStore(), nil)
 	token, deviceID := registerAccountAndDevice(t, handler, "mesh-proof@example.com")
-	registration := meshRegistration(t, deviceID, "android", []map[string]string{{"id": "mobile.camera.capture", "risk": "medium"}})
+	registration := meshRegistration(t, deviceID, "android", []map[string]string{{"id": "mesh.event.receive", "risk": "low"}})
 	registration["runtimeVersion"] = "tampered"
 	result := requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/nodes/register", registration, token)
 	if result["_status"] != float64(http.StatusBadRequest) {
@@ -154,28 +191,54 @@ func TestMeshTaskEventsRequireBoundTicketAndAdvanceSequence(t *testing.T) {
 	}, token)
 	targetDevice, _ := targetRegistration["device"].(map[string]any)
 	targetDeviceID, _ := targetDevice["id"].(string)
-	sourceNode := registerMeshNode(t, handler, token, sourceDevice, "android", []map[string]string{{"id": "task.execute", "risk": "high"}})
-	targetNode := registerMeshNode(t, handler, token, targetDeviceID, "windows", []map[string]string{{"id": "task.execute", "risk": "high"}})
+	sourceNode := registerMeshNode(t, handler, token, sourceDevice, "android", []map[string]string{{"id": "mesh.event.receive", "risk": "low"}})
+	targetNode := registerMeshNode(t, handler, token, targetDeviceID, "windows", []map[string]string{{"id": "mesh.event.receive", "risk": "low"}})
 	ticketResponse := requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/capability-tickets", map[string]any{
 		"subjectNodeId": sourceNode, "targetNodeId": targetNode, "sessionId": "mesh-session-1",
-		"capabilities": []string{"task.execute"},
+		"capabilities": []string{"mesh.event.receive"},
 	}, token)
 	ticket, _ := ticketResponse["ticket"].(string)
 	if ticketResponse["_status"] != float64(http.StatusOK) || ticket == "" {
 		t.Fatalf("ticket issue failed: %#v", ticketResponse)
 	}
 	event := func(sequence int, eventID string, target string) map[string]any {
+		payload := map[string]any{"node": "test-node"}
 		return requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/events", map[string]any{
 			"ticket": ticket, "eventId": eventID, "subjectNodeId": sourceNode, "targetNodeId": target,
-			"sessionId": "mesh-session-1", "sequence": sequence, "type": "task.command",
-			"payload": map[string]any{"command": "run"},
+			"sessionId": "mesh-session-1", "sequence": sequence, "type": "task.started",
+			"payload":   payload,
+			"signature": signedMeshEvent(t, sourceDevice, eventID, sourceNode, target, "mesh-session-1", sequence, "task.started", payload),
 		}, token)
 	}
 	accepted := event(1, "event-1", targetNode)
 	if accepted["_status"] != float64(http.StatusAccepted) {
 		t.Fatalf("event should be accepted: %#v", accepted)
 	}
-	listed := requestJSON(t, handler, http.MethodGet, "/api/mesh/v1/events?targetNodeId="+targetNode+"&after=0", nil, token)
+	retry := event(1, "event-1", targetNode)
+	if retry["_status"] != float64(http.StatusOK) {
+		t.Fatalf("same event ID should remain an idempotent retry: %#v", retry)
+	}
+	tampered := requestJSON(t, handler, http.MethodPost, "/api/mesh/v1/events", map[string]any{
+		"ticket": ticket, "eventId": "event-tampered", "subjectNodeId": sourceNode, "targetNodeId": targetNode,
+		"sessionId": "mesh-session-1", "sequence": 2, "type": "task.progress",
+		"payload": map[string]any{"node": "test-node"}, "signature": base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize)),
+	}, token)
+	if tampered["_status"] != float64(http.StatusForbidden) {
+		t.Fatalf("unsigned or tampered event must be rejected: %#v", tampered)
+	}
+	claims, err := auth.ParseToken([]byte(config.JWTSecret), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deviceToken, err := auth.IssueDeviceToken([]byte(config.JWTSecret), claims.AccountID, targetDeviceID, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	missingDeviceToken := requestJSON(t, handler, http.MethodGet, "/api/mesh/v1/events?targetNodeId="+targetNode+"&after=0", nil, token)
+	if missingDeviceToken["_status"] != float64(http.StatusForbidden) {
+		t.Fatalf("target node events require a device token: %#v", missingDeviceToken)
+	}
+	listed := requestJSON(t, handler, http.MethodGet, "/api/mesh/v1/events?targetNodeId="+targetNode+"&after=0", nil, token, map[string]string{"X-Ola-Device-Token": deviceToken})
 	events, _ := listed["events"].([]any)
 	if listed["_status"] != float64(http.StatusOK) || len(events) != 1 {
 		t.Fatalf("target should receive one event: %#v", listed)
@@ -188,9 +251,9 @@ func TestMeshTaskEventsRequireBoundTicketAndAdvanceSequence(t *testing.T) {
 	if deliveryErr != nil || deliveryClaims.SubjectNodeID != sourceNode || deliveryClaims.TargetNodeID != targetNode || deliveryClaims.SessionID != "mesh-session-1" {
 		t.Fatalf("delivery ticket must be bound to event: claims=%#v err=%v", deliveryClaims, deliveryErr)
 	}
-	conflict := event(1, "event-2", targetNode)
-	if conflict["_status"] != float64(http.StatusConflict) {
-		t.Fatalf("sequence replay should be rejected: %#v", conflict)
+	reused := event(2, "event-2", targetNode)
+	if reused["_status"] != float64(http.StatusForbidden) {
+		t.Fatalf("a capability ticket nonce must be single-use: %#v", reused)
 	}
 	foreignTarget := event(2, "event-3", "node-not-owned")
 	if foreignTarget["_status"] != float64(http.StatusForbidden) {

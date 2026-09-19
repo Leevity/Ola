@@ -104,7 +104,11 @@
     "chats": "채팅",
     "noChats": "채팅 없음",
     "smartRename": "스마트 이름 변경",
-    "smartRenaming": "스마트 이름 변경 중"
+    "smartRenaming": "스마트 이름 변경 중",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "세션 삭제",

@@ -1,4 +1,4 @@
-﻿{
+{
   "wiki": {
     "title": "Project Wiki",
     "subtitle": "Build an incremental local project map",
@@ -10,8 +10,41 @@
     "export": "Export Markdown"
   },
   "desktopAutomation": {
-    "title": "Desktop Automation",
-    "subtitle": "Record and replay approved desktop flows"
+    "title": "Desktop automation",
+    "subtitle": "Record and safely replay local desktop workflows.",
+    "defaultFlowName": "Desktop flow",
+    "safetyNotice": "Typed text is never saved. Every high-risk replay requires a separate native confirmation.",
+    "recording": {
+      "title": "Record a flow",
+      "description": "Create a local workflow from your desktop actions."
+    },
+    "flowName": "Flow name",
+    "flowNameDescription": "Use a clear name so this flow is easy to find later.",
+    "start": "Start recording",
+    "stopAndSave": "Stop and save",
+    "status": {
+      "recording": "Recording · {{count}} steps",
+      "idle": "Idle · {{count}} steps"
+    },
+    "replay": {
+      "success": "Replay completed · {{count}} steps changed the screen.",
+      "failed": "Replay stopped: {{error}}"
+    },
+    "unknownError": "Unknown error",
+    "current": {
+      "title": "Current flow",
+      "description": "The recording currently held in memory."
+    },
+    "saveCurrent": "Save current flow",
+    "saved": {
+      "title": "Saved flows",
+      "description": "Run or remove a previously saved desktop workflow.",
+      "empty": "No saved desktop flows yet."
+    },
+    "cancelReplay": "Cancel replay",
+    "flowSummary": "{{name}} · {{count}} steps",
+    "run": "Run",
+    "delete": "Delete {{name}}"
   },
   "hooks": {
     "title": "Automation hooks",
@@ -20,7 +53,10 @@
     "securityNotice": "Hooks run local commands. Review the resolved path and hashes before trusting them; any file change requires trust again.",
     "configured": "Configured hooks",
     "empty": "No hooks were found for the user or current project.",
-    "source": { "user": "User", "project": "Project" },
+    "source": {
+      "user": "User",
+      "project": "Project"
+    },
     "configHash": "config",
     "revoke": "Revoke trust",
     "reviewAndTrust": "Review and trust",
@@ -91,7 +127,8 @@
       "personalization": "Personalization",
       "dataUsage": "Data & Usage",
       "about": "About"
-    }
+    },
+    "back": "Back"
   },
   "profile": {
     "title": "Profile",
@@ -342,6 +379,10 @@
   "sync": {
     "title": "Sync",
     "subtitle": "Record-level Ola data sync with WebDAV.",
+    "workspaceUnavailable": {
+      "title": "Sync is unavailable here",
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+    },
     "loading": "Loading sync settings...",
     "provider": {
       "title": "Provider",
@@ -830,7 +871,15 @@
       "allowedDomains": "Allowed domains",
       "allowedDomainsDesc": "Leave empty to allow all domains. When set, only matching domains can be opened.",
       "domainPlaceholder": "example.com\nsub.example.org",
-      "domainRuleHint": "Enter one domain per line or separate with commas. Blocked domains take priority over allowed domains; subdomains match automatically."
+      "domainRuleHint": "Enter one domain per line or separate with commas. Blocked domains take priority over allowed domains; subdomains match automatically.",
+      "exportCookies": "Export encrypted cookies",
+      "exportingCookies": "Exporting...",
+      "cookieExportComplete": "Exported {{exported}} cookies in an encrypted archive",
+      "cookieExportErrors": {
+        "secure_storage_unavailable": "System secure storage is unavailable; encrypted cookie export is disabled",
+        "write_failed": "Failed to export encrypted browser cookies",
+        "unknown": "Browser cookie export failed"
+      }
     },
     "items": {
       "image": {
@@ -948,7 +997,9 @@
         "share": "Share target",
         "shareDesc": "Optional, detected from connected hosting or deployment MCP tools."
       }
-    }
+    },
+    "defaultPlugins": "Built-in plugins",
+    "customPlugins": "Custom extensions"
   },
   "migration": {
     "title": "Migration Center",
@@ -1651,7 +1702,23 @@
     "testSuccess": "Connection successful! Found {{count}} skills.",
     "testFailed": "Connection failed: {{error}}",
     "configSummary": "Configuration Summary",
-    "notSet": "Not set"
+    "notSet": "Not set",
+    "marketTab": "Skills market",
+    "installedTab": "Installed",
+    "installedTitle": "Installed Skills",
+    "installedDescription": "Skills currently installed and available for Ola to load.",
+    "refreshInstalled": "Refresh",
+    "loadingInstalled": "Loading installed Skills…",
+    "emptyInstalled": "No installed Skills",
+    "emptyInstalledDescription": "Install Skills from the Skills page and they will appear here.",
+    "installedBadge": "Installed",
+    "noDescription": "No description",
+    "openFolder": "Open folder",
+    "delete": "Delete",
+    "deleteTitle": "Delete {{name}}",
+    "deleteDescription": "This removes the Skill from Ola’s installed Skills directory.",
+    "deleteSuccess": "Deleted {{name}}",
+    "deleteFailed": "Could not delete {{name}}"
   },
   "soulmarket": {
     "title": "SOUL Market",
@@ -1786,10 +1853,110 @@
       "securityDesc": "Permissions, approvals, credentials, MCP, Extensions and desktop automation are shared by both profiles.",
       "defaultTitle": "Default profile",
       "defaultDesc": "New conversations start with this profile. You can override it before sending."
-    }
+    },
+    "shellType": "Shell type",
+    "shellDefault": "System default",
+    "gitPolicy": "Git policy",
+    "gitInspect": "Inspect only",
+    "gitAsk": "Ask before write",
+    "gitApproval": "Allow with approval",
+    "verificationPolicy": "Verification policy",
+    "verifyNone": "No automatic verification",
+    "verifyStatic": "Lint and typecheck",
+    "verifyFull": "Tests and build",
+    "diffStyle": "Diff display",
+    "diffInline": "Inline in conversation",
+    "diffSidePanel": "Open in side panel",
+    "fileApproval": "File approval",
+    "approvalAlways": "Always ask",
+    "approvalRisk": "Ask on risk",
+    "approvalGlobal": "Use global policy",
+    "useTeams": "Prefer Team delegation",
+    "useTeamsDesc": "Suggest sub-agents and Team workflows for larger engineering tasks.",
+    "defaultsDescription": "Defaults: {{mode}}. Profile changes apply to new conversations.",
+    "defaultsChat": "starts with conversation",
+    "defaultsExecution": "starts with execution"
   },
   "credentials": {
     "title": "Credentials",
     "subtitle": "Manage the credentials the agent can use to log into sites"
+  },
+  "architecture": {
+    "groups": {
+      "common": "Common",
+      "models": "Models & account",
+      "execution": "Execution & security",
+      "integrations": "Extensions & integrations",
+      "personalization": "Data & personalization",
+      "advanced": "Advanced"
+    },
+    "pages": {
+      "modelManagement": {
+        "description": "Manage available models and their capabilities."
+      },
+      "model": {
+        "description": "Choose defaults and task-specific model behavior."
+      },
+      "projectIntelligence": {
+        "title": "Project intelligence",
+        "description": "Manage project Wiki and CodeGraph indexing."
+      },
+      "advanced": {
+        "title": "Advanced",
+        "description": "Context, concurrency, developer, and experimental controls."
+      },
+      "olaAccount": {
+        "title": "Ola account",
+        "description": "Use your Ola personal and team model resources without storing their API keys on this device.",
+        "localProviderNotice": "Local providers remain available offline in every workspace. Ola-managed model credentials stay on the Ola service.",
+        "connection": {
+          "title": "Account connection",
+          "description": "Sign in to load your personal and team resources.",
+          "signIn": "Sign in",
+          "signOut": "Sign out",
+          "manage": "Manage on Ola",
+          "notSignedIn": "Not signed in",
+          "notSignedInDescription": "Sign in to access Ola-managed personal and team models."
+        },
+        "spaces": {
+          "title": "Workspaces",
+          "description": "Switching spaces changes what new work uses. Existing conversations keep their original binding.",
+          "local": "Local personal workspace",
+          "personal": "Ola personal workspace",
+          "team": "Ola team workspace",
+          "localModels": "Local models",
+          "resourceCount": "{{count}} managed models",
+          "localName": "Local workspace"
+        },
+        "resources": {
+          "title": "Managed model resources",
+          "description": "Only metadata is stored on this device; API keys never leave Ola.",
+          "refresh": "Refresh",
+          "available": "Available",
+          "unavailable": "Unavailable",
+          "empty": "No Ola-managed models are available in this workspace."
+        },
+        "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
+        "deviceRegistered": "Registered device: {{name}}",
+        "lastSynced": "Last refreshed: {{time}}",
+        "defaultModel": "Default model"
+      }
+    },
+    "usage": {
+      "title": "Usage & cost",
+      "description": "Review local model usage, cost, and performance."
+    },
+    "petStudio": {
+      "title": "Pet studio",
+      "description": "Manage your desktop companion outside system settings."
+    }
+  },
+  "projectIntelligence": {
+    "title": "Project intelligence",
+    "description": "Use project Wiki and CodeGraph to understand the current project.",
+    "activeProject": "Active project: {{path}}",
+    "noProject": "Select a project with a working folder to use both capabilities.",
+    "wikiTitle": "Project Wiki",
+    "codeGraphTitle": "CodeGraph"
   }
 }

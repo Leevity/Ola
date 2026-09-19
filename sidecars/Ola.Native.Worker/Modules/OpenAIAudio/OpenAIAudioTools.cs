@@ -506,7 +506,7 @@ internal static class OpenAIAudioTools
 
     private static void ValidateProvider(JsonElement provider)
     {
-        if (string.IsNullOrWhiteSpace(JsonHelpers.GetString(provider, "apiKey")))
+        if (string.IsNullOrWhiteSpace(JsonHelpers.GetString(provider, "apiKey")) && JsonHelpers.GetBool(provider, "requiresApiKey", true))
         {
             throw new InvalidOperationException("OpenAI audio transcription requires apiKey.");
         }

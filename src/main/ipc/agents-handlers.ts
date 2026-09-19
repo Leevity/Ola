@@ -1,88 +1,51 @@
 import { registerMessagePackHandler } from './messagepack-handler'
+import { join } from 'node:path'
+import { olaDataRoot } from '../lib/ola-data-root'
+import { getBundledResourceDirCandidates } from '../resources/bundled-resources'
 import {
-  ensureNativeUserContent,
-  getBundledResourceDirCandidates,
-  nativeUserContentRequest
-} from './user-content-native'
-
-export interface AgentInfo {
-  name: string
-  description: string
-  icon?: string
-  tools: string[]
-  allowedTools: string[]
-  disallowedTools: string[]
-  maxTurns: number
-  maxIterations: number
-  initialPrompt?: string
-  background?: boolean
-  model?: string
-  temperature?: number
-  systemPrompt: string
-}
-
-export interface AgentManageItem {
-  id: string
-  name: string
-  description: string
-  path: string
-  source: 'user' | 'bundled' | 'overridden'
-  editable: boolean
-}
-
-type AgentManageReadResult =
-  | (AgentManageItem & {
-      content: string
-    })
-  | { error: string }
-
-type AgentMutationResult = {
-  success: boolean
-  error?: string
-}
-
-function agentParams(args: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    ...args,
-    bundledDirCandidates: getBundledResourceDirCandidates('agents')
-  }
-}
+  AgentCatalog,
+  type AgentInfo,
+  type AgentManageItem,
+  type AgentManageReadResult,
+  type AgentMutationResult
+} from '../user-content/agent-catalog'
 
 export function registerAgentsHandlers(): void {
-  ensureNativeUserContent('agents/ensure', agentParams())
+  const catalog = new AgentCatalog({
+    userDirectory: join(olaDataRoot(), 'agents'),
+    bundledDirectoryCandidates: getBundledResourceDirCandidates('agents')
+  })
+  void catalog.ensure().then((result) => {
+    if (!result.success)
+      console.warn(`[Agents] Failed to initialize user agent directory: ${result.error}`)
+  })
 
   registerMessagePackHandler<undefined, AgentInfo[]>('agents:list', async () => {
-    return nativeUserContentRequest<AgentInfo[]>('agents/list', agentParams())
+    return await catalog.list()
   })
 
   registerMessagePackHandler<{ name: string }, AgentInfo | { error: string }>(
     'agents:load',
     async (args) => {
-      return nativeUserContentRequest<AgentInfo | { error: string }>(
-        'agents/load',
-        agentParams(args)
-      )
+      return await catalog.load(args.name)
     }
   )
 
   registerMessagePackHandler<undefined, AgentManageItem[]>('agents:manage-list', async () => {
-    return nativeUserContentRequest<AgentManageItem[]>('agents/manage-list', agentParams())
+    return await catalog.manageList()
   })
 
   registerMessagePackHandler<{ path: string }, AgentManageReadResult>(
     'agents:manage-read',
     async (args) => {
-      return nativeUserContentRequest<AgentManageReadResult>(
-        'agents/manage-read',
-        agentParams(args)
-      )
+      return await catalog.manageRead(args.path)
     }
   )
 
   registerMessagePackHandler<{ path: string; content: string }, AgentMutationResult>(
     'agents:manage-save',
     async (args) => {
-      return nativeUserContentRequest<AgentMutationResult>('agents/manage-save', agentParams(args))
+      return await catalog.manageSave(args)
     }
   )
 }

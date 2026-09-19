@@ -1,8 +1,8 @@
 import * as fs from 'fs'
-import * as os from 'os'
 import * as path from 'path'
+import { olaDataRoot } from '../lib/ola-data-root'
 
-const DATA_DIR = path.join(os.homedir(), '.ola')
+const DATA_DIR = olaDataRoot()
 
 function formatTimestamp(date = new Date()): string {
   const year = date.getFullYear()

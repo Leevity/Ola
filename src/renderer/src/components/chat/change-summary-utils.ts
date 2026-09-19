@@ -2,6 +2,7 @@ import * as React from 'react'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { toMessagePackChannel } from '../../../../shared/messagepack/binary-ipc'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import {
   canRenderInlineSnapshot,
   computeDiff,
@@ -35,6 +36,10 @@ const aggregatedChangeContentCache = new Map<
   Promise<LoadedChangeContent | ErrorResult | null>
 >()
 
+useWorkspaceStore.subscribe((state, previous) => {
+  if (state.activeWorkspaceId !== previous.activeWorkspaceId) aggregatedChangeContentCache.clear()
+})
+
 export function isLoadedChangeContent(value: unknown): value is LoadedChangeContent {
   return (
     !!value &&
@@ -62,7 +67,8 @@ async function loadSnapshotSidesViaIpc(
     toMessagePackChannel(IPC.AGENT_CHANGES_DIFF_CONTENT),
     {
       runId: sourceChange.runId,
-      changeId: sourceChange.id
+      changeId: sourceChange.id,
+      workspaceId: useWorkspaceStore.getState().activeWorkspaceId
     }
   )
 
@@ -85,6 +91,7 @@ async function loadSnapshotSidesViaIpc(
 
 function aggregatedChangeCacheKey(change: AggregatedFileChange): string {
   return [
+    useWorkspaceStore.getState().activeWorkspaceId,
     change.id,
     change.op,
     change.before.hash ?? 'before:null',

@@ -11,6 +11,7 @@ import {
   resolveCodeGraphWorkerPath
 } from '../lib/codegraph-worker'
 import { observeCodeGraphOperation, startCodeGraphSync } from '../lib/codegraph-sync'
+import { TsCodeGraphService } from '../codegraph/ts-codegraph-service'
 
 interface CodeGraphRequestArgs {
   method: string
@@ -19,6 +20,35 @@ interface CodeGraphRequestArgs {
 }
 
 const RECOVERABLE_DASHBOARD_METHODS = new Set(['codegraph/index-status', 'codegraph/stats'])
+let tsService: TsCodeGraphService | null = null
+
+function isTsCodeGraphEnabled(): boolean {
+  return process.env.OLA_CODEGRAPH_RUNTIME?.trim().toLowerCase() === 'ts'
+}
+
+function getTsCodeGraphService(): TsCodeGraphService {
+  if (!tsService) {
+    tsService = new TsCodeGraphService(undefined, (progress) =>
+      broadcast('codegraph:index-progress', {
+        indexId: progress.indexId,
+        phase: progress.phase,
+        processed: progress.filesDone,
+        total: progress.filesTotal,
+        nodeCount: progress.nodeCount,
+        edgeCount: progress.edgeCount,
+        message: progress.message,
+        done: progress.phase === 'complete'
+      })
+    )
+  }
+  return tsService
+}
+
+async function stopTsCodeGraphService(): Promise<void> {
+  const active = tsService
+  tsService = null
+  await active?.close()
+}
 
 function isStalledWorkerError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
@@ -26,6 +56,7 @@ function isStalledWorkerError(error: unknown): boolean {
 }
 
 async function requestCodeGraph(args: CodeGraphRequestArgs): Promise<unknown> {
+  if (isTsCodeGraphEnabled()) return await getTsCodeGraphService().request(args.method, args.params)
   const worker = getCodeGraphWorker()
   try {
     return await worker.request(args.method, args.params, args.timeoutMs)
@@ -67,8 +98,8 @@ function registerProgressForwarding(): void {
 }
 
 export function registerCodeGraphHandlers(): void {
-  registerProgressForwarding()
-  void startCodeGraphSync()
+  if (!isTsCodeGraphEnabled()) registerProgressForwarding()
+  if (!isTsCodeGraphEnabled()) void startCodeGraphSync()
   ipcMain.handle(toMessagePackChannel('codegraph:request'), async (_event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<CodeGraphRequestArgs>(bytes)
     if (!args.method?.startsWith('codegraph/')) {
@@ -79,6 +110,17 @@ export function registerCodeGraphHandlers(): void {
     return encodeMessagePackPayload(result)
   })
   ipcMain.handle(toMessagePackChannel('codegraph:status'), async () => {
+    if (isTsCodeGraphEnabled()) {
+      return encodeMessagePackPayload({
+        running: true,
+        workerReady: true,
+        workerPath: null,
+        grammarsDir: null,
+        grammarStatus: { expected: 19, available: 19, missing: [] },
+        generation: 1,
+        runtime: 'ts-wasm'
+      })
+    }
     const worker = getCodeGraphWorker()
     const workerPath = resolveCodeGraphWorkerPath()
     const grammarsDir = workerPath ? resolveCodeGraphGrammarsDir(workerPath) : null
@@ -93,10 +135,19 @@ export function registerCodeGraphHandlers(): void {
     })
   })
   ipcMain.handle(toMessagePackChannel('codegraph:stop'), async () => {
+    if (isTsCodeGraphEnabled()) {
+      await stopTsCodeGraphService()
+      return encodeMessagePackPayload({ ok: true })
+    }
     await getCodeGraphWorker().stop()
     return encodeMessagePackPayload({ ok: true })
   })
   ipcMain.handle(toMessagePackChannel('codegraph:recycle'), async () => {
+    if (isTsCodeGraphEnabled()) {
+      await stopTsCodeGraphService()
+      getTsCodeGraphService()
+      return encodeMessagePackPayload({ ok: true })
+    }
     await getCodeGraphWorker().recycle()
     return encodeMessagePackPayload({ ok: true })
   })

@@ -9,7 +9,8 @@ import {
   nativeImage,
   dialog,
   session,
-  type IpcMainEvent
+  type IpcMainEvent,
+  type IpcMainInvokeEvent
 } from 'electron'
 
 import { join, extname } from 'path'
@@ -18,6 +19,8 @@ import { mkdirSync, writeFileSync } from 'fs'
 import { homedir, hostname, release, totalmem } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
+import { ensureGeneratedImagesDirectory } from './lib/generated-image-path'
+import { authorizeGeneratedImageWorkspace } from './ipc/generated-image-workspace'
 
 // Delay import of @electron-toolkit/utils to avoid accessing app before ready
 let electronApp: { setAppUserModelId: (id: string) => void }
@@ -51,7 +54,7 @@ import { registerTerminalHandlers, killAllTerminalSessions } from './ipc/termina
 import { registerDbHandlers } from './ipc/db-handlers'
 import { registerGoalRuntimeHandlers } from './ipc/goal-runtime-handlers'
 import { registerMemoryAutomationHandlers } from './ipc/memory-automation-handlers'
-import { registerConfigHandlers } from './ipc/secure-key-store'
+import { readConfig, registerConfigHandlers } from './ipc/secure-key-store'
 import { registerExtensionHandlers } from './ipc/extension-handlers'
 import { registerChannelHandlers, autoStartChannels } from './ipc/channel-handlers'
 import { ChannelManager } from './channels/channel-manager'
@@ -61,7 +64,10 @@ import { registerInputHandlers } from './ipc/input-handlers'
 import { registerInputDraftHandlers } from './ipc/input-draft-handlers'
 import { registerHooksHandlers } from './ipc/hooks-handlers'
 import { closeAllRemoteSessions, registerRemoteHandlers } from './ipc/remote-handlers'
-import { handleRemoteOAuthCallback } from './remote/account-client'
+import { handleRemoteOAuthCallback, loadOfflineWorkspaceIds } from './remote/account-client'
+import { workspaceMemoryDataRoot } from './lib/workspace-memory-path'
+import { olaDataRoot, olaExternalDataHome } from './lib/ola-data-root'
+import { configureIsolatedElectronUserData } from './lib/isolated-electron-user-data'
 import { registerNotifyHandlers } from './ipc/notify-handlers'
 import {
   installBuiltinPets,
@@ -70,7 +76,10 @@ import {
   togglePetWindow
 } from './ipc/pet-handlers'
 import { registerScreenshotHandlers } from './ipc/screenshot-handlers'
-import { registerDesktopFlowHandlers } from './ipc/desktop-flow-handlers'
+import {
+  isDesktopFlowActiveForSender,
+  registerDesktopFlowHandlers
+} from './ipc/desktop-flow-handlers'
 import { registerWebSearchHandlers } from './ipc/web-search-handlers'
 import { registerBrowserHandlers } from './ipc/browser-handlers'
 import { registerAiCodingHandlers } from './ipc/ai-coding-handlers'
@@ -86,7 +95,14 @@ import { registerWikiHandlers } from './ipc/wiki-handlers'
 import { registerProviderHandlers } from './ipc/provider-handlers'
 import { registerSidecarHandlers, getSidecarManager } from './ipc/sidecar-manager'
 import { registerCodeGraphHandlers } from './ipc/codegraph-handlers'
-import { getNativeWorker, stopNativeWorker } from './lib/native-worker'
+import { getNativeWorker, parkNativeWorkerForHandover, stopNativeWorker } from './lib/native-worker'
+import { restoreBusinessHandoverIfEnabled } from './db/business-handover-state'
+import {
+  quiesceDesktopLegacyBusinessWriter,
+  resumeDesktopTsChannelWriter
+} from './runtime/business-handover-quiesce'
+import { desktopRuntime } from './runtime/desktop-runtime'
+import { registerTsRuntimeHandlers } from './ipc/ts-runtime-handlers'
 import { getCodeGraphWorker } from './lib/codegraph-worker'
 import { stopCodeGraphSync } from './lib/codegraph-sync'
 import { registerTeamRuntimeHandlers } from './ipc/team-runtime-handlers'
@@ -102,7 +118,15 @@ import {
   startNativeCrashReporter
 } from './crash-logger'
 import { setupAutoUpdater } from './updater'
-import { safeSendMessagePackToWindow } from './window-ipc'
+import {
+  beginWindowWorkspaceRegistration,
+  getTrustedWorkspaceRegistrationWindow,
+  getRegisteredWindowWorkspace,
+  isWindowRegisteredForChannelTasks,
+  registerWindowWorkspace,
+  safeSendMessagePackToWindow
+} from './window-ipc'
+import { authorizeChannelSessionWorkspace } from './channels/channel-session-workspace'
 import { registerMessagePackHandler } from './ipc/messagepack-handler'
 import {
   decodeMessagePackPayload,
@@ -116,8 +140,14 @@ import {
   getBuiltInBrowserStorageSessions,
   resolveBrowserSessionStorageMode
 } from './browser/browser-emulation'
+import { isBuiltInBrowserPartition } from '../shared/browser-plugin'
 
-import { setPluginManager } from './channels/auto-reply'
+import {
+  acknowledgeChannelTaskDelivery,
+  closeChannelTaskInbox,
+  flushPendingChannelTasks,
+  setPluginManager
+} from './channels/auto-reply'
 
 const channelManager = new ChannelManager()
 setPluginManager(channelManager)
@@ -189,14 +219,12 @@ let isQuiting = false
 const detachedSessionWindows = new Map<string, BrowserWindow>()
 const visibleSessionWindowIds = new Map<string, Set<number>>()
 
-function ensureGlobalMemoryHome(): string {
-  const rootPath = join(homedir(), '.ola')
+function ensureGlobalMemoryHome(workspaceId = 'local-personal'): string {
+  const rootPath = workspaceMemoryDataRoot(olaDataRoot(), workspaceId)
   mkdirSync(join(rootPath, 'memory'), { recursive: true })
   return rootPath
 }
 
-const GENERATED_IMAGES_DIR = 'ola'
-const GENERATED_IMAGES_SUBDIR = 'image'
 const MACOS_SHELL_ENV_TIMEOUT_MS = 4000
 const USAGE_EVENTS_STARTUP_CLEANUP_DELAY_MS = 5000
 const USAGE_EVENTS_CLEANUP_INTERVAL_MS = 30 * 60 * 1000
@@ -261,6 +289,7 @@ function parseShellEnvironmentOutput(output: string): Record<string, string> {
 
 async function syncMacOSShellEnvironment(): Promise<void> {
   if (process.platform !== 'darwin') return
+  if (process.env.OLA_E2E_DATA_ROOT !== undefined) return
 
   const shellPath = process.env.SHELL?.trim() || '/bin/zsh'
 
@@ -335,10 +364,8 @@ async function syncMacOSShellEnvironment(): Promise<void> {
   })
 }
 
-function getGeneratedImagesDir(): string {
-  const dir = join(homedir(), GENERATED_IMAGES_DIR, GENERATED_IMAGES_SUBDIR)
-  mkdirSync(dir, { recursive: true })
-  return dir
+function getGeneratedImagesDir(workspaceId: string): string {
+  return ensureGeneratedImagesDirectory(olaDataRoot(), workspaceId)
 }
 
 function guessMimeTypeFromExtension(ext: string): string {
@@ -380,6 +407,7 @@ function persistGeneratedImageFile(args: {
   buffer: Buffer
   mediaType?: string
   sourceUrl?: string
+  workspaceId: string
 }): { filePath: string; mediaType: string; data: string } {
   const urlExt = args.sourceUrl ? extname(args.sourceUrl.split('?')[0]) : ''
   const mediaType =
@@ -387,7 +415,10 @@ function persistGeneratedImageFile(args: {
       ? args.mediaType
       : guessMimeTypeFromExtension(urlExt || '.png')
   const fileExt = urlExt || guessExtensionFromMimeType(mediaType)
-  const filePath = join(getGeneratedImagesDir(), `${Date.now()}-${randomUUID()}${fileExt}`)
+  const filePath = join(
+    getGeneratedImagesDir(args.workspaceId),
+    `${Date.now()}-${randomUUID()}${fileExt}`
+  )
   writeFileSync(filePath, args.buffer)
   return {
     filePath,
@@ -397,17 +428,35 @@ function persistGeneratedImageFile(args: {
 }
 
 type ClipboardWriteImageArgs = { data: string }
-type ImagePersistGeneratedArgs = { data?: string; mediaType?: string; url?: string }
+type ImagePersistGeneratedArgs = {
+  workspaceId: string
+  data?: string
+  mediaType?: string
+  url?: string
+}
 type ImageFetchBase64Args = { url: string }
 
 function registerBinaryInvokeHandler<TArgs>(
   channel: string,
-  handler: (args: TArgs) => Promise<unknown> | unknown
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
     const args = decodeMessagePackPayload<TArgs>(bytes)
-    return encodeMessagePackPayload(await handler(args))
+    return encodeMessagePackPayload(await handler(args, event))
   })
+}
+
+async function authorizeImageWorkspace(
+  event: IpcMainInvokeEvent,
+  requestedWorkspaceId: unknown
+): Promise<string> {
+  const window = getTrustedWorkspaceRegistrationWindow(event)
+  if (!window) throw new Error('GENERATED_IMAGE_SENDER_UNTRUSTED')
+  return authorizeGeneratedImageWorkspace(
+    requestedWorkspaceId,
+    getRegisteredWindowWorkspace(window),
+    loadOfflineWorkspaceIds
+  )
 }
 
 function handleClipboardWriteImage(args: ClipboardWriteImageArgs): {
@@ -431,9 +480,11 @@ async function downloadRemoteImage(url: string): Promise<Buffer> {
 }
 
 async function handleImagePersistGenerated(
-  args: ImagePersistGeneratedArgs
+  args: ImagePersistGeneratedArgs,
+  event: IpcMainInvokeEvent
 ): Promise<{ filePath?: string; mediaType?: string; data?: string; error?: string }> {
   try {
+    const workspaceId = await authorizeImageWorkspace(event, args.workspaceId)
     let buffer: Buffer
     if (typeof args.data === 'string' && args.data.trim()) {
       buffer = Buffer.from(args.data, 'base64')
@@ -443,10 +494,12 @@ async function handleImagePersistGenerated(
       return { error: 'Missing image data or url' }
     }
 
+    await authorizeImageWorkspace(event, workspaceId)
     return persistGeneratedImageFile({
       buffer,
       mediaType: args.mediaType,
-      sourceUrl: args.url
+      sourceUrl: args.url,
+      workspaceId
     })
   } catch (err) {
     return { error: String(err) }
@@ -952,7 +1005,11 @@ async function openDetachedSessionWindow(
     }
   })
 
-  const params = new URLSearchParams({ appView: 'session', sessionId })
+  const params = new URLSearchParams({
+    appView: 'session',
+    sessionId,
+    layoutWindowScope: `session:${sessionId}`
+  })
 
   try {
     await loadRendererWindow(window, params)
@@ -1034,6 +1091,49 @@ function createTray(): void {
 }
 
 function registerWindowControlHandlers(): void {
+  registerMessagePackHandler<{ workspaceId: string; deliveryId: string }>(
+    'plugin:session-task:ack',
+    async (args, event) => {
+      const targetWindow = getTrustedWorkspaceRegistrationWindow(event)
+      if (
+        !targetWindow ||
+        typeof args?.deliveryId !== 'string' ||
+        !args.deliveryId ||
+        args.deliveryId.length > 128 ||
+        !isWindowRegisteredForChannelTasks(targetWindow, args.workspaceId)
+      )
+        throw new Error('CHANNEL_TASK_DELIVERY_UNAVAILABLE')
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        args.workspaceId,
+        loadOfflineWorkspaceIds
+      )
+      return { acknowledged: acknowledgeChannelTaskDelivery(workspaceId, args.deliveryId) }
+    }
+  )
+  registerMessagePackHandler<{ workspaceId: string }>(
+    'window:workspace:set',
+    async (args, event) => {
+      const targetWindow = getTrustedWorkspaceRegistrationWindow(event)
+      if (!targetWindow) throw new Error('WINDOW_WORKSPACE_UNAVAILABLE')
+      const version = beginWindowWorkspaceRegistration(targetWindow)
+      const workspaceId = await authorizeChannelSessionWorkspace(
+        args?.workspaceId,
+        loadOfflineWorkspaceIds
+      )
+      if (
+        getRegisteredWindowWorkspace(targetWindow) !== workspaceId &&
+        isDesktopFlowActiveForSender(event.sender.id)
+      )
+        throw new Error('DESKTOP_FLOW_WORKSPACE_BUSY')
+      if (!registerWindowWorkspace(targetWindow, workspaceId, version, targetWindow === mainWindow))
+        throw new Error('WINDOW_WORKSPACE_SUPERSEDED')
+      if (targetWindow === mainWindow)
+        void flushPendingChannelTasks(workspaceId).catch((error) => {
+          console.warn('[AutoReply] Failed to flush pending channel tasks:', error)
+        })
+      return { workspaceId }
+    }
+  )
   registerMessagePackHandler<void>('window:minimize', (_args, event) => {
     const targetWindow = BrowserWindow.fromWebContents(event.sender)
     targetWindow?.minimize()
@@ -1061,11 +1161,13 @@ function registerWindowControlHandlers(): void {
     return { success: true }
   })
 
-  registerMessagePackHandler<string>('session-window:open', async (sessionId) => {
+  registerMessagePackHandler<string>('session-window:open', async (sessionId, event) => {
+    if (!getTrustedWorkspaceRegistrationWindow(event)) throw new Error('UNTRUSTED_IPC_SENDER')
     return openDetachedSessionWindow(sessionId)
   })
 
-  registerMessagePackHandler<string>('session-window:focus-if-open', (sessionId) => {
+  registerMessagePackHandler<string>('session-window:focus-if-open', (sessionId, event) => {
+    if (!getTrustedWorkspaceRegistrationWindow(event)) throw new Error('UNTRUSTED_IPC_SENDER')
     return { handled: focusDetachedSessionWindow(sessionId) }
   })
 
@@ -1105,7 +1207,7 @@ function configureAppWindow(
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const sourceUrl = params.src ?? ''
     const isHttpUrl = /^https?:\/\//i.test(sourceUrl)
-    const isAllowedPartition = !params.partition || params.partition === 'persist:ola-browser'
+    const isAllowedPartition = !params.partition || isBuiltInBrowserPartition(params.partition)
 
     if (!isHttpUrl || !isAllowedPartition) {
       event.preventDefault()
@@ -1124,6 +1226,13 @@ function configureAppWindow(
     webPreferences.sandbox = true
     webPreferences.webSecurity = true
     webPreferences.allowRunningInsecureContent = false
+    const browserSession = params.partition
+      ? session.fromPartition(params.partition)
+      : session.defaultSession
+    browserSession.setPermissionCheckHandler(() => false)
+    browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+      callback(false)
+    })
   })
 
   window.on('maximize', () => {
@@ -1205,7 +1314,7 @@ function createWindow(): void {
     }
   })
 
-  void loadRendererWindow(window)
+  void loadRendererWindow(window, new URLSearchParams({ layoutWindowScope: 'primary' }))
   if (process.env.OLA_OPEN_DEVTOOLS === '1') {
     window.webContents.once('did-finish-load', () => {
       if (!window.isDestroyed() && !window.webContents.isDevToolsOpened()) {
@@ -1276,7 +1385,7 @@ async function createSshWindow(): Promise<void> {
     }
   })
 
-  const params = new URLSearchParams({ appView: 'ssh' })
+  const params = new URLSearchParams({ appView: 'ssh', layoutWindowScope: 'ssh' })
   await loadRendererWindow(window, params)
 }
 
@@ -1313,15 +1422,32 @@ app.on('child-process-gone', (_event, details) => {
 
 let quitStateFlushed = false
 let quitStateFlushStarted = false
+
+function stopBackgroundServicesForQuit(): void {
+  channelManager.stopAll()
+  mcpManager.disconnectAll()
+  killAllManagedProcesses()
+  killAllTerminalSessions()
+  closeAllSshSessions()
+  closeAllRemoteSessions()
+  cancelAllJobs()
+  void stopNativeWorker()
+  stopCodeGraphSync()
+  void getCodeGraphWorker().stop()
+  void getSidecarManager()
+    .stop()
+    .catch(() => {})
+  closeDb()
+  closeChannelTaskInbox()
+}
+
 app.on('before-quit', (event) => {
   isQuiting = true
   if (quitStateFlushed) {
     flushBuiltInBrowserStorage()
     void flushSettingsSync()
-    closeAllRemoteSessions()
-    void stopNativeWorker()
-    stopCodeGraphSync()
-    void getCodeGraphWorker().stop()
+    void desktopRuntime.stop()
+    stopBackgroundServicesForQuit()
     return
   }
 
@@ -1335,14 +1461,15 @@ app.on('before-quit', (event) => {
     quitStateFlushed = true
     flushBuiltInBrowserStorage()
     void flushSettingsSync()
-    closeAllRemoteSessions()
-    void stopNativeWorker()
-    stopCodeGraphSync()
-    void getCodeGraphWorker().stop()
+    await desktopRuntime.stop().catch((error) => {
+      console.error('[TsRuntime] Failed to stop desktop runtime before quit:', error)
+    })
+    stopBackgroundServicesForQuit()
     app.quit()
   })()
 })
 
+runLoggedStartupStep('configure_isolated_user_data', () => configureIsolatedElectronUserData(app))
 startNativeCrashReporter()
 runLoggedStartupStep('configure_chromium_cache_paths', configureChromiumCachePaths)
 runLoggedStartupStep('configure_renderer_heap_limit', configureRendererHeapLimit)
@@ -1426,7 +1553,39 @@ if (gotSingleInstanceLock) {
       optimizer.watchWindowShortcuts(window)
       attachWindowCrashLogging(window)
     })
+    // The renderer reattaches TS runs during its first render. This must be
+    // registered before creating that window; the runtime itself can still
+    // report unavailable while the remaining startup work is in progress.
+    registerTsRuntimeHandlers()
+    // Prompt cache and offline workspace initialization read config during the
+    // first renderer paint. This file-backed handler has no Native Worker
+    // dependency, so make it available before the initial window exists.
+    registerConfigHandlers()
+    // Settings hydrate from the Main-owned local store and are requested by
+    // the persisted offline workspace state during the first render.
+    registerSettingsHandlers()
     runLoggedStartupStep('create_main_window', createWindow)
+
+    await runLoggedStartupStepAsync('restore_business_handover', async () => {
+      try {
+        const marker = await restoreBusinessHandoverIfEnabled()
+        if (marker) {
+          // Reapply the complete legacy-writer quiesce boundary on every
+          // restart, not only the Native Worker park. Cron, channels, sync,
+          // and Agent bridges must not issue late requests into a parked DB.
+          await quiesceDesktopLegacyBusinessWriter()
+          if (process.env.OLA_ENABLE_TS_CHANNEL_RESUME === '1') {
+            await resumeDesktopTsChannelWriter()
+          }
+          console.log(`[BusinessHandover] restored TS ownership from ${marker.manifestPath}`)
+        }
+      } catch (error) {
+        // Never let a stale or corrupt promotion marker silently reopen the
+        // legacy writer. Keep Native parked and surface the failure to logs.
+        await parkNativeWorkerForHandover().catch(() => undefined)
+        throw error
+      }
+    })
 
     await runLoggedStartupStepAsync('sync_macos_shell_environment', syncMacOSShellEnvironment)
     try {
@@ -1473,10 +1632,16 @@ if (gotSingleInstanceLock) {
 
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
 
-    registerMessagePackHandler<void>('app:homedir', () => homedir())
-    registerMessagePackHandler<void>('app:global-memory-home', () => {
-      return ensureGlobalMemoryHome()
-    })
+    registerMessagePackHandler<void>('app:homedir', () => olaExternalDataHome())
+    registerMessagePackHandler<{ workspaceId?: string } | undefined>(
+      'app:global-memory-home',
+      async (args) => {
+        const workspaceId = args?.workspaceId ?? 'local-personal'
+        if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
+          throw new Error('Memory workspace is not available')
+        return ensureGlobalMemoryHome(workspaceId)
+      }
+    )
     registerMessagePackHandler<void>('app:system-info', () => ({
       machineName: hostname(),
       platform: process.platform,
@@ -1498,8 +1663,6 @@ if (gotSingleInstanceLock) {
     registerShellHandlers()
 
     registerApiProxyHandlers()
-
-    registerSettingsHandlers()
 
     registerSkillsHandlers()
     registerSoulsHandlers()
@@ -1531,6 +1694,24 @@ if (gotSingleInstanceLock) {
       )
     }
 
+    // The runtime resolves local provider secrets in Main. Hydrate the mirror
+    // before starting it so no renderer or socket client ever receives them.
+    await runLoggedStartupStepAsync('hydrate_provider_main_mirror', readConfig)
+    try {
+      await runLoggedStartupStepAsync('ts_runtime_desktop_startup', () =>
+        desktopRuntime.start(join(app.getPath('userData'), 'ts-runtime'))
+      )
+      console.log('[TsRuntime] desktop host ready')
+    } catch (error) {
+      // The production agent still uses the native worker during the staged
+      // cutover. A failed staged runtime must not prevent existing sessions.
+      console.warn(
+        `[TsRuntime] desktop host unavailable: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      )
+    }
+
     await runLoggedStartupStepAsync('register_db_handlers', () =>
       registerDbHandlers({
         onSessionDeleted: (sessionId) => {
@@ -1540,7 +1721,6 @@ if (gotSingleInstanceLock) {
     )
     registerGoalRuntimeHandlers()
     registerMemoryAutomationHandlers()
-    registerConfigHandlers()
     registerExtensionHandlers()
     await runLoggedStartupStepAsync('register_ssh_handlers', registerSshHandlers)
     registerChannelHandlers(channelManager)
@@ -1694,23 +1874,10 @@ if (gotSingleInstanceLock) {
 // explicitly with Cmd + Q.
 
 app.on('window-all-closed', () => {
-  channelManager.stopAll()
-  mcpManager.disconnectAll()
-  killAllManagedProcesses()
-  killAllTerminalSessions()
-  closeAllSshSessions()
-  closeAllRemoteSessions()
-  cancelAllJobs()
-  void stopNativeWorker()
-  stopCodeGraphSync()
-  void getCodeGraphWorker().stop()
-  getSidecarManager()
-    .stop()
-    .catch(() => {})
-  closeDb()
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
+  // Closing UI windows is distinct from exiting Ola. The Main process keeps
+  // the scheduler, channel routes and protected runtime socket alive so a
+  // running chat, Cron job or CLI client can finish and be reopened from tray.
+  console.log('[Main] All windows closed; background runtime remains active')
 })
 
 // In this file you can include the rest of your app's specific main process

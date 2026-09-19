@@ -310,16 +310,13 @@ internal static partial class ExtensionHttpToolExecutor
         {
             return false;
         }
-        if (target.Scheme is not ("http" or "https"))
+        if (target.Scheme is not ("http" or "https") ||
+            !string.IsNullOrEmpty(target.UserInfo))
         {
             return false;
         }
 
         var allowlist = manifest.NetworkPermissions;
-        if (allowlist.Contains("*", StringComparer.Ordinal))
-        {
-            return true;
-        }
         if (allowlist.Count == 0)
         {
             return false;
@@ -331,23 +328,39 @@ internal static partial class ExtensionHttpToolExecutor
     private static bool IsAllowedUrl(Uri target, string allowed)
     {
         var value = allowed.Trim();
-        if (value.Length == 0)
+        if (value.Length == 0 || value == "*")
         {
             return false;
         }
 
-        if (value.EndsWith('*'))
+        var wildcard = value.EndsWith('*');
+        if (wildcard)
         {
-            return target.AbsoluteUri.StartsWith(value[..^1], StringComparison.Ordinal);
+            value = value[..^1];
         }
 
-        if (Uri.TryCreate(value, UriKind.Absolute, out var allowedUrl))
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var allowedUrl) ||
+            allowedUrl.Scheme is not ("http" or "https") ||
+            !string.IsNullOrEmpty(allowedUrl.UserInfo) ||
+            !string.Equals(target.Scheme, allowedUrl.Scheme, StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(target.Host, allowedUrl.Host, StringComparison.OrdinalIgnoreCase) ||
+            target.Port != allowedUrl.Port)
         {
-            return string.Equals(target.GetLeftPart(UriPartial.Authority), allowedUrl.GetLeftPart(UriPartial.Authority), StringComparison.Ordinal) &&
-                target.AbsoluteUri.StartsWith(allowedUrl.AbsoluteUri, StringComparison.Ordinal);
+            return false;
         }
 
-        return string.Equals(target.GetLeftPart(UriPartial.Authority), value, StringComparison.Ordinal);
+        var allowedPath = allowedUrl.AbsolutePath;
+        if (allowedPath == "/")
+        {
+            return true;
+        }
+        if (wildcard)
+        {
+            return allowedPath.EndsWith("/", StringComparison.Ordinal) &&
+                target.AbsolutePath.StartsWith(allowedPath, StringComparison.Ordinal);
+        }
+
+        return string.Equals(target.AbsolutePath, allowedPath, StringComparison.Ordinal);
     }
 
     private static bool IsRedirectStatus(HttpStatusCode status)

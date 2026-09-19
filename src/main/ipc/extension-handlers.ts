@@ -1,7 +1,9 @@
 import { shell } from 'electron'
+import { readFile } from 'node:fs/promises'
 import { registerMessagePackHandler } from './messagepack-handler'
 import type { ExtensionInstance } from '../../shared/extension-types'
 import { nativeExtensionRequest } from './extension-native-bridge'
+import { getExtensionService, getExtensionStorage } from '../extensions/extension-runtime'
 
 type MutationResult = {
   success: boolean
@@ -28,10 +30,6 @@ type ExtensionStorageGetArgs = {
 
 type ExtensionStorageSetArgs = ExtensionStorageGetArgs & {
   value: unknown
-}
-
-type ExtensionPathResult = MutationResult & {
-  path?: string
 }
 
 function getExtensionId(args: string | { id?: string }): string {
@@ -69,43 +67,63 @@ export function registerExtensionHandlers(): void {
   registerMessagePackHandler<string | { id?: string }, MutationResult>(
     'extension:open-folder',
     async (args) => {
-      const result = await nativeExtensionRequest<ExtensionPathResult>('extension/resolve-path', {
-        id: getExtensionId(args)
-      })
-      if (!result.success || !result.path) {
-        return { success: false, error: result.error ?? 'Extension path not found' }
+      try {
+        const id = getExtensionId(args)
+        await getExtensionService().getManifest(id)
+        const error = await shell.openPath(getExtensionService().getPath(id))
+        return error ? { success: false, error } : { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
       }
-
-      const error = await shell.openPath(result.path)
-      return error ? { success: false, error } : { success: true }
     }
   )
 
   registerMessagePackHandler<ExtensionAssetArgs, { content: string } | { error: string }>(
     'extension:read-asset',
     async (args) => {
-      return await nativeExtensionRequest<{ content: string } | { error: string }>(
-        'extension/read-asset',
-        args
-      )
+      try {
+        await getExtensionService().getManifest(args.id)
+        return {
+          content: await readFile(getExtensionService().getAssetPath(args.id, args.path), 'utf8')
+        }
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error) }
+      }
     }
   )
 
   registerMessagePackHandler<ExtensionStorageGetArgs>('extension:storage-get', async (args) => {
-    return await nativeExtensionRequest<unknown>('extension/storage-get', args)
+    try {
+      await getExtensionService().getManifest(args.extensionId)
+      return await getExtensionStorage().get(args.extensionId, args.key)
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) }
+    }
   })
 
   registerMessagePackHandler<ExtensionStorageSetArgs, MutationResult>(
     'extension:storage-set',
     async (args) => {
-      return await nativeExtensionRequest<MutationResult>('extension/storage-set', args)
+      try {
+        await getExtensionService().getManifest(args.extensionId)
+        await getExtensionStorage().set(args.extensionId, args.key, args.value)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
     }
   )
 
   registerMessagePackHandler<ExtensionStorageGetArgs, MutationResult>(
     'extension:storage-delete',
     async (args) => {
-      return await nativeExtensionRequest<MutationResult>('extension/storage-delete', args)
+      try {
+        await getExtensionService().getManifest(args.extensionId)
+        await getExtensionStorage().delete(args.extensionId, args.key)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
     }
   )
 }

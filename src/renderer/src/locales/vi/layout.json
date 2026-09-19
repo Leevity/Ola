@@ -104,7 +104,11 @@
     "chats": "Tán gẫu",
     "noChats": "Chưa nói chuyện",
     "smartRename": "Thay tên thông minh",
-    "smartRenaming": "Đổi tên thông minh"
+    "smartRenaming": "Đổi tên thông minh",
+    "workspaceSwitcher": "Switch workspace",
+    "localWorkspace": "Local workspace",
+    "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
+    "localModelSource": "Local"
   },
   "sidebar_toast": {
     "sessionDeleted": "Phiên chạy đã xoá",

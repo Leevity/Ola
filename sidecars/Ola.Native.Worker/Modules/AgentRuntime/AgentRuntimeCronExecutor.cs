@@ -38,12 +38,15 @@ internal static partial class AgentRuntimeCronExecutor
         WorkerRequestContext context,
         CancellationToken cancellationToken)
     {
+        var workspaceId = JsonHelpers.GetString(parameters, "workspaceId")?.Trim();
+        if (string.IsNullOrEmpty(workspaceId))
+            return EncodeError("workspaceId is required");
         return call.Name switch
         {
-            "CronAdd" or "CronCreate" => await ExecuteAddAsync(call, parameters, context, cancellationToken),
-            "CronUpdate" => await ExecuteUpdateAsync(call, parameters, context, cancellationToken),
-            "CronRemove" or "CronDelete" => await ExecuteDeleteAsync(call, context, cancellationToken),
-            "CronList" => await ExecuteListAsync(context, cancellationToken),
+            "CronAdd" or "CronCreate" => await ExecuteAddAsync(call, parameters, workspaceId, context, cancellationToken),
+            "CronUpdate" => await ExecuteUpdateAsync(call, parameters, workspaceId, context, cancellationToken),
+            "CronRemove" or "CronDelete" => await ExecuteDeleteAsync(call, workspaceId, context, cancellationToken),
+            "CronList" => await ExecuteListAsync(workspaceId, context, cancellationToken),
             _ => EncodeError($"Unsupported cron tool: {call.Name}")
         };
     }
@@ -51,6 +54,7 @@ internal static partial class AgentRuntimeCronExecutor
     private static async Task<string> ExecuteAddAsync(
         NativeToolCallView call,
         JsonElement parameters,
+        string workspaceId,
         WorkerRequestContext context,
         CancellationToken cancellationToken)
     {
@@ -79,6 +83,7 @@ internal static partial class AgentRuntimeCronExecutor
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         var job = new CronJobRow
         {
+            WorkspaceId = workspaceId,
             Id = NewJobId(),
             Name = name,
             SessionId = JsonHelpers.GetString(parameters, "sessionId"),
@@ -124,7 +129,7 @@ internal static partial class AgentRuntimeCronExecutor
         var scheduled = await ScheduleJobAsync(context, job, cancellationToken);
         if (!scheduled.Success)
         {
-            DbCronTools.DeleteJobRecord(job.Id);
+            DbCronTools.DeleteJobRecord(job.Id, workspaceId: workspaceId);
             return EncodeError(scheduled.Error ?? $"Failed to schedule job (kind={job.ScheduleKind})");
         }
 
@@ -141,6 +146,7 @@ internal static partial class AgentRuntimeCronExecutor
     private static async Task<string> ExecuteUpdateAsync(
         NativeToolCallView call,
         JsonElement parameters,
+        string workspaceId,
         WorkerRequestContext context,
         CancellationToken cancellationToken)
     {
@@ -156,7 +162,7 @@ internal static partial class AgentRuntimeCronExecutor
             return EncodeError("patch is required");
         }
 
-        var found = DbCronTools.FindJobRecord(jobId);
+        var found = DbCronTools.FindJobRecord(jobId, workspaceId: workspaceId);
         if (!found.Success)
         {
             return EncodeError($"DB error: {found.Error ?? "failed to load cron job"}");
@@ -172,7 +178,7 @@ internal static partial class AgentRuntimeCronExecutor
         }
         job.UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-        var mutation = DbCronTools.UpdateJobRecord(job);
+        var mutation = DbCronTools.UpdateJobRecord(job, workspaceId: workspaceId);
         if (!mutation.Success)
         {
             return EncodeError($"DB error: {mutation.Error ?? "failed to update cron job"}");
@@ -203,6 +209,7 @@ internal static partial class AgentRuntimeCronExecutor
 
     private static async Task<string> ExecuteDeleteAsync(
         NativeToolCallView call,
+        string workspaceId,
         WorkerRequestContext context,
         CancellationToken cancellationToken)
     {
@@ -215,7 +222,7 @@ internal static partial class AgentRuntimeCronExecutor
             return EncodeError("jobId is required");
         }
 
-        var found = DbCronTools.FindJobRecord(jobId);
+        var found = DbCronTools.FindJobRecord(jobId, workspaceId: workspaceId);
         if (!found.Success)
         {
             return EncodeError($"DB error: {found.Error ?? "failed to load cron job"}");
@@ -231,7 +238,7 @@ internal static partial class AgentRuntimeCronExecutor
             return EncodeError(cancel.Error ?? $"Failed to cancel schedule for {jobId}");
         }
 
-        var mutation = DbCronTools.DeleteJobRecord(jobId);
+        var mutation = DbCronTools.DeleteJobRecord(jobId, workspaceId: workspaceId);
         if (!mutation.Success)
         {
             return EncodeError($"DB error: {mutation.Error ?? "failed to delete cron job"}");
@@ -246,10 +253,11 @@ internal static partial class AgentRuntimeCronExecutor
     }
 
     private static async Task<string> ExecuteListAsync(
+        string workspaceId,
         WorkerRequestContext context,
         CancellationToken cancellationToken)
     {
-        var list = DbCronTools.ListJobRecords();
+        var list = DbCronTools.ListJobRecords(workspaceId: workspaceId);
         if (!list.Success)
         {
             return EncodeError($"DB error: {list.Error ?? "failed to list cron jobs"}");

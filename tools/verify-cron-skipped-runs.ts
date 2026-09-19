@@ -9,6 +9,7 @@ const cronPanel = await readFile('src/renderer/src/components/cowork/CronPanel.t
 const tasksPage = await readFile('src/renderer/src/components/tasks/TasksPage.tsx', 'utf8')
 const app = await readFile('src/renderer/src/App.tsx', 'utf8')
 const cronEvents = await readFile('src/renderer/src/lib/tools/cron-events.ts', 'utf8')
+const workspaceEvents = await readFile('src/main/cron/cron-workspace-events.ts', 'utf8')
 
 assert.match(dao, /CronRunStatus = 'running' \| 'success' \| 'error' \| 'aborted' \| 'skipped'/)
 assert.match(store, /status: 'running' \| 'success' \| 'error' \| 'aborted' \| 'skipped'/)
@@ -20,7 +21,14 @@ assert.match(scheduler, /deliveryTargetSnapshot: job\.delivery_target/)
 assert.match(scheduler, /finishedAt: Date\.now\(\)/)
 assert.match(scheduler, /status: 'skipped'/)
 assert.match(scheduler, /error: reason/)
-assert.match(scheduler, /safeSendMessagePackToAllWindows\('cron:run-finished'/)
+assert.match(
+  scheduler,
+  /sendCronWorkspaceEvent\(job\.workspace_id \?\? 'local-personal', 'cron:run-finished'/
+)
+assert.match(
+  workspaceEvents,
+  /safeSendMessagePackToWorkspaceWindows\(workspaceId, channel, \{ \.\.\.payload, workspaceId \}\)/
+)
 assert.match(scheduler, /await recordSkippedCronRun\(job, firedAt\)/)
 assert.match(handlers, /await recordSkippedCronRun\(row, firedAt\)/)
 assert.match(handlers, /status: 'running' \| 'success' \| 'error' \| 'aborted' \| 'skipped'/)

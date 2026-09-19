@@ -10,7 +10,15 @@
 
 import { app, safeStorage } from 'electron'
 import { randomUUID } from 'crypto'
-import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync
+} from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import type {
@@ -54,7 +62,16 @@ function getCredentialsDir(): string {
   // module can still be loaded.
   const base = app.isReady() ? app.getPath('userData') : tmpdir()
   const dir = join(base, CREDENTIALS_DIR_NAME)
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true, mode: 0o700 })
+  // Existing installations may have created this directory under a permissive
+  // umask. Credential metadata is sensitive too, so repair its mode whenever
+  // the vault is accessed.
+  try {
+    chmodSync(dir, 0o700)
+  } catch {
+    // The encrypted files remain mode 0600; callers still receive a useful
+    // vault error if the platform refuses the directory operation.
+  }
   return dir
 }
 
@@ -143,7 +160,13 @@ function persistPlaintextCache(): void {
 
 export function isSafeStorageAvailable(): boolean {
   try {
-    return safeStorage.isEncryptionAvailable()
+    const backend = (
+      safeStorage as typeof safeStorage & {
+        getSelectedStorageBackend?: () => string
+      }
+    ).getSelectedStorageBackend?.()
+    // Electron's Linux basic_text backend provides obfuscation, not encryption.
+    return safeStorage.isEncryptionAvailable() && backend !== 'basic_text'
   } catch {
     return false
   }

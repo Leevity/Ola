@@ -25,6 +25,12 @@ internal sealed class ProjectRow
 
     [JsonPropertyName("updated_at")]
     public long UpdatedAt { get; set; }
+
+    [JsonPropertyName("workspace_id")]
+    public string WorkspaceId { get; set; } = "local-personal";
+
+    [JsonPropertyName("model_source")]
+    public string? ModelSource { get; set; }
 }
 
 internal sealed record ProjectFindResult(

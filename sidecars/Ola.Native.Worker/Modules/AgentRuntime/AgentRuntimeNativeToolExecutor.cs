@@ -171,6 +171,14 @@ internal static class AgentRuntimeNativeToolExecutor
 
     public static bool RequiresApproval(string toolName, JsonElement input, JsonElement parameters)
     {
+        if (IsExternalChannelInvocation(parameters))
+        {
+            // Channel messages are untrusted input. Until channel policy is carried as a
+            // signed, immutable Worker policy object, no tool invocation from that context
+            // may be auto-approved by renderer metadata, a model response, or a local rule.
+            return true;
+        }
+
         if (AgentRuntimeTranslationExecutor.CanExecute(toolName, parameters))
         {
             return false;
@@ -300,6 +308,14 @@ internal static class AgentRuntimeNativeToolExecutor
             "NotebookEdit" => IsNotebookWriteOutsideWorkingFolder(input, parameters),
             _ => false
         };
+    }
+
+    public static bool IsExternalChannelInvocation(JsonElement parameters)
+    {
+        return parameters.ValueKind == JsonValueKind.Object &&
+            parameters.TryGetProperty("pluginChannelContext", out var channelContext) &&
+            channelContext.ValueKind == JsonValueKind.Object &&
+            !string.IsNullOrWhiteSpace(JsonHelpers.GetString(channelContext, "channelId"));
     }
 
     /// <summary>
@@ -640,6 +656,8 @@ internal static class AgentRuntimeNativeToolExecutor
             throw new InvalidOperationException("Write requires a content string");
         }
 
+        AssertSafeWorkspaceWritePath(path, parameters);
+
         var guardError = AssertCurrentFileMatchesLastRead(parameters, path, "Write", allowMissingFile: true);
         if (guardError is not null)
         {
@@ -651,6 +669,7 @@ internal static class AgentRuntimeNativeToolExecutor
         if (!string.IsNullOrEmpty(directory))
         {
             Directory.CreateDirectory(directory);
+            AssertSafeWorkspaceWritePath(path, parameters);
         }
 
         await File.WriteAllTextAsync(path, content, Encoding.UTF8, cancellationToken);
@@ -687,6 +706,8 @@ internal static class AgentRuntimeNativeToolExecutor
         {
             return EncodeError("new_string must be different from old_string");
         }
+
+        AssertSafeWorkspaceWritePath(path, parameters);
 
         var guardError = AssertCurrentFileMatchesLastRead(parameters, path, "Edit", allowMissingFile: false);
         if (guardError is not null)
@@ -743,6 +764,8 @@ internal static class AgentRuntimeNativeToolExecutor
         {
             return EncodeError("NotebookEdit requires notebook_path or file_path");
         }
+
+        AssertSafeWorkspaceWritePath(path, parameters);
 
         var guardError = AssertCurrentFileMatchesLastRead(parameters, path, "NotebookEdit", allowMissingFile: false);
         if (guardError is not null)
@@ -1194,6 +1217,66 @@ internal static class AgentRuntimeNativeToolExecutor
         return !normalizedTarget.StartsWith(
             normalizedWorkingFolder.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void AssertSafeWorkspaceWritePath(string target, JsonElement parameters)
+    {
+        var workingFolder = JsonHelpers.GetString(parameters, "workingFolder");
+        if (string.IsNullOrWhiteSpace(target) || string.IsNullOrWhiteSpace(workingFolder))
+        {
+            throw new InvalidOperationException("Writes require an active working folder.");
+        }
+
+        var root = Path.GetFullPath(workingFolder);
+        var path = Path.GetFullPath(target);
+        var relative = Path.GetRelativePath(root, path);
+        if (string.IsNullOrEmpty(relative) ||
+            Path.IsPathRooted(relative) ||
+            relative == ".." ||
+            relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal) ||
+            relative.StartsWith($"..{Path.AltDirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Refusing to write outside the active working folder.");
+        }
+
+        AssertNotReparsePoint(root);
+        var current = root;
+        var segments = relative.Split(
+            [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+            StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < segments.Length; index += 1)
+        {
+            current = Path.Combine(current, segments[index]);
+            if (File.Exists(current) || Directory.Exists(current))
+            {
+                AssertNotReparsePoint(current);
+            }
+            else
+            {
+                // The remaining path does not exist yet. It can only be created under the
+                // already verified parent, and is checked again after directory creation.
+                break;
+            }
+        }
+    }
+
+    private static void AssertNotReparsePoint(string path)
+    {
+        try
+        {
+            if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException("Refusing a workspace path containing a symbolic link or reparse point.");
+            }
+        }
+        catch (FileNotFoundException)
+        {
+            // A missing leaf is valid for Write and is checked after its parent is created.
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // A missing leaf is valid for Write and is checked after its parent is created.
+        }
     }
 
     private static string ResolveInputPath(JsonElement input, JsonElement parameters)

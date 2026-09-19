@@ -6,7 +6,10 @@
     "securityNotice": "Hook은 로컬 명령을 실행합니다. 경로와 해시를 확인하세요. 파일이 변경되면 다시 승인해야 합니다.",
     "configured": "구성된 Hook",
     "empty": "사용자 또는 프로젝트 Hook이 없습니다.",
-    "source": { "user": "사용자", "project": "프로젝트" },
+    "source": {
+      "user": "사용자",
+      "project": "프로젝트"
+    },
     "configHash": "구성",
     "revoke": "신뢰 취소",
     "reviewAndTrust": "검토 후 신뢰",
@@ -29,8 +32,20 @@
       "system": "시스템",
       "ai": "AI 기능",
       "extensions": "확장 및 연동",
-      "about": "정보"
-    }
+      "about": "정보",
+      "general": "General",
+      "aiAndModels": "AI & Models",
+      "executionSecurity": "Execution & Security",
+      "integrations": "Capabilities & Integrations",
+      "personalization": "Personalization",
+      "dataUsage": "Data & Usage"
+    },
+    "searchPlaceholder": "Search settings",
+    "searchLabel": "Search settings",
+    "globalScope": "Global",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "back": "Back"
   },
   "profile": {
     "title": "프로필",
@@ -132,7 +147,8 @@
           "label": "따뜻한 새벽",
           "desc": "가벼운 형태와 지상에 놓인 어두운 형태에 있는 온도를 가진 온난한 구리 주황색 팔레트."
         }
-      }
+      },
+      "remoteHint": "Remote"
     },
     "appearance": {
       "title": "외관",
@@ -207,7 +223,10 @@
       "newVersionAvailable": "새로운 버전 (v{{version}})을 사용할 수 있습니다.",
       "downloading": "다운로드 업데이트 ...",
       "downloadingWithProgress": "다운로드 업데이트 ... {{progress}} %",
-      "downloadedRestarting": "v{{version}} 업데이트 다운로드. 설치에 재시작 ..."
+      "downloadedRestarting": "v{{version}} 업데이트 다운로드. 설치에 재시작 ...",
+      "installNow": "Install now",
+      "installing": "Installing…",
+      "downloadedReady": "Update v{{version}} downloaded and waiting for installation confirmation."
     },
     "projectDefaultDirectory": {
       "title": "Default 프로젝트 디렉토리",
@@ -256,10 +275,30 @@
       "clearConfirm": "모든 {{count}} 세션 삭제? 이것은 undone일 수 없습니다.",
       "cleared": "{{count}} 세션 삭제",
       "noSessions": "이용안내"
-    }
+    },
+    "toolExecutionDensity": "Tool detail density",
+    "toolExecutionDensityDesc": "Controls ordinary tool detail after expanding a process log. Errors and interactive cards remain fully visible.",
+    "toolExecutionDensityCompact": "Compact",
+    "toolExecutionDensityBalanced": "Balanced",
+    "toolExecutionDensityVerbose": "Verbose",
+    "advancedDraw": "Advanced canvas tools",
+    "advancedDrawDesc": "Enable optional image operations, prompt presets, and asset workflows.",
+    "videoGeneration": "Video generation",
+    "videoGenerationDesc": "Enable optional video task interfaces. Provider configuration is still required.",
+    "contextCompressionThreshold": "Global compression threshold",
+    "contextCompressionThresholdDesc": "Compress when the current model context reaches this percentage.",
+    "contextCompressionModel": "Compression model",
+    "contextCompressionModelDesc": "Use a dedicated model for summaries, or keep using the current session model.",
+    "contextCompressionModelCurrent": "Current session model",
+    "providerRetryMaxAttempts": "Provider request attempts",
+    "providerRetryMaxAttemptsDesc": "Total attempts for HTTP 429 and 5xx responses. Cancellation stops retry waiting immediately."
   },
   "sync": {
     "title": "Sync의",
+    "workspaceUnavailable": {
+      "title": "Sync is unavailable here",
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+    },
     "subtitle": "기록 수준 Ola 자료는 WebDAV와 동기화합니다.",
     "loading": "로딩중...",
     "provider": {
@@ -548,7 +587,9 @@
     "clearConfirmDescription": "{{date}} 이전에 생성 된 {{count}} 로그 항목을 영구적으로 삭제합니다. 이것은 undone일 수 없습니다.",
     "clearSuccess": "클리어 {{count}} 로그 항목",
     "clearFailed": "명확한 로그에 실패",
-    "clearEmpty": "7 일 이상 로그 없음"
+    "clearEmpty": "7 일 이상 로그 없음",
+    "cacheTokenShare": "Cached Token Share",
+    "cacheReadRatio": "Cache Read Ratio"
   },
   "model": {
     "title": "모델 구성",
@@ -579,14 +620,16 @@
       "clarify": "Clarify 형태",
       "cowork": "Cowork 형태",
       "code": "코드 모드",
-      "acp": "ACP 형태"
+      "acp": "ACP 형태",
+      "execute": "Execute Mode"
     },
     "promptRecommendationModesDesc": {
       "chat": "일반 대화 및 next-question 제안",
       "clarify": "요구 사항 명확화 및 후속 제안",
       "cowork": "협업 실행 및 작업 내역 제안",
       "code": "구현, 수정 및 디버깅 제안",
-      "acp": "ACP 제어 흐름의 목표 명확화, 건축 설계 및 위임 제안"
+      "acp": "ACP 제어 흐름의 목표 명확화, 건축 설계 및 위임 제안",
+      "execute": "For implementation, research, operations, debugging, and task breakdown suggestions"
     },
     "selectRecommendationModel": "추천 모델 선택",
     "useFastModelRecommendation": "빠른 모형 (과태)를 사용하십시오",
@@ -653,7 +696,8 @@
       "DesktopClick": "유효한 args: x, y, 단추, 활동",
       "DesktopType": "유효한 args: 원본, 열쇠, hotkey",
       "DesktopScroll": "유효한 args: x, y, scrollX, scrollY",
-      "DesktopWait": "유효한 args: delayMs"
+      "DesktopWait": "유효한 args: delayMs",
+      "codegraph_explore": "Available args: query, projectPath"
     },
     "status": {
       "disabled": "플러그인은 비활성화되어 있으므로 도구는 에이전트에 노출되지 않습니다.",
@@ -687,7 +731,30 @@
       "allowedDomains": "허용된 도메인",
       "allowedDomainsDesc": "모든 도메인을 허용하도록 빈번하게하십시오. 설정할 때만 해당 도메인만 열 수 있습니다.",
       "domainPlaceholder": "예제.com\n하위.example.org",
-      "domainRuleHint": "라인당 하나의 도메인을 입력하거나 commas로 분리하십시오. Blocked Domain은 허용된 도메인에 우선 순위를 가지고 있습니다. 하위 도메인은 자동으로 일치합니다."
+      "domainRuleHint": "라인당 하나의 도메인을 입력하거나 commas로 분리하십시오. Blocked Domain은 허용된 도메인에 우선 순위를 가지고 있습니다. 하위 도메인은 자동으로 일치합니다.",
+      "cookieImport": "Import browser cookies",
+      "cookieImportDesc": "Copy cookies from a detected Chromium profile into Ola's isolated browser session. Cookie values never leave the Main process.",
+      "importCookies": "Import cookies",
+      "importingCookies": "Importing...",
+      "noCookieProfiles": "No supported profiles detected",
+      "cookiePrivacyConfirm": "I understand that imported signed-in sessions become available to Ola's built-in browser.",
+      "cookieImportComplete": "Imported {{imported}} cookies; skipped {{skipped}}; failed {{failed}}",
+      "cookieImportErrors": {
+        "browser_busy": "Close the source browser and try again",
+        "key_denied": "Cookie decryption key access was denied",
+        "unsupported_database": "This browser cookie database format is not supported",
+        "profile_missing": "The selected browser profile is no longer available",
+        "privacy_confirmation_required": "Confirm the privacy notice before importing",
+        "unknown": "Browser cookie import failed"
+      },
+      "exportCookies": "Export encrypted cookies",
+      "exportingCookies": "Exporting...",
+      "cookieExportComplete": "Exported {{exported}} cookies in an encrypted archive",
+      "cookieExportErrors": {
+        "secure_storage_unavailable": "System secure storage is unavailable; encrypted cookie export is disabled",
+        "write_failed": "Failed to export encrypted browser cookies",
+        "unknown": "Browser cookie export failed"
+      }
     },
     "items": {
       "image": {
@@ -707,8 +774,108 @@
         "description": "데스크톱 스크린 샷, 클릭, 스크롤 및 에이전트에 키보드 도구.",
         "promptTitle": "공구 사용 constraints",
         "promptDesc": "이 도구는 전체 데스크탑을 검사하고 제어 할 수 있습니다. 승인이 활성화되어 작동하기 전에 화면을 캡처하고 직접 데스크톱 자동화가 필요합니다. 활성 모델이 컴퓨터 사용을 활성화하면 OpenAI 컴퓨터 사용은이 데스크탑 기능을 먼저 조정할 것입니다."
+      },
+      "product-design": {
+        "title": "Product Design",
+        "description": "Explore design directions, build prototypes, audit flows, and QA visual fidelity.",
+        "promptTitle": "Workflow constraints",
+        "promptDesc": "Product Design starts by confirming the brief, uses visual targets before builds, generates three directions when no target exists, and requires design QA before prototype handoff."
+      },
+      "codegraph": {
+        "title": "Project Intelligence",
+        "description": "Unify the human-readable Project Wiki with CodeGraph structural code analysis.",
+        "promptTitle": "Project analysis scope",
+        "promptDesc": "Disabled by default. When enabled, you can generate a local Wiki and build the CodeGraph index on demand."
       }
-    }
+    },
+    "toolStatusDescCodeGraph": "The Project Intelligence plugin exposes the Wiki and CodeGraph panels. CodeGraph tools are available to the Agent and the isolated analysis Worker starts lazily on the first request.",
+    "projectIntelligence": {
+      "title": "Project Intelligence",
+      "description": "Use a lightweight project map for people and a deep code graph for structural analysis.",
+      "activeProject": "Active project: {{path}}",
+      "noProject": "Select a project with a working folder to use both capabilities.",
+      "wikiTitle": "Project Wiki",
+      "codeGraphTitle": "CodeGraph"
+    },
+    "toolStatusDescProductDesign": "Product Design is a workflow plugin. It exposes no new low-level Tool; it coordinates enabled image, browser, search, file, shell, MCP, and deployment tools through the product-design skill.",
+    "codegraph": {
+      "dashboard": "Code analysis dashboard",
+      "noProject": "Select a local project folder to inspect its code index.",
+      "refresh": "Refresh",
+      "index": "Index project",
+      "indexing": "Indexing…",
+      "fileCount": "Files",
+      "nodeCount": "Symbols",
+      "edgeCount": "Relations",
+      "searchPlaceholder": "Search symbols",
+      "workerRunning": "Analysis Worker running",
+      "workerReady": "Analysis Worker ready",
+      "workerChecking": "Checking Analysis Worker…",
+      "workerMissing": "Analysis Worker assets missing",
+      "callers": "Callers",
+      "callees": "Callees",
+      "localGraph": "Local relation graph",
+      "relationCount": "{{count}} relations",
+      "sync": "Sync changes",
+      "syncing": "Syncing…",
+      "indexedProjects": "Indexed projects",
+      "noIndexedProjects": "No local indexes yet.",
+      "projectState": "State: {{state}}",
+      "lastIndexed": "Last indexed: {{value}}",
+      "indexSize": "Index size: {{size}}",
+      "removeIndex": "Remove index",
+      "removeIndexConfirm": "Remove the local CodeGraph index for {{project}}? This does not modify project files.",
+      "grammarReady": "Grammar assets available ({{available}}/{{expected}})",
+      "grammarMissing": "Grammar assets missing ({{missing}}/{{expected}})",
+      "workerGeneration": "Worker generation {{generation}}",
+      "syncFailed": "Unable to sync code index",
+      "indexedFiles": "Indexed files",
+      "noIndexedFiles": "No indexed source files.",
+      "analytics": "Graph health",
+      "circularDependencies": "Circular dependencies: {{count}}",
+      "deadCode": "Potentially unused symbols: {{count}}",
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
+    },
+    "productDesign": {
+      "workflowTitle": "Workflow plugin",
+      "workflowDesc": "Adds Product Design routing, saved design context, visual exploration, prototype scaffolding, URL cloning, image-to-code, audits, design QA, and sharing handoff.",
+      "ready": "Ready",
+      "notReady": "Not ready",
+      "optional": "Optional",
+      "ensureFailed": "Failed to prepare Product Design skill",
+      "promptsTitle": "Default prompts",
+      "workflows": {
+        "getContext": "Get context",
+        "ideate": "Ideate",
+        "prototype": "Prototype",
+        "urlToCode": "URL to code",
+        "imageToCode": "Image to code",
+        "audit": "Audit",
+        "research": "Research",
+        "designQa": "Design QA",
+        "share": "Share",
+        "userContext": "User context"
+      },
+      "prompts": {
+        "getStarted": "Help me get started",
+        "threeDirections": "Turn this product idea into three visual directions",
+        "cloneUrl": "Clone this URL into an editable prototype"
+      },
+      "dependencies": {
+        "skill": "product-design skill",
+        "skillDesc": "Copied from bundled resources when this plugin is enabled.",
+        "image": "Image generation",
+        "imageDesc": "Needed for visual directions and replacement visual assets.",
+        "browser": "Browser capture",
+        "browserDesc": "Needed for URL capture, audits, screenshots, and prototype QA.",
+        "webSearch": "Web search",
+        "webSearchDesc": "Optional, used for current UX research and public source scans.",
+        "share": "Share target",
+        "shareDesc": "Optional, detected from connected hosting or deployment MCP tools."
+      }
+    },
+    "defaultPlugins": "Built-in plugins",
+    "customPlugins": "Custom extensions"
   },
   "migration": {
     "title": "Migration 센터",
@@ -796,6 +963,22 @@
       "channels": {
         "title": "MCP 및 샴페인 생태계",
         "desc": "MCP 서버, 기술 및 제 3 자 channles를 원활하게 연결하십시오."
+      },
+      "chat": {
+        "title": "Chat Mode",
+        "desc": "General conversation for Q&A, brainstorming, content creation, and everyday interaction."
+      },
+      "clarify": {
+        "title": "Clarify Mode",
+        "desc": "Requirement clarification: before starting a task, the agent asks questions and confirms your intent — ideal for complex or ambiguous requests."
+      },
+      "execute": {
+        "title": "Execute Mode",
+        "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
+      },
+      "acp": {
+        "title": "ACP Mode",
+        "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
       }
     },
     "summary": "Ola는 멀티 모델 워크플로우, MCP 서버, 기술 및 사용자 정의 챔nnles를 하나의 데스크탑 경험 안에 통합하여 Chat, Cowork 또는 Code 모드를 제어할 수 있습니다."
@@ -1163,7 +1346,17 @@
     "channelUserRefreshFailed": "사용자 정보를 새로 고침",
     "channelDisconnect": "연결하기",
     "channelDisconnected": "채널 연결",
-    "channelRequired": "먼저 채널 검증 완료"
+    "channelRequired": "먼저 채널 검증 완료",
+    "requestTimeoutSeconds": "API request timeout (seconds)",
+    "requestTimeoutSecondsDesc": "Time to wait for response headers. Set to 0 to wait indefinitely.",
+    "resetToDefault": "Reset to default",
+    "resetToDefaultSuccess": "{{field}} has been reset to default",
+    "userAgent": "User-Agent",
+    "userAgentHint": "Leave empty to use {{defaultUserAgent}}. Set a custom value to simulate another client.",
+    "modelCategoryVideo": "Video",
+    "seedanceVideo": "Seedance video",
+    "cacheTtl": "Cache TTL (anthropic)",
+    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level."
   },
   "channel": {
     "title": "채널 :",
@@ -1392,7 +1585,24 @@
     "testSuccess": "연결 성공! {{count}} 기술.",
     "testFailed": "연결 실패: {{error}}",
     "configSummary": "구성 요약",
-    "notSet": "설정하기"
+    "notSet": "설정하기",
+    "catalogInfo": "Browse the current skill catalog and review each package locally before installation. An API key is optional.",
+    "marketTab": "Skills market",
+    "installedTab": "Installed",
+    "installedTitle": "Installed Skills",
+    "installedDescription": "Skills currently installed and available for Ola to load.",
+    "refreshInstalled": "Refresh",
+    "loadingInstalled": "Loading installed Skills…",
+    "emptyInstalled": "No installed Skills",
+    "emptyInstalledDescription": "Install Skills from the Skills page and they will appear here.",
+    "installedBadge": "Installed",
+    "noDescription": "No description",
+    "openFolder": "Open folder",
+    "delete": "Delete",
+    "deleteTitle": "Delete {{name}}",
+    "deleteDescription": "This removes the Skill from Ola’s installed Skills directory.",
+    "deleteSuccess": "Deleted {{name}}",
+    "deleteFailed": "Could not delete {{name}}"
   },
   "soulmarket": {
     "title": "SOUL 시장",
@@ -1468,5 +1678,305 @@
     "copyConversation": "복사 대화",
     "allowTool": "도구 실행",
     "denyTool": "Deny 도구 실행"
+  },
+  "wiki": {
+    "title": "Project Wiki",
+    "subtitle": "Build an incremental local project map",
+    "description": "Build a local, incremental map of project files and symbols. Sensitive directories are excluded.",
+    "projectFolder": "Project folder",
+    "chooseProjectFolder": "Choose project folder",
+    "generate": "Generate Wiki",
+    "rescan": "Re-scan",
+    "export": "Export Markdown"
+  },
+  "desktopAutomation": {
+    "title": "Desktop Automation",
+    "subtitle": "Record and replay approved desktop flows",
+    "defaultFlowName": "Desktop flow",
+    "safetyNotice": "Typed text is never saved. Every high-risk replay requires a separate native confirmation.",
+    "recording": {
+      "title": "Record a flow",
+      "description": "Create a local workflow from your desktop actions."
+    },
+    "flowName": "Flow name",
+    "flowNameDescription": "Use a clear name so this flow is easy to find later.",
+    "start": "Start recording",
+    "stopAndSave": "Stop and save",
+    "status": {
+      "recording": "Recording · {{count}} steps",
+      "idle": "Idle · {{count}} steps"
+    },
+    "replay": {
+      "success": "Replay completed · {{count}} steps changed the screen.",
+      "failed": "Replay stopped: {{error}}"
+    },
+    "unknownError": "Unknown error",
+    "current": {
+      "title": "Current flow",
+      "description": "The recording currently held in memory."
+    },
+    "saveCurrent": "Save current flow",
+    "saved": {
+      "title": "Saved flows",
+      "description": "Run or remove a previously saved desktop workflow.",
+      "empty": "No saved desktop flows yet."
+    },
+    "cancelReplay": "Cancel replay",
+    "flowSummary": "{{name}} · {{count}} steps",
+    "run": "Run",
+    "delete": "Delete {{name}}"
+  },
+  "permission": {
+    "title": "Permissions",
+    "subtitle": "Tool whitelist & shell command rules",
+    "master": {
+      "title": "Enable permission whitelist",
+      "description": "Whitelisted tools and matching shell commands skip confirmation; denied commands are always rejected. Other dangerous operations still ask for confirmation."
+    },
+    "precedence": {
+      "description": "Order: command deny rules → tool/command allow rules → normal confirmation. Deny rules also override global auto-approval."
+    },
+    "wildcardHelp": "Wildcards match the whole command; * matches any text. Regex allow rules match the whole command, while regex deny rules may match anywhere. Every segment of a compound command must be allowed.",
+    "tools": {
+      "title": "Tool whitelist",
+      "description": "These tools run without confirmation. Wildcards are supported.",
+      "placeholder": "Tool name, e.g. Write",
+      "add": "Add",
+      "suggestions": "Suggestions:",
+      "empty": "No whitelisted tools yet",
+      "duplicate": "This tool is already whitelisted",
+      "remove": "Remove {{tool}}",
+      "commandToolWarning": "A shell tool is whitelisted; all its commands skip confirmation unless denied."
+    },
+    "bashAllow": {
+      "title": "Command allow rules",
+      "description": "Matching shell commands run without confirmation."
+    },
+    "bashDeny": {
+      "title": "Command deny rules",
+      "description": "Matching commands are always rejected."
+    },
+    "rules": {
+      "add": "Add rule",
+      "patternPlaceholder": "e.g. npm run *",
+      "modeWildcard": "Wildcard",
+      "modeRegex": "Regex",
+      "empty": "No rules yet",
+      "invalidPattern": "Invalid pattern: {{error}}",
+      "delete": "Delete rule"
+    }
+  },
+  "aiCoding": {
+    "title": "AI Coding",
+    "subtitle": "Manage CLI model and permission profiles",
+    "name": "Configuration name",
+    "tool": "Coding CLI",
+    "provider": "Ola Provider",
+    "model": "Model",
+    "permissionMode": "Permission mode",
+    "enabled": "Enabled",
+    "mapping": "Effective mapping",
+    "credential": "Credential",
+    "notConfigured": "Not configured",
+    "copy": "Copy",
+    "delete": "Delete",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "AI Coding configuration saved",
+    "saveFailed": "Failed to save AI Coding configuration",
+    "permissions": {
+      "standard": "Standard",
+      "approve-edits": "Approve edits",
+      "read-only": "Read only",
+      "full-access": "Full access"
+    },
+    "validation": {
+      "providerMissing": "Select a Provider",
+      "providerDisabled": "The selected Provider is disabled",
+      "protocolMismatch": "This Provider protocol is not compatible with the selected CLI",
+      "baseUrlMissing": "The Provider Base URL is missing",
+      "authMissing": "The Provider authentication is not configured",
+      "modelMissing": "Select a compatible enabled model"
+    }
+  },
+  "capabilityCenter": {
+    "title": "Capability Center",
+    "description": "Manage installed capabilities, custom extensions, MCP servers, skills, channels, scopes, permissions, and health from one place.",
+    "installed": "Installed capabilities",
+    "extensions": "Extensions",
+    "mcp": "MCP servers",
+    "skills": "Skills",
+    "channels": "Channels",
+    "enabledCount": "{{enabled}} of {{total}} enabled",
+    "healthyCount": "{{healthy}} of {{total}} healthy",
+    "installedCount": "{{total}} installed"
+  },
+  "pet": {
+    "title": "Desktop Pet",
+    "subtitle": "Manage your capybara pet, skins, experience & agent"
+  },
+  "extension": {
+    "title": "Extensions",
+    "subtitle": "Install local custom tools and response UI components",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "tools": "Tools",
+    "renderers": "Renderers",
+    "components": "Components",
+    "hostRendered": "host-rendered",
+    "network": "Network",
+    "noNetwork": "No network access",
+    "readOnlyCount": "{{count}} read-only",
+    "required": "Required",
+    "showSecret": "Show secret",
+    "hideSecret": "Hide secret",
+    "saveConfig": "Save config",
+    "saved": "Extension configuration saved",
+    "saveFailed": "Failed to save configuration",
+    "updateFailed": "Failed to update extension",
+    "openFolder": "Open folder",
+    "openFolderFailed": "Failed to open folder",
+    "remove": "Remove",
+    "removeConfirm": "Remove this extension?",
+    "removeFailed": "Failed to remove extension",
+    "installFolder": "Install folder",
+    "installFailed": "Failed to install extension",
+    "installed": "Extension installed",
+    "loading": "Loading extensions...",
+    "emptyTitle": "No extensions installed",
+    "emptyDesc": "Choose a folder containing extension.json to add custom tools to Ola.",
+    "noRenderers": "No custom renderers"
+  },
+  "workModes": {
+    "title": "Work modes",
+    "subtitle": "Choose how new conversations prioritize Work and Code tasks.",
+    "work": "Work",
+    "code": "Code",
+    "sharedLabel": "Shared",
+    "autoSummarize": "Generate a structured result",
+    "autoSummarizeDesc": "After tool work, summarize what changed, what was verified and what remains.",
+    "preferBrowser": "Prioritize browser actions",
+    "preferBrowserDesc": "Place browser and desktop research capabilities near the top of the tool picker.",
+    "preferWebSearch": "Prioritize web research",
+    "preferWebSearchDesc": "Prefer search and source gathering for research-oriented tasks.",
+    "autoIndex": "Keep project intelligence ready",
+    "autoIndexDesc": "Prefer CodeGraph and Wiki indexing when a project is selected.",
+    "allowShell": "Show shell capabilities",
+    "allowShellDesc": "Expose terminal and command tools as preferred Code capabilities; approvals still apply.",
+    "defaultsHint": "New conversations use this profile configuration.",
+    "mainModel": "Main model",
+    "fastModel": "Fast model",
+    "inheritModel": "Inherit global model",
+    "inheritFastModel": "Inherit global fast model",
+    "shared": {
+      "securityTitle": "Security stays global",
+      "securityDesc": "Permissions, approvals, credentials, MCP, Extensions and desktop automation are shared by both profiles.",
+      "defaultTitle": "Default profile",
+      "defaultDesc": "New conversations start with this profile. You can override it before sending."
+    },
+    "shellType": "Shell type",
+    "shellDefault": "System default",
+    "gitPolicy": "Git policy",
+    "gitInspect": "Inspect only",
+    "gitAsk": "Ask before write",
+    "gitApproval": "Allow with approval",
+    "verificationPolicy": "Verification policy",
+    "verifyNone": "No automatic verification",
+    "verifyStatic": "Lint and typecheck",
+    "verifyFull": "Tests and build",
+    "diffStyle": "Diff display",
+    "diffInline": "Inline in conversation",
+    "diffSidePanel": "Open in side panel",
+    "fileApproval": "File approval",
+    "approvalAlways": "Always ask",
+    "approvalRisk": "Ask on risk",
+    "approvalGlobal": "Use global policy",
+    "useTeams": "Prefer Team delegation",
+    "useTeamsDesc": "Suggest sub-agents and Team workflows for larger engineering tasks.",
+    "defaultsDescription": "Defaults: {{mode}}. Profile changes apply to new conversations.",
+    "defaultsChat": "starts with conversation",
+    "defaultsExecution": "starts with execution"
+  },
+  "credentials": {
+    "title": "Credentials",
+    "subtitle": "Manage the credentials the agent can use to log into sites"
+  },
+  "architecture": {
+    "groups": {
+      "common": "일반",
+      "models": "모델 및 계정",
+      "execution": "실행 및 보안",
+      "integrations": "확장 및 통합",
+      "personalization": "데이터 및 개인화",
+      "advanced": "고급"
+    },
+    "pages": {
+      "modelManagement": {
+        "description": "사용 가능한 모델과 기능을 관리합니다."
+      },
+      "model": {
+        "description": "기본값과 작업별 모델 동작을 선택합니다."
+      },
+      "projectIntelligence": {
+        "title": "프로젝트 인텔리전스",
+        "description": "프로젝트 Wiki 및 CodeGraph 인덱싱을 관리합니다."
+      },
+      "advanced": {
+        "title": "고급",
+        "description": "컨텍스트, 동시성, 개발자 및 실험 기능 제어입니다."
+      },
+      "olaAccount": {
+        "title": "Ola account",
+        "description": "Use your Ola personal and team model resources without storing their API keys on this device.",
+        "localProviderNotice": "Local providers remain available offline in every workspace. Ola-managed model credentials stay on the Ola service.",
+        "connection": {
+          "title": "Account connection",
+          "description": "Sign in to load your personal and team resources.",
+          "signIn": "Sign in",
+          "signOut": "Sign out",
+          "manage": "Manage on Ola",
+          "notSignedIn": "Not signed in",
+          "notSignedInDescription": "Sign in to access Ola-managed personal and team models."
+        },
+        "spaces": {
+          "title": "Workspaces",
+          "description": "Switching spaces changes what new work uses. Existing conversations keep their original binding.",
+          "local": "Local personal workspace",
+          "personal": "Ola personal workspace",
+          "team": "Ola team workspace",
+          "localModels": "Local models",
+          "resourceCount": "{{count}} managed models",
+          "localName": "Local workspace"
+        },
+        "resources": {
+          "title": "Managed model resources",
+          "description": "Only metadata is stored on this device; API keys never leave Ola.",
+          "refresh": "Refresh",
+          "available": "Available",
+          "unavailable": "Unavailable",
+          "empty": "No Ola-managed models are available in this workspace."
+        },
+        "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
+        "deviceRegistered": "Registered device: {{name}}",
+        "lastSynced": "Last refreshed: {{time}}",
+        "defaultModel": "Default model"
+      }
+    },
+    "usage": {
+      "title": "사용량 및 비용",
+      "description": "로컬 모델 사용량, 비용 및 성능을 검토합니다."
+    },
+    "petStudio": {
+      "title": "펫 스튜디오",
+      "description": "시스템 설정 밖에서 데스크톱 동반자를 관리합니다."
+    }
+  },
+  "projectIntelligence": {
+    "title": "Project intelligence",
+    "description": "Use project Wiki and CodeGraph to understand the current project.",
+    "activeProject": "Active project: {{path}}",
+    "noProject": "Select a project with a working folder to use both capabilities.",
+    "wikiTitle": "Project Wiki",
+    "codeGraphTitle": "CodeGraph"
   }
 }

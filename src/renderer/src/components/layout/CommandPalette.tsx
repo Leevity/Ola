@@ -29,6 +29,8 @@ import {
   CommandShortcut,
   CommandSeparator
 } from '@renderer/components/ui/command'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { useMemo } from 'react'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useUIStore, type AppMode } from '@renderer/stores/ui-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
@@ -88,7 +90,12 @@ export function CommandPalette(): React.JSX.Element {
     getWorkbenchActionsSnapshot
   )
 
-  const sessions = useChatStore((s) => s.sessions)
+  const allSessions = useChatStore((s) => s.sessions)
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const sessions = useMemo(
+    () => allSessions.filter((s) => (s.workspaceId ?? 'local-personal') === workspaceId),
+    [allSessions, workspaceId]
+  )
   const activeSessionId = useChatStore((s) => s.activeSessionId)
   const deleteSession = useChatStore((s) => s.deleteSession)
   const togglePinSession = useChatStore((s) => s.togglePinSession)

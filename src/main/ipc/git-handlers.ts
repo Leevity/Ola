@@ -1,6 +1,25 @@
 import { ipcMain } from 'electron'
 import { getNativeSshConnectionPayload } from './ssh-handlers'
+import {
+  currentSshWorkspaceId,
+  initializeSshConfigCache,
+  withSshWorkspace
+} from '../ssh/ssh-config'
+import { authorizeSshWorkspace } from '../ssh/ssh-workspace-authorization'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { getNativeWorker } from '../lib/native-worker'
+import { scanLocalGitRepositories } from '../../runtime/host/git-scan'
+import { getLocalGitStatusDetailed } from '../../runtime/host/git-status'
+import {
+  executeLocalGitMutation,
+  requireSafeGitPaths,
+  requireSafeGitReference
+} from '../../runtime/host/git-mutation'
+import {
+  queryLocalGit,
+  type LocalGitQuery,
+  type LocalGitQueryOptions
+} from '../../runtime/host/git-query'
 import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
@@ -29,11 +48,16 @@ type GitErrorType =
   | 'MERGE_CONFLICT'
   | 'UNCOMMITTED_CHANGES_BLOCKING'
   | 'NON_FAST_FORWARD'
+  | 'VALIDATION'
+  | 'TIMEOUT'
+  | 'SPAWN'
+  | 'OUTPUT_LIMIT'
   | 'UNKNOWN'
 
 interface GitTarget {
   cwd: string
   sshConnectionId?: string | null
+  workspaceId?: string
 }
 
 interface NativeGitTarget extends GitTarget {
@@ -172,7 +196,7 @@ function stableQueryValue(value: unknown): unknown {
 }
 
 function gitTargetKey(target: GitTarget): string {
-  return `${target.sshConnectionId?.trim() || 'local'}\u0000${target.cwd}`
+  return `${currentSshWorkspaceId()}\u0000${target.sshConnectionId?.trim() || 'local'}\u0000${target.cwd}`
 }
 
 function gitQueryKey(target: GitTarget, params: Record<string, unknown>): string {
@@ -345,7 +369,13 @@ function queryGit<T extends NativeGitQueryResult = NativeGitQueryResult>(
     operation: params.operation
   })
   const requestRevision = gitQueryRevision(target)
-  const request = nativeGitRequest<T>('git/query', target, params)
+  const request = (
+    isLocalGitQuery(params.operation) && !target.sshConnectionId
+      ? queryLocalGit(target.cwd, params.operation, params as LocalGitQueryOptions).then(
+          (result) => result as T
+        )
+      : nativeGitRequest<T>('git/query', target, params)
+  )
     .then((result) => {
       const ttl = gitQueryTtl(params)
       if (gitQueryRevision(target) === requestRevision) {
@@ -368,7 +398,33 @@ function queryGit<T extends NativeGitQueryResult = NativeGitQueryResult>(
   return request
 }
 
+function isLocalGitQuery(operation: unknown): operation is LocalGitQuery {
+  return (
+    typeof operation === 'string' &&
+    [
+      'get-head',
+      'get-range-commits',
+      'get-changed-files',
+      'get-status',
+      'get-line-summary',
+      'get-file-diff',
+      'get-file-diff-at-commit',
+      'get-file-content-at-ref',
+      'get-staged-diff-bundle',
+      'get-commit-history',
+      'list-branches',
+      'get-file-history'
+    ].includes(operation)
+  )
+}
+
 async function execGit(args: string[], target: GitTarget): Promise<GitExecResult> {
+  // Local Git is a Main-owned TS path. Remote targets retain the Native SSH
+  // transport until the SSH execution host moves, so the two environments do
+  // not accidentally share credentials or command semantics.
+  if (!target.sshConnectionId) {
+    return await executeLocalGitMutation(target.cwd, args)
+  }
   return await nativeGitRequest<GitExecResult>(
     'git/exec',
     target,
@@ -389,7 +445,15 @@ function registerGitMessagePackHandler<TArgs>(
   ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
     try {
       const args = decodeMessagePackPayload<TArgs>(bytes)
-      return encodeMessagePackPayload(await handler(args))
+      const rawWorkspaceId = (args as { workspaceId?: unknown } | null)?.workspaceId
+      const workspaceId = await authorizeSshWorkspace(rawWorkspaceId, loadOfflineWorkspaceIds)
+      return encodeMessagePackPayload(
+        await withSshWorkspace(workspaceId, async () => {
+          if ((args as { sshConnectionId?: unknown } | null)?.sshConnectionId)
+            await initializeSshConfigCache()
+          return handler(args)
+        })
+      )
     } catch (error) {
       return encodeMessagePackPayload(failFromError(error))
     }
@@ -432,6 +496,15 @@ export function registerGitHandlers(): void {
   })
 
   registerGitMessagePackHandler<ScanRepositoriesArgs>('git:scan-repositories', async (args) => {
+    if (!args.sshConnectionId) {
+      return ok({
+        repositories: await scanLocalGitRepositories({
+          rootPath: args.rootPath,
+          maxDepth: args.maxDepth ?? DEFAULT_SCAN_DEPTH,
+          excludeDirs: args.excludeDirs ?? []
+        })
+      })
+    }
     const repositories = await nativeGitRequest<GitRepositorySummary[]>(
       'git/scan-repositories',
       args,
@@ -446,10 +519,9 @@ export function registerGitHandlers(): void {
   })
 
   registerGitMessagePackHandler<GitTarget>('git:get-repo-summary', async (args) => {
-    const result = await nativeGitRequest<NativeGitStatusDetailedResult>(
-      'git/status-detailed',
-      args
-    )
+    const result = args.sshConnectionId
+      ? await nativeGitRequest<NativeGitStatusDetailedResult>('git/status-detailed', args)
+      : await getLocalGitStatusDetailed(args.cwd)
     if (!result.success) return result
     const summary: GitRepoSummary = {
       branch: result.status.branch,
@@ -461,7 +533,9 @@ export function registerGitHandlers(): void {
   })
 
   registerGitMessagePackHandler<GitTarget>('git:get-status-detailed', async (args) => {
-    return await nativeGitRequest<NativeGitStatusDetailedResult>('git/status-detailed', args)
+    return args.sshConnectionId
+      ? await nativeGitRequest<NativeGitStatusDetailedResult>('git/status-detailed', args)
+      : await getLocalGitStatusDetailed(args.cwd)
   })
 
   registerGitMessagePackHandler<GitTarget & { filePath: string; staged?: boolean }>(
@@ -556,7 +630,11 @@ export function registerGitHandlers(): void {
     'git:create-branch',
     async (args) => {
       const result = await execGit(
-        ['branch', args.name, ...(args.startPoint ? [args.startPoint] : [])],
+        [
+          'branch',
+          requireSafeGitReference(args.name, 'branch name'),
+          ...(args.startPoint ? [requireSafeGitReference(args.startPoint, 'start point')] : [])
+        ],
         args
       )
       if (!result.success) return fail(result, 'Failed to create branch')
@@ -567,20 +645,26 @@ export function registerGitHandlers(): void {
   registerGitMessagePackHandler<GitTarget & { name: string }>(
     'git:checkout-branch',
     async (args) => {
-      const result = await execGit(['checkout', args.name], args)
+      const result = await execGit(
+        ['checkout', requireSafeGitReference(args.name, 'branch name')],
+        args
+      )
       if (!result.success) return fail(result, 'Failed to checkout branch')
       return okMutation(args, result)
     }
   )
 
   registerGitMessagePackHandler<GitTarget & { ref: string }>('git:merge-branch', async (args) => {
-    const result = await execGit(['merge', '--no-edit', args.ref], args)
+    const result = await execGit(
+      ['merge', '--no-edit', requireSafeGitReference(args.ref, 'reference')],
+      args
+    )
     if (!result.success) return fail(result, 'Failed to merge branch')
     return okMutation(args, result)
   })
 
   registerGitMessagePackHandler<GitTarget & { ref: string }>('git:rebase-branch', async (args) => {
-    const result = await execGit(['rebase', args.ref], args)
+    const result = await execGit(['rebase', requireSafeGitReference(args.ref, 'reference')], args)
     if (!result.success) return fail(result, 'Failed to rebase branch')
     return okMutation(args, result)
   })
@@ -588,7 +672,10 @@ export function registerGitHandlers(): void {
   registerGitMessagePackHandler<GitTarget & { name: string; force?: boolean }>(
     'git:delete-local-branch',
     async (args) => {
-      const result = await execGit(['branch', args.force ? '-D' : '-d', args.name], args)
+      const result = await execGit(
+        ['branch', args.force ? '-D' : '-d', requireSafeGitReference(args.name, 'branch name')],
+        args
+      )
       if (!result.success) return fail(result, 'Failed to delete local branch')
       return okMutation(args, result)
     }
@@ -597,7 +684,15 @@ export function registerGitHandlers(): void {
   registerGitMessagePackHandler<GitTarget & { remote: string; branchName: string }>(
     'git:delete-remote-branch',
     async (args) => {
-      const result = await execGit(['push', args.remote, '--delete', args.branchName], args)
+      const result = await execGit(
+        [
+          'push',
+          requireSafeGitReference(args.remote, 'remote name'),
+          '--delete',
+          requireSafeGitReference(args.branchName, 'branch name')
+        ],
+        args
+      )
       if (!result.success) return fail(result, 'Failed to delete remote branch')
       return okMutation(args, result)
     }
@@ -608,8 +703,13 @@ export function registerGitHandlers(): void {
     async (args) => {
       const cmd =
         args.oldName !== undefined && args.oldName !== ''
-          ? (['branch', '-m', args.oldName, args.newName] as const)
-          : (['branch', '-m', args.newName] as const)
+          ? ([
+              'branch',
+              '-m',
+              requireSafeGitReference(args.oldName, 'branch name'),
+              requireSafeGitReference(args.newName, 'branch name')
+            ] as const)
+          : (['branch', '-m', requireSafeGitReference(args.newName, 'branch name')] as const)
       const result = await execGit([...cmd], args)
       if (!result.success) return fail(result, 'Failed to rename branch')
       return okMutation(args, result)
@@ -619,8 +719,9 @@ export function registerGitHandlers(): void {
   registerGitMessagePackHandler<GitTarget & { paths: string[] }>(
     'git:stage-files',
     async (args) => {
-      if (!args.paths.length) return ok({})
-      const result = await execGit(['add', '--', ...args.paths], args)
+      const paths = requireSafeGitPaths(args.paths)
+      if (!paths.length) return ok({})
+      const result = await execGit(['add', '--', ...paths], args)
       if (!result.success) return fail(result, 'Failed to stage files')
       return okMutation(args, result)
     }
@@ -629,8 +730,9 @@ export function registerGitHandlers(): void {
   registerGitMessagePackHandler<GitTarget & { paths: string[] }>(
     'git:unstage-files',
     async (args) => {
-      if (!args.paths.length) return ok({})
-      const result = await execGit(['restore', '--staged', '--', ...args.paths], args)
+      const paths = requireSafeGitPaths(args.paths)
+      if (!paths.length) return ok({})
+      const result = await execGit(['restore', '--staged', '--', ...paths], args)
       if (!result.success) return fail(result, 'Failed to unstage files')
       return okMutation(args, result)
     }
@@ -651,16 +753,17 @@ export function registerGitHandlers(): void {
   registerGitMessagePackHandler<
     GitTarget & { paths: string[]; scope: 'worktree' | 'full' | 'untracked' }
   >('git:discard-files', async (args) => {
-    if (!args.paths.length) return ok({})
+    const paths = requireSafeGitPaths(args.paths)
+    if (!paths.length) return ok({})
     if (args.scope === 'untracked') {
-      const result = await execGit(['clean', '-fd', '--', ...args.paths], args)
+      const result = await execGit(['clean', '-fd', '--', ...paths], args)
       if (!result.success) return fail(result, 'Failed to remove untracked files')
       return okMutation(args, result)
     }
     const restoreArgs =
       args.scope === 'full'
-        ? (['restore', '--source=HEAD', '--staged', '--worktree', '--', ...args.paths] as const)
-        : (['restore', '--worktree', '--', ...args.paths] as const)
+        ? (['restore', '--source=HEAD', '--staged', '--worktree', '--', ...paths] as const)
+        : (['restore', '--worktree', '--', ...paths] as const)
     const result = await execGit([...restoreArgs], args)
     if (!result.success) return fail(result, 'Failed to discard changes')
     return okMutation(args, result)

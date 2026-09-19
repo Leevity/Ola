@@ -147,8 +147,12 @@ export async function loadHooksConfig(
   )
 }
 
-export function hooksConfigPaths(homePath: string, projectPath?: string): string[] {
-  const paths = [join(homePath, '.ola', 'hooks.json')]
+export function hooksConfigPaths(
+  homePath: string,
+  projectPath?: string,
+  dataRoot = join(homePath, '.ola')
+): string[] {
+  const paths = [join(dataRoot, 'hooks.json')]
   if (projectPath) paths.push(join(projectPath, '.ola', 'hooks.json'))
   return paths
 }

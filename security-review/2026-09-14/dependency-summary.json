@@ -1,0 +1,105 @@
+{
+  "scope": "root npm lockfile; registry severity is not exploitability",
+  "all": {
+    "info": 0,
+    "low": 3,
+    "moderate": 11,
+    "high": 43,
+    "critical": 2,
+    "total": 59
+  },
+  "production": {
+    "info": 0,
+    "low": 2,
+    "moderate": 8,
+    "high": 32,
+    "critical": 1,
+    "total": 43
+  },
+  "direct": [
+    {
+      "name": "@larksuiteoapi/node-sdk",
+      "lockedVersion": "1.59.0",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "@toon-format/toon",
+      "lockedVersion": "2.1.0",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "electron",
+      "lockedVersion": "36.9.5",
+      "severity": "high",
+      "fixAvailable": {
+        "name": "electron",
+        "version": "44.3.0",
+        "isSemVerMajor": true
+      }
+    },
+    {
+      "name": "electron-builder",
+      "lockedVersion": "26.3.3",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "electron-updater",
+      "lockedVersion": "6.7.3",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "mermaid",
+      "lockedVersion": "11.12.3",
+      "severity": "moderate",
+      "fixAvailable": true
+    },
+    {
+      "name": "monaco-editor",
+      "lockedVersion": "0.55.1",
+      "severity": "moderate",
+      "fixAvailable": {
+        "name": "monaco-editor",
+        "version": "0.56.0",
+        "isSemVerMajor": true
+      }
+    },
+    {
+      "name": "nanoid",
+      "lockedVersion": "5.1.6",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "node-cron",
+      "lockedVersion": "3.0.3",
+      "severity": "moderate",
+      "fixAvailable": {
+        "name": "node-cron",
+        "version": "4.6.0",
+        "isSemVerMajor": true
+      }
+    },
+    {
+      "name": "vite",
+      "lockedVersion": "7.3.1",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "ws",
+      "lockedVersion": "8.19.0",
+      "severity": "high",
+      "fixAvailable": true
+    },
+    {
+      "name": "xlsx",
+      "lockedVersion": "0.18.5",
+      "severity": "high",
+      "fixAvailable": false
+    }
+  ]
+}

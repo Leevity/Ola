@@ -35,6 +35,7 @@ internal static class DbGoalTools
         {
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRequestedWorkspace(connection, transaction, parameters, RequireString(parameters, "sessionId"));
             var row = AddGoalEvent(connection, transaction, parameters);
             transaction.Commit();
             return WorkerResponse.Json(row, WorkerJsonContext.Default.SessionGoalEventRow);
@@ -53,6 +54,7 @@ internal static class DbGoalTools
             var goalId = NormalizeOptional(JsonHelpers.GetString(parameters, "goalId"));
             var limit = Math.Clamp(JsonHelpers.GetInt(parameters, "limit", 40), 1, 100);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            RequireRequestedWorkspace(connection, null, parameters, sessionId);
             using var command = connection.CreateCommand();
             if (goalId is not null)
             {
@@ -87,9 +89,18 @@ internal static class DbGoalTools
     {
         try
         {
+            var workspaceId = RequireString(parameters, "workspaceId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var command = connection.CreateCommand();
-            command.CommandText = $"{GoalSelectSql} ORDER BY updated_at DESC";
+            command.CommandText = """
+                SELECT g.session_id, g.goal_id, g.objective, g.status, g.token_budget,
+                       g.tokens_used, g.time_used_seconds, g.created_at, g.updated_at
+                  FROM session_goals g
+                  JOIN sessions s ON s.id = g.session_id
+                 WHERE s.workspace_id = $workspaceId
+                 ORDER BY g.updated_at DESC
+                """;
+            command.Parameters.AddWithValue("$workspaceId", workspaceId);
             return WorkerResponse.Json(ReadGoals(command), WorkerJsonContext.Default.ListSessionGoalRow);
         }
         catch (Exception ex)
@@ -104,6 +115,7 @@ internal static class DbGoalTools
         {
             var sessionId = RequireString(parameters, "sessionId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            RequireRequestedWorkspace(connection, null, parameters, sessionId);
             var goal = GetGoal(connection, null, sessionId);
             return WorkerResponse.Json(
                 new SessionGoalFindResult(true, goal, null),
@@ -128,6 +140,7 @@ internal static class DbGoalTools
             var status = NormalizeStatusAfterBudget("active", 0, tokenBudget);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRequestedWorkspace(connection, transaction, parameters, sessionId);
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
             command.CommandText = $"""
@@ -184,6 +197,7 @@ internal static class DbGoalTools
             var status = NormalizeStatusAfterBudget(JsonHelpers.GetString(parameters, "status") ?? "active", 0, tokenBudget);
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRequestedWorkspace(connection, transaction, parameters, sessionId);
             var existing = GetGoal(connection, transaction, sessionId);
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
@@ -249,6 +263,7 @@ internal static class DbGoalTools
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRequestedWorkspace(connection, transaction, parameters, sessionId);
             var existing = GetGoal(connection, transaction, sessionId);
             if (existing is null)
             {
@@ -288,6 +303,7 @@ internal static class DbGoalTools
             var sessionId = RequireString(parameters, "sessionId");
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRequestedWorkspace(connection, transaction, parameters, sessionId);
             var existing = GetGoal(connection, transaction, sessionId);
             var changed = DbSql.ExecuteNonQuery(
                 connection,
@@ -320,6 +336,7 @@ internal static class DbGoalTools
             var tokenDelta = Math.Max(0, JsonHelpers.GetLong(parameters, "tokenDelta", 0));
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var transaction = connection.BeginTransaction();
+            RequireRequestedWorkspace(connection, transaction, parameters, sessionId);
             if (timeDeltaSeconds == 0 && tokenDelta == 0)
             {
                 var current = GetGoal(connection, transaction, sessionId);
@@ -802,6 +819,25 @@ internal static class DbGoalTools
         return JsonHelpers.GetString(parameters, name) is { Length: > 0 } value
             ? value
             : throw new InvalidOperationException($"Missing required goal field: {name}");
+    }
+
+    private static void RequireRequestedWorkspace(
+        SqliteConnection connection,
+        SqliteTransaction? transaction,
+        JsonElement parameters,
+        string sessionId)
+    {
+        if (!parameters.TryGetProperty("workspaceId", out _)) return;
+        var workspaceId = RequireString(parameters, "workspaceId");
+        using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT 1 FROM sessions WHERE id = $sessionId AND workspace_id = $workspaceId LIMIT 1";
+        command.Parameters.AddWithValue("$sessionId", sessionId);
+        command.Parameters.AddWithValue("$workspaceId", workspaceId);
+        if (command.ExecuteScalar() is null)
+        {
+            throw new InvalidOperationException("Goal session does not belong to requested workspace");
+        }
     }
 
     private static string? NormalizeOptional(string? value)

@@ -1,4 +1,9 @@
 import { getNativeWorker } from '../lib/native-worker'
+import { businessWriteCanary } from './business-write-canary'
+import {
+  canaryGetMemoryAutomationEntry,
+  canaryListMemoryAutomationEntries
+} from './legacy-read-canary'
 import type {
   MemoryAutomationEntry,
   MemoryAutomationListQuery,
@@ -31,6 +36,36 @@ function unwrapEntryResult(
 export async function addMemoryAutomationEntry(
   input: MemoryAutomationRecordInput
 ): Promise<MemoryAutomationEntry> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    const workspaceId = input.workspaceId ?? 'local-personal'
+    return writer.recordMemoryAutomationEntry<MemoryAutomationEntry>({
+      workspaceId,
+      scope: input.scope,
+      rootScope: input.rootScope ?? null,
+      memoryRootId: input.memoryRootId ?? null,
+      jobId: input.jobId ?? null,
+      projectId: input.projectId ?? null,
+      target: input.target,
+      kind: input.kind,
+      content: input.content,
+      confidence: input.confidence ?? 0,
+      sourceSessionId: input.sourceSessionId ?? null,
+      targetPath: input.targetPath ?? null,
+      status: input.status,
+      filterReason: input.filterReason ?? null,
+      fingerprint: input.fingerprint,
+      evidenceJson:
+        input.evidenceJson ??
+        (input.evidence === undefined ? null : JSON.stringify(input.evidence)),
+      writtenAt: input.writtenAt ?? null,
+      error: input.error ?? null,
+      beforeContent: input.beforeContent ?? null,
+      afterContent: input.afterContent ?? null,
+      appendedText: input.appendedText ?? null,
+      sshConnectionId: input.sshConnectionId ?? null
+    })
+  }
   const result = await getNativeWorker().request<MemoryAutomationEntryResult>(
     'db/memory-automation-add',
     input,
@@ -43,18 +78,30 @@ export async function addMemoryAutomationEntry(
   return entry
 }
 
-export async function getMemoryAutomationEntry(id: string): Promise<MemoryAutomationEntry | null> {
+export async function getMemoryAutomationEntry(
+  id: string,
+  workspaceId = 'local-personal'
+): Promise<MemoryAutomationEntry | null> {
+  const canary = await canaryGetMemoryAutomationEntry(id, workspaceId)
+  if (canary !== undefined) return canary
   const result = await getNativeWorker().request<MemoryAutomationEntryResult>(
     'db/memory-automation-get',
-    { id },
+    { id, workspaceId },
     120_000
   )
   return unwrapEntryResult(result, 'get')
 }
 
-export function listMemoryAutomationEntries(
+export async function listMemoryAutomationEntries(
   query: MemoryAutomationListQuery = {}
 ): Promise<MemoryAutomationEntry[]> {
+  if (query.workspaceId?.trim()) {
+    const canary = await canaryListMemoryAutomationEntries({
+      ...query,
+      workspaceId: query.workspaceId
+    })
+    if (canary !== undefined) return canary
+  }
   return getNativeWorker().request<MemoryAutomationEntry[]>(
     'db/memory-automation-list',
     query,
@@ -65,17 +112,28 @@ export function listMemoryAutomationEntries(
 export async function markMemoryAutomationUndo(
   id: string,
   status: 'undone' | 'error' = 'undone',
-  error?: string | null
+  error?: string | null,
+  workspaceId = 'local-personal'
 ): Promise<MemoryAutomationEntry | null> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.markMemoryAutomationUndo<MemoryAutomationEntry>({
+      id,
+      status,
+      error: error ?? null,
+      workspaceId
+    })
+  }
   const result = await getNativeWorker().request<MemoryAutomationEntryResult>(
     'db/memory-automation-mark-undo',
-    { id, status, error },
+    { id, status, error, workspaceId },
     120_000
   )
   return unwrapEntryResult(result, 'mark-undo')
 }
 
 export async function hasProcessedRollup(args: {
+  workspaceId?: string
   scope: string
   targetPath: string
   sourceDate: string
@@ -93,12 +151,25 @@ export async function hasProcessedRollup(args: {
 }
 
 export async function markProcessedRollup(args: {
+  workspaceId?: string
   scope: string
   target: MemoryAutomationTarget
   targetPath: string
   sourceDate: string
   contentHash: string
 }): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.markMemoryRollup({
+      workspaceId: args.workspaceId ?? 'local-personal',
+      scope: args.scope,
+      target: args.target,
+      targetPath: args.targetPath,
+      sourceDate: args.sourceDate,
+      contentHash: args.contentHash
+    })
+    return
+  }
   const result = await getNativeWorker().request<MemoryAutomationRollupResult>(
     'db/memory-automation-rollup-mark',
     args,

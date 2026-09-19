@@ -4,24 +4,78 @@ internal static class DbQqWakeupTools
 {
     private const string SourcePeriodKey = "__source__";
 
+    public static WorkerResponse RecordSource(JsonElement parameters)
+    {
+        try
+        {
+            var pluginId = RequireString(parameters, "pluginId");
+            var openId = RequireString(parameters, "openId");
+            var workspaceId = WorkspaceId(parameters);
+            var sourceMessageId = RequireString(parameters, "sourceMessageId");
+            var sourceTimestamp = JsonHelpers.GetLong(parameters, "sourceTimestamp", -1);
+            var now = JsonHelpers.GetLong(parameters, "now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            if (sourceTimestamp < 0 || now < 0)
+                throw new ArgumentException("Invalid QQ source timestamp.");
+
+            using var connection = DbConnectionFactory.OpenReadWrite(parameters);
+            using var transaction = connection.BeginTransaction();
+            var changed = DbSql.ExecuteNonQuery(
+                connection,
+                transaction,
+                """
+                INSERT INTO qq_wakeup_windows_v2 (
+                  workspace_id, plugin_id, open_id, period_key, source_message_id,
+                  source_timestamp, sent_at, created_at, updated_at
+                ) VALUES (
+                  $workspaceId, $pluginId, $openId, '__source__', $sourceMessageId,
+                  $sourceTimestamp, $now, $now, $now
+                )
+                ON CONFLICT(workspace_id, plugin_id, open_id, period_key) DO UPDATE SET
+                  source_message_id = excluded.source_message_id,
+                  source_timestamp = excluded.source_timestamp,
+                  updated_at = excluded.updated_at
+                WHERE excluded.source_timestamp > qq_wakeup_windows_v2.source_timestamp
+                """,
+                new DbSql.SqlParam("$workspaceId", workspaceId),
+                new DbSql.SqlParam("$pluginId", pluginId),
+                new DbSql.SqlParam("$openId", openId),
+                new DbSql.SqlParam("$sourceMessageId", sourceMessageId),
+                new DbSql.SqlParam("$sourceTimestamp", sourceTimestamp),
+                new DbSql.SqlParam("$now", now));
+            transaction.Commit();
+            return WorkerResponse.Json(
+                new QqWakeupMutationResult(true, changed, null),
+                WorkerJsonContext.Default.QqWakeupMutationResult);
+        }
+        catch (Exception ex)
+        {
+            return WorkerResponse.Json(
+                new QqWakeupMutationResult(false, 0, ex.Message),
+                WorkerJsonContext.Default.QqWakeupMutationResult);
+        }
+    }
+
     public static WorkerResponse ResolveEligibility(JsonElement parameters)
     {
         try
         {
             var pluginId = RequireString(parameters, "pluginId");
             var openId = RequireString(parameters, "openId");
+            var workspaceId = WorkspaceId(parameters);
             var now = JsonHelpers.GetLong(parameters, "now", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
             using var connection = DbConnectionFactory.OpenReadWrite(parameters);
             using var sourceCommand = connection.CreateCommand();
             sourceCommand.CommandText = """
                 SELECT source_message_id, source_timestamp
-                  FROM qq_wakeup_windows
-                 WHERE plugin_id = $pluginId
+                  FROM qq_wakeup_windows_v2
+                 WHERE workspace_id = $workspaceId
+                   AND plugin_id = $pluginId
                    AND open_id = $openId
                    AND period_key = $periodKey
                  LIMIT 1
                 """;
+            sourceCommand.Parameters.AddWithValue("$workspaceId", workspaceId);
             sourceCommand.Parameters.AddWithValue("$pluginId", pluginId);
             sourceCommand.Parameters.AddWithValue("$openId", openId);
             sourceCommand.Parameters.AddWithValue("$periodKey", SourcePeriodKey);
@@ -54,12 +108,14 @@ internal static class DbQqWakeupTools
             using var existingCommand = connection.CreateCommand();
             existingCommand.CommandText = """
                 SELECT 1
-                  FROM qq_wakeup_windows
-                 WHERE plugin_id = $pluginId
+                  FROM qq_wakeup_windows_v2
+                 WHERE workspace_id = $workspaceId
+                   AND plugin_id = $pluginId
                    AND open_id = $openId
                    AND period_key = $periodKey
                  LIMIT 1
                 """;
+            existingCommand.Parameters.AddWithValue("$workspaceId", workspaceId);
             existingCommand.Parameters.AddWithValue("$pluginId", pluginId);
             existingCommand.Parameters.AddWithValue("$openId", openId);
             existingCommand.Parameters.AddWithValue("$periodKey", periodKey);
@@ -89,6 +145,7 @@ internal static class DbQqWakeupTools
         {
             var pluginId = RequireString(parameters, "pluginId");
             var openId = RequireString(parameters, "openId");
+            var workspaceId = WorkspaceId(parameters);
             var periodKey = RequireString(parameters, "periodKey");
             var sourceMessageId = JsonHelpers.GetString(parameters, "sourceMessageId");
             var sourceTimestamp = JsonHelpers.GetLong(parameters, "sourceTimestamp", 0);
@@ -100,7 +157,8 @@ internal static class DbQqWakeupTools
                 connection,
                 transaction,
                 """
-                INSERT OR REPLACE INTO qq_wakeup_windows (
+                INSERT OR REPLACE INTO qq_wakeup_windows_v2 (
+                  workspace_id,
                   plugin_id,
                   open_id,
                   period_key,
@@ -111,6 +169,7 @@ internal static class DbQqWakeupTools
                   updated_at
                 )
                 VALUES (
+                  $workspaceId,
                   $pluginId,
                   $openId,
                   $periodKey,
@@ -119,14 +178,16 @@ internal static class DbQqWakeupTools
                   $sentAt,
                   COALESCE((
                     SELECT created_at
-                      FROM qq_wakeup_windows
-                     WHERE plugin_id = $pluginId
+                      FROM qq_wakeup_windows_v2
+                     WHERE workspace_id = $workspaceId
+                       AND plugin_id = $pluginId
                        AND open_id = $openId
                        AND period_key = $periodKey
                   ), $createdAt),
                   $updatedAt
                 )
                 """,
+                new DbSql.SqlParam("$workspaceId", workspaceId),
                 new DbSql.SqlParam("$pluginId", pluginId),
                 new DbSql.SqlParam("$openId", openId),
                 new DbSql.SqlParam("$periodKey", periodKey),
@@ -183,6 +244,16 @@ internal static class DbQqWakeupTools
         if (string.IsNullOrEmpty(value))
         {
             throw new ArgumentException($"Missing required string parameter: {name}");
+        }
+        return value;
+    }
+
+    private static string WorkspaceId(JsonElement parameters)
+    {
+        var value = JsonHelpers.GetString(parameters, "workspaceId") ?? "local-personal";
+        if (value.Length == 0 || value.Length > 1024 || value != value.Trim())
+        {
+            throw new ArgumentException("Invalid QQ wakeup workspace.");
         }
         return value;
     }

@@ -397,10 +397,7 @@ internal static class UserSoulCatalog
 
     private static string ResolveGlobalSoulPath()
     {
-        return Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-            ".ola",
-            "SOUL.md");
+        return Path.Combine(OlaDataRoot.DirectoryPath, "SOUL.md");
     }
 
     private static string? ResolveProjectSoulPath(string? projectRootPath)

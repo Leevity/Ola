@@ -6,7 +6,10 @@
     "securityNotice": "Hooks executam comandos locais. Verifique caminho e hashes; qualquer alteração exige nova autorização.",
     "configured": "Hooks configurados",
     "empty": "Nenhum hook de usuário ou projeto encontrado.",
-    "source": { "user": "Usuário", "project": "Projeto" },
+    "source": {
+      "user": "Usuário",
+      "project": "Projeto"
+    },
     "configHash": "configuração",
     "revoke": "Revogar confiança",
     "reviewAndTrust": "Revisar e confiar",
@@ -29,8 +32,20 @@
       "system": "Sistema",
       "ai": "Capacidades AI",
       "extensions": "Extensões e Integrações",
-      "about": "Sobre"
-    }
+      "about": "Sobre",
+      "general": "General",
+      "aiAndModels": "AI & Models",
+      "executionSecurity": "Execution & Security",
+      "integrations": "Capabilities & Integrations",
+      "personalization": "Personalization",
+      "dataUsage": "Data & Usage"
+    },
+    "searchPlaceholder": "Search settings",
+    "searchLabel": "Search settings",
+    "globalScope": "Global",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "back": "Back"
   },
   "profile": {
     "title": "Perfil",
@@ -132,7 +147,8 @@
           "label": "Amanhecer Quente",
           "desc": "Uma paleta quente de cobre-laranja com mais temperatura no modo luz e um modo escuro aterrado."
         }
-      }
+      },
+      "remoteHint": "Remote"
     },
     "appearance": {
       "title": "Aparência",
@@ -207,7 +223,10 @@
       "newVersionAvailable": "Uma versão mais recente (v {{version}}) está disponível.",
       "downloading": "A transferir a actualização...",
       "downloadingWithProgress": "A transferir a actualização... {{progress}} %",
-      "downloadedRestarting": "Actualizar v {{version}} baixado. Reiniciando para instalar..."
+      "downloadedRestarting": "Actualizar v {{version}} baixado. Reiniciando para instalar...",
+      "installNow": "Install now",
+      "installing": "Installing…",
+      "downloadedReady": "Update v{{version}} downloaded and waiting for installation confirmation."
     },
     "projectDefaultDirectory": {
       "title": "Directório por omissão do projecto",
@@ -256,10 +275,30 @@
       "clearConfirm": "Apagar tudo {{count}} Isto não pode ser desfeito.",
       "cleared": "Removido {{count}} sessões",
       "noSessions": "Nenhuma sessão disponível"
-    }
+    },
+    "toolExecutionDensity": "Tool detail density",
+    "toolExecutionDensityDesc": "Controls ordinary tool detail after expanding a process log. Errors and interactive cards remain fully visible.",
+    "toolExecutionDensityCompact": "Compact",
+    "toolExecutionDensityBalanced": "Balanced",
+    "toolExecutionDensityVerbose": "Verbose",
+    "advancedDraw": "Advanced canvas tools",
+    "advancedDrawDesc": "Enable optional image operations, prompt presets, and asset workflows.",
+    "videoGeneration": "Video generation",
+    "videoGenerationDesc": "Enable optional video task interfaces. Provider configuration is still required.",
+    "contextCompressionThreshold": "Global compression threshold",
+    "contextCompressionThresholdDesc": "Compress when the current model context reaches this percentage.",
+    "contextCompressionModel": "Compression model",
+    "contextCompressionModelDesc": "Use a dedicated model for summaries, or keep using the current session model.",
+    "contextCompressionModelCurrent": "Current session model",
+    "providerRetryMaxAttempts": "Provider request attempts",
+    "providerRetryMaxAttemptsDesc": "Total attempts for HTTP 429 and 5xx responses. Cancellation stops retry waiting immediately."
   },
   "sync": {
     "title": "Sincronizar",
+    "workspaceUnavailable": {
+      "title": "Sync is unavailable here",
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+    },
     "subtitle": "Sincronização de dados Ola de nível de gravação com WebDAV.",
     "loading": "Carregando configurações de sincronização...",
     "provider": {
@@ -548,7 +587,9 @@
     "clearConfirmDescription": "Apagar permanentemente {{count}} entradas de log criadas antes {{date}} Isto não pode ser desfeito.",
     "clearSuccess": "Limpado {{count}} entradas de log",
     "clearFailed": "Não foi possível limpar os registos",
-    "clearEmpty": "Nenhum registro acima de 7 dias para limpar"
+    "clearEmpty": "Nenhum registro acima de 7 dias para limpar",
+    "cacheTokenShare": "Cached Token Share",
+    "cacheReadRatio": "Cache Read Ratio"
   },
   "model": {
     "title": "Configuração do Modelo",
@@ -579,14 +620,16 @@
       "clarify": "Modo de clareza",
       "cowork": "Modo de co- trabalho",
       "code": "Modo de Código",
-      "acp": "Modo ACP"
+      "acp": "Modo ACP",
+      "execute": "Execute Mode"
     },
     "promptRecommendationModesDesc": {
       "chat": "Para conversas gerais e sugestões de próxima pergunta",
       "clarify": "Para esclarecimento dos requisitos e sugestões de acompanhamento",
       "cowork": "Para a execução colaborativa e sugestões de quebra de tarefas",
       "code": "Para implementação, modificação e sugestões de depuração",
-      "acp": "Para esclarecimento de objectivos, concepção de arquitectura e sugestões de delegação nos fluxos de controlo ACP"
+      "acp": "Para esclarecimento de objectivos, concepção de arquitectura e sugestões de delegação nos fluxos de controlo ACP",
+      "execute": "For implementation, research, operations, debugging, and task breakdown suggestions"
     },
     "selectRecommendationModel": "Seleccione o modelo de recomendação",
     "useFastModelRecommendation": "Usar modelo rápido (por omissão)",
@@ -653,7 +696,8 @@
       "DesktopClick": "Args disponíveis: x, y, botão, ação",
       "DesktopType": "Args disponíveis: texto, chave, tecla de atalho",
       "DesktopScroll": "Args disponíveis: x, y, rolagemX, rolagemY",
-      "DesktopWait": "Args disponíveis: atrasoMs"
+      "DesktopWait": "Args disponíveis: atrasoMs",
+      "codegraph_explore": "Available args: query, projectPath"
     },
     "status": {
       "disabled": "O plugin está desativado, então suas ferramentas não estão expostas ao Agent.",
@@ -687,7 +731,30 @@
       "allowedDomains": "Domínios permitidos",
       "allowedDomainsDesc": "Deixe em branco para permitir todos os domínios. Quando estiver definido, somente os domínios correspondentes poderão ser abertos.",
       "domainPlaceholder": "exemplo.com\nsub.example.org",
-      "domainRuleHint": "Digite um domínio por linha ou separado com vírgulas. Domínios bloqueados têm prioridade sobre domínios permitidos; subdomínios correspondem automaticamente."
+      "domainRuleHint": "Digite um domínio por linha ou separado com vírgulas. Domínios bloqueados têm prioridade sobre domínios permitidos; subdomínios correspondem automaticamente.",
+      "cookieImport": "Import browser cookies",
+      "cookieImportDesc": "Copy cookies from a detected Chromium profile into Ola's isolated browser session. Cookie values never leave the Main process.",
+      "importCookies": "Import cookies",
+      "importingCookies": "Importing...",
+      "noCookieProfiles": "No supported profiles detected",
+      "cookiePrivacyConfirm": "I understand that imported signed-in sessions become available to Ola's built-in browser.",
+      "cookieImportComplete": "Imported {{imported}} cookies; skipped {{skipped}}; failed {{failed}}",
+      "cookieImportErrors": {
+        "browser_busy": "Close the source browser and try again",
+        "key_denied": "Cookie decryption key access was denied",
+        "unsupported_database": "This browser cookie database format is not supported",
+        "profile_missing": "The selected browser profile is no longer available",
+        "privacy_confirmation_required": "Confirm the privacy notice before importing",
+        "unknown": "Browser cookie import failed"
+      },
+      "exportCookies": "Export encrypted cookies",
+      "exportingCookies": "Exporting...",
+      "cookieExportComplete": "Exported {{exported}} cookies in an encrypted archive",
+      "cookieExportErrors": {
+        "secure_storage_unavailable": "System secure storage is unavailable; encrypted cookie export is disabled",
+        "write_failed": "Failed to export encrypted browser cookies",
+        "unknown": "Browser cookie export failed"
+      }
     },
     "items": {
       "image": {
@@ -707,8 +774,108 @@
         "description": "Expor imagens de desktop, clique, rolagem e ferramentas de teclado para o Agente.",
         "promptTitle": "Restrições de utilização da ferramenta",
         "promptDesc": "Estas ferramentas podem inspecionar e controlar a área de trabalho completa. Mantenha a aprovação ativada, capture a tela antes de agir e use-a apenas quando for necessária a automação direta da área de trabalho. Se o modelo ativo habilitar o uso do computador, o OpenAI Computer Use irá coordenar essas capacidades de desktop primeiro."
+      },
+      "product-design": {
+        "title": "Product Design",
+        "description": "Explore design directions, build prototypes, audit flows, and QA visual fidelity.",
+        "promptTitle": "Workflow constraints",
+        "promptDesc": "Product Design starts by confirming the brief, uses visual targets before builds, generates three directions when no target exists, and requires design QA before prototype handoff."
+      },
+      "codegraph": {
+        "title": "Project Intelligence",
+        "description": "Unify the human-readable Project Wiki with CodeGraph structural code analysis.",
+        "promptTitle": "Project analysis scope",
+        "promptDesc": "Disabled by default. When enabled, you can generate a local Wiki and build the CodeGraph index on demand."
       }
-    }
+    },
+    "toolStatusDescCodeGraph": "The Project Intelligence plugin exposes the Wiki and CodeGraph panels. CodeGraph tools are available to the Agent and the isolated analysis Worker starts lazily on the first request.",
+    "projectIntelligence": {
+      "title": "Project Intelligence",
+      "description": "Use a lightweight project map for people and a deep code graph for structural analysis.",
+      "activeProject": "Active project: {{path}}",
+      "noProject": "Select a project with a working folder to use both capabilities.",
+      "wikiTitle": "Project Wiki",
+      "codeGraphTitle": "CodeGraph"
+    },
+    "toolStatusDescProductDesign": "Product Design is a workflow plugin. It exposes no new low-level Tool; it coordinates enabled image, browser, search, file, shell, MCP, and deployment tools through the product-design skill.",
+    "codegraph": {
+      "dashboard": "Code analysis dashboard",
+      "noProject": "Select a local project folder to inspect its code index.",
+      "refresh": "Refresh",
+      "index": "Index project",
+      "indexing": "Indexing…",
+      "fileCount": "Files",
+      "nodeCount": "Symbols",
+      "edgeCount": "Relations",
+      "searchPlaceholder": "Search symbols",
+      "workerRunning": "Analysis Worker running",
+      "workerReady": "Analysis Worker ready",
+      "workerChecking": "Checking Analysis Worker…",
+      "workerMissing": "Analysis Worker assets missing",
+      "callers": "Callers",
+      "callees": "Callees",
+      "localGraph": "Local relation graph",
+      "relationCount": "{{count}} relations",
+      "sync": "Sync changes",
+      "syncing": "Syncing…",
+      "indexedProjects": "Indexed projects",
+      "noIndexedProjects": "No local indexes yet.",
+      "projectState": "State: {{state}}",
+      "lastIndexed": "Last indexed: {{value}}",
+      "indexSize": "Index size: {{size}}",
+      "removeIndex": "Remove index",
+      "removeIndexConfirm": "Remove the local CodeGraph index for {{project}}? This does not modify project files.",
+      "grammarReady": "Grammar assets available ({{available}}/{{expected}})",
+      "grammarMissing": "Grammar assets missing ({{missing}}/{{expected}})",
+      "workerGeneration": "Worker generation {{generation}}",
+      "syncFailed": "Unable to sync code index",
+      "indexedFiles": "Indexed files",
+      "noIndexedFiles": "No indexed source files.",
+      "analytics": "Graph health",
+      "circularDependencies": "Circular dependencies: {{count}}",
+      "deadCode": "Potentially unused symbols: {{count}}",
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
+    },
+    "productDesign": {
+      "workflowTitle": "Workflow plugin",
+      "workflowDesc": "Adds Product Design routing, saved design context, visual exploration, prototype scaffolding, URL cloning, image-to-code, audits, design QA, and sharing handoff.",
+      "ready": "Ready",
+      "notReady": "Not ready",
+      "optional": "Optional",
+      "ensureFailed": "Failed to prepare Product Design skill",
+      "promptsTitle": "Default prompts",
+      "workflows": {
+        "getContext": "Get context",
+        "ideate": "Ideate",
+        "prototype": "Prototype",
+        "urlToCode": "URL to code",
+        "imageToCode": "Image to code",
+        "audit": "Audit",
+        "research": "Research",
+        "designQa": "Design QA",
+        "share": "Share",
+        "userContext": "User context"
+      },
+      "prompts": {
+        "getStarted": "Help me get started",
+        "threeDirections": "Turn this product idea into three visual directions",
+        "cloneUrl": "Clone this URL into an editable prototype"
+      },
+      "dependencies": {
+        "skill": "product-design skill",
+        "skillDesc": "Copied from bundled resources when this plugin is enabled.",
+        "image": "Image generation",
+        "imageDesc": "Needed for visual directions and replacement visual assets.",
+        "browser": "Browser capture",
+        "browserDesc": "Needed for URL capture, audits, screenshots, and prototype QA.",
+        "webSearch": "Web search",
+        "webSearchDesc": "Optional, used for current UX research and public source scans.",
+        "share": "Share target",
+        "shareDesc": "Optional, detected from connected hosting or deployment MCP tools."
+      }
+    },
+    "defaultPlugins": "Built-in plugins",
+    "customPlugins": "Custom extensions"
   },
   "migration": {
     "title": "Centro de Migração",
@@ -796,6 +963,22 @@
       "channels": {
         "title": "Ecossistema MCP & channle",
         "desc": "Conecte servidores MCP, habilidades e channles de terceiros perfeitamente."
+      },
+      "chat": {
+        "title": "Chat Mode",
+        "desc": "General conversation for Q&A, brainstorming, content creation, and everyday interaction."
+      },
+      "clarify": {
+        "title": "Clarify Mode",
+        "desc": "Requirement clarification: before starting a task, the agent asks questions and confirms your intent — ideal for complex or ambiguous requests."
+      },
+      "execute": {
+        "title": "Execute Mode",
+        "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
+      },
+      "acp": {
+        "title": "ACP Mode",
+        "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
       }
     },
     "summary": "O Ola unifica fluxos de trabalho multimodelos, servidores MCP, habilidades e channles personalizados dentro de uma experiência de desktop para que você possa alternar entre os modos Chat, Cowork ou Code enquanto estiver no controle."
@@ -1163,7 +1346,17 @@
     "channelUserRefreshFailed": "Falha ao atualizar informações do usuário",
     "channelDisconnect": "Desligar",
     "channelDisconnected": "Canal desligado",
-    "channelRequired": "Por favor, complete a verificação do canal primeiro"
+    "channelRequired": "Por favor, complete a verificação do canal primeiro",
+    "requestTimeoutSeconds": "API request timeout (seconds)",
+    "requestTimeoutSecondsDesc": "Time to wait for response headers. Set to 0 to wait indefinitely.",
+    "resetToDefault": "Reset to default",
+    "resetToDefaultSuccess": "{{field}} has been reset to default",
+    "userAgent": "User-Agent",
+    "userAgentHint": "Leave empty to use {{defaultUserAgent}}. Set a custom value to simulate another client.",
+    "modelCategoryVideo": "Video",
+    "seedanceVideo": "Seedance video",
+    "cacheTtl": "Cache TTL (anthropic)",
+    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level."
   },
   "channel": {
     "title": "Canais",
@@ -1392,7 +1585,24 @@
     "testSuccess": "Conexão com sucesso! Encontrada {{count}} Competências.",
     "testFailed": "A ligação falhou: {{error}}",
     "configSummary": "Resumo da Configuração",
-    "notSet": "Não definido"
+    "notSet": "Não definido",
+    "catalogInfo": "Browse the current skill catalog and review each package locally before installation. An API key is optional.",
+    "marketTab": "Skills market",
+    "installedTab": "Installed",
+    "installedTitle": "Installed Skills",
+    "installedDescription": "Skills currently installed and available for Ola to load.",
+    "refreshInstalled": "Refresh",
+    "loadingInstalled": "Loading installed Skills…",
+    "emptyInstalled": "No installed Skills",
+    "emptyInstalledDescription": "Install Skills from the Skills page and they will appear here.",
+    "installedBadge": "Installed",
+    "noDescription": "No description",
+    "openFolder": "Open folder",
+    "delete": "Delete",
+    "deleteTitle": "Delete {{name}}",
+    "deleteDescription": "This removes the Skill from Ola’s installed Skills directory.",
+    "deleteSuccess": "Deleted {{name}}",
+    "deleteFailed": "Could not delete {{name}}"
   },
   "soulmarket": {
     "title": "Mercado da Soul",
@@ -1468,5 +1678,305 @@
     "copyConversation": "Copiar conversação",
     "allowTool": "Permitir a execução da ferramenta",
     "denyTool": "Negar a execução da ferramenta"
+  },
+  "wiki": {
+    "title": "Project Wiki",
+    "subtitle": "Build an incremental local project map",
+    "description": "Build a local, incremental map of project files and symbols. Sensitive directories are excluded.",
+    "projectFolder": "Project folder",
+    "chooseProjectFolder": "Choose project folder",
+    "generate": "Generate Wiki",
+    "rescan": "Re-scan",
+    "export": "Export Markdown"
+  },
+  "desktopAutomation": {
+    "title": "Desktop Automation",
+    "subtitle": "Record and replay approved desktop flows",
+    "defaultFlowName": "Desktop flow",
+    "safetyNotice": "Typed text is never saved. Every high-risk replay requires a separate native confirmation.",
+    "recording": {
+      "title": "Record a flow",
+      "description": "Create a local workflow from your desktop actions."
+    },
+    "flowName": "Flow name",
+    "flowNameDescription": "Use a clear name so this flow is easy to find later.",
+    "start": "Start recording",
+    "stopAndSave": "Stop and save",
+    "status": {
+      "recording": "Recording · {{count}} steps",
+      "idle": "Idle · {{count}} steps"
+    },
+    "replay": {
+      "success": "Replay completed · {{count}} steps changed the screen.",
+      "failed": "Replay stopped: {{error}}"
+    },
+    "unknownError": "Unknown error",
+    "current": {
+      "title": "Current flow",
+      "description": "The recording currently held in memory."
+    },
+    "saveCurrent": "Save current flow",
+    "saved": {
+      "title": "Saved flows",
+      "description": "Run or remove a previously saved desktop workflow.",
+      "empty": "No saved desktop flows yet."
+    },
+    "cancelReplay": "Cancel replay",
+    "flowSummary": "{{name}} · {{count}} steps",
+    "run": "Run",
+    "delete": "Delete {{name}}"
+  },
+  "permission": {
+    "title": "Permissions",
+    "subtitle": "Tool whitelist & shell command rules",
+    "master": {
+      "title": "Enable permission whitelist",
+      "description": "Whitelisted tools and matching shell commands skip confirmation; denied commands are always rejected. Other dangerous operations still ask for confirmation."
+    },
+    "precedence": {
+      "description": "Order: command deny rules → tool/command allow rules → normal confirmation. Deny rules also override global auto-approval."
+    },
+    "wildcardHelp": "Wildcards match the whole command; * matches any text. Regex allow rules match the whole command, while regex deny rules may match anywhere. Every segment of a compound command must be allowed.",
+    "tools": {
+      "title": "Tool whitelist",
+      "description": "These tools run without confirmation. Wildcards are supported.",
+      "placeholder": "Tool name, e.g. Write",
+      "add": "Add",
+      "suggestions": "Suggestions:",
+      "empty": "No whitelisted tools yet",
+      "duplicate": "This tool is already whitelisted",
+      "remove": "Remove {{tool}}",
+      "commandToolWarning": "A shell tool is whitelisted; all its commands skip confirmation unless denied."
+    },
+    "bashAllow": {
+      "title": "Command allow rules",
+      "description": "Matching shell commands run without confirmation."
+    },
+    "bashDeny": {
+      "title": "Command deny rules",
+      "description": "Matching commands are always rejected."
+    },
+    "rules": {
+      "add": "Add rule",
+      "patternPlaceholder": "e.g. npm run *",
+      "modeWildcard": "Wildcard",
+      "modeRegex": "Regex",
+      "empty": "No rules yet",
+      "invalidPattern": "Invalid pattern: {{error}}",
+      "delete": "Delete rule"
+    }
+  },
+  "aiCoding": {
+    "title": "AI Coding",
+    "subtitle": "Manage CLI model and permission profiles",
+    "name": "Configuration name",
+    "tool": "Coding CLI",
+    "provider": "Ola Provider",
+    "model": "Model",
+    "permissionMode": "Permission mode",
+    "enabled": "Enabled",
+    "mapping": "Effective mapping",
+    "credential": "Credential",
+    "notConfigured": "Not configured",
+    "copy": "Copy",
+    "delete": "Delete",
+    "save": "Save",
+    "saving": "Saving...",
+    "saved": "AI Coding configuration saved",
+    "saveFailed": "Failed to save AI Coding configuration",
+    "permissions": {
+      "standard": "Standard",
+      "approve-edits": "Approve edits",
+      "read-only": "Read only",
+      "full-access": "Full access"
+    },
+    "validation": {
+      "providerMissing": "Select a Provider",
+      "providerDisabled": "The selected Provider is disabled",
+      "protocolMismatch": "This Provider protocol is not compatible with the selected CLI",
+      "baseUrlMissing": "The Provider Base URL is missing",
+      "authMissing": "The Provider authentication is not configured",
+      "modelMissing": "Select a compatible enabled model"
+    }
+  },
+  "capabilityCenter": {
+    "title": "Capability Center",
+    "description": "Manage installed capabilities, custom extensions, MCP servers, skills, channels, scopes, permissions, and health from one place.",
+    "installed": "Installed capabilities",
+    "extensions": "Extensions",
+    "mcp": "MCP servers",
+    "skills": "Skills",
+    "channels": "Channels",
+    "enabledCount": "{{enabled}} of {{total}} enabled",
+    "healthyCount": "{{healthy}} of {{total}} healthy",
+    "installedCount": "{{total}} installed"
+  },
+  "pet": {
+    "title": "Desktop Pet",
+    "subtitle": "Manage your capybara pet, skins, experience & agent"
+  },
+  "extension": {
+    "title": "Extensions",
+    "subtitle": "Install local custom tools and response UI components",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "tools": "Tools",
+    "renderers": "Renderers",
+    "components": "Components",
+    "hostRendered": "host-rendered",
+    "network": "Network",
+    "noNetwork": "No network access",
+    "readOnlyCount": "{{count}} read-only",
+    "required": "Required",
+    "showSecret": "Show secret",
+    "hideSecret": "Hide secret",
+    "saveConfig": "Save config",
+    "saved": "Extension configuration saved",
+    "saveFailed": "Failed to save configuration",
+    "updateFailed": "Failed to update extension",
+    "openFolder": "Open folder",
+    "openFolderFailed": "Failed to open folder",
+    "remove": "Remove",
+    "removeConfirm": "Remove this extension?",
+    "removeFailed": "Failed to remove extension",
+    "installFolder": "Install folder",
+    "installFailed": "Failed to install extension",
+    "installed": "Extension installed",
+    "loading": "Loading extensions...",
+    "emptyTitle": "No extensions installed",
+    "emptyDesc": "Choose a folder containing extension.json to add custom tools to Ola.",
+    "noRenderers": "No custom renderers"
+  },
+  "workModes": {
+    "title": "Work modes",
+    "subtitle": "Choose how new conversations prioritize Work and Code tasks.",
+    "work": "Work",
+    "code": "Code",
+    "sharedLabel": "Shared",
+    "autoSummarize": "Generate a structured result",
+    "autoSummarizeDesc": "After tool work, summarize what changed, what was verified and what remains.",
+    "preferBrowser": "Prioritize browser actions",
+    "preferBrowserDesc": "Place browser and desktop research capabilities near the top of the tool picker.",
+    "preferWebSearch": "Prioritize web research",
+    "preferWebSearchDesc": "Prefer search and source gathering for research-oriented tasks.",
+    "autoIndex": "Keep project intelligence ready",
+    "autoIndexDesc": "Prefer CodeGraph and Wiki indexing when a project is selected.",
+    "allowShell": "Show shell capabilities",
+    "allowShellDesc": "Expose terminal and command tools as preferred Code capabilities; approvals still apply.",
+    "defaultsHint": "New conversations use this profile configuration.",
+    "mainModel": "Main model",
+    "fastModel": "Fast model",
+    "inheritModel": "Inherit global model",
+    "inheritFastModel": "Inherit global fast model",
+    "shared": {
+      "securityTitle": "Security stays global",
+      "securityDesc": "Permissions, approvals, credentials, MCP, Extensions and desktop automation are shared by both profiles.",
+      "defaultTitle": "Default profile",
+      "defaultDesc": "New conversations start with this profile. You can override it before sending."
+    },
+    "shellType": "Shell type",
+    "shellDefault": "System default",
+    "gitPolicy": "Git policy",
+    "gitInspect": "Inspect only",
+    "gitAsk": "Ask before write",
+    "gitApproval": "Allow with approval",
+    "verificationPolicy": "Verification policy",
+    "verifyNone": "No automatic verification",
+    "verifyStatic": "Lint and typecheck",
+    "verifyFull": "Tests and build",
+    "diffStyle": "Diff display",
+    "diffInline": "Inline in conversation",
+    "diffSidePanel": "Open in side panel",
+    "fileApproval": "File approval",
+    "approvalAlways": "Always ask",
+    "approvalRisk": "Ask on risk",
+    "approvalGlobal": "Use global policy",
+    "useTeams": "Prefer Team delegation",
+    "useTeamsDesc": "Suggest sub-agents and Team workflows for larger engineering tasks.",
+    "defaultsDescription": "Defaults: {{mode}}. Profile changes apply to new conversations.",
+    "defaultsChat": "starts with conversation",
+    "defaultsExecution": "starts with execution"
+  },
+  "credentials": {
+    "title": "Credentials",
+    "subtitle": "Manage the credentials the agent can use to log into sites"
+  },
+  "architecture": {
+    "groups": {
+      "common": "Comum",
+      "models": "Modelos e conta",
+      "execution": "Execução e segurança",
+      "integrations": "Extensões e integrações",
+      "personalization": "Dados e personalização",
+      "advanced": "Avançado"
+    },
+    "pages": {
+      "modelManagement": {
+        "description": "Gerencie os modelos disponíveis e suas capacidades."
+      },
+      "model": {
+        "description": "Escolha padrões e comportamento de modelo por tarefa."
+      },
+      "projectIntelligence": {
+        "title": "Inteligência do projeto",
+        "description": "Gerencie o Wiki do projeto e a indexação CodeGraph."
+      },
+      "advanced": {
+        "title": "Avançado",
+        "description": "Controles de contexto, concorrência, desenvolvimento e recursos experimentais."
+      },
+      "olaAccount": {
+        "title": "Ola account",
+        "description": "Use your Ola personal and team model resources without storing their API keys on this device.",
+        "localProviderNotice": "Local providers remain available offline in every workspace. Ola-managed model credentials stay on the Ola service.",
+        "connection": {
+          "title": "Account connection",
+          "description": "Sign in to load your personal and team resources.",
+          "signIn": "Sign in",
+          "signOut": "Sign out",
+          "manage": "Manage on Ola",
+          "notSignedIn": "Not signed in",
+          "notSignedInDescription": "Sign in to access Ola-managed personal and team models."
+        },
+        "spaces": {
+          "title": "Workspaces",
+          "description": "Switching spaces changes what new work uses. Existing conversations keep their original binding.",
+          "local": "Local personal workspace",
+          "personal": "Ola personal workspace",
+          "team": "Ola team workspace",
+          "localModels": "Local models",
+          "resourceCount": "{{count}} managed models",
+          "localName": "Local workspace"
+        },
+        "resources": {
+          "title": "Managed model resources",
+          "description": "Only metadata is stored on this device; API keys never leave Ola.",
+          "refresh": "Refresh",
+          "available": "Available",
+          "unavailable": "Unavailable",
+          "empty": "No Ola-managed models are available in this workspace."
+        },
+        "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
+        "deviceRegistered": "Registered device: {{name}}",
+        "lastSynced": "Last refreshed: {{time}}",
+        "defaultModel": "Default model"
+      }
+    },
+    "usage": {
+      "title": "Uso e custo",
+      "description": "Revise uso local, custo e desempenho dos modelos."
+    },
+    "petStudio": {
+      "title": "Estúdio de pet",
+      "description": "Gerencie seu acompanhante de desktop fora das configurações do sistema."
+    }
+  },
+  "projectIntelligence": {
+    "title": "Project intelligence",
+    "description": "Use project Wiki and CodeGraph to understand the current project.",
+    "activeProject": "Active project: {{path}}",
+    "noProject": "Select a project with a working folder to use both capabilities.",
+    "wikiTitle": "Project Wiki",
+    "codeGraphTitle": "CodeGraph"
   }
 }

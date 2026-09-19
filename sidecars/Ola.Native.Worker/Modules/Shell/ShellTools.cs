@@ -240,6 +240,7 @@ internal static class ShellTools
         }
 
         ApplyEnvironment(startInfo, parameters);
+        OlaDataRoot.ApplyIsolatedHome(startInfo);
         return new Process { StartInfo = startInfo, EnableRaisingEvents = true };
     }
 
@@ -336,7 +337,7 @@ internal static class ShellTools
             return Path.GetFullPath(cwd);
         }
 
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var home = OlaDataRoot.ExternalDataHome;
         return Directory.Exists(home) ? home : Environment.CurrentDirectory;
     }
 

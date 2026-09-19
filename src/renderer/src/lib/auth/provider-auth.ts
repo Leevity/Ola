@@ -1,4 +1,5 @@
-﻿import { nanoid } from 'nanoid'
+import { isOlaManagedProviderId } from '@renderer/lib/workspace-context'
+import { nanoid } from 'nanoid'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import type {
   AccountRateLimit,
@@ -737,6 +738,8 @@ export async function refreshProviderOAuth(
 }
 
 export async function ensureProviderAuthReady(providerId: string): Promise<boolean> {
+  // Managed authentication is checked by the main-process ticket bridge on every request.
+  if (isOlaManagedProviderId(providerId)) return true
   const provider = getProviderById(providerId)
   if (!provider) return false
 
