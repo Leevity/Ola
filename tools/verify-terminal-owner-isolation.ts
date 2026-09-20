@@ -10,16 +10,30 @@ assert.match(terminal, /event\.senderFrame === event\.sender\.mainFrame/)
 assert.match(terminal, /terminal:create'[\s\S]*isTrustedTerminalIpcSender\(event\)/)
 assert.match(
   terminal,
-  /function isTerminalOwnedBy\(id: string, sender\?: WebContents \| null\): boolean/
+  /function resolveSenderWorkspace\(event: IpcMainInvokeEvent\): string \| null/
 )
-assert.match(terminal, /terminal:input'[\s\S]*isTerminalOwnedBy\(args\.id, event\.sender\)/)
-assert.match(terminal, /terminal:resize'[\s\S]*isTerminalOwnedBy\(args\.id, event\.sender\)/)
-assert.match(terminal, /terminal:kill'[\s\S]*isTerminalOwnedBy\(args\.id, event\.sender\)/)
-assert.match(terminal, /terminal:get'[\s\S]*isTerminalOwnedBy\(args\.id, event\.sender\)/)
+assert.match(terminal, /function isTerminalWorkspaceAuthorized\(/)
 assert.match(
   terminal,
-  /terminal:list'[\s\S]*sessions\.filter\(\(session\) => terminalWindowIds\.get\(session\.id\) === ownerWindowId\)/
+  /terminal:input'[\s\S]*isTerminalWorkspaceAuthorized\(args\.id, event\.sender\)/
 )
+assert.match(
+  terminal,
+  /terminal:resize'[\s\S]*isTerminalWorkspaceAuthorized\(args\.id, event\.sender\)/
+)
+assert.match(
+  terminal,
+  /terminal:kill'[\s\S]*isTerminalWorkspaceAuthorized\(args\.id, event\.sender\)/
+)
+assert.match(
+  terminal,
+  /terminal:get'[\s\S]*isTerminalWorkspaceAuthorized\(args\.id, event\.sender\)/
+)
+assert.match(
+  terminal,
+  /terminal:list'[\s\S]*terminalSessions\.list\(workspaceId\)[\s\S]*owner\?\.windowId === ownerWindowId[\s\S]*owner\.workspaceId === workspaceId/
+)
+assert.match(terminal, /export function hasActiveLocalTerminalSessions\(workspaceId: string\)/)
 
 assert.match(processes, /function isTrustedProcessIpcSender\(event: IpcMainInvokeEvent\): boolean/)
 assert.match(processes, /event\.senderFrame === event\.sender\.mainFrame/)

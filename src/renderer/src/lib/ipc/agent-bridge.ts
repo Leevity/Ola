@@ -2,28 +2,20 @@ import type {
   ProviderConfig,
   StreamEvent,
   ToolDefinition,
-  ToolCallExtraContent,
   UnifiedMessage
 } from '@renderer/lib/api/types'
 import type { CompressionResult } from '@renderer/lib/agent/context-compression'
-import type { AgentEvent } from '@renderer/lib/agent/types'
 import {
-  RESPONSES_SESSION_SCOPE_SIDECAR_TEXT_REQUEST,
+  RESPONSES_SESSION_SCOPE_AUXILIARY_TEXT_REQUEST,
   withAuxiliaryResponsesRequestPolicy
 } from '@renderer/lib/api/responses-session-policy'
-import {
-  buildSidecarAgentRunRequest,
-  isNativeSidecarProviderConfig
-} from '@renderer/lib/ipc/sidecar-protocol'
-import type {
-  SidecarSlashCommandContext,
-  SidecarSystemCommandContext
-} from '@renderer/lib/ipc/sidecar-protocol'
-import { agentStream } from '@renderer/lib/ipc/agent-stream-receiver'
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
-import { ipcClient } from '@renderer/lib/ipc/ipc-client'
-import { toAgentEvent } from '@renderer/lib/agent/stream-event-adapter'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from './ts-runtime-bridge'
+import { resolveTsRuntimeModelBinding } from './ts-runtime-model-binding'
+import { assessTsRuntimeTextEligibility } from './ts-runtime-text-eligibility'
 import { toMessagePackChannel } from '../../../../shared/messagepack/binary-ipc'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+export { readRuntimeDebugBody } from './runtime-debug-body'
 
 class AgentBridgeClient {
   private initialized = false
@@ -41,64 +33,8 @@ class AgentBridgeClient {
   }
 
   private async initializeWithRetry(): Promise<boolean> {
-    const maxAttempts = 2
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-      try {
-        const result = (await ipcClient.invoke('sidecar:start')) as { ok: boolean }
-        if (!result.ok) {
-          throw new Error('sidecar:start returned ok=false')
-        }
-
-        await this.request('initialize', {
-          workingFolder: undefined
-        })
-        this.initialized = true
-        return true
-      } catch (err) {
-        this.initialized = false
-        console.error(`[AgentBridge] Initialize failed (attempt ${attempt}/${maxAttempts}):`, err)
-
-        if (attempt < maxAttempts) {
-          await this.recycleWorker('native', 'initialize-retry').catch(() => {})
-          await new Promise((resolve) => setTimeout(resolve, 250))
-          continue
-        }
-
-        return false
-      }
-    }
-
-    return false
-  }
-
-  async request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
-    return await invokeMessagePackBinary(toMessagePackChannel('sidecar:request'), {
-      method,
-      params,
-      timeoutMs
-    })
-  }
-
-  notify(method: string, params?: unknown): void {
-    ipcClient.send('sidecar:notify', method, params)
-  }
-
-  async isRunning(): Promise<boolean> {
-    const result = (await ipcClient.invoke('sidecar:status')) as {
-      running: boolean
-    }
-    return result.running
-  }
-
-  async recycleWorker(
-    target: 'native' | 'codegraph' = 'native',
-    reason?: string
-  ): Promise<{ ok: boolean; target: 'native' | 'codegraph'; reason?: string | null }> {
-    return await invokeMessagePackBinary(toMessagePackChannel('sidecar:recycle'), {
-      target,
-      reason
-    })
+    this.initialized = await isTsRuntimeAvailable().catch(() => false)
+    return this.initialized
   }
 
   async requestCodeGraph<T = unknown>(
@@ -117,123 +53,32 @@ class AgentBridgeClient {
     await invokeMessagePackBinary(toMessagePackChannel('codegraph:stop'), {})
   }
 
-  async runAgent(params: unknown): Promise<{ started: boolean; runId: string }> {
-    return await invokeMessagePackBinary<{ started: boolean; runId: string }>(
-      toMessagePackChannel('agent:run'),
-      params
-    )
-  }
-
-  async getAgentRunSnapshot(runId: string): Promise<{
-    active: boolean
-    run: { runId: string; sessionId: string; startedAt: number; queuedMessageCount: number } | null
-    lastSeq: number
-    generation?: number
-    reason?: 'not_owner'
-  }> {
-    return (await ipcClient.invoke('agent:run-snapshot', { runId })) as {
-      active: boolean
-      run: {
-        runId: string
-        sessionId: string
-        startedAt: number
-        queuedMessageCount: number
-      } | null
-      lastSeq: number
-      generation?: number
-      reason?: 'not_owner'
-    }
-  }
-
-  async getAgentRuntimeState(): Promise<{
-    runs: Array<{
-      runId: string
-      sessionId: string
-      assistantMessageId: string
-      firstSeq: number
-      lastSeq: number
-      status: 'running'
-    }>
-  }> {
-    return (await ipcClient.invoke('agent:runtime-state')) as {
-      runs: Array<{
-        runId: string
-        sessionId: string
-        assistantMessageId: string
-        firstSeq: number
-        lastSeq: number
-        status: 'running'
-      }>
-    }
-  }
-
-  async attachAgentRun(
-    runId: string,
-    sinceSeq = -1
-  ): Promise<{
-    attached: boolean
-    frames: import('../../../../shared/agent-stream-protocol').AgentStreamEnvelope[]
-    terminal?: boolean
-    firstSeq?: number
-    lastSeq?: number
-    reason?: 'not_found' | 'not_owner'
-  }> {
-    return (await ipcClient.invoke('agent:attach-run', { runId, sinceSeq })) as {
-      attached: boolean
-      frames: import('../../../../shared/agent-stream-protocol').AgentStreamEnvelope[]
-      terminal?: boolean
-      firstSeq?: number
-      lastSeq?: number
-      reason?: 'not_found' | 'not_owner'
-    }
-  }
-
   async cancelAgent(
     runId: string,
     toolUseId?: string
   ): Promise<{ cancelled: boolean; runId?: string; toolUseId?: string }> {
+    void toolUseId
     return await invokeMessagePackBinary<{
       cancelled: boolean
       runId?: string
       toolUseId?: string
-    }>(toMessagePackChannel('agent:cancel'), { runId, toolUseId })
+    }>(toMessagePackChannel('agent:request-stop'), {
+      workspaceId: useWorkspaceStore.getState().activeWorkspaceId,
+      runId
+    })
   }
 
-  async requestStopAgent(runId: string): Promise<{ stopped: boolean; runId?: string }> {
-    return await invokeMessagePackBinary<{ stopped: boolean; runId?: string }>(
-      toMessagePackChannel('agent:request-stop'),
-      { runId }
+  async lookupToolResults<T = unknown>(args: {
+    workspaceId: string
+    sessionId: string
+    toolUseIds: string[]
+  }): Promise<T[]> {
+    const result = await invokeMessagePackBinary<{ results: T[]; error?: string }>(
+      toMessagePackChannel('agent:tool-results-lookup'),
+      args
     )
-  }
-
-  async appendAgentMessages(
-    runId: string,
-    messages: UnifiedMessage[]
-  ): Promise<{ appended: boolean; runId?: string; count: number }> {
-    return await invokeMessagePackBinary<{ appended: boolean; runId?: string; count: number }>(
-      toMessagePackChannel('agent:append-messages'),
-      {
-        runId,
-        messages
-      }
-    )
-  }
-
-  async stop(): Promise<void> {
-    this.initializePromise = null
-    await ipcClient.invoke('sidecar:stop')
-    this.initialized = false
-  }
-}
-
-/**
- * Check if a capability is available via the main-process runtime bridge.
- */
-export async function canSidecarHandle(capability: string): Promise<boolean> {
-  try {
-    return Boolean(await ipcClient.invoke('sidecar:can-handle', capability))
-  } catch {
-    return false
+    if (result.error) throw new Error(result.error)
+    return result.results
   }
 }
 
@@ -242,305 +87,58 @@ export async function canSidecarHandle(capability: string): Promise<boolean> {
  */
 export const agentBridge = new AgentBridgeClient()
 
-export async function readSidecarDebugBody(bodyRef: string): Promise<string> {
-  const result = (await agentBridge.request('agent/debug-body-read', { bodyRef })) as {
-    success?: boolean
-    body?: string
-    error?: string
-  }
-  if (!result.success || typeof result.body !== 'string') {
-    throw new Error(result.error || 'Debug body is unavailable')
-  }
-  return result.body
-}
-
-export function runSidecarCleanup(unsubscribe: (() => void) | null): void {
-  if (unsubscribe) {
-    unsubscribe()
-  }
-}
-
-function normalizeProviderToolInput(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
-}
-
-function toProviderErrorEvent(error: unknown): StreamEvent {
-  return {
-    type: 'error',
-    error: {
-      type: error instanceof Error ? error.name || 'sidecar_error' : 'sidecar_error',
-      message: error instanceof Error ? error.message : String(error)
-    }
-  }
-}
-
-function mapAgentEventToProviderEvents(
-  event: AgentEvent,
-  startedToolIds: Set<string>
-): StreamEvent[] {
-  switch (event.type) {
-    case 'text_delta':
-      return [{ type: 'text_delta', text: event.text }]
-    case 'thinking_delta':
-      return [{ type: 'thinking_delta', thinking: event.thinking }]
-    case 'thinking_encrypted':
-      return [
-        {
-          type: 'thinking_encrypted',
-          thinkingEncryptedContent: event.thinkingEncryptedContent,
-          thinkingEncryptedProvider: event.thinkingEncryptedProvider
-        }
-      ]
-    case 'image_generation_started':
-      return [{ type: 'image_generation_started' }]
-    case 'image_generation_partial':
-      return [
-        {
-          type: 'image_generation_partial',
-          imageBlock: event.imageBlock,
-          ...(event.partialImageIndex !== undefined
-            ? { partialImageIndex: event.partialImageIndex }
-            : {})
-        }
-      ]
-    case 'image_generated':
-      return [{ type: 'image_generated', imageBlock: event.imageBlock }]
-    case 'image_error':
-      return [{ type: 'image_error', imageError: event.imageError }]
-    case 'request_debug':
-      return [{ type: 'request_debug', debugInfo: event.debugInfo }]
-    case 'message_end':
-      return [
-        {
-          type: 'message_end',
-          usage: event.usage,
-          timing: event.timing,
-          providerResponseId: event.providerResponseId,
-          stopReason: event.stopReason
-        }
-      ]
-    case 'tool_use_streaming_start': {
-      const toolCallId = event.toolCallId
-      if (!toolCallId) return []
-      startedToolIds.add(toolCallId)
-      return [
-        {
-          type: 'tool_call_start',
-          toolCallId,
-          toolName: event.toolName,
-          ...(event.toolCallExtraContent
-            ? { toolCallExtraContent: event.toolCallExtraContent as ToolCallExtraContent }
-            : {})
-        }
-      ]
-    }
-    case 'tool_use_generated': {
-      const block = event.toolUseBlock
-      if (!block?.id || !block.name) return []
-      const events: StreamEvent[] = []
-      if (!startedToolIds.has(block.id)) {
-        startedToolIds.add(block.id)
-        events.push({
-          type: 'tool_call_start',
-          toolCallId: block.id,
-          toolName: block.name,
-          ...(block.extraContent ? { toolCallExtraContent: block.extraContent } : {})
-        })
-      }
-      events.push({
-        type: 'tool_call_end',
-        toolCallId: block.id,
-        toolName: block.name,
-        toolCallInput: normalizeProviderToolInput(block.input),
-        ...(block.extraContent ? { toolCallExtraContent: block.extraContent } : {})
-      })
-      return events
-    }
-    case 'error':
-      return [toProviderErrorEvent(event.error)]
-    default:
-      return []
-  }
-}
-
-export async function* streamSidecarProviderTurn(args: {
+export async function* streamTsProviderTurn(args: {
   provider: ProviderConfig
   messages: UnifiedMessage[]
   tools: ToolDefinition[]
   planMode?: boolean
-  slashCommand?: SidecarSlashCommandContext
-  systemCommand?: SidecarSystemCommandContext
   requestContextTexts?: readonly string[]
   includeFullDebugBody?: boolean
   signal?: AbortSignal
 }): AsyncGenerator<StreamEvent> {
-  if (!isNativeSidecarProviderConfig(args.provider)) {
+  void args.tools
+  void args.planMode
+  void args.requestContextTexts
+  void args.includeFullDebugBody
+  const binding = resolveTsRuntimeModelBinding(args.provider)
+  if (!binding || !(await isTsRuntimeAvailable())) {
     yield {
       type: 'error',
-      error: {
-        type: 'native_unavailable',
-        message: `${args.provider.type} requires the .NET Native Worker for execution.`
-      }
+      error: { type: 'ts_runtime_unavailable', message: 'TS Runtime model binding is unavailable.' }
     }
     return
   }
-
-  const sidecarRequest = buildSidecarAgentRunRequest({
-    messages: args.messages,
-    provider: args.provider,
-    tools: args.tools,
-    maxIterations: 1,
-    forceApproval: false,
-    planMode: args.planMode,
-    slashCommand: args.slashCommand,
-    systemCommand: args.systemCommand,
-    requestContextTexts: args.requestContextTexts,
-    includeFullDebugBody: args.includeFullDebugBody,
-    providerTurnOnly: true
-  })
-  if (!sidecarRequest) {
-    yield {
-      type: 'error',
-      error: {
-        type: 'request_build_failed',
-        message: 'Sidecar provider request build failed.'
-      }
-    }
-    return
-  }
-
+  const userMessages = args.messages.filter((message) => message.role === 'user')
+  const prompt = String(userMessages.at(-1)?.content ?? '')
+  const history = userMessages.slice(0, -1).map((message) => ({
+    role: message.role === 'user' ? ('user' as const) : ('assistant' as const),
+    text: String(message.content ?? '')
+  }))
   try {
-    const supportsAgentRun = await canSidecarHandle('agent.run')
-    const supportsProvider = await canSidecarHandle(`provider.${args.provider.type}`)
-    if (!supportsAgentRun || !supportsProvider) {
-      yield {
-        type: 'error',
-        error: {
-          type: 'native_unavailable',
-          message: `${args.provider.type} is not available in the .NET Native Worker.`
-        }
-      }
-      return
-    }
-
-    const initialized = await agentBridge.initialize()
-    if (!initialized) {
-      yield {
-        type: 'error',
-        error: {
-          type: 'sidecar_unavailable',
-          message: 'Sidecar unavailable.'
-        }
-      }
-      return
-    }
-
-    const queue: StreamEvent[] = []
-    const pendingEvents: Array<{ runId: string; event: { type: string; [key: string]: unknown } }> =
-      []
-    const startedToolIds = new Set<string>()
-    let finished = false
-    let notify: (() => void) | null = null
-    let runId = ''
-    let abortCleanup: (() => void) | null = null
-
-    const wake = (): void => {
-      if (!notify) return
-      const resume = notify
-      notify = null
-      resume()
-    }
-
-    const pushProviderEvents = (events: StreamEvent[]): void => {
-      if (events.length === 0) return
-      for (const event of events) {
-        queue.push(event)
-      }
-      if (events.some((event) => event.type === 'error')) {
-        finished = true
-      }
-      wake()
-    }
-
-    const dispatchAgentEvent = (event: { type: string; [key: string]: unknown }): void => {
-      if (event.type === 'loop_end') {
-        finished = true
-        wake()
-        return
-      }
-      pushProviderEvents(
-        mapAgentEventToProviderEvents(event as unknown as AgentEvent, startedToolIds)
-      )
-    }
-
-    const unsubscribe = agentStream.subscribeAll((eventRunId, _sessionId, streamEvent) => {
-      const event = toAgentEvent(streamEvent)
-      if (!event) return
-
-      if (!runId) {
-        pendingEvents.push({
-          runId: eventRunId,
-          event: event as unknown as { type: string; [key: string]: unknown }
-        })
-        return
-      }
-
-      if (eventRunId && eventRunId !== runId) return
-      dispatchAgentEvent(event as unknown as { type: string; [key: string]: unknown })
-    })
-
-    try {
-      const result = await agentBridge.runAgent(sidecarRequest)
-      runId = result.runId
-      console.log('[AgentBridge] sidecar provider turn started', {
-        runId,
-        providerType: args.provider.type,
-        model: args.provider.model
-      })
-
-      if (args.signal) {
-        if (args.signal.aborted) {
-          void agentBridge.cancelAgent(runId).catch(() => {})
-          finished = true
-        } else {
-          const onAbort = (): void => {
-            void agentBridge.cancelAgent(runId).catch(() => {})
-            finished = true
-            wake()
-          }
-          args.signal.addEventListener('abort', onAbort, { once: true })
-          abortCleanup = () => args.signal?.removeEventListener('abort', onAbort)
-        }
-      }
-
-      for (const pending of pendingEvents.splice(0, pendingEvents.length)) {
-        if (pending.runId && pending.runId !== runId) continue
-        dispatchAgentEvent(pending.event)
-        if (finished) break
-      }
-
-      while (!finished || queue.length > 0) {
-        if (queue.length === 0) {
-          await new Promise<void>((resolve) => {
-            notify = resolve
-          })
-          continue
-        }
-        const next = queue.shift()
-        if (next) yield next
-      }
-    } finally {
-      abortCleanup?.()
-      unsubscribe()
+    for await (const event of streamTsRuntimeTextTurn({
+      workspaceId: binding.workspaceId,
+      sessionId: `ts-provider:${crypto.randomUUID()}`,
+      modelSource: binding.modelSource,
+      modelOptions: {
+        systemPrompt: args.provider.systemPrompt,
+        thinking: args.provider.thinkingEnabled === false ? { type: 'disabled' } : undefined
+      },
+      prompt,
+      history,
+      signal: args.signal
+    })) {
+      if (event.type === 'text_delta') yield { type: 'text_delta', text: event.text }
+      else if (event.type === 'thinking_delta')
+        yield { type: 'thinking_delta', thinking: event.thinking }
+      else if (event.type === 'message_end') yield event
+      else if (event.type === 'error') yield { type: 'error', error: event.error }
     }
   } catch (error) {
-    yield toProviderErrorEvent(error)
+    yield { type: 'error', error: { type: 'ts_runtime_error', message: String(error) } }
   }
 }
 
-export async function runSidecarTextRequest(args: {
+export async function runTsTextRequest(args: {
   provider: ProviderConfig
   messages: UnifiedMessage[]
   signal?: AbortSignal
@@ -549,130 +147,47 @@ export async function runSidecarTextRequest(args: {
 }): Promise<string> {
   const provider = withAuxiliaryResponsesRequestPolicy(
     args.provider,
-    args.responsesSessionScope ?? RESPONSES_SESSION_SCOPE_SIDECAR_TEXT_REQUEST
+    args.responsesSessionScope ?? RESPONSES_SESSION_SCOPE_AUXILIARY_TEXT_REQUEST
   )
-  const sidecarRequest = buildSidecarAgentRunRequest({
-    messages: args.messages,
-    provider,
-    tools: [],
-    maxIterations: args.maxIterations ?? 1,
-    forceApproval: false
-  })
-  if (!sidecarRequest) {
-    throw new Error('Sidecar request build failed')
-  }
 
-  if (!isNativeSidecarProviderConfig(provider)) {
-    throw new Error('Sidecar capability unavailable')
-  }
-
-  const supportsAgentRun = await canSidecarHandle('agent.run')
-  const supportsProvider = await canSidecarHandle(`provider.${provider.type}`)
-  if (!supportsAgentRun || !supportsProvider) {
-    throw new Error('Sidecar capability unavailable')
-  }
-
-  const initialized = await agentBridge.initialize()
-  if (!initialized) {
-    throw new Error('Sidecar unavailable')
-  }
-
-  let text = ''
-  let settled = false
-  let unsubscribe: (() => void) | null = null
-  let runId = ''
-  const pendingEvents: Array<{ runId: string; event: { type: string; [key: string]: unknown } }> =
-    []
-
-  try {
-    await new Promise<void>((resolve, reject) => {
-      const handleEvent = (event: { type: string; [key: string]: unknown }): void => {
-        switch (event.type) {
-          case 'text_delta':
-            if (typeof event.text === 'string' && event.text) text += event.text
-            break
-          case 'error':
-            settled = true
-            args.signal?.removeEventListener('abort', abortHandler)
-            reject(event.error instanceof Error ? event.error : new Error(String(event.error)))
-            break
-          case 'loop_end':
-            settled = true
-            args.signal?.removeEventListener('abort', abortHandler)
-            resolve()
-            break
-          default:
-            break
-        }
-      }
-
-      const onAbort = async (): Promise<void> => {
-        try {
-          if (runId) {
-            await agentBridge.cancelAgent(runId)
-          }
-        } catch {
-          // ignore cancellation races
-        }
-        reject(new Error('aborted'))
-      }
-
-      if (args.signal?.aborted) {
-        void onAbort()
-        return
-      }
-
-      const abortHandler = (): void => {
-        void onAbort()
-      }
-      args.signal?.addEventListener('abort', abortHandler, { once: true })
-
-      unsubscribe = agentStream.subscribeAll((eventRunId, _sessionId, streamEvent) => {
-        const event = toAgentEvent(streamEvent)
-        if (!event) return
-
-        if (!runId) {
-          pendingEvents.push({
-            runId: eventRunId,
-            event: event as unknown as { type: string; [key: string]: unknown }
-          })
-          return
-        }
-
-        if (eventRunId !== runId) return
-        handleEvent(event as unknown as { type: string; [key: string]: unknown })
-      })
-
-      void (async () => {
-        try {
-          const result = await agentBridge.runAgent(sidecarRequest)
-          runId = result.runId
-          for (const pending of pendingEvents.splice(0, pendingEvents.length)) {
-            if (pending.runId && pending.runId !== runId) continue
-            handleEvent(pending.event)
-            if (settled) break
-          }
-        } catch (error) {
-          args.signal?.removeEventListener('abort', abortHandler)
-          reject(error instanceof Error ? error : new Error(String(error)))
-        }
-      })()
+  const binding = resolveTsRuntimeModelBinding(provider)
+  if (binding && (await isTsRuntimeAvailable())) {
+    const eligibility = assessTsRuntimeTextEligibility({
+      messages: args.messages,
+      provider,
+      modelSource: binding.modelSource
     })
-  } finally {
-    runSidecarCleanup(unsubscribe)
-    if (!settled) {
+    if (eligibility.eligible) {
+      let text = ''
       try {
-        await agentBridge.cancelAgent(runId)
-      } catch {
-        // ignore cancellation races
+        for await (const event of streamTsRuntimeTextTurn({
+          workspaceId: binding.workspaceId,
+          sessionId: `auxiliary-text:${crypto.randomUUID()}`,
+          modelSource: binding.modelSource,
+          modelOptions: eligibility.modelOptions,
+          prompt: eligibility.prompt,
+          promptImages: eligibility.promptImages,
+          history: eligibility.history,
+          maxTurns: args.maxIterations ?? 1,
+          signal: args.signal
+        })) {
+          if (event.type === 'text_delta' && event.text) text += event.text
+          if (event.type === 'loop_end') break
+          if (event.type === 'error') throw event.error
+        }
+        if (text.trim()) return text
+      } catch (error) {
+        if (args.signal?.aborted) throw error
+        // Do not fall back to a removed runtime. Callers receive an explicit
+        // TS runtime error below.
       }
     }
   }
 
-  return text
+  throw new Error('TS_RUNTIME_TEXT_REQUIRED')
 }
 
-export async function runSidecarContextCompression(args: {
+export async function runTsContextCompression(args: {
   provider: ProviderConfig
   messages: UnifiedMessage[]
   signal?: AbortSignal
@@ -688,7 +203,7 @@ export async function runSidecarContextCompression(args: {
 
   const initialized = await agentBridge.initialize()
   if (!initialized) {
-    throw new Error('Sidecar unavailable')
+    throw new Error('TS_RUNTIME_UNAVAILABLE')
   }
 
   const result = await invokeMessagePackBinary<{

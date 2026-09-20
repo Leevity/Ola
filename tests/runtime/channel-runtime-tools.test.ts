@@ -206,7 +206,9 @@ describe('TS provider channel write runtime tools', () => {
       'WeixinSendFile',
       'FeishuBitableCreateRecords',
       'FeishuBitableUpdateRecords',
-      'FeishuBitableDeleteRecords'
+      'FeishuBitableDeleteRecords',
+      'FeishuSendAudio',
+      'FeishuSendVideo'
     ])
     expect(
       tools[6].validate({
@@ -277,6 +279,21 @@ describe('TS provider channel write runtime tools', () => {
     })
     expect(() =>
       tool.validate({ plugin_id: 'weixin-a', chat_id: 'chat-a', file_path: '' })
+    ).toThrow('INVALID_TOOL_INPUT')
+  })
+
+  it('validates explicit Feishu audio and video media types', () => {
+    const tools = createChannelProviderWriteRuntimeTools()
+    const audio = tools.find((tool) => tool.name === 'FeishuSendAudio')!
+    const video = tools.find((tool) => tool.name === 'FeishuSendVideo')!
+    expect(
+      audio.validate({ plugin_id: 'plugin-a', chat_id: 'chat-a', file_path: '/tmp/voice.opus' })
+    ).toMatchObject({ pluginId: 'plugin-a', chatId: 'chat-a', fileType: 'opus' })
+    expect(
+      video.validate({ plugin_id: 'plugin-a', chat_id: 'chat-a', file_path: '/tmp/clip.mp4' })
+    ).toMatchObject({ pluginId: 'plugin-a', chatId: 'chat-a', fileType: 'mp4' })
+    expect(() =>
+      audio.validate({ plugin_id: 'plugin-a', chat_id: 'chat-a', file_path: '/tmp/clip.mp4' })
     ).toThrow('INVALID_TOOL_INPUT')
   })
 })

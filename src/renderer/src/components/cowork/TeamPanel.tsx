@@ -26,6 +26,7 @@ import { abortTeammate, abortAllTeammates } from '@renderer/lib/agent/teams/team
 import { resetTeamAutoTrigger } from '@renderer/hooks/use-chat-actions'
 import { removeTeamLimiter } from '@renderer/lib/agent/sub-agents/create-tool'
 import { teamEvents } from '@renderer/lib/agent/teams/events'
+import { appendTeamRuntimeMessage } from '@renderer/lib/agent/teams/runtime-client'
 import { ToolCallCard } from '@renderer/components/chat/ToolCallCard'
 import { cn } from '@renderer/lib/utils'
 import { nanoid } from 'nanoid'
@@ -33,7 +34,6 @@ import { getBillableTotalTokens } from '@renderer/lib/format-tokens'
 import type { TeamMember, TeamTask, TeamMessage } from '@renderer/lib/agent/teams/types'
 import { useTranslation } from 'react-i18next'
 import * as React from 'react'
-import { useShallow } from 'zustand/react/shallow'
 
 function formatElapsed(ms: number): string {
   if (ms < 1000) return `${ms}ms`
@@ -71,7 +71,9 @@ const statusDots: Record<string, string> = {
 const taskStatusConfig: Record<string, { bg: string; label: string }> = {
   pending: { bg: 'bg-muted text-muted-foreground/60', label: 'pending' },
   in_progress: { bg: 'bg-blue-500/15 text-blue-500', label: 'active' },
-  completed: { bg: 'bg-green-500/15 text-green-500', label: 'done' }
+  completed: { bg: 'bg-green-500/15 text-green-500', label: 'done' },
+  failed: { bg: 'bg-red-500/15 text-red-500', label: 'failed' },
+  cancelled: { bg: 'bg-amber-500/15 text-amber-500', label: 'cancelled' }
 }
 
 function MessageInput({ targetName }: { targetName: string }): React.JSX.Element {
@@ -85,22 +87,25 @@ function MessageInput({ targetName }: { targetName: string }): React.JSX.Element
     const content = text.trim()
     if (!content) return
 
-    const sessionId = useTeamStore.getState().activeTeam?.sessionId
-    teamEvents.emit({
-      type: 'team_message',
-      sessionId,
-      message: {
-        id: nanoid(8),
-        from: 'user',
-        to: targetName,
-        type: isBroadcast ? 'broadcast' : 'message',
-        content,
-        timestamp: Date.now()
-      }
-    })
-
-    setText('')
-    inputRef.current?.focus()
+    const team = useTeamStore.getState().activeTeam
+    if (!team) return
+    const message = {
+      id: nanoid(8),
+      from: 'user',
+      to: targetName,
+      type: isBroadcast ? ('broadcast' as const) : ('message' as const),
+      content,
+      timestamp: Date.now()
+    }
+    void appendTeamRuntimeMessage({ teamName: team.name, message })
+      .then(() => {
+        teamEvents.emit({ type: 'team_message', sessionId: team.sessionId, message })
+        setText('')
+        inputRef.current?.focus()
+      })
+      .catch((error) => {
+        console.error('[TeamRuntime] Failed to persist UI message:', error)
+      })
   }
 
   return (
@@ -447,30 +452,23 @@ function SectionHeader({
 
 export function TeamPanel(): React.JSX.Element {
   const { t } = useTranslation('cowork')
-  const activeTeam = useTeamStore(
-    useShallow((state) => {
-      const team = state.activeTeam
-      if (!team) return null
-      return {
-        ...team,
-        members: [...team.members],
-        tasks: [...team.tasks],
-        messages: [...team.messages]
-      }
-    })
-  )
+  // The store already replaces the team snapshot when its members, tasks, or
+  // messages change. Returning that stable reference avoids creating a fresh
+  // external-store snapshot on every render (which React 19 treats as an
+  // update loop).
+  const activeTeam = useTeamStore((state) => state.activeTeam)
 
   const handleStopMember = React.useCallback((memberId: string): void => {
     const team = useTeamStore.getState().activeTeam
     const member = team?.members.find((item) => item.id === memberId)
     if (!member) return
-    abortTeammate(member.name)
+    void abortTeammate(member.name)
   }, [])
 
   const handleClearAll = React.useCallback((): void => {
     const team = useTeamStore.getState().activeTeam
     resetTeamAutoTrigger()
-    abortAllTeammates()
+    void abortAllTeammates()
     if (team) removeTeamLimiter(team.name)
     teamEvents.emit({ type: 'team_end', sessionId: team?.sessionId })
   }, [])

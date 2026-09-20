@@ -4,8 +4,6 @@ const state = vi.hoisted(() => ({
   handlers: new Map<string, (args: unknown, event: unknown) => Promise<unknown>>(),
   registeredWorkspace: 'team-a',
   runtimeAvailable: true,
-  nativeAgentBusy: false,
-  agentSwitchPending: false,
   cronBusy: false,
   cronSwitchPending: false,
   desktopFlowBusy: false,
@@ -50,18 +48,6 @@ vi.mock('../../src/main/ipc/ssh-handlers', () => ({
     }
   }
 }))
-vi.mock('../../src/main/ipc/native-agent-runtime', () => ({
-  getNativeAgentRuntimeManager: () => ({
-    hasRunAdmissionOrActiveRuns: () => state.nativeAgentBusy,
-    beginWorkspaceSwitch: () => {
-      if (state.nativeAgentBusy || state.agentSwitchPending) throw new Error('WORKSPACE_BUSY_AGENT')
-      state.agentSwitchPending = true
-      return () => {
-        state.agentSwitchPending = false
-      }
-    }
-  })
-}))
 vi.mock('../../src/main/cron/cron-scheduler', () => ({
   hasActiveOrFinishingCronRuns: () => state.cronBusy,
   beginCronWorkspaceSwitch: () => {
@@ -89,8 +75,6 @@ beforeEach(() => {
   state.handlers.clear()
   state.registeredWorkspace = 'team-a'
   state.runtimeAvailable = true
-  state.nativeAgentBusy = false
-  state.agentSwitchPending = false
   state.cronBusy = false
   state.cronSwitchPending = false
   state.desktopFlowBusy = false
@@ -200,7 +184,6 @@ it('requires the registered source workspace before switching the runtime', asyn
   expect(state.request).toHaveBeenCalledWith('workspace.switch', {
     workspaceId: 'local-personal'
   })
-  expect(state.agentSwitchPending).toBe(false)
   expect(state.cronSwitchPending).toBe(false)
   expect(state.desktopFlowSwitchPending).toBe(false)
   expect(state.sshSwitchPending).toBe(false)
@@ -229,7 +212,6 @@ it('does not switch while a TS run is waiting for session ownership or submissio
   ).toMatchObject({ switched: false, error: 'WORKSPACE_BUSY_TS_RUNTIME' })
   releaseSession?.({ id: 'session-1', workspace_id: 'team-a' })
   await expect(pending).resolves.toMatchObject({ accepted: true })
-  expect(state.agentSwitchPending).toBe(false)
   expect(
     await invoke('ts-runtime:workspace-switch', {
       fromWorkspaceId: 'team-a',
@@ -318,7 +300,6 @@ it('rejects a delayed switch acknowledgement after the window changes workspace'
     workspaceId: 'local-personal'
   })
   await vi.waitFor(() => expect(state.request).toHaveBeenCalledOnce())
-  expect(state.agentSwitchPending).toBe(true)
   expect(state.cronSwitchPending).toBe(true)
   expect(state.desktopFlowSwitchPending).toBe(true)
   expect(state.sshSwitchPending).toBe(true)
@@ -334,7 +315,6 @@ it('rejects a delayed switch acknowledgement after the window changes workspace'
     switched: false,
     error: 'WINDOW_WORKSPACE_MISMATCH'
   })
-  expect(state.agentSwitchPending).toBe(false)
   expect(state.cronSwitchPending).toBe(false)
   expect(state.desktopFlowSwitchPending).toBe(false)
   expect(state.sshSwitchPending).toBe(false)
@@ -348,7 +328,6 @@ it('releases earlier admission guards when a desktop flow blocks switching', asy
       workspaceId: 'local-personal'
     })
   ).resolves.toMatchObject({ switched: false, error: 'WORKSPACE_BUSY_DESKTOP_FLOW' })
-  expect(state.agentSwitchPending).toBe(false)
   expect(state.cronSwitchPending).toBe(false)
   expect(state.desktopFlowSwitchPending).toBe(false)
   expect(state.request).not.toHaveBeenCalled()
@@ -362,7 +341,6 @@ it('releases earlier admission guards when SSH blocks switching', async () => {
       workspaceId: 'local-personal'
     })
   ).resolves.toMatchObject({ switched: false, error: 'WORKSPACE_BUSY_SSH' })
-  expect(state.agentSwitchPending).toBe(false)
   expect(state.cronSwitchPending).toBe(false)
   expect(state.desktopFlowSwitchPending).toBe(false)
   expect(state.sshSwitchPending).toBe(false)
@@ -375,19 +353,6 @@ it('reports Main-owned activity even when the TS runtime is unavailable', async 
     busy: true,
     error: 'WINDOW_WORKSPACE_MISMATCH'
   })
-  state.nativeAgentBusy = true
-  expect(await invoke('ts-runtime:workspace-activity', { workspaceId: 'team-a' })).toEqual({
-    busy: true,
-    reason: 'WORKSPACE_BUSY_AGENT'
-  })
-  expect(
-    await invoke('ts-runtime:workspace-switch', {
-      fromWorkspaceId: 'team-a',
-      workspaceId: 'local-personal'
-    })
-  ).toMatchObject({ switched: false, error: 'WORKSPACE_BUSY_AGENT' })
-  expect(state.request).not.toHaveBeenCalled()
-  state.nativeAgentBusy = false
   state.cronBusy = true
   expect(await invoke('ts-runtime:workspace-activity', { workspaceId: 'team-a' })).toEqual({
     busy: true,
@@ -399,7 +364,6 @@ it('reports Main-owned activity even when the TS runtime is unavailable', async 
       workspaceId: 'local-personal'
     })
   ).toMatchObject({ switched: false, error: 'WORKSPACE_BUSY_CRON' })
-  expect(state.agentSwitchPending).toBe(false)
   expect(state.cronSwitchPending).toBe(false)
   state.cronBusy = false
   state.sshBusy = true
@@ -426,4 +390,52 @@ it('discards a delayed list response after the window switches workspace', async
   state.registeredWorkspace = 'team-b'
   release?.([{ id: 'run-a' }])
   await expect(pending).resolves.toMatchObject({ runs: [], error: 'WINDOW_WORKSPACE_MISMATCH' })
+})
+
+it('reports TS-owned runtime routes and process memory without a Worker', async () => {
+  expect(await invoke('worker:routes', undefined)).toMatchObject({
+    runtime: 'typescript',
+    routes: expect.arrayContaining(['run.submit', 'run.cancel']),
+    capabilities: expect.arrayContaining(['runs', 'cancel'])
+  })
+  expect(await invoke('worker:memory', undefined)).toMatchObject({
+    runtime: 'typescript',
+    memory: expect.objectContaining({ rss: expect.any(Number) })
+  })
+})
+
+it('routes legacy agent stop and reverse cancellation through the TS scheduler', async () => {
+  state.request.mockResolvedValue({ ok: true })
+  await expect(
+    invoke('agent:request-stop', { workspaceId: 'team-a', runId: 'run-a' })
+  ).resolves.toMatchObject({ cancelled: true, runId: 'run-a' })
+  await expect(
+    invoke('agent:reverse-cancel', { workspaceId: 'team-a', runId: 'run-b' })
+  ).resolves.toMatchObject({ cancelled: true, runId: 'run-b' })
+  expect(state.request).toHaveBeenNthCalledWith(1, 'run.cancel', {
+    workspaceId: 'team-a',
+    runId: 'run-a'
+  })
+  expect(state.request).toHaveBeenNthCalledWith(2, 'run.cancel', {
+    workspaceId: 'team-a',
+    runId: 'run-b'
+  })
+})
+
+it('routes legacy reverse responses through the TS interaction scheduler', async () => {
+  state.request.mockResolvedValue({ ok: true })
+  await expect(
+    invoke('agent:reverse-response', {
+      workspaceId: 'team-a',
+      runId: 'run-a',
+      interactionId: 'interaction-a',
+      response: { approved: true }
+    })
+  ).resolves.toEqual({ accepted: true })
+  expect(state.request).toHaveBeenCalledWith('run.interact', {
+    workspaceId: 'team-a',
+    runId: 'run-a',
+    interactionId: 'interaction-a',
+    response: { approved: true }
+  })
 })

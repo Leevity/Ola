@@ -7,6 +7,7 @@ import {
   type SharedProviderRecord
 } from '../../shared/provider-contract'
 import { decodePersistedStoreState } from '../ipc/settings-handlers'
+import { getProviderSecretStore } from './provider-secret-store'
 
 let mirroredState: PersistedProviderState = { providers: [] }
 let revision = revisionOf(mirroredState)
@@ -92,13 +93,62 @@ export function resolveMainProviderModel(
   return model ? { provider, model } : null
 }
 
-export function listMainProviderModels(requestType: string): Array<{
-  providerId: string
-  providerName: string
-  modelId: string
-}> {
-  return mirroredState.providers.flatMap((provider) => {
-    if (!provider.enabled || !provider.apiKey?.trim()) return []
+/**
+ * Resolve a Main-owned secret. A legacy config value is accepted only as a
+ * one-time migration input and is immediately copied into the encrypted Main
+ * store; it is never returned as an ongoing runtime fallback.
+ */
+export async function resolveMainProviderSecret(
+  providerId: string,
+  legacyApiKey?: string
+): Promise<string> {
+  const secure = await getProviderSecretStore().get(providerId)
+  if (secure) return secure
+  const legacy = legacyApiKey?.trim() ?? ''
+  if (!legacy) return ''
+  try {
+    await getProviderSecretStore().set(providerId, legacy)
+    return (await getProviderSecretStore().get(providerId)) || ''
+  } catch {
+    // Fail closed if the encrypted store is unavailable. Do not return the
+    // legacy value to a runtime request after a failed migration.
+    return ''
+  }
+}
+
+/** Resolves the separately configured image model without borrowing the chat model. */
+export function resolveMainImageProviderModel(): {
+  provider: SharedProviderRecord
+  model: SharedProviderRecord['models'][number]
+} | null {
+  const imageProviderId =
+    typeof mirroredState.activeImageProviderId === 'string'
+      ? mirroredState.activeImageProviderId
+      : undefined
+  const imageModelId =
+    typeof mirroredState.activeImageModelId === 'string'
+      ? mirroredState.activeImageModelId
+      : undefined
+  if (!imageProviderId || !imageModelId) return null
+  return resolveMainProviderModel(imageProviderId, imageModelId)
+}
+
+export async function listMainProviderModels(requestType: string): Promise<
+  Array<{
+    providerId: string
+    providerName: string
+    modelId: string
+  }>
+> {
+  const candidates = mirroredState.providers.filter((provider) => provider.enabled)
+  const configured = await Promise.all(
+    candidates.map(async (provider) => ({
+      provider,
+      secret: await resolveMainProviderSecret(provider.id, provider.apiKey)
+    }))
+  )
+  return configured.flatMap(({ provider, secret }) => {
+    if (!secret) return []
     return provider.models
       .filter((model) => model.enabled !== false && (model.type ?? provider.type) === requestType)
       .map((model) => ({

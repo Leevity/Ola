@@ -1,5 +1,4 @@
 import { nanoid } from 'nanoid'
-import { agentBridge } from '@renderer/lib/ipc/agent-bridge'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
 import { useProviderStore } from '@renderer/stores/provider-store'
@@ -18,7 +17,6 @@ import { usePetsStore } from '@renderer/stores/pets-store'
  * generated, so audio starts roughly in sync with the text.
  */
 
-const SPEECH_TIMEOUT_MS = 120_000
 const MAX_SPEECH_CHARS = 400
 const SENTENCE_BOUNDARY = /[。！？!?；;…~～\n]/
 /** Softer pause marks the opening segment may cut at for a faster start. */
@@ -124,30 +122,15 @@ async function synthesizeClip(params: PetVoiceParams, text: string): Promise<Spe
     .getState()
     .getProviderConfigById(params.providerId, params.modelId)
   if (!provider) throw new Error('pet voice model is not configured')
-  if (!(await agentBridge.initialize())) {
-    throw new Error('native worker unavailable for speech synthesis')
-  }
 
   const mode = resolvePetVoiceMode(params.modelId, params.mode)
-  const result = (await agentBridge.request(
-    'openai-audio/speech',
-    {
-      provider,
-      input,
-      // The OpenAI speech endpoint requires a voice; chat-audio endpoints
-      // fall back to their own default when omitted.
-      voice: params.voice.trim() || (mode === 'speech' ? 'alloy' : ''),
-      instruction: params.instruction.trim(),
-      mode,
-      // Chat-mode message shape: MiMo speaks the assistant message verbatim;
-      // OpenAI audio models need a read-aloud instruction in a user message.
-      chatStyle: /mimo/i.test(params.modelId) ? 'assistant' : 'instruct'
-    },
-    SPEECH_TIMEOUT_MS
-  )) as { base64?: string; mediaType?: string; message?: string; error?: string } | null
+  const result = (await ipcClient.invoke('pet:tts', {
+    provider,
+    input,
+    voice: params.voice.trim() || (mode === 'speech' ? 'alloy' : ''),
+    instruction: params.instruction.trim()
+  })) as { base64?: string; mediaType?: string; message?: string; error?: string } | null
   if (!result?.base64) {
-    // Surface the worker's own error text when present (e.g. an outdated
-    // native worker without the speech route, or an upstream API error).
     throw new Error(result?.message || result?.error || 'speech synthesis returned no audio')
   }
   return { base64: result.base64, mediaType: result.mediaType ?? 'audio/mpeg' }
@@ -463,7 +446,7 @@ export function isVoiceInputConfigured(): boolean {
 
 /**
  * Transcribe recorded voice input with the app's speech recognition model
- * (Settings → Model → Speech recognition) via the native worker.
+ * (Settings → Model → Speech recognition) via the Main TypeScript runtime.
  */
 export async function transcribeVoiceInput(base64: string, mediaType: string): Promise<string> {
   const store = useProviderStore.getState()
@@ -472,17 +455,9 @@ export async function transcribeVoiceInput(base64: string, mediaType: string): P
   await ensureProviderAuthReady(providerId)
   const config = store.getSpeechProviderConfig()
   if (!config) throw new Error('speech recognition model is not configured')
-  if (!(await agentBridge.initialize())) {
-    throw new Error('native worker unavailable for transcription')
-  }
-
-  const result = (await agentBridge.request(
-    'openai-audio/transcribe',
-    {
-      provider: config,
-      file: { base64, mediaType, fileName: 'voice-input.webm' }
-    },
-    SPEECH_TIMEOUT_MS
-  )) as { text?: string } | null
+  const result = (await ipcClient.invoke('pet:transcribe', {
+    provider: config,
+    file: { base64, mediaType, fileName: 'voice-input.webm' }
+  })) as { text?: string } | null
   return result?.text?.trim() ?? ''
 }

@@ -83,6 +83,11 @@ export function registerSkillsHandlers(): void {
     async (args) => await catalog.ensureBuiltin(args.name)
   )
 
+  registerMessagePackHandler<undefined, MutationResult>(
+    'skills:ensure-builtins',
+    async () => await catalog.ensureBuiltins()
+  )
+
   registerMessagePackHandler<undefined, SkillInfo[]>(
     'skills:list',
     async () => await catalog.list()
@@ -115,6 +120,11 @@ export function registerSkillsHandlers(): void {
       const error = await shell.openPath(result.path)
       return error ? { success: false, error } : { success: true }
     }
+  )
+
+  registerMessagePackHandler<{ name: string }, MutationResult & { path?: string }>(
+    'skills:resolve-path',
+    async (args) => await catalog.resolvePath(args.name)
   )
 
   registerMessagePackHandler<{ sourcePath: string }, MutationResult & { name?: string }>(

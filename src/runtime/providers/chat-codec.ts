@@ -2,6 +2,7 @@ import { RuntimeError } from '../../shared/runtime/contracts'
 import type { AgentMessage, ModelDelta, ModelInput } from '../../shared/runtime/model'
 import type { ModelCodec } from './codec'
 import { applyBodyOptions, type ModelTarget } from './transport'
+import { runtimeImageSource } from './image-source'
 import {
   array,
   count,
@@ -13,7 +14,7 @@ import {
   text
 } from './stream'
 
-function messages(input: readonly AgentMessage[]): unknown[] {
+function messages(input: readonly AgentMessage[], workspaceId: string): unknown[] {
   return input.flatMap((message): unknown[] => {
     if (message.role === 'tool')
       return message.results.map((result) => ({
@@ -45,7 +46,7 @@ function messages(input: readonly AgentMessage[]): unknown[] {
           ...(message.text ? [{ type: 'text', text: message.text }] : []),
           ...message.images.map((image) => ({
             type: 'image_url',
-            image_url: { url: image.url ?? `data:${image.mimeType};base64,${image.data}` }
+            image_url: { url: runtimeImageSource(image, workspaceId) }
           }))
         ]
       : message.text
@@ -64,7 +65,7 @@ export const chatCodec: ModelCodec = {
       body: applyBodyOptions(
         {
           model: target.model,
-          messages: messages(history),
+          messages: messages(history, input.run.workspaceId),
           stream: true,
           stream_options: { include_usage: true },
           ...(options.maxTokens ? { max_completion_tokens: options.maxTokens } : {}),

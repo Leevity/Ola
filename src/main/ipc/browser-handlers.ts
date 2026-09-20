@@ -1,4 +1,4 @@
-import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, webContents, type IpcMainInvokeEvent } from 'electron'
 import {
   getBrowserEmulationStatus,
   getBuiltInBrowserStorageSessions
@@ -20,6 +20,7 @@ import {
   takeBrowserUserControl,
   unregisterBrowserUserTab
 } from '../browser/browser-service'
+import { WebContentsViewBrowserService } from '../browser/web-contents-view-service'
 import { getSession } from '../db/sessions-dao'
 import { getProject } from '../db/projects-dao'
 import { loadManagedWorkspaceIds } from '../remote/account-client'
@@ -61,7 +62,124 @@ function registerTrustedBrowserMessagePackHandler<TArgs>(
   })
 }
 
+const webContentsViewBrowserService = new WebContentsViewBrowserService()
+
+webContentsViewBrowserService.onNavigationEvent((event) => {
+  const host = webContents.fromId(event.hostWebContentsId)
+  if (host && !host.isDestroyed()) host.send('browser:view-event', event)
+})
+
 export function registerBrowserHandlers(): void {
+  registerTrustedBrowserMessagePackHandler<void>('browser:view-status', () => ({
+    // WebContentsView is the production host now. Keep an explicit opt-out
+    // for platforms or builds that still need the legacy <webview> fallback.
+    enabled: process.env.OLA_BROWSER_USE_WEBCONTENTS_VIEW !== '0'
+  }))
+
+  registerTrustedBrowserMessagePackHandler<{
+    tabId: string
+    workspaceId: string
+    profileId: string
+    bounds: { x: number; y: number; width: number; height: number }
+    partition?: string
+    userAgent?: string
+    url?: string
+  }>('browser:view-create', async (input, event) => {
+    try {
+      if (
+        !input ||
+        typeof input.tabId !== 'string' ||
+        typeof input.workspaceId !== 'string' ||
+        typeof input.profileId !== 'string' ||
+        !input.bounds ||
+        ![input.bounds.x, input.bounds.y, input.bounds.width, input.bounds.height].every((value) =>
+          Number.isFinite(value)
+        ) ||
+        input.bounds.width <= 0 ||
+        input.bounds.height <= 0 ||
+        (input.url !== undefined && typeof input.url !== 'string')
+      ) {
+        return { success: false, error: 'Invalid WebContentsView tab request' }
+      }
+      if (!(await isAuthorizedBrowserWorkspace(input.workspaceId))) {
+        return { success: false, error: 'Unauthorized workspace' }
+      }
+      const tab = webContentsViewBrowserService.createTab({
+        tabId: input.tabId,
+        workspaceId: input.workspaceId,
+        profileId: input.profileId,
+        hostWebContentsId: event.sender.id,
+        bounds: input.bounds,
+        ...(input.partition ? { partition: input.partition } : {}),
+        ...(input.userAgent ? { userAgent: input.userAgent } : {})
+      })
+      const state = input.url
+        ? await webContentsViewBrowserService.navigate(
+            input.tabId,
+            event.sender.id,
+            'goto',
+            input.url
+          )
+        : webContentsViewBrowserService.getNavigationState(input.tabId, event.sender.id)
+      return { success: true, tabId: tab.tabId, state }
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) }
+    }
+  })
+
+  registerTrustedBrowserMessagePackHandler<{
+    tabId: string
+    bounds: { x: number; y: number; width: number; height: number }
+  }>('browser:view-set-bounds', (input, event) => {
+    try {
+      if (!input?.tabId || !input.bounds || input.bounds.width <= 0 || input.bounds.height <= 0)
+        return { success: false, error: 'Invalid WebContentsView bounds' }
+      webContentsViewBrowserService.setBounds(input.tabId, event.sender.id, input.bounds)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) }
+    }
+  })
+
+  registerTrustedBrowserMessagePackHandler<{
+    tabId: string
+    action: 'back' | 'forward' | 'reload' | 'stop' | 'goto'
+    url?: string
+  }>('browser:view-navigate', async (input, event) => {
+    try {
+      if (
+        !input?.tabId ||
+        !['back', 'forward', 'reload', 'stop', 'goto'].includes(input.action) ||
+        (input.action === 'goto' && typeof input.url !== 'string')
+      )
+        return { success: false, error: 'Invalid WebContentsView navigation' }
+      const state = await webContentsViewBrowserService.navigate(
+        input.tabId,
+        event.sender.id,
+        input.action,
+        input.url
+      )
+      return { success: true, state }
+    } catch (error) {
+      return { success: false, error: getErrorMessage(error) }
+    }
+  })
+
+  registerTrustedBrowserMessagePackHandler<{ tabId: string }>(
+    'browser:view-destroy',
+    (input, event) => {
+      try {
+        return {
+          success: Boolean(
+            input?.tabId && webContentsViewBrowserService.destroyTab(input.tabId, event.sender.id)
+          )
+        }
+      } catch (error) {
+        return { success: false, error: getErrorMessage(error) }
+      }
+    }
+  )
+
   registerTrustedBrowserMessagePackHandler<{
     tabId: string
     workspaceId: string

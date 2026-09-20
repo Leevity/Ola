@@ -12,6 +12,7 @@ import { WorkModesPanel } from './WorkModesPanel'
 import { AdvancedSettingsPanel } from './AdvancedSettingsPanel'
 import { ProfilePanel } from './ProfilePanel'
 import { OlaAccountPanel } from './OlaAccountPanel'
+import { MigrationPanel } from './MigrationPanel'
 import type { SettingsPageId } from './settings-registry'
 
 export type SettingsPanelComponent = ComponentType
@@ -35,6 +36,7 @@ const EXTERNAL_PANEL_BINDINGS: Partial<Record<SettingsPageId, SettingsPanelCompo
   projectIntelligence: ProjectIntelligenceDashboard,
   profile: ProfilePanel,
   olaAccount: OlaAccountPanel,
+  migration: MigrationPanel,
   advanced: AdvancedSettingsPanel
 }
 

@@ -122,11 +122,11 @@ Keep entries short. If a memory needs pages of explanation, link to a project do
 - Confidence: high
 - Content:
   - Ola is a four-layer Electron app: main process, preload bridge, renderer UI, and main-process agent runtime.
-  - Main process handles system access, IPC, SQLite, shell, SSH, channels, MCP, cron, sync, and native worker integration.
+  - Main process handles system access, IPC, SQLite, shell, SSH, channels, MCP, cron, sync, and TypeScript runtime integration.
   - Preload exposes a narrow safe bridge.
   - Renderer uses React 19, Tailwind, Zustand, i18n, Monaco, xterm, and chat/workflow UI components.
   - Shared contracts live under `src/shared`.
-  - Native worker lives under `sidecars/Ola.Native.Worker` and uses MessagePack/local IPC for heavier native work.
+  - TypeScript runtime lives in the Electron Main/runtime boundary and uses typed IPC for local execution.
 - Use When:
   - Editing code or explaining system boundaries.
   - Deciding where a feature belongs.
@@ -155,7 +155,7 @@ Keep entries short. If a memory needs pages of explanation, link to a project do
   - `npm run lint`: run ESLint with cache.
   - `npm run typecheck`: run TypeScript checks for node/preload and renderer.
   - `npm run build`: typecheck and build production output.
-  - `npm run native:publish`: build the .NET native sidecar for the current platform.
+  - `npm run verify:ts-codegraph`: verify the TypeScript/WASM CodeGraph runtime.
   - `npm run format`: run Prettier.
 - Use When:
   - Verifying changes.

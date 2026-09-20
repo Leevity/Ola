@@ -100,7 +100,9 @@ export class ErrorBoundary extends Component<Props, State> {
                 {i18n.t('errorBoundary.errorDetails', { ns: 'cowork' })}
               </summary>
               <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-muted p-3 text-[11px] leading-relaxed text-muted-foreground">
-                {this.state.error.stack}
+                {[this.state.error.stack, this.state.errorInfo?.componentStack]
+                  .filter(Boolean)
+                  .join('\n\nComponent stack:\n')}
               </pre>
             </details>
           )}

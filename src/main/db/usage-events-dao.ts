@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import {
   canaryGetRawUsageRows,
@@ -117,7 +117,7 @@ async function usageQuery(
   timeoutMs = 120_000
 ): Promise<NativeUsageAnalyticsResult> {
   const workspaceId = await requireUsageWorkspace((params as { workspaceId?: string }).workspaceId)
-  const result = await getNativeWorker().request<NativeUsageAnalyticsResult>(
+  const result = await getTsDatabaseRouteGuard().request<NativeUsageAnalyticsResult>(
     'db/usage-query',
     { operation, ...params, workspaceId },
     timeoutMs
@@ -164,7 +164,7 @@ export async function addUsageEvent(
     })
     return
   }
-  const result = await getNativeWorker().request<NativeUsageAddEventResult>(
+  const result = await getTsDatabaseRouteGuard().request<NativeUsageAddEventResult>(
     'db/usage-add-event',
     { ...event, workspace_id: workspaceId },
     120_000
@@ -184,6 +184,15 @@ async function getUsageOverviewInternal(query: UsageEventsQuery): Promise<Record
   if (canary !== undefined) {
     await requireUsageWorkspace(workspaceId)
     return canary
+  }
+  const writer = businessWriteCanary()
+  if (writer) {
+    return (
+      (await writer.usageOverview<Record<string, unknown>>({
+        ...query,
+        workspaceId
+      })) ?? {}
+    )
   }
   return usageQueryRow('overview', { ...query, workspaceId })
 }
@@ -219,6 +228,13 @@ async function rawUsageRowsWithCanary(
   if (canary !== undefined) {
     await requireUsageWorkspace(workspaceId)
     return canary
+  }
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.usageRawRows<Record<string, unknown>>(operation, {
+      ...query,
+      workspaceId
+    })
   }
   return usageQueryRows(operation, { ...query, workspaceId })
 }
@@ -262,6 +278,14 @@ async function usageActivityWithCanary(
     await requireUsageWorkspace(workspaceId)
     return operation === 'activity-overview' ? (canary.row ?? {}) : (canary.rows ?? [])
   }
+  const writer = businessWriteCanary()
+  if (writer) {
+    const result = await writer.queryActivityUsage<Record<string, unknown>>(operation, {
+      ...query,
+      workspaceId
+    })
+    return operation === 'activity-overview' ? (result.row ?? {}) : (result.rows ?? [])
+  }
   return operation === 'activity-overview'
     ? usageQueryRow(operation, { ...query, workspaceId })
     : usageQueryRows(operation, { ...query, workspaceId })
@@ -285,7 +309,9 @@ export async function deleteUsageEvents(query: UsageEventsQuery): Promise<{ dele
 }
 
 async function cleanupExpiredUsageEventsInternal(): Promise<UsageEventsCleanupResult> {
-  const result = await getNativeWorker().request<NativeUsageMaintenanceResult>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.maintainUsage(Date.now())
+  const result = await getTsDatabaseRouteGuard().request<NativeUsageMaintenanceResult>(
     'db/usage-maintenance',
     {},
     120_000
@@ -320,6 +346,15 @@ async function listUsageEventsInternal(query: UsageEventsQuery): Promise<UsageEv
   if (canary !== undefined) {
     await requireUsageWorkspace(workspaceId)
     return canary
+  }
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.usageEvents<UsageEventListRow>({
+      ...query,
+      workspaceId,
+      limit: query.limit,
+      offset: query.offset
+    })
   }
   return usageQueryRows('list', { ...query, workspaceId }) as Promise<UsageEventListRow[]>
 }

@@ -1,11 +1,16 @@
 import { RuntimeError, type RunSpec } from '../../shared/runtime/contracts'
 import type { AccountGateway } from '../../shared/runtime/host'
 import type { ModelOptions, ModelProtocol } from '../../shared/runtime/model'
+import { openResponsesWebSocket, ResponsesWebSocketPool } from './responses-websocket'
 
 export interface ModelTarget {
   protocol: ModelProtocol
   model: string
   options?: ModelOptions
+  /** Main-owned, non-secret Responses WebSocket routing metadata. */
+  websocketUrl?: string
+  websocketMode?: 'auto' | 'disabled'
+  responsesSessionScope?: string
 }
 export interface ModelRequest {
   endpoint: string
@@ -51,15 +56,26 @@ function effectiveOptions(target: ModelTarget, run: RunSpec): ModelOptions | und
 
 /** Credentials are resolved again per request; never cached on run records or sent to a codec. */
 export class LocalModelTransport implements ModelTransport {
+  private readonly responsesWebSocketPool = new ResponsesWebSocketPool()
+
   constructor(
     private resolvePrivate: (run: RunSpec) => Promise<LocalModelTarget>,
     private fetcher: typeof fetch = fetch
   ) {}
   async resolve(run: RunSpec): Promise<ModelTarget> {
     if (run.modelSource.kind !== 'local') throw new RuntimeError('ACCOUNT_GATEWAY_REQUIRED')
-    const { protocol, model, options } = await this.resolvePrivate(run)
+    const resolved = await this.resolvePrivate(run)
+    const { protocol, model, options } = resolved
     const effective = effectiveOptions({ protocol, model, options }, run)
-    return { protocol, model, ...(effective ? { options: effective } : {}) }
+    const responsesSessionScope = resolved.responsesSessionScope ?? effective?.responsesSessionScope
+    return {
+      protocol,
+      model,
+      ...(effective ? { options: effective } : {}),
+      ...(resolved.websocketUrl ? { websocketUrl: resolved.websocketUrl } : {}),
+      ...(resolved.websocketMode ? { websocketMode: resolved.websocketMode } : {}),
+      ...(responsesSessionScope ? { responsesSessionScope } : {})
+    }
   }
   async request(
     run: RunSpec,
@@ -72,6 +88,8 @@ export class LocalModelTransport implements ModelTransport {
     signal.throwIfAborted()
     if (target.protocol !== expected.protocol || target.model !== expected.model)
       throw new RuntimeError('MODEL_BINDING_CHANGED')
+    const effective = effectiveOptions(target, run)
+    const responsesSessionScope = target.responsesSessionScope ?? effective?.responsesSessionScope
     let base = target.baseUrl.trim().replace(/\/+$/, '')
     if (target.protocol === 'anthropic') base = base.replace(/\/v1(?:\/messages)?$/, '')
     if (target.protocol === 'gemini') base = base.replace(/\/openai$/, '')
@@ -109,6 +127,27 @@ export class LocalModelTransport implements ModelTransport {
           .replace(/\{\{\s*sessionId\s*\}\}/g, run.sessionId)
           .replace(/\{\{\s*model\s*\}\}/g, target.model)
       )
+    if (
+      target.protocol === 'openai-responses' &&
+      target.websocketMode !== 'disabled' &&
+      target.websocketUrl
+    ) {
+      if (responsesSessionScope) {
+        return await this.responsesWebSocketPool.open({
+          key: `${run.workspaceId}\u0000${run.sessionId}\u0000${responsesSessionScope}\u0000${target.websocketUrl}\u0000${target.model}\u0000${headers.get('authorization') ?? ''}`,
+          url: target.websocketUrl,
+          headers,
+          body: request.body,
+          signal
+        })
+      }
+      return await openResponsesWebSocket({
+        url: target.websocketUrl,
+        headers,
+        body: request.body,
+        signal
+      })
+    }
     let response: Response
     try {
       response = await this.fetcher(url, {

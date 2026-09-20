@@ -21,17 +21,17 @@ There is no root test suite. For UI/IPC/workflow changes, smoke test with `npm r
 Four-layer Electron + Node.js app. Keep process boundaries explicit — system access stays in main, UI state stays in renderer, shared types go through `src/shared`.
 
 1. **Electron main (`src/main/`)** — system and orchestration layer. App bootstrap (`index.ts`),
-   window lifecycle, IPC handlers (`ipc/`), Native Worker supervision, cron, channels, MCP clients,
-   SSH, auto-updates, and crash logging. Its `db/` modules are IPC wrappers rather than the SQLite
-   engine.
+   window lifecycle, IPC handlers (`ipc/`), TypeScript runtime supervision, cron, channels, MCP clients,
+   SSH, auto-updates, and crash logging. Its `db/` modules expose the Main-owned TypeScript
+   BusinessRepository and SQLite schema services through IPC.
 2. **Preload (`src/preload/`)** — secure bridge exposing a narrow API surface to the renderer. All main↔renderer traffic goes through here; do not add `nodeIntegration` shortcuts.
 3. **Renderer (`src/renderer/src/`)** — React 19 UI. Zustand stores (`stores/`), i18n (`locales/`, `react-i18next`, `en`/`zh`), Tailwind v4, Monaco, xterm, recharts. The renderer owns message presentation, approvals, and session UX. `session-runtime-router.ts` buffers message state for background (non-visible) sessions and flushes it when those sessions come to the foreground.
-4. **Native Worker runtime (`sidecars/Ola.Native.Worker/`)** — the provider-agnostic Agent loop and
-   SQLite owner. Electron main supervises the process and bridges MessagePack streams plus reverse
-   tool/approval requests; the renderer remains the interaction surface.
+4. **TypeScript runtime (`src/runtime/`)** — the provider-agnostic Agent loop, scheduler, storage,
+   and CodeGraph implementation. Electron main owns the runtime service and typed IPC projections;
+   the renderer remains the interaction surface.
 
-Agent execution runs in `Ola.Native.Worker`. The renderer remains the UI and tool/approval surface;
-Electron main is the lifecycle, policy, and transport boundary.
+Agent execution runs in the TypeScript runtime. The renderer remains the UI and tool/approval
+surface; Electron main is the lifecycle, policy, and transport boundary.
 
 ### IPC wiring
 
@@ -57,16 +57,14 @@ Bundled skills live in `resources/skills/` as folders containing a `SKILL.md` me
 
 ### Agent runtime
 
-The Native Worker Agent Runtime is provider-agnostic. `native-agent-runtime.ts` supervises its
-handshake and active runs, while `sidecar-manager.ts` forwards streams and services reverse
-requests that require renderer-owned tools or approval state.
+The TypeScript Agent Runtime is provider-agnostic. Main owns its lifecycle and active runs, while
+typed runtime IPC forwards streams and services renderer-owned tools or approval state.
 
 ### Data and runtime assets
 
 - User data directory: `~/.ola/`. Contains `data.db` (SQLite), plus user-customizable `prompts/` and `agents/` directories loaded at runtime.
-- SQLite is opened and migrated by `sidecars/Ola.Native.Worker/Modules/Db/DbSchemaMigrator.cs`.
-  `src/main/db/database.ts` requests `db/initialize`; the remaining TypeScript DB modules bridge
-  typed calls to Native Worker routes. Schema changes remain additive.
+- SQLite is opened and migrated by the TypeScript BusinessRepository and versioned schema worker.
+  Schema changes remain additive.
 - Bundled runtime assets (shipped to users, loaded at runtime — not source): `resources/agents`, `resources/skills`, `resources/prompts`, `resources/commands`.
 
 `src/shared/` holds cross-process TypeScript contracts. `src/components`, `src/hooks`, `src/lib` at the repo root (not under `renderer/`) are additional shared utilities.

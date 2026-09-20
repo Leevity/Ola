@@ -20,21 +20,6 @@ vi.mock('../../src/main/ipc/sync-handlers', () => ({
     if (state.failAt === 'sync') throw new Error('SYNC_RUNS_ACTIVE_DURING_HANDOVER')
   }
 }))
-vi.mock('../../src/main/ipc/native-agent-runtime', () => ({
-  getNativeAgentRuntimeManager: () => ({
-    quiesceForHandover: async () => {
-      state.calls.push('agent')
-      if (state.failAt === 'agent') throw new Error('NATIVE_AGENT_RUNS_ACTIVE_DURING_HANDOVER')
-    }
-  })
-}))
-vi.mock('../../src/main/lib/native-worker', () => ({
-  parkNativeWorkerForHandover: async () => {
-    state.calls.push('worker')
-    if (state.failAt === 'worker') throw new Error('NATIVE_WORKER_REQUEST_DRAIN_TIMEOUT')
-  }
-}))
-
 import { quiesceDesktopLegacyBusinessWriter } from '../../src/main/runtime/business-handover-quiesce'
 
 beforeEach(() => {
@@ -42,17 +27,15 @@ beforeEach(() => {
   state.failAt = ''
 })
 
-it('quiesces channels, scheduled runs, sync and Agent admissions before parking the Worker', async () => {
+it('quiesces the remaining legacy writers before promoting TS ownership', async () => {
   await quiesceDesktopLegacyBusinessWriter()
-  expect(state.calls).toEqual(['channels', 'cron', 'sync', 'agent', 'worker'])
+  expect(state.calls).toEqual(['channels', 'cron', 'sync'])
 })
 
 it.each([
   ['channels', ['channels']],
   ['cron', ['channels', 'cron']],
-  ['sync', ['channels', 'cron', 'sync']],
-  ['agent', ['channels', 'cron', 'sync', 'agent']],
-  ['worker', ['channels', 'cron', 'sync', 'agent', 'worker']]
+  ['sync', ['channels', 'cron', 'sync']]
 ])('does not advance past a failed %s gate', async (failed, calls) => {
   state.failAt = failed
   await expect(quiesceDesktopLegacyBusinessWriter()).rejects.toThrow()

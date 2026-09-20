@@ -2,8 +2,12 @@ import { shell } from 'electron'
 import { readFile } from 'node:fs/promises'
 import { registerMessagePackHandler } from './messagepack-handler'
 import type { ExtensionInstance } from '../../shared/extension-types'
-import { nativeExtensionRequest } from './extension-native-bridge'
-import { getExtensionService, getExtensionStorage } from '../extensions/extension-runtime'
+import {
+  getExtensionPackageManager,
+  getExtensionService,
+  getExtensionStorage
+} from '../extensions/extension-runtime'
+import { executeExtensionHttpTool } from '../extensions/extension-http-tool'
 
 type MutationResult = {
   success: boolean
@@ -38,29 +42,42 @@ function getExtensionId(args: string | { id?: string }): string {
 
 export function registerExtensionHandlers(): void {
   registerMessagePackHandler<undefined, ExtensionInstance[]>('extension:list', async () => {
-    return await nativeExtensionRequest<ExtensionInstance[]>('extension/list')
+    return await getExtensionService().list()
   })
 
   registerMessagePackHandler<{ sourcePath: string }, MutationResult>(
     'extension:install-from-folder',
     async (args) => {
-      return await nativeExtensionRequest<MutationResult>('extension/install-from-folder', args)
+      try {
+        await getExtensionPackageManager().installFromFolder(args.sourcePath)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
     }
   )
 
   registerMessagePackHandler<ExtensionUpdateArgs, MutationResult>(
     'extension:update',
     async (args) => {
-      return await nativeExtensionRequest<MutationResult>('extension/update', args)
+      try {
+        await getExtensionService().update(args.id, args.patch)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
     }
   )
 
   registerMessagePackHandler<string | { id?: string }, MutationResult>(
     'extension:remove',
     async (args) => {
-      return await nativeExtensionRequest<MutationResult>('extension/remove', {
-        id: getExtensionId(args)
-      })
+      try {
+        await getExtensionPackageManager().remove(getExtensionId(args))
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
     }
   )
 
@@ -72,6 +89,19 @@ export function registerExtensionHandlers(): void {
         await getExtensionService().getManifest(id)
         const error = await shell.openPath(getExtensionService().getPath(id))
         return error ? { success: false, error } : { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    }
+  )
+
+  registerMessagePackHandler<string | { id?: string }, MutationResult & { path?: string }>(
+    'extension:resolve-path',
+    async (args) => {
+      try {
+        const id = getExtensionId(args)
+        await getExtensionService().getManifest(id)
+        return { success: true, path: getExtensionService().getPath(id) }
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) }
       }
@@ -91,6 +121,24 @@ export function registerExtensionHandlers(): void {
       }
     }
   )
+
+  registerMessagePackHandler<
+    { id: string; toolName: string; input?: Record<string, unknown> },
+    unknown
+  >('extension:execute-tool', async (args) => {
+    try {
+      const extension = await getExtensionService().getRuntime(args.id)
+      return await executeExtensionHttpTool({
+        manifest: extension.manifest,
+        enabled: extension.enabled,
+        config: extension.config,
+        toolName: args.toolName,
+        input: args.input
+      })
+    } catch (error) {
+      return { error: error instanceof Error ? error.message : String(error) }
+    }
+  })
 
   registerMessagePackHandler<ExtensionStorageGetArgs>('extension:storage-get', async (args) => {
     try {

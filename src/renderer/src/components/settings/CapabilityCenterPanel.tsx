@@ -3,6 +3,8 @@ import { useUIStore } from '@renderer/stores/ui-store'
 import { AppPluginPanel } from './AppPluginPanel'
 import { ExtensionPanel } from './ExtensionPanel'
 import { SettingsPageHeader } from './settings-primitives'
+import { Badge } from '@renderer/components/ui/badge'
+import { CAPABILITY_LIFECYCLE } from '../../../../shared/capability-lifecycle'
 
 export function CapabilityCenterPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
@@ -28,6 +30,47 @@ export function CapabilityCenterPanel(): React.JSX.Element {
           title={t('plugin.title')}
           description={t('capabilityCenter.description')}
         />
+      </section>
+
+      <section className="shrink-0 rounded-lg border border-border/60 bg-muted/10 p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xs font-medium">
+              {t('capabilityCenter.lifecycleTitle', { defaultValue: 'Capability lifecycle' })}
+            </h2>
+            <p className="text-[10px] text-muted-foreground">
+              {t('capabilityCenter.lifecycleDescription', {
+                defaultValue:
+                  'High-impact capabilities remain explicitly labelled until their release gates are complete.'
+              })}
+            </p>
+          </div>
+          <Badge variant="outline" className="shrink-0 text-[10px]">
+            {t('capabilityCenter.lifecyclePolicy', { defaultValue: 'Release policy' })}
+          </Badge>
+        </div>
+        <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+          {CAPABILITY_LIFECYCLE.map((capability) => (
+            <div
+              key={capability.id}
+              className="flex items-center gap-2 rounded-md border border-border/50 px-2 py-1.5"
+            >
+              <span className="min-w-0 flex-1 truncate text-[11px]">
+                {t(`capabilityCenter.capabilities.${capability.id}`, {
+                  defaultValue: capability.id
+                })}
+              </span>
+              <Badge
+                variant={capability.status === 'ga' ? 'default' : 'secondary'}
+                className="h-5 px-1.5 text-[10px]"
+              >
+                {t(`capabilityCenter.status.${capability.status}`, {
+                  defaultValue: capability.status.toUpperCase()
+                })}
+              </Badge>
+            </div>
+          ))}
+        </div>
       </section>
 
       <div

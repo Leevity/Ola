@@ -200,6 +200,7 @@ function dispatch(method, args) {
       .map((row) => {
         const summary = run(row)
         delete summary.prompt
+        delete summary.promptImages
         delete summary.history
         delete summary.modelOptions
         return summary

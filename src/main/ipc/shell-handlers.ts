@@ -44,7 +44,7 @@ interface ShellOutputSummary {
   firstChunkMs?: number
   shell?: string
   outputFile?: string
-  executionEngine?: 'main' | 'native_aot'
+  executionEngine?: 'main'
   timedOut?: boolean
   aborted?: boolean
 }
@@ -63,7 +63,7 @@ interface ShellExecutionTiming {
   spawnMs: number
   firstChunkMs?: number
   shell: string
-  executionEngine?: 'main' | 'native_aot'
+  executionEngine?: 'main'
   timedOut?: boolean
   aborted?: boolean
 }
@@ -436,8 +436,8 @@ export function registerShellHandlers(): void {
         timing: {
           totalMs: Date.now() - startedAt,
           spawnMs: 0,
-          shell: 'native',
-          executionEngine: 'native_aot'
+          shell: args.shell ?? 'default',
+          executionEngine: 'main'
         }
       })
     } finally {

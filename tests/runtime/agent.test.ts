@@ -89,6 +89,43 @@ describe('headless agent and tools', () => {
       { role: 'user', text: 'read' }
     ])
   })
+
+  it('passes bounded images to the provider for history and the current turn', async () => {
+    let received: readonly AgentMessage[] = []
+    const provider: ProviderAdapter = {
+      async *stream(input) {
+        received = [...input.messages]
+        yield { type: 'text', text: 'seen' }
+      }
+    }
+    await createAgentExecutor(provider, new ToolExecutor([], async () => false))(
+      {
+        ...run,
+        prompt: 'describe',
+        promptImages: [{ mimeType: 'image/png', data: 'aGVsbG8=' }],
+        history: [
+          {
+            role: 'user',
+            text: 'Earlier',
+            images: [{ mimeType: 'image/jpeg', url: 'https://example.test/earlier.jpg' }]
+          }
+        ]
+      },
+      {
+        signal: new AbortController().signal,
+        emit: async () => undefined,
+        requestInteraction: async () => undefined
+      }
+    )
+    expect(received).toEqual([
+      {
+        role: 'user',
+        text: 'Earlier',
+        images: [{ mimeType: 'image/jpeg', url: 'https://example.test/earlier.jpg' }]
+      },
+      { role: 'user', text: 'describe', images: [{ mimeType: 'image/png', data: 'aGVsbG8=' }] }
+    ])
+  })
   it('persists final provider usage with the completed turn', async () => {
     const completed: unknown[] = []
     const provider: ProviderAdapter = {

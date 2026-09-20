@@ -1,5 +1,117 @@
 # Ola TS 运行时迁移记录
 
+> 当前状态（2026-09-20）：生产源码、开发启动、核心 CI、当前 `out` 构建和六份 staging 目录均已切换到 TypeScript/WASM；生产依赖图与产物扫描未发现可达的 `.NET Native Worker`、.NET CodeGraph 或旧外部 Worker 路径。验收台账的 358 条路由与 18 个 CodeGraph 语言项为 376/376；P0、P2–P9、P11 已通过。严格退出仍缺完整 Electron/功能页人工验收、真实主站联调，以及六平台原生安装／升级／启动／签名证据。阶段进度只以[验收台账](acceptance-ledger.json)和最新[验收报告](acceptance-report-2026-09-20.md)为准；下方按日期保留的旧记录只说明当次验证，不代表当前生产路径。
+
+后续执行顺序、证据要求和严格退出条件见 [补充验收基准](SUPPLEMENTAL-ACCEPTANCE.md)。
+
+> 当前 Cron 收口（2026-09-20）：定时触发、手动运行、取消和运行状态查询均固定走 TS 执行器；旧 Cron 执行器、运行时选择器和遗留资格判断已从源码树移除。本文下方较早的 Native/回退描述是历史记录，不代表当前生产路径。当前完成状态只以[验收台账](acceptance-ledger.json)和最新[验收报告](acceptance-report-2026-09-20.md)为准。
+
+> 2026-09-20 频道 SSH 入口收口：频道自动回复不再因会话绑定 SSH 连接而无条件回退旧 Agent；TS Run 现在携带经过 Main 授权的 `sshConnectionId`，并保留无效连接的显式拒绝。Node/Web 类型检查、构建和相关全量回归保持通过。
+
+> 2026-09-20 本轮继续收口：修复生产 TS BusinessRepository 下渠道任务入队后不再 flush 的断路；Main Provider secret gateway 改为仅一次迁移旧 `config.json` 密钥到加密存储，运行时不再把旧值作为回退源。新增供应商密钥迁移回归，渠道任务交付专项 **14 项**及密钥专项 **5 项**通过，Node 类型检查通过。迁移仍未完成：Agent/渠道/团队等完整 parity、跨平台实机验收和所有 legacy 路由清理仍在进行。
+
+> 2026-09-20 本轮收口验证：生产态旧 Agent bridge 在能力探测失败时快速返回，不再为 `sidecar:start` 触发 Native Worker 重试；Native start/recycle IPC 在默认生产配置下显式拒绝，避免白屏窗口进入无限等待。`npm run build`、`npm run test:runtime`（237 个测试文件／863 项测试）、`npm run verify:release-gates`、`npm run verify:ci-core` 及 macOS/Linux/Windows 三平台 runtime staging 完整性均通过。该修复改善启动体验，但不改变迁移完成度：旧 Agent runtime 与部分 legacy route parity 仍未完成。
+
+> 2026-09-20 真实用户库 handover 预检：对当前本机 `data.db` 只读执行 legacy contract 校验，约 153 MB 数据库的业务表与 Wiki schema 均通过；临时目录内生成 backup、manifest、rollback baseline，`verify-legacy-handover` 与 `drill-legacy-rollback` 均成功，源库未切换、未写入。该证据证明真实数据可迁移与可回滚，但不代替用户确认后的生产 ownership 切换。
+
+> 2026-09-20 Settings 体验门禁纳入核心 CI：`verify:settings-visual`、Settings registry scan 与 settings typecheck 现在由 `verify:ci-core` 强制执行；本轮视觉契约、国际化审计、Settings registry/typecheck 和核心 CI 全部通过。
+
+> 2026-09-20 macOS arm64 staging 历史记录：该次构建与重启测试通过；记录中涉及旧 Worker 的构建步骤以当时流水线为准。产物仍未完成 Developer ID 签名／公证，也不能代表六平台原生验收。
+
+> 2026-09-20 三平台 staging 资产门禁复验：macOS arm64、Linux arm64 和 Windows arm64 unpacked 产物通过 `verify-runtime-staging`；默认包不含 `Ola.Native.Worker`，但仍包含独立 .NET CodeGraph。该结果不替代对应系统实机启动／安装验收。
+
+> 2026-09-20 macOS staging handover restart 复验：使用 `dist-staged-mac/mac-arm64/Ola.app` 运行 `verify:electron-handover-restart`，1 个文件／1 项测试通过；重启阶段仍能在 Native 启动前恢复 TS ownership。
+
+> 2026-09-20 Electron workspace IPC 门禁收口：多窗口／工作空间路由验证正式纳入 `verify:ci-core`，不再只作为独立手动命令；新增门禁与全量核心 CI 通过。
+
+> 2026-09-20 阶段 22 体验门禁收口：`verify:ci-core` 进一步纳入 Task Board、Workbench Registry、只读工具并行、Run Lifecycle、Settings routes、Product Experience、Task Profile 和用户可见错误专项；同时修复 `verify:run-lifecycle` 的 Node 侧 Renderer IPC/store 隔离，核心 CI 全量通过。
+
+> 2026-09-20 Native Project Wiki 语义归档迁移：TS handover 现在统计并保留旧 `wiki_documents`／`wiki_generation_runs`，在 TS-owned archive 中校验文档与生成记录数量；预检显示 warning，归档不完整时仍在 Promote 前失败。旧文档不被错误转换成代码索引 Wiki。全量回归 **236 个测试文件／855 项测试通过**。
+
+> 2026-09-20 全量 CI 门禁收口：`verify:ci-core` 新增纳入 SSH Store／重连／续传、Provider Main Store、Draw Graph 四个切片与媒体 runtime 专项验证，避免阶段 15–21 只存在独立脚本而未进入核心 CI。扩展后的核心门禁全量通过。
+
+> 2026-09-20 上下文压缩 TS-first：长对话压缩现在优先通过 TS Runtime 生成摘要，并保留安全边界、原始任务、工具调用/结果、压缩边界元数据和最近消息；TS 不可用或摘要失败时继续回退 Native sidecar，专项回归覆盖 TS 摘要、工具对边界和 sidecar 回退。全量回归 **236 个测试文件／855 项测试通过**。
+
+> 2026-09-20 通用辅助文本入口收口：共享 `runSidecarTextRequest` 现在对标题、Git 提交信息、宠物 claim、Draw Prompt、记忆和推荐等无工具纯文本请求优先使用显式 workspace/model 绑定的 TS Runtime；不满足资格或运行失败时保留 sidecar fallback。定向文本资格回归 **46 项通过**。
+
+> 2026-09-20 普通 Chat 图片路径收口：TS Runtime 已支持的受限 PNG／JPEG／GIF／WebP 图片不再因“存在图片”被入口无条件绕过；只有不满足 workspace/model、provider 或内容边界的图片请求继续走 provider-only 兼容路径。全量回归 **235 个测试文件／851 项测试通过**。
+
+> 2026-09-19 自动模型路由与频道工具收口：自动模型分类器现在优先使用显式 workspace/model 绑定的 TS Runtime；频道自动回复的 TS 工具快照扩展到 Main 已实现的群摘要、音频/视频、@成员、催办和 Bitable 工具，避免 Renderer 过滤造成静默 sidecar 降级。定向资格回归 **20 项通过**；完整回归待本轮最终验收执行。
+
+> 2026-09-19 辅助文本工作流迁移切片：Final Outcome 汇总与 Skill 安全审查在显式 workspace/model 绑定和 TS Runtime 可用时优先走 TS 文本运行；Prompt Optimizer 现通过 Main-owned `WriteOptimizedPrompts` 结构化工具写回 1–3 个选项；无安全绑定时保留 sidecar 兼容路径。全量回归为 **235 个测试文件／850 项测试通过**。
+
+> 2026-09-19 翻译 Agent 缓冲工具接管：TS Runtime 新增 Main-owned、按 run 隔离的 `Write`／`Edit`／`Read`／`FileRead` 翻译工具；翻译缓冲只存在于当前运行，不写用户文件，文件读取限制在选定源文件夹，Renderer 继续接收缓冲更新和工具活动投影。新增工具、路径隔离和授权回归。
+
+> 2026-09-19 翻译主流程迁移切片：普通纯文本翻译现在优先进入 TS Runtime，保留图片/复杂内容及未绑定模型的安全回退；Agent 翻译编辑模式在具备显式模型和 workspace 绑定时也优先使用上述翻译缓冲工具。
+
+> 2026-09-19 Pet 主工作流迁移切片：桌面宠物对话现在优先进入 TS Runtime，保留只读项目工具、历史消息、图片、用量和经验统计；仅在 TS Runtime 不可用或工作区／模型绑定无法安全解析时回退 sidecar。类型检查、Lint、构建、release gates 与全量回归 **233 个测试文件／844 项测试通过**。
+
+> 2026-09-19 真实数据库 handover 兼容性收口：预检识别当前 Native Project Wiki schema；TS handover 副本会保留新版表为版本化归档，并建立旧扫描 Wiki 的兼容表，避免真实 `~/.ola/data.db` 因 schema 漂移被误判为不可迁移。真实库复制副本已完成 v1–v3 ledger、TS Wiki 读写验证；原库未切换 ownership。全量回归 **233 个测试文件／841 项测试通过**。
+
+> 2026-09-19 团队终态投影修复：后台 TS 子 Agent 失败或取消时，团队任务现在分别持久化为 `failed`／`cancelled`，不再误报 `completed`；Renderer 的团队任务列表、状态图标、进度和迟到更新保护已同步支持两个终态。定向回归 **3 个文件／8 项测试通过**。
+
+> 2026-09-19 统一执行记录契约起步：新增共享 `ExecutionRecord` 归一化层，并接入受窗口工作空间授权保护的 `execution-records:list` MessagePack IPC，将 TS 聊天运行与 Cron 运行投影为同一份脱敏结构，包含工作空间、项目、SSH 主机、状态、审批、工具失败、命令/投递摘要、文件变更、产物和失败原因；控制字符、长度、数量和未知状态均有界处理，新增回归。右侧面板已接入该列表，支持工作空间切换、刷新、空态和错误重试；详情跳转与阶段 23 的完整产品闭环仍待补齐，暂不宣称阶段 23 已完成。
+
+> 2026-09-19 阶段 23/25 体验收敛：统一执行记录支持展开查看会话、SSH、文件变更和产物，并可跳回关联会话；审批拒绝状态纳入归一化。能力中心新增本地 Agent、SSH、频道、Cookie、媒体和统一审计的 Prototype/Internal/Beta/GA 生命周期声明；Chat Home 新增本地代码、远程诊断、自动化通知三条首次成功路径入口，均复用现有运行逻辑。类型检查、Lint 与 **233 个 runtime 测试文件／841 项测试**保持通过；真实 Provider/SSH/渠道、跨平台原生启动和生产 ownership handover 仍需外部环境验收。
+
+> 2026-09-19 发布 staging 修复与验收：发布 staging 复制 `.app` 时保留 Electron Framework 的相对符号链接，并在 `verify-runtime-staging` 中拒绝断链或逃出产物根目录的链接；重新生成 macOS arm64 DMG/ZIP 后，runtime staging 完整性与 `verify:electron-handover-restart` **1/1** 通过。通用 electron-builder 入口在本机因完整开发依赖树 OOM，staging 入口可正常完成；本机无有效 Developer ID，仍未完成正式签名／公证。当前完整 runtime 回归为 **232 个测试文件／837 项测试通过**。
+
+> 2026-09-19 Plan Mode TS 接入与交互回归：Main TS Runtime 新增 `EnterPlanMode`／`ExitPlanMode` 的工作空间限定持久化、`AskUserQuestion` 的 question interaction、`Agent` 兼容入口和 `visualize_show_widget` 结果工具；Renderer 已接入 question 回答、计划状态刷新和 camelCase 计划投影。新增 Plan Mode 资格与工具行为测试；随后补齐 SSH 运行契约后全量 runtime 回归现为 **232 个测试文件、836 项测试通过**。这仍不等于 Native Worker 生产写入所有权已退役，也不覆盖真实供应商端点及跨平台原生启动验收。
+> 2026-09-19 SSH Agent TS 接入：运行契约携带经过校验的非敏感 `sshConnectionId`，Main TS Runtime 提供空间授权后的远程 `Read`／`LS`／`Glob`／`Grep`／`Write`／`Edit`／`Bash`，凭据继续留在 Main／Native SSH 数据面；远程 `.plan/<id>.md` 生命周期与计划审批读取已接入，绑定 SSH 连接的 Plan Mode 现可进入 TS Runtime。全量 runtime 回归现为 **232 个测试文件、836 项测试通过**；真实远端 Electron 端到端仍待对应环境验收。
+
+> 2026-09-19 跨平台 staging 复验：同一当前构建通过 release staging 生成 Linux arm64 与 Windows arm64 unpacked 目录，`verify-runtime-staging` 分别校验主程序、TS read/write Worker 与 Native Worker 资源通过；当前 macOS 主机不能替代 Linux/Windows 原生启动、安装器和签名验收。
+
+> 2026-09-20 Provider Main secret gateway：Provider 密钥写入／读取现在会同步到 Main-only 加密 secret store；TS 桌面文本与图片运行优先通过 Main gateway 解析密钥，Renderer 仍只接收脱敏镜像，Electron 未就绪时使用会话内存态。旧 `config.json` 密钥仍保留作为 Native 共存回退，故供应商密钥的唯一生产数据源切换和旧 Worker 退役尚未完成；新增 secret store、图片、协议与桌面运行回归后，全量 runtime 为 **237 个测试文件／858 项测试通过**。
+
+> 2026-09-19 TS RunSpec 配置贯通：`responsesSessionScope` 现从 Provider 配置投影到受限公开 `ModelOptions`，通过 256 字符与控制字符边界校验，并用于本地 Responses WebSocket session pool；新增配置解析、资格层和传输复用回归。
+
+> 2026-09-19 Responses WebSocket transport 补齐：本地 `openai-responses` 且配置显式 `ws/wss` 地址时，TS Runtime 通过 workspace/session/scope 隔离的可复用 WebSocket 发送 `response.create`，将事件适配到既有 Responses codec；鉴权头、URL、4 MiB 单帧、取消、并发忙保护和 HTTP fallback 已覆盖行为测试。`disabled`、未配置 WS 地址和托管模型仍走 HTTP；托管账户 WS gateway 与真实 Provider 联调仍是剩余尾项。
+
+> 2026-09-19 托管 Responses HTTP 补齐：远端 Go gateway 新增 `/v1/responses`，复用 workspace/resource/session 绑定的短期 ticket、provider 安全 URL 和 32 MiB 请求边界；此前桌面虽允许 `responses` endpoint，服务端只有 Chat Completions 路由，现已补上 ticket 与团队模型配置回归。
+
+> 2026-09-19 大图附件 staging 补齐：TS Runtime 对 PNG/JPEG/GIF/WebP 图片先由 Main 按 workspace 隔离写入受保护资产目录，RunSpec 仅携带 assetId，Provider 编解码阶段再由 Main 读取并转换为对应格式，绕过 Unix-socket 1 MiB frame 限制并保留单图 20 MiB 上限；prompt 与 history 均覆盖，资产校验、workspace 隔离和编解码回归已纳入。当前完整 runtime 回归为 **228 个测试文件／825 项测试通过**。Responses WebSocket、真实 Provider 端点联调和生产数据所有权切换仍未达到默认路由门槛。
+
+> 2026-09-19 CodeGraph TS 关系查询补齐：`callers`／`callees`／`impact` 现基于独立 WASM 符号与引用索引提供有深度和数量上限的跨文件关系结果；对无法可靠解析的语言继续显式回报 grammar unavailable，不把不兼容 WASM grammar 当作可用能力。
+
+> 2026-09-19 CodeGraph TS analytics 补齐：Main-owned TS/WASM 适配器现在基于独立索引的 import/reference 数据计算文件依赖循环，并按非导出且无引用符号生成稳定 dead-code 候选，结果限额与 .NET 面板契约一致；新增循环与 dead-code 回归。跨文件调用解析、嵌入式语言和性能对照仍未达到默认路由切换门槛。
+
+> 2026-09-19 TS 多模态小载荷接入：Execute／Chat 的 TS Runtime 现在可传递受 768 KiB 总预算约束的 PNG/JPEG/GIF/WebP base64 或 HTTPS 图片，history 与当前 turn 均投影到各 Provider codec；超预算、非 HTTPS URL、rich blocks 和未迁移高级能力仍准确回退 sidecar，Run list 不暴露图片载荷。
+
+> 2026-09-19 workspace v2 全业务表覆盖补齐：TS Business Worker 的同步 allow-list 现覆盖 `qq_wakeup_windows_v2` 与 `wiki_documents`／`wiki_nodes`／`wiki_file_snapshots`／`wiki_generation_runs`，总计 37 张 workspace-owned 表；新增 schema v3 为 Wiki 记录补充 `workspace_id` 并保留旧个人键兼容读取，团队 Wiki 与 QQ wakeup 已纳入真实 workspace bundle 回归。生产 handover 仍保持显式确认与可回退，不改变 Native 默认所有权。
+
+> 2026-09-19 本轮最终验证：WebContentsView 默认宿主已开启，保留 `OLA_BROWSER_USE_WEBCONTENTS_VIEW=0` 显式回退；工作台支持将会话标签拖入内容区形成 workspace/window-scoped 分屏；类型检查、Lint、完整 `npm run build`、`verify:ci-core`、Electron IPC 及 runtime 回归全部通过，runtime 为 **227 个测试文件／818 项测试**。默认配置 Electron 主界面完成首次启动向导后真实冒烟通过；当前版本重新执行 `build:mac:staged` 生成 arm64 macOS DMG/ZIP，unpacked runtime staging 完整性通过；当前产物未签名／公证，因本机无有效 Developer ID 证书。
+> 2026-09-19 P11 WebContentsView 事件投影：Main-owned WebContentsView 现在将页面自身的加载开始／结束、主导航、页内导航、标题变化和非取消加载失败通过受控 `browser:view-event` 通道投影到对应宿主 Renderer；地址栏、标题、前进后退、加载态和错误提示不再只依赖工具栏 IPC 返回。新增服务事件回归；本轮最终 runtime 回归 **226 个测试文件、815 项测试通过**。
+> 2026-09-19 团队任务协议闭环：Main 与 Renderer TS Runtime 现完整提供 `TeamTaskCreate`／`TeamTaskUpdate`，覆盖任务 ID、负责人、依赖、状态和报告的边界校验、重复任务与非法依赖拒绝，并纳入统一工具授权和 system prompt；后台队友终态会回写任务报告。新增团队任务协议与 manifest 并发回归；本轮最终 runtime 回归 **226 个测试文件、815 项测试通过**。
+> 2026-09-19 团队停止协议闭环：TeamRuntime member 记录现在保存后台 TS 子运行 `runId`；停止成员会在 workspace-scoped JSONL 写入 `shutdown_request` 后调用受授权的 `run.cancel`，终态回写清除运行标识。新增实际取消调用断言；完整回归待本轮最终验收执行。
+> 2026-09-19 团队任务投影闭环：后台 TS `Task` 在注册队友时同步创建 workspace-scoped manifest task，并在子运行终态回写任务报告与成员状态；TeamPanel 增加任务状态展示，避免只显示成员而丢失任务进度。新增后台任务投影回归；完整回归待本轮最终验收执行。
+> 2026-09-19 P12 主站模型契约切片：`server/` 新增与桌面 `account-client` 对齐的 workspace directory、脱敏 model resources 和短期 model access ticket；ticket 绑定账户、设备、workspace、resource、session，并在 `/v1/chat/completions` 侧验证后才进入 provider gateway。新增 Go 端账户目录／票据／gateway fail-closed 回归；真实部署、供应商计费、跨平台安装签名仍未完成。
+> 2026-09-19 P11 WebContentsView 默认宿主：WebContentsView 现默认启用，保留 `OLA_BROWSER_USE_WEBCONTENTS_VIEW=0` 的显式回退开关；创建失败仍自动回退 `<webview>`。Main 侧所有权、bounds、导航、页面事件和 HTTP(S)/新窗口安全边界已接入，真实登录流程与人工视觉验收仍待完成。
+> 2026-09-19 P11 Renderer 宿主接入：BrowserPanel 默认创建并销毁 Main-owned WebContentsView，按容器 ResizeObserver 更新 bounds，工具栏导航复用新的受 host 所有权保护的 IPC，并把 view 的 webContents 注册回现有浏览器控制／取消链路；创建失败自动回退 `<webview>`，`OLA_BROWSER_USE_WEBCONTENTS_VIEW=0` 可显式关闭。新增跨 host 销毁拒绝回归；真实登录流程和人工视觉验收仍待完成。
+> 2026-09-19 本轮最终验收：workspace v2 冲突选择 UI 已接入托管个人／团队同步入口；修复 ChatHomePage 的 workspace project selector 在 React 19 下生成不稳定 external-store snapshot 导致的启动更新循环，并将 TeamPanel 改为订阅稳定团队快照。真实 Electron 主界面启动验收通过；生产构建、类型检查、Lint、225 个 runtime 测试文件／812 项测试及 `verify:ci-core` 全部通过。默认 Native→TS 生产所有权、完整团队并行协议、六平台原生验收和 P12 主站／发布集成仍未完成。
+> 2026-09-19 团队 UI 控制闭环：TeamPanel 的停止成员／停止全部现在通过 workspace-scoped TeamRuntime JSONL 写入 `shutdown_request`，不再调用空的 Native 控制桩；面板手动消息先持久化再更新本地投影，避免刷新后丢失。新增 2 项控制行为测试，终态成员不会重复发送关闭请求。
+> 2026-09-19 workspace v2 全域同步接入：Business Worker 现在按 allow-list 捕获并事务化提交 31 个 workspace-owned 业务表（含 sessions/messages/plans/tasks/Cron/memory/usage/Draw/agent/runtime/desktop flows 及其关系表），支持关联表通过 workspace owner 过滤、revision 防并发覆盖、基线与 tombstone；TS 通用冲突合并器已接入 WebDAV v2，Main IPC 与 Renderer Sync 页面提供 workspace-scoped 触发入口。Global/device 表仍明确排除，Native→TS handover 仍需先完成并获得有效 TS writer ownership；本轮新增真实 handover 全域同步回归。
+> 2026-09-19 workspace v2 自动同步：TS ownership 已提升且启用自动同步时，Main 按本地个人／离线授权团队 workspace 去重执行 v2；未登录且没有 managed workspace 目录时保留个人 v1 离线兼容路径，避免把 account-bound v2 scope 错当成无账户授权。
+> 2026-09-19 Feishu 音视频发送迁移切片：新增 `FeishuSendAudio` 与 `FeishuSendVideo` Main-owned TS 工具，分别固定 `opus`／`mp4` 类型、校验扩展名、workspace/channel/chat 授权，并复用受控 Feishu upload/send IPC；复杂的渠道入站媒体解析、转码和跨平台真实账号验收仍待完成。
+> 2026-09-19 团队快照实时投影补齐：Renderer 团队 inbox poller 现在与消息消费合并为 workspace-scoped 单轮询，同时刷新 TeamRuntimeStore manifest 快照；后台队友状态、任务终态和报告可自动进入 TeamPanel，团队切换会丢弃旧请求，停止 poller 会清理去重与审批状态。新增 **2** 项行为测试；全量回归需重新执行。
+> 2026-09-19 后台团队子 Agent 终态闭环：scheduler 现在支持一次性的 nested terminal projection；后台子 Agent 完成、失败或取消后会回写团队成员状态、currentTaskId、completedAt，并在已有团队任务时写入报告。新增调度器终态投影回归，当前定向验证 **17 项通过**；团队 UI 实时投影、完整并行协作协议和真实 Electron 端到端验收仍待完成。
+> 2026-09-19 团队 Agent TS 接入切片：TS Run 新增经过边界校验的团队上下文，Main TS Runtime 接入 `TeamCreate`、`SendMessage`、`TeamStatus`、`TeamDelete`，复用 TeamRuntimeStore 的 manifest／JSONL 持久化与显式工具授权；团队 Agent 不再因 active team 被资格层无条件回退 sidecar。当前仍未完成队友子运行的完整 UI 投影、并行调度协议、权限／计划交互闭环和真实 Electron 团队端到端验收，不能据此宣告团队域完成迁移。
+> 2026-09-19 团队子 Agent 语义修复：Main `Task` 现在保留 `team_name`、成员名和任务 ID，后台队友注册到团队 manifest，并将团队上下文与 Team 工具能力传入独立子运行；`createAgentExecutor` 也不再丢失 scheduler 的嵌套运行句柄。后台队友完成后的 UI 投影、任务终态回写和真实并行协作验收仍待完成。
+> 2026-09-19 团队空间隔离补齐：TeamRuntimeStore 的 manifest／JSONL 路径按 workspace 哈希分区，同名团队在个人与团队空间不再串读；Renderer runtime-client 自动带当前工作空间，Main Team IPC 校验已登记窗口空间及离线授权。兼容旧的无 workspace 参数存储路径，旧团队数据仍需显式迁移验收。
+> 2026-09-19 托管图片资源绑定补齐：TS Run 可携带独立 `imageModelSource`，图片工具不再把聊天模型资源误用为图片资源；托管图片请求仍通过 Main account ticket，local／托管图片生成均有路径、响应大小、模型类型和 workspace 隔离测试。全量 Runtime 回归现为 **222 个测试文件、799 项测试通过**。
+> 2026-09-19 ImageGenerate 接管：Main TS Runtime 新增受 workspace 资源锁保护的 `ImageGenerate` 工具，local provider 只使用 Main provider mirror，托管模型只通过 Main account ticket 调用 `images/generations`；响应大小、数量、尺寸、质量和模型类型均有边界，生成 PNG 按 workspace 保存到受保护目录并返回文件元数据。大附件 staging、Responses WebSocket、协议全量多模态能力及真实端点联调仍待完成；ImageGenerate 工具单测通过。
+
+> 2026-09-19 TS 子 Agent 调度接管：Main TS Runtime 新增受父运行约束的 `Task` 工具，支持同步子运行与后台子运行提交；同步任务使用独立 session 并复用持久化 scheduler/journal、取消和交互通道，子任务工具快照自动移除 `Task` 防止递归。后台子任务使用 `subagent:` 运行标识，仅按显式权限策略授权写工具；无人值守频道仍禁止生成子 Agent。调度器父子运行、能力继承、后台提交和安全拒绝测试通过。后台队友的完整 UI 投影、团队协作协议和真实 Electron 验收仍未完成。
+
+> 2026-09-19 Goal 资格门接线：Goal 工具完成 Main TS 接入后，Execute 资格不再因“已有 Goal”无条件回退 sidecar；`get_goal/update_goal` 可在已有 Goal 会话中使用，计划、SSH、团队和未迁移 Goal 相关高级路径仍保持独立门禁。
+
+> 2026-09-19 Goal 工具接管：`get_goal`、`create_goal`、`update_goal` 已接入 Main TS Runtime；创建仅在当前 session 无 Goal 时允许，更新只接受 `complete/blocked`，所有读写绑定当前 workspace/session。非后台运行沿用原有免审批语义，后台运行不会借此获得 Goal 写权限；Goal UI 会在工具完成后刷新。
+
+> 2026-09-19 Task 工具接管：`TaskList`、`TaskGet`、`TaskCreate`、`TaskUpdate`、`TaskDelete` 已接入 Main TS Runtime，所有读写固定绑定当前运行的 session/workspace，并复用现有 workspace-scoped tasks DAO；跨会话读取、非法状态、超长字段和越界关联均拒绝。Renderer 任务面板与旧 IPC 仍保持兼容，后续需补 UI 实时投影与 Electron 多窗口验收。
+
+> 2026-09-19 频道自动回复资格收紧：TS 频道路径现在显式声明并校验 `pluginId/chatId/messageId` 运行上下文；未绑定频道上下文的插件／渠道工具请求继续回退 sidecar，绑定上下文的 unattended 运行才可进入 Main 授权层。新增资格回归覆盖，避免频道写工具绕过运行目标绑定。
+
+> 2026-09-19 Renderer 工具桥接补齐：MCP 动态工具／资源不再返回 Native-only 占位，现通过 Main 的可信 MessagePack IPC 调用已连接 MCP 管理器；桌面截图、点击、键盘输入、滚动和等待工具也已接入现有 Main TS/IPC 实现，并保留取消、参数边界和结构化错误结果。新增 Renderer MCP 行为测试；全量 runtime 回归 **218 个测试文件、783 项测试通过**。默认业务数据所有权、渠道复杂媒体与真实 Electron 多窗口验收仍是后续收尾项。
+
 > 迁移预检补齐：Settings 的业务 handover 状态现在只读验证 legacy 数据库契约、备份目录安全性与预计快照空间；不满足条件时显示具体阻塞原因并禁用提升按钮。预检不会创建快照，合法源库、首次目录和符号链接失败路径均有专项覆盖；当前全量 runtime 回归 **216 个测试文件、779 个测试通过**。
 
 > 浏览器宿主生命周期行为验收补齐：新增 MainBrowserService 行为测试，真实触发宿主 WebContents 销毁后确认其全部 tab 登记和用户控制租约失效；静态安全门禁与 Node 类型/Lint 均通过。
@@ -44,7 +156,7 @@
 
 > 体验门禁复验：`verify:workbench-registry`、`verify:settings-visual`、`verify:product-experience` 与 `verify:media-runtime` 全部通过；其中 product-experience verifier 已同步当前 Settings registry/resolver 架构，避免因旧字符串路径产生误报。
 
-> 业务 handover 合约复验：Native→TS 快照、marker 恢复、写入提升与回退边界专项测试 **9/9 通过**；生产入口仍需显式开关和确认，未擅自改变默认 Native 所有权。
+> 业务 handover 合约复验：Native→TS 快照、marker 恢复、写入提升与回退边界专项测试 **9/9 通过**；生产入口现由只读预检、可信主 frame 与二次确认保护，不再要求部署环境变量开关。
 
 > 体验自动化扩展复验：消息列表视口、任务板投影、工作台注册、Settings 视觉契约、产品体验和媒体运行时门禁均通过；这些自动化结果仍不替代真实多窗口人工视觉验收。
 
@@ -94,7 +206,7 @@
 
 > 渠道只读工具接管切片：TS Runtime 现在提供 `PluginGetGroupMessages`、`PluginGetCurrentChatMessages` 和 `PluginListGroups`，通过 Main 渠道服务执行并以运行工作空间复核插件归属；参数数量、插件 ID 与聊天 ID 均有边界校验，发送／回复等写工具仍未开放。专项测试新增 **2/2**，全量回归为 **214 个测试文件、751 项测试**。
 
-> handover 重启恢复补齐：提升成功后 Main 以私有原子 marker 持久化 manifest／副本路径；后续启动只要 marker 存在就先恢复 TS 仓库并永久停住 Native Worker，损坏 marker 不会静默回退旧写入者。发起提升仍需 `OLA_ENABLE_BUSINESS_HANDOVER=1` 和显式确认。真实 Native→TS 合约测试已关闭并重新打开提升仓库验证空间读取；marker 单测和当前 macOS staging Electron 重启验收通过。全量运行时回归现为 **210 个测试文件、742 项测试通过**。
+> handover 重启恢复补齐：提升成功后 Main 以私有原子 marker 持久化 manifest／副本路径；后续启动只要 marker 存在就先恢复 TS 仓库并永久停住 Native Worker，损坏 marker 不会静默回退旧写入者。发起提升需要通过只读预检、可信主 frame 与显式确认。真实 Native→TS 合约测试已关闭并重新打开提升仓库验证空间读取；marker 单测和当前 macOS staging Electron 重启验收通过。全量运行时回归现为 **210 个测试文件、742 项测试通过**。
 
 > Linux staging 当前版本复验：重新生成 arm64 `--dir` 包成功，产物约 499 MiB；`ola`、`business-worker.mjs`、`legacy-read-worker.mjs` 与 `Ola.Native.Worker` 均通过完整性检查。当前主机为 macOS，未执行 Linux 原生启动。
 
@@ -108,7 +220,7 @@
 
 > 提升后读取路由补齐：业务 handover 成功后，所有现有 TS read-canary 会自动复用已提升的 `BusinessRepository`，不再继续打开已停写的 Native 数据库；读取关闭开关在已提升状态下也不会把请求退回 Native。全量运行时回归仍为 **208 个测试文件、738 项测试通过**。
 
-> 生产提升入口补齐：Main 现提供受可信主窗口保护、需要 `OLA_ENABLE_BUSINESS_HANDOVER=1` 与显式确认的 `migration:business-handover`，按“旧写入者停写 → 一致快照／回退演练 → TS 仓库提升”顺序执行，并在成功后将业务写入路由提升到该仓库；`migration:business-handover-status` 可查询提升状态。入口不会通过修改环境变量切换，也不会在失败后恢复 Native 写入。该入口已完成接线与 Node 类型／Lint 校验，但尚未在真实用户库上执行生产提升；执行前仍需完整桌面端 E2E、全业务域接管和可回退演练。
+> 生产提升入口补齐：Main 现提供受可信主窗口、只读预检和显式确认保护的 `migration:business-handover`，按“旧写入者停写 → 一致快照／回退演练 → TS 仓库提升”顺序执行，并在成功后将业务写入路由提升到该仓库；`migration:business-handover-status` 可查询提升状态。入口不会通过修改环境变量切换，也不会在失败后恢复 Native 写入。该入口已完成接线与 Node 类型／Lint 校验，但尚未在真实用户库上执行生产提升；执行前仍需完整桌面端 E2E、全业务域接管和可回退演练。
 
 > 跨平台 staging 验收：同一运行时依赖白名单在本机成功生成 Linux arm64 `--dir` 包和 Windows arm64 `--dir` 解包目录；Windows 资源签名步骤在无证书环境中可继续完成未签名产物。`lint:ci`、完整类型检查通过。
 
@@ -302,9 +414,9 @@
 
 > Goal IPC 撤权竞态补充：Main 的会话归属门禁现在在异步会话查询后再次核验团队离线目录；Goal 创建、替换、更新、清除在读取旧目标后和 Native 写入返回后也复核，累计与追加事件在写入返回后复核。目录在查询期间撤权会阻止写入开始；已进入 Native 写入的请求无法因此回滚，但撤权后的数据结果不会返回 Renderer，也不会再由该 IPC 触发 Goal 运行时处理。专项 IPC 测试覆盖查会话与查旧目标时撤权；本轮运行时测试为 171 文件、624 项通过。写入中撤权、恢复及重试的一致性仍需更强的事务／接管门禁。
 
-> 2026-09-18 追加进度：下文数据表清点中的 11 张为此前统计；自动记忆 6 张、用量域 4 张、绘图历史 1 张、代码变更日志 2 张、子 Agent 历史 1 张、运行工具结果 1 张、运行任务与事件 2 张、Project Wiki 4 张、桌面流程 3 张及 QQ 唤醒窗口 v2 表已加入 TS 交接字段契约，当前按契约键实际清点为 36 张。TS 副本可按空间读写绘图、子 Agent 历史、工具结果、运行任务及事件、Project Wiki，读取用量明细及活动汇总；记忆域可按 Native 兼容的根归属键幂等创建记忆根、按指纹幂等写入 Stage1 产物、创建／结束记忆任务，以及写入／撤销自动化记录、记录引用并增加 Stage1 使用计数、标记空间限定 rollup 水位、按空间清理根的 Stage1 产物与可选任务。QQ 唤醒窗口使用带空间主键的新表，旧记录只回填本地个人空间，Main 在读写前核验离线团队授权；网关收到私聊消息时先保存原始消息 ID 与时间，只接受比当前来源更新的消息，避免重放使窗口倒退。真实 Native 备份后的 TS 来源更新、读写与同一 QQ 身份跨空间隔离测试通过。跨空间关联拒绝、默认列表遮蔽内容快照和真实 Native 备份后继续写入的测试通过。生产路由切换及完整端到端验证仍未完成。旧版无空间键的 rollup 表只保留在备份中，不作为空间限定读取入口。
+> 2026-09-18 追加进度：下文数据表清点中的 11 张为此前统计；自动记忆 6 张、用量域 4 张、绘图历史 1 张、代码变更日志 2 张、子 Agent 历史 1 张、运行工具结果 1 张、运行任务与事件 2 张、Project Wiki 4 张、桌面流程 3 张及 QQ 唤醒窗口 v2 表已加入 TS 交接字段契约，当前按契约键实际清点为 37 张。TS 副本可按空间读写绘图、子 Agent 历史、工具结果、运行任务及事件、Project Wiki，读取用量明细及活动汇总；记忆域可按 Native 兼容的根归属键幂等创建记忆根、按指纹幂等写入 Stage1 产物、创建／结束记忆任务，以及写入／撤销自动化记录、记录引用并增加 Stage1 使用计数、标记空间限定 rollup 水位、按空间清理根的 Stage1 产物与可选任务。QQ 唤醒窗口使用带空间主键的新表，旧记录只回填本地个人空间，Main 在读写前核验离线团队授权；网关收到私聊消息时先保存原始消息 ID 与时间，只接受比当前来源更新的消息，避免重放使窗口倒退。真实 Native 备份后的 TS 来源更新、读写与同一 QQ 身份跨空间隔离测试通过。跨空间关联拒绝、默认列表遮蔽内容快照和真实 Native 备份后继续写入的测试通过。生产路由切换及完整端到端验证仍未完成。旧版无空间键的 rollup 表只保留在备份中，不作为空间限定读取入口。
 
-> Native 表覆盖清点：当前 schema 声明 48 张表，交接契约覆盖 36 张；剩余 12 张在 `native-business-table-coverage` 测试中逐项登记为保留的旧版或技术表，并继续随 SQLite 备份保存。清单门禁会在新增 Native 表未分类时失败；它不证明旧路由已退役，也不代表所有活跃功能都已由 TS 接管。
+> Native 表覆盖清点：当前 schema 声明 48 张表，交接契约覆盖 37 张；剩余 11 张在 `native-business-table-coverage` 测试中逐项登记为保留的旧版或技术表，并继续随 SQLite 备份保存。清单门禁会在新增 Native 表未分类时失败；它不证明旧路由已退役，也不代表所有活跃功能都已由 TS 接管。
 
 > QQ 唤醒只读金丝雀：Main 现默认用 TS 只读 Worker 从当前 Native 数据库按空间计算唤醒资格（`OLA_TS_QQ_WAKEUP_READS=0` 可关闭）；读取失败回退 Native。团队授权在异步读取前后均复核，撤权后的迟到结果不返回。真实 Native 数据库的个人／团队同身份结果、未来时间、日／三日／七日／三十日边界、过期与已发送窗口均与 TS 只读结果对照通过；来源写入和已发送标记仍由 Native 独占，真实 QQ 网关端到端仍未验证。
 
@@ -338,7 +450,7 @@
 
 > QQ 网关续连状态追加：生产 `QQService` 已不再调用 Native 的 `channel/qq-session-*` 文件路由，改由 Main TS 将短时续连状态原子写入 `~/.ola/qq-bot/sessions`，Unix 文件权限为 `0600`。文件名使用工作空间与插件 ID 的 SHA-256 键，避免不同空间或旧文件名清理规则碰撞；同键写入和清理由队列排序，旧 Native 状态文件不再读取（其原有有效期仅五分钟）。QQ 启动、入站消息向 UI 分发和对外发送前核验团队离线授权，撤销后拒绝继续传递消息。Native 旧路由暂留供回退，不代表全部渠道运行时已迁移。离线隔离、过期和写入／清除竞态测试通过；真实 QQ 网关在线续连尚待验证。
 
-> 桌面流程交接补充：三张流程表现已纳入 TS 交接字段契约，目前连同后续纳入的 QQ 唤醒窗口 v2 表，契约总数为 36 张。TS 业务库副本可按空间列出、保存及删除流程，事务化同步步骤并在删除时清理运行记录；真实 Native 数据库备份后的续写、跨空间拒绝及捕获文本遮蔽测试通过。生产流程持久化仍由 Native Worker 与 Main 文件回退承担，尚未切换默认路由。
+> 桌面流程交接补充：三张流程表现已纳入 TS 交接字段契约，目前连同后续纳入的 QQ 唤醒窗口 v2 表，契约总数为 37 张。TS 业务库副本可按空间列出、保存及删除流程，事务化同步步骤并在删除时清理运行记录；真实 Native 数据库备份后的续写、跨空间拒绝及捕获文本遮蔽测试通过。生产流程持久化仍由 Native Worker 与 Main 文件回退承担，尚未切换默认路由。
 
 > 桌面流程只读金丝雀补充：Main 现默认经只读 TS Worker 按空间列出活跃 Native 数据库中的流程（`OLA_TS_DESKTOP_FLOW_READS=0` 可关闭），异常回退 Native；同一真实 Native 数据库的个人／团队／未授权空间结果与 Native 列表对照通过。写入和删除仍由 Native Worker 执行，Main IPC 返回前仍须复核窗口空间与团队离线授权。
 
@@ -361,7 +473,7 @@
 > 空间化同步元数据迁移：TS 交接库的独立 v2 schema 现有按 scope hash／工作空间／提供方隔离的基线和墓碑表，支持事务化替换、重启后读取、重复键失败回滚，以及相同 hash 被不同空间复用时拒绝写入。绘图快照在单个 SQLite 事务中读取记录、识别已同步基线里本地缺失的记录并首次持久化墓碑，避免扫描期间重建记录造成误删；重复扫描或仓库重启不会改写删除时间，重建后的记录不携带旧墓碑，其他提供方不会继承该墓碑。绘图域现有纯三方合并决策，能区分单边更改、删除、并发修改与并发创建，冲突必须显式选择；基线已有记录在一侧无记录也无墓碑时会拒绝继续，以防静默复活或误删。合并前会验证远端 `draw_runs` 行的表名、ID／空间归属、必需字段、JSON、时间和持久化约束，避免上传成功后才发现记录无法本地应用；上传前还会对全部合并记录与墓碑 ID 查询本地全局归属，拒绝伪造个人空间既有 ID 的团队记录。绘图合并结果现可在远端条件上传后进行本地事务化提交：对捕获时的记录／基线／墓碑修订令牌做比较，全部记录应用与该域的新基线、墓碑同事务写入；离线期间本地编辑会使提交失败而不覆盖新数据。独立绘图运行器现串联捕获、远端下载、冲突裁决、条件上传、远端回读确认与本地提交；冲突不会上传，上传失败不会推进本地基线。真实 Native 备份与模拟传输的流程测试、WebDAV 适配器加隔离 HTTP 响应的首次上传／条件替换／远端修改下载合并测试通过。此运行器尚未接入生产调度或真实账号授权，其他领域和真实 WebDAV 服务／Electron 端到端验证仍未完成，不能视为完整跨设备同步。
 
 本目录记录实际落地状态，不将新模块存在或单元测试通过等同于完整替换。
-当前桌面生产入口仍使用 Native Worker；没有删除旧运行时或迁移用户业务数据库。
+当前桌面生产入口由 Main 托管的 TS Runtime 与 TS BusinessRepository 提供；旧 Worker 源码、启动、发布和生产回退路径已清理。用户数据库接管、真实主站联调和跨平台发布仍按验收台账保留为最终门禁。
 
 ## 已落地的纵向链路
 
@@ -377,7 +489,7 @@
 - 桌面 TS 运行提交现会等待新会话的 Native 持久化创建完成；Main 随后用空间限定的业务会话查询核对 `sessionId`，不存在或属于其他空间时拒绝运行，并在异步查询后再核验窗口空间。独立测试验证创建先于提交、跨空间或缺失会话不触发 TS 调度。当前校验仍依赖 Native 生产会话库；正式切换后必须由 TS 单写入仓库接管同一归属检查。
 - DesktopRuntime 测试现把含 bearer token 的本地连接描述文件注入隔离临时目录，不再写默认 `~/.ola`；服务停止抛错或令牌公布后的启动初始化失败时也会清除描述文件。故障注入测试覆盖两种失败路径。真实用户目录中已有的描述文件不在本轮自动清理范围内。
 - 显式工作空间的生产会话列表与按 ID 读取现默认走 TS 只读 Worker，Native 仍是唯一写入者；无空间参数保持旧路由，TS 读失败回退 Native，`OLA_TS_SESSION_READS=0` 可立即关闭该切片。提升前补齐 `external_chat_id`、任务档案及锁定字段、空值默认和 Native 列表排序；隔离真实 Native Worker 对照覆盖个人／团队、全字段、分页及跨空间拒绝。其余已实现的空间限定业务只读入口也已独立默认开启，均保留关闭开关和 Native 故障回退；写入和正式业务库所有权尚未切换。
-- 生产默认连接描述文件现位于 `~/.ola/runtime-private/desktop-runtime.json`，由独立私有目录保护，不再为了发布令牌而改动既有 `~/.ola` 目录权限。发布拒绝符号链接或共享父目录，读取拒绝符号链接文件；旧路径中的已有描述文件不自动删除，CLI 默认只读取新路径。隔离测试覆盖权限不变、链接拒绝和 CLI 连接。
+- 生产默认连接描述文件现位于 `~/.ola/runtime-private/desktop-runtime.json`，由独立私有目录保护，不再为了发布令牌而改动既有 `~/.ola` 目录权限。发布拒绝符号链接或共享父目录，读取拒绝符号链接文件；隔离测试覆盖权限不变、链接拒绝和 CLI 连接。
 - 桌面 TS Runtime 的运行列表／快照／提交／取消／交互 IPC 现在还要求请求空间与发起窗口的已登记空间一致；异步列表与快照返回前再次确认窗口仍在原空间。工作空间切换请求也必须携带来源空间并与窗口登记一致。Renderer 的 TS 运行重连等待窗口登记确认，避免启动和切换时误判为跨空间请求。隔离测试覆盖跨窗口空间拒绝、迟到列表丢弃、来源空间伪造及登记并发；完整 Electron 多窗口验收仍待完成。
 - 桌面 TS Agent 在提交及排队运行正式启动时重新读取离线团队授权；账户退出或空间目录更新时，Main 会通知 TS 调度器中止已运行的被撤权团队任务，并取消排队任务，个人空间不受影响。离线目录缓存满 30 天时有主动定时复核，即使 UI 没有再次请求；在线刷新成功会重排期限，离线且缓存失效会撤销团队运行。模型请求在目标解析后及响应返回后再检查取消并丢弃迟到响应体；工具在审批、资源定位和执行结果边界检查取消，不向模型回传撤权后的结果。本地模拟流式模型与真实 DesktopRuntime 的集成测试已验证目录撤权使正在读取的 HTTP 响应关闭、运行进入 `cancelled`。已开始执行、且不遵守取消信号的外部工具无法通用地回滚副作用，需逐工具审计和 Electron 端到端验证。
 - 团队目录或账户身份请求收到明确的 HTTP 401/403 时，Main 立即清除账户绑定的离线目录缓存并广播空团队目录，触发上述运行撤权；纯网络故障才允许使用未过期的离线快照。账户客户端测试分别覆盖 401、403、离线回退及缓存删除。
@@ -388,19 +500,20 @@
 - 账户令牌和 Mesh 身份拒绝 `basic_text`；登出删除旧账户令牌文件，避免重新加载旧账户。
 - Renderer 账户目录刷新使用身份代次保护；Hydrate 失败、登出和晚到的旧目录响应均不能恢复已撤销账户的工作空间目录。
 - 旧 Cron 路径收到 Worker 中断时结束等待；旧目标状态表重建增加事务。
-- 旧共享 Worker Dispatcher 的请求上下文与托管 HTTP 处理器解耦，恢复 CodeGraph 测试编译。
-- Vitest 行为测试、独立类型检查、内核依赖边界检查及 CI 质量门禁。CI 保留 .NET，直到旧实现正式退役。
+- TS Runtime Dispatcher 的请求上下文与托管 HTTP 处理器解耦，CodeGraph 使用固定的 TypeScript/WASM grammar 资源。
+- Vitest 行为测试、独立类型检查、内核依赖边界检查及 CI 质量门禁；CI 和生产发布流程不构建或运行 .NET。
 
 ## 当前能力边界
 
-新的 CLI 是分阶段验证入口。`npm run cli -- …` 已使用 TS Runtime bundle；旧 `cli/src/index.ts` 保留为过渡源码，直到 Native Worker 删除。
+新的 CLI 是 TS Runtime 的正式入口。`npm run cli -- …` 使用 TS Runtime bundle；旧 CLI/Worker 启动路径已从生产构建删除。
 
 - CLI 当前只开放 `local-personal`、一个显式配置的本地模型（五种协议可选）和文本对话。传入显式 `--workspace-root` 可注册受 `realpath` 边界限制的工具；每次 `run` 还必须用 `--tools` 明确声明本次模型可见的工具快照。
-- Responses WebSocket、协议全量多模态能力、各服务商特殊参数及真实端点联调尚未完成；目前不是旧协议实现的完全等价替代。签名回放保留在本次运行的模型上下文，不写入公开 UI 事件；跨重启续跑尚未实现。
-- Agent/工具/调度内核的模拟宿主行为已覆盖。桌面 Chat 模式在无 SSH、插件、MCP、团队或目标运行时，且工具集合仅为 `Read`、`LS`、`Glob`、`Grep`、`WebSearch`、`WebFetch` 时，可将这套只读工具快照提交给 TS Agent。Execute 模式在无计划、目标、SSH、插件、MCP、渠道或团队时，可额外迁移 `Write`、`Edit`、`Bash`、`Notify`；写入与 Shell 仍经 Main 侧持久化审批。任一路径不满足条件或 TS 服务不可用时保留同一快照走 sidecar，不能静默丢失工具。创建仅允许既有真实父目录、不可覆盖已有文件、不可跨越符号链接，并必须经现有审批卡片和受限 IPC 明确批准。问答与计划审批专用 UI、子 Agent 和渠道尚未接入。
+- Responses WebSocket 的本地 session-scoped transport、协议全量多模态能力、各服务商特殊参数及真实端点联调仍需继续对照；当前不宣称已达到旧协议的完全等价替代。签名回放保留在本次运行的模型上下文，不写入公开 UI 事件；跨重启续跑尚未实现。
+- Agent/工具/调度内核由 TS Runtime 提供，写入与 Shell 仍经 Main 侧持久化审批。生产资格边界不再启动 sidecar 或 Native Worker；尚未支持的能力必须显式失败并记录在验收台账，不能静默降级。创建仅允许既有真实父目录、不可覆盖已有文件、不可跨越符号链接，并必须经现有审批卡片和受限 IPC 明确批准。
 - CLI Key 通过服务环境变量显式传入并只在内存使用；UI 只写凭据库、OAuth 与口令导出尚未迁移，不能宣称供应商 Key 已从 Renderer 全面移除。
+- Plan Mode 例外更新：上一条 Agent 能力边界中的“问答与计划审批专用 UI、子 Agent 尚未接入”已由当前 TS Plan 文件生命周期、`AskUserQuestion`、`Agent` 子运行和 widget 结果接线覆盖；SSH 远端工具、复杂插件能力、真实 Electron 端到端及生产 Native 写入权切换仍未完成。
 - 新日志库位于所选目录的 `runtime-v2`，不打开或接管旧数据库。
-- Main 的会话、项目、计划、任务及显式工作空间的消息读取／搜索现默认走按工作空间限定的 TS SQLite 只读适配器，分别可用 `OLA_TS_SESSION_READS=0`、`OLA_TS_PROJECT_READS=0`、`OLA_TS_PLAN_READS=0`、`OLA_TS_TASK_READS=0`、`OLA_TS_MESSAGE_READS=0` 单独关闭；查询失败立即回落 Native Worker。项目、计划及任务列表均保留 Native 的完整结果而非 2000 条截断。现有渠道会话、用量、Goal、代码变更日志、QQ 唤醒、Wiki 和桌面流程读取也已分别默认启用 TS，只读路由各有独立关闭开关；这不涉及生产写入所有权切换。
+- Main 的会话、项目、计划、任务及显式工作空间的消息读取／搜索现由按工作空间限定的 TS BusinessRepository 提供；查询失败 fail-closed，不再回落 Native Worker。现有渠道会话、用量、Goal、代码变更日志、QQ 唤醒、Wiki 和桌面流程读写入口也由 TS 服务提供。
 - Native 当前会在部分消息读取时修复重复或缺口 `sort_order`，TS 只读 Worker 不能执行这项写入。默认 TS 消息读取在同一 SQLite 快照中检查排序异常并回退 Native 修复；真实 Native 对照覆盖修复前拒绝、修复后消息／用户消息／定位／标记／分页／请求上下文／窗口的结果及跨空间隔离，包括长会话、压缩标记与 `headLimit=0`。消息计数已改为与 Native 相同的 `sessions.message_count` 缓存值，测试覆盖缓存值暂时落后于明细的情况。P8 交接副本现在于提升前显式修复历史排序异常，回退基线不变；生产消息写入仍由 Native 持有。
 - 消息搜索现在由 Renderer 携带活动空间，Main 要求显式空间并在查询前后核验团队离线目录；TS 和 Native 回退查询均在 `LIMIT` 前按空间过滤，再对结果逐个复核会话归属。真实 Native 数据用跨团队命中占满 `limit=1` 的场景验证：本团队结果不会再因其他团队的命中而丢失。Native 的无空间搜索仍保留给内部兼容调用，但 Renderer IPC 不再提供跨空间全库搜索。
 - 桌面会话列表／按 ID 获取及消息列表、用户消息、标记、定位、分页、请求上下文、窗口和计数 IPC 现拒绝未显式指定空间的 Renderer 请求；Main 读取前按团队离线目录核验空间，读取后再次核验，避免撤销期间返回已取得的数据。聊天导出分页与插件自动回复的会话读取已补齐空间参数。旧 Main 内部 DAO 的可选空间参数仍为兼容入口；桌面 IPC 不再借此作全局读取。运行时测试覆盖无空间请求在触达数据库前被拒、团队授权在读取期间撤销时不返回消息。其他数据库域 IPC 的窗口绑定与授权仍须逐项审查，不能把这一步视为整个桌面数据库的隔离验收。
@@ -408,10 +521,10 @@
 - 项目与会话的创建、更新、删除，以及确保默认项目／清空会话的桌面写入 IPC 现要求显式空间并在调用 Native 前验证团队离线目录；不再把无空间字符串／空请求默认为本地个人空间。Runtime IPC 测试覆盖无空间写入与已失去离线授权的团队写入均在触达 Native DAO 前被拒。Native 事务内部的撤权时序、其他业务域写入和窗口绑定仍未在这一步完成。
 - 计划和任务的桌面创建、更新、删除 IPC 也已拒绝无空间默认写入；创建与按会话删除先核验持久化会话属于请求空间及团队离线目录，按 ID 更新／删除先核验空间。测试覆盖无空间和跨空间会话创建在触达对应 DAO 前被拒。Goal store 及其 IPC 仍以会话 ID 为主、缺乏完整的空间生命周期约束，是下一步独立审查项。
 - Commands、Agents 与 Prompts 的本地目录和读取／管理已由 Main TS 目录适配器负责；Commands 保留 bundled 命令优先及创建模板，Agents 保留内置模板首次复制、frontmatter 解析和覆盖检测，Prompts 保留模板首次复制和本地覆盖。Soul 的内置、本地安装和市场列表／分类／下载已由 Main TS 接管；下载只允许固定市场源、拒绝重定向并限制响应大小。Skills 的内置同步、本地目录读取／编辑／导入／删除、风险扫描、市场 ZIP 下载和临时目录回收均已由 Main TS 接管，下载同样只允许固定市场源、拒绝重定向并限制大小。
-- CodeGraph 默认生产入口仍为 .NET；设置 `OLA_CODEGRAPH_RUNTIME=ts` 可显式启用 Main 拥有的 TS/WASM 适配器。它使用独立数据目录和 SQLite Worker，不会打开旧图数据库；提供索引、状态、统计、文件树、符号／引用搜索、相对导入邻居查询和进度事件。TS/WASM 解析器包含 19 个可运行的固定 WASM 语法包，能从语法树提取文件内声明、位置、导入边和标识符引用，并将单文件索引原子写入独立 `graph.db`；受控目录扫描会跳过依赖、构建产物和符号链接，按内容哈希跳过未变文件，并只在完整扫描时移除已删除文件的旧索引。高级跨文件调用解析、死代码／循环依赖分析、嵌入式语言、全语言语义对照和性能门禁尚未完成。Haskell、Julia、Razor、Ruby、Dart 在当前 Tree-sitter WASM ABI 下无法安全解析；Solidity 已覆盖文件索引及契约／方法声明。
-- 工作台已有按窗口／空间隔离的布局与会话标签起步；多标签全面体验、拖动分屏、独立窗口协同、UI 全页改造及 WebContentsView 仍未完成。浏览器的 Main 所有权服务现在会验证现有 `<webview>` guest 的 Electron 宿主关系，并登记显式工作空间、Profile 与用户控制租约；会话或项目上下文会由 Main 再次验证空间归属。凭据注入只接受已登记 guest。该登记层仍是 `<webview>` 到 `WebContentsView` 的过渡，不代表实际浏览器视图已迁移。
+- CodeGraph 生产入口为 Main 拥有的 TS/WASM 适配器，不存在 `OLA_CODEGRAPH_RUNTIME=dotnet` 或 .NET Worker 回退。TS 使用独立数据目录和 SQLite Worker，提供索引、状态、统计、文件树、符号／引用搜索、相对导入邻居查询和进度事件。18 个台账语言项均有固定 grammar/诊断映射；高级语义对照与性能证据仍由 P7 台账门禁约束，能力缺失必须显式诊断而不是切换到 .NET。
+- 工作台已有按窗口／空间隔离的布局与会话标签起步；多标签全面体验、拖动分屏、独立窗口协同及 UI 全页改造仍未完成。浏览器的 Main 所有权服务现在会验证现有 `<webview>` guest 的 Electron 宿主关系，并登记显式工作空间、Profile 与用户控制租约；`WebContentsView` 已默认接入创建、bounds、导航、页面事件投影及 HTTP(S)/新窗口安全边界，并保留显式 legacy 回退，完整浏览器自动化调度和视觉验收仍待完成。会话或项目上下文会由 Main 再次验证空间归属，凭据注入只接受已登记 guest。
 - 桌面六平台 Node 打包、真实主站联调、性能及视觉验收尚未完成。
-- 桌面空间切换仍使用旧检查；新调度器有集中检查，但尚未接入所有桌面入口，不构成已完成的跨窗口保护。
+- 桌面空间切换的唯一 Renderer 写入口已集中到 `switchWorkspace`：切换前检查 Agent／子 Agent／后台进程／频道／SSH／Draw／Cron／桌面流程是否空闲，复核窗口与授权空间，调用 TS Runtime workspace switch，并在切换后清理并重挂载空间状态。真实 Electron 多窗口并发切换与人工视觉验收仍需外部环境验证，不能仅凭该入口的静态覆盖宣称最终发布完成。
 - 会话、项目、定时任务与渠道自动回复的显式 ModelSource 过渡存储已接入；渠道设置选择器已按本地与所属 Ola 个人／团队空间分组写入公开来源，且桌面实际模型请求仍走旧引擎。
 
 ## 本地验证入口
@@ -443,19 +556,14 @@ npm run runtime:cli -- cancel --data-dir /tmp/ola-ts-demo --run RUN_ID
 
 ## 阶段状态和后续切换门禁
 
-| 阶段   | 状态     | 尚需完成                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P0     | 部分完成 | 已记录 205 个原始修改/新增文件的哈希和 tracked patch；清单含 355 条注册路由（包含 17 条 Agent 常量路由）、18 个语言；Native 与 CodeGraph Worker 的实时路由均与清单对照。完整 UI 基线待补。                                                                                                                                                                                                                                                        |
-| P1     | 部分完成 | Vitest/类型检查/依赖边界/CI 已接入；Electron E2E、完整旧新契约及视觉夹具待补。                                                                                                                                                                                                                                                                                                                                                                    |
-| P2     | 部分完成 | 独立服务/CLI/鉴权/版本与能力协商/所有权锁/日志库可运行；Electron Main 会在 Provider 镜像加载后启动、以私有令牌代理请求并在退出时停止本地 TS 服务。Renderer 仅在开发模式提交经资格判定的文本/受限写入桌面试运行；正式构建生成 Node Runtime/CLI 与 SQLite Worker。LegacyRepositoryAdapter 目前仅提供旧库的受限只读查询。                                                                                                                            |
-| P3     | 部分完成 | ModelSource、空间默认和会话／项目绑定、账户存储加固、TS AccountGateway 边界已接入；会话、项目与普通任务的前端命令已按空间校验，Cron 定义与运行快照及渠道自动回复保存公开模型绑定；供应商写入式秘密库和桌面网关接线待完成。                                                                                                                                                                                                                        |
-| P4     | 部分完成 | 核心循环/工具并发/五种协议文本与函数工具路径具备行为测试；高级协议能力、真实工具和上下文能力待对齐。                                                                                                                                                                                                                                                                                                                                              |
-| P5     | 部分完成 | 基础根运行调度/取消/回放/中断恢复及持久化交互已实现；所有入口、父子预算、审批 UI、定时语义及集中空间检查待接入。                                                                                                                                                                                                                                                                                                                                  |
-| P6     | 部分完成 | Commands 的 `list/load/manage-list/manage-read/manage-create/manage-save`、Agents 的 `list/ensure/load/manage-list/manage-read/manage-save`、Prompts 的 `list/ensure/load`、Souls 的全部本地和市场路由，以及 Skills 本地目录、`scan`、市场下载和临时文件清理已由 Main TS 替代并有隔离契约测试；本地 Git 查询和 mutation 均由 Main TS 执行器处理，SSH Git 仍走 Native SSH 适配。渠道会话的写入、路由及其余旧 Worker 路由仍须逐项实现、对照和切换。 |
-| P7     | 部分完成 | TS/WASM 解析器基座、语法包固定、受控目录扫描、内容哈希增量、文件内声明、导入边与标识符引用、相对导入查询、独立持久化索引以及可显式启用的 Main IPC 适配器已落地；全语言、跨文件语义和性能比较待完成。                                                                                                                                                                                                                                              |
-| P8     | 部分完成 | 历史库只读适配器与交接副本已覆盖会话、项目、任务、计划、消息、Cron 及其余离线空间业务表；备份、manifest 验证和隔离恢复演练可运行，TS 仓库具备核心业务及 Cron 写入基座。生产停写编排、所有领域接管、回退演练及默认路由切换仍未完成。                                                                                                                                                                                                                        |
-| P9–P11 | 部分完成 | 浏览器已具备 Main 侧 guest／空间／Profile 所有权登记，以及凭据注入的登记校验；工作台有按窗口／空间隔离的会话标签基础。完整对话／设置／功能页、拖动分屏、WebContentsView 生命周期、浏览器自动化调度及视觉验收仍待完成。                                                                                                                                                                                                                            |
-| P12    | 未开始   | 主站真实联调、六平台构建升级、完整验收后移除 .NET。                                                                                                                                                                                                                                                                                                                                                                                               |
+| 阶段  | 状态   | 当前证据与未关闭项                                                                                   |
+| ----- | ------ | ---------------------------------------------------------------------------------------------------- |
+| P0    | 通过   | 工作区基线和验收台账已固定。                                                                         |
+| P1    | 实现中 | Electron 冷启动与 24 个页面路由 smoke 已通过；完整人工视觉、多窗口和旧新全量契约仍待验收。           |
+| P2–P9 | 通过   | TS Runtime、数据接管、Agent/业务路由、CodeGraph、数据库交接和工作台证据已通过。                      |
+| P10   | 实现中 | 页面级自动 smoke 已通过；全部既有功能页、输入法和人工体验验收仍未关闭。                              |
+| P11   | 通过   | Main-owned 浏览器生命周期、Profile、控制权、导航安全和相关测试已通过。                               |
+| P12   | 实现中 | 生产源码、构建、发布 staging 无 .NET 资产；真实主站联调及六平台原生安装/升级/启动/签名仍待外部证据。 |
 
 `capability-inventory.json` 由 `node scripts/inventory-ts-migration.mjs` 生成，所有旧路由当前均标记为 legacy。
 清单解析字面量注册及生成的 `AgentRuntimeContract` 路由常量；`verify:workspace-runtime` 与 `verify:codegraph-worker` 会将其与实时 `worker/routes` 双向对照。清单覆盖不代表功能等价或生产切换完成。
@@ -472,6 +580,8 @@ npm run verify:workspace-runtime
 dotnet test sidecars/Ola.CodeGraph.Tests/Ola.CodeGraph.Tests.csproj --no-restore
 npm run build
 ```
+
+macOS 本机资源有限时可使用 `npm run build:mac:staged`：它只安装 Main 运行时外部依赖并复制 `sidecars/`，生成 `dist-staged-mac/` 下的 DMG、ZIP 和 unpacked 目录；签名／公证仍需在配置 Developer ID 证书的构建机执行。可用 `npm run verify:runtime-staging -- dist-staged-mac/mac-arm64 --platform=darwin` 校验 unpacked 资源。
 
 测试使用临时目录、模拟模型端点和隔离 Worker，不使用用户账户、不访问收费模型、不修改真实用户数据库。
 当前改动没有提交、推送或发布。
@@ -526,7 +636,7 @@ npm run build
 - 固定 `web-tree-sitter` 0.20.8 与兼容的 `tree-sitter-wasms` 0.1.13，避免较新的运行时与旧语法模块 ABI 不匹配。
 - 工作区扫描只将扩展名映射到实际可加载的固定 WASM grammar；例如该固定包没有 Ruby grammar，因此 `.rb` 会被明确跳过，不会把重复解析失败误报为项目索引故障。
 - 19 个目标语言通过实际 WASM 解析测试；Haskell、Julia、Razor、Ruby 与 Dart 被明确标记为不可用，不能进入替代路径。Ruby 与 Dart 虽有本地模块，但在当前 `web-tree-sitter` ABI 下解析会失败，因此不能仅凭模块存在标记为可用。
-- 打包配置会将两组 WASM 资源和 TS SQLite Worker 解包，供运行时按文件路径加载。`OLA_CODEGRAPH_RUNTIME=ts` 是受控迁移入口；默认仍保留 .NET Worker，直到高级语义和性能对照达标。
+- 打包配置会将两组 WASM 资源和 TS SQLite Worker 解包，供运行时按文件路径加载。默认使用 TS/WASM CodeGraph；`OLA_CODEGRAPH_RUNTIME=dotnet` 是受控回退入口。两者使用独立数据根，直到高级语义和性能对照达标，不允许双写同一索引。
 - 本轮 Node 24.21.0 运行时测试为 16 个文件、99 项；运行时与应用类型检查、Lint、Native Worker 编译通过。生产构建已复验通过，且既有构建会报告动态与静态混合导入提示。
 
 ## CLI 与桌面试运行的受限文件工具验证（2026-09-17）
@@ -599,7 +709,7 @@ npm run build
 
 - 工作台的侧栏、右侧运行面板、工作目录面板和对话宽度会按工作空间与逻辑窗口作用域保存；主窗口、SSH 窗口和每个独立会话窗口由 Main 在加载 URL 时传入稳定作用域，因此 Electron 的短生命周期窗口 ID 不会污染持久化布局键。
 - 原有只按工作空间保存的布局键仍作为一次读取回退，升级后首次保存会写入新键；无效对象、`NaN` 与无穷宽度会被拒绝，宽度在保存和恢复时均会裁剪到安全范围。
-- `tests/runtime/workspace-layout.test.ts` 覆盖有效快照、窗口作用域键、恢复裁剪及损坏持久化对象。此项只完成工作台布局数据隔离，尚不代表 P9 的多标签、拖动分屏、独立窗口全功能或视觉验收已完成。
+- `tests/runtime/workspace-layout.test.ts` 覆盖有效快照、窗口作用域键、恢复裁剪及损坏持久化对象。此项只完成工作台布局数据隔离，尚不代表 P9 的多标签全面体验、拖动分屏、独立窗口全功能或视觉验收已完成。
 
 ## 本地 Grep TS 金丝雀验证（2026-09-17）
 

@@ -430,7 +430,14 @@ export function buildSystemPrompt(options: {
     )
 
     // Agent Teams
-    const teamToolNames = ['TeamCreate', 'SendMessage', 'TeamStatus', 'TeamDelete']
+    const teamToolNames = [
+      'TeamCreate',
+      'SendMessage',
+      'TeamStatus',
+      'TeamDelete',
+      'TeamTaskCreate',
+      'TeamTaskUpdate'
+    ]
     const hasTeamTools = teamToolNames.some((n) => toolDefs.some((t) => t.name === n))
     if (hasTeamTools) {
       if (hasActiveTeam) {

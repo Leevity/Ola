@@ -20,7 +20,7 @@ import {
   createLegacyListDirectoryTool,
   createLegacyReadTool,
   createLegacyWriteTool
-} from '../../runtime/tools/legacy-local-tools'
+} from '../../runtime/tools/workspace-tools'
 import { selectExplicitTools } from '../../runtime/tools/explicit-tools'
 import {
   createLocalFindFilesTool,
@@ -38,6 +38,17 @@ import { createMcpRuntimeTools } from '../mcp/mcp-runtime-tools'
 import { getActiveMcpManager } from '../ipc/mcp-handlers'
 import { showSystemNotification } from '../ipc/notify-handlers'
 import { createDesktopNotificationTool } from './desktop-notification-runtime-tool'
+import { createTaskRuntimeTools } from './task-runtime-tools'
+import { createGoalRuntimeTools } from './goal-runtime-tools'
+import { createSubAgentRuntimeTool } from './sub-agent-runtime-tool'
+import { createImageRuntimeTool } from './image-runtime-tool'
+import { createTeamRuntimeTools } from './team-runtime-tools'
+import { createPlanRuntimeTools } from './plan-runtime-tools'
+import { createAskUserRuntimeTool } from './ask-user-runtime-tool'
+import { createWidgetRuntimeTool } from './widget-runtime-tool'
+import { createSshRuntimeTools } from './ssh-runtime-tools'
+import { createTranslationRuntimeTools } from './translation-runtime-tools'
+import { createPromptOptimizerRuntimeTool } from './prompt-optimizer-runtime-tool'
 import {
   createChannelProviderReadRuntimeTools,
   createChannelProviderWriteRuntimeTools,
@@ -50,7 +61,10 @@ import { startStandaloneRuntime } from '../../runtime/host/standalone'
 import { RuntimeClient } from '../../runtime/host/runtime-client'
 import { RuntimeError, type RunSpec } from '../../shared/runtime/contracts'
 import type { ModelProtocol } from '../../shared/runtime/model'
-import { resolveMainProviderModel } from '../providers/provider-main-store'
+import {
+  resolveMainProviderModel,
+  resolveMainProviderSecret
+} from '../providers/provider-main-store'
 import { mainAccountGateway } from './account-gateway'
 import {
   loadManagedModelResources,
@@ -97,8 +111,7 @@ async function approvedLocalWorkingDirectory(run: RunSpec): Promise<string> {
 /**
  * Main owns this service and resolves credentials per request. The renderer
  * receives neither provider keys nor the local runtime connection token.
- * The simple plain-text desktop chat path already uses this host; richer
- * legacy turns remain on the Worker until their capabilities are equivalent.
+ * All desktop turns and tools are executed by this TypeScript runtime.
  */
 export class DesktopRuntime {
   private service: Awaited<ReturnType<typeof startStandaloneRuntime>> | null = null
@@ -131,7 +144,14 @@ export class DesktopRuntime {
             throw new RuntimeError('MODEL_UNAVAILABLE')
           return
         }
-        if (!resolveMainProviderModel(run.modelSource.providerId, run.modelSource.modelId))
+        const resolved = resolveMainProviderModel(
+          run.modelSource.providerId,
+          run.modelSource.modelId
+        )
+        if (!resolved) throw new RuntimeError('MODEL_UNAVAILABLE')
+        if (
+          !(await resolveMainProviderSecret(run.modelSource.providerId, resolved.provider.apiKey))
+        )
           throw new RuntimeError('MODEL_UNAVAILABLE')
       }
       const local = new LocalModelTransport(async (run) => {
@@ -142,12 +162,37 @@ export class DesktopRuntime {
           run.modelSource.modelId
         )
         if (!resolved) throw new RuntimeError('MODEL_UNAVAILABLE')
+        const websocketUrl =
+          typeof resolved.model.websocketUrl === 'string'
+            ? resolved.model.websocketUrl
+            : typeof resolved.provider.websocketUrl === 'string'
+              ? resolved.provider.websocketUrl
+              : undefined
+        const websocketMode =
+          resolved.model.websocketMode === 'auto' || resolved.model.websocketMode === 'disabled'
+            ? resolved.model.websocketMode
+            : resolved.provider.websocketMode === 'auto' ||
+                resolved.provider.websocketMode === 'disabled'
+              ? resolved.provider.websocketMode
+              : undefined
+        const responsesSessionScope =
+          typeof resolved.model.responsesSessionScope === 'string'
+            ? resolved.model.responsesSessionScope
+            : typeof resolved.provider.responsesSessionScope === 'string'
+              ? resolved.provider.responsesSessionScope
+              : undefined
         return {
           protocol: protocol(resolved.model.type ?? resolved.provider.type),
           model: run.modelSource.modelId,
           baseUrl: resolved.provider.baseUrl,
-          apiKey: resolved.provider.apiKey,
-          options: run.modelOptions
+          apiKey: await resolveMainProviderSecret(
+            run.modelSource.providerId,
+            resolved.provider.apiKey
+          ),
+          options: run.modelOptions,
+          ...(websocketUrl ? { websocketUrl } : {}),
+          ...(websocketMode ? { websocketMode } : {}),
+          ...(responsesSessionScope ? { responsesSessionScope } : {})
         }
       })
       const managed = new AccountGatewayTransport(async (run) => {
@@ -185,29 +230,31 @@ export class DesktopRuntime {
         // local root has been validated by Main for this exact run. Declarative
         // extensions are independent Main-owned capabilities and are selected
         // only from the run's project activation snapshot.
-        const localTools = run.workingDirectory
-          ? (() => {
-              return approvedLocalWorkingDirectory(run).then((root) => [
-                createLocalReadFileTool(root),
-                createLocalListDirectoryTool(root),
-                createLocalFindFilesTool(root),
-                createLocalGlobFilesTool(root),
-                createLocalGitStatusTool(root),
-                createLocalCreateFileTool(root),
-                createLocalWriteFileTool(root),
-                createLocalShellCommandTool(root),
-                // Existing Agent/Cron prompts use these protocol names. Their
-                // implementations delegate to the same confined TS primitives.
-                createLegacyReadTool(root),
-                createLegacyListDirectoryTool(root),
-                createLegacyGlobTool(root),
-                createLegacyGrepTool(root),
-                createLegacyBashTool(root),
-                createLegacyWriteTool(root),
-                createLegacyEditTool(root)
-              ])
-            })()
-          : Promise.resolve([])
+        const localTools = run.sshConnectionId
+          ? Promise.resolve(createSshRuntimeTools(run.sshConnectionId))
+          : run.workingDirectory
+            ? (() => {
+                return approvedLocalWorkingDirectory(run).then((root) => [
+                  createLocalReadFileTool(root),
+                  createLocalListDirectoryTool(root),
+                  createLocalFindFilesTool(root),
+                  createLocalGlobFilesTool(root),
+                  createLocalGitStatusTool(root),
+                  createLocalCreateFileTool(root),
+                  createLocalWriteFileTool(root),
+                  createLocalShellCommandTool(root),
+                  // Existing Agent/Cron prompts use these protocol names. Their
+                  // implementations delegate to the same confined TS primitives.
+                  createLegacyReadTool(root),
+                  createLegacyListDirectoryTool(root),
+                  createLegacyGlobTool(root),
+                  createLegacyGrepTool(root),
+                  createLegacyBashTool(root),
+                  createLegacyWriteTool(root),
+                  createLegacyEditTool(root)
+                ])
+              })()
+            : Promise.resolve([])
         return new ToolExecutor(
           selectExplicitTools(
             [
@@ -216,6 +263,17 @@ export class DesktopRuntime {
               createLegacyWebFetchRuntimeTool(),
               createLegacyWebSearchRuntimeTool(),
               createDesktopNotificationTool(showSystemNotification),
+              ...createTaskRuntimeTools(),
+              ...createGoalRuntimeTools(),
+              createSubAgentRuntimeTool(),
+              createSubAgentRuntimeTool('Agent'),
+              createAskUserRuntimeTool(),
+              createWidgetRuntimeTool(),
+              ...(run.translationContext ? createTranslationRuntimeTools() : []),
+              createPromptOptimizerRuntimeTool(),
+              createImageRuntimeTool(),
+              ...createTeamRuntimeTools(),
+              ...createPlanRuntimeTools(),
               ...createChannelReadRuntimeTools(),
               ...createChannelWriteRuntimeTools(),
               ...createChannelProviderReadRuntimeTools(),

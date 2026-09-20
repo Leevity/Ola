@@ -4,7 +4,10 @@ import type {
   ProviderConfig,
   UnifiedMessage
 } from '../api/types'
-import { runSidecarContextCompression } from '@renderer/lib/ipc/agent-bridge'
+import { runTsContextCompression } from '@renderer/lib/ipc/agent-bridge'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { resolveTsRuntimeModelBinding } from '@renderer/lib/ipc/ts-runtime-model-binding'
+import { assessTsRuntimeTextEligibility } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 
 export interface CompressionConfig {
   enabled: boolean
@@ -35,6 +38,12 @@ export const CONTEXT_COMPRESSION_PRE_BUFFER_TOKENS = 20_000
 export const CONTEXT_COMPRESSION_PRE_GAP_TOKENS = 8_000
 
 const DEFAULT_PRECOMPRESS_THRESHOLD = 0.65
+const TS_COMPRESSION_SESSION_SCOPE = 'context-compression'
+const TS_COMPRESSION_SYSTEM_PROMPT =
+  'You compress long AI coding-agent conversations into durable working memory. ' +
+  'Preserve exact user intent, constraints, decisions, files touched, errors, test results, ' +
+  'open tasks, and any facts needed to continue safely. Omit filler and obsolete details. ' +
+  'Return only a concise Markdown summary, with no preface.'
 const LEGACY_SUMMARY_PREFIXES = [
   '[Context Memory Compressed Summary]',
   '[Context Memory Compressed Summary]',
@@ -42,7 +51,7 @@ const LEGACY_SUMMARY_PREFIXES = [
 ]
 
 export function resetCompressionFailures(): void {
-  // Native worker owns the summarizer circuit breaker.
+  // Main TS runtime owns the summarizer circuit breaker.
 }
 
 export function clampCompressionThreshold(value?: number | null): number {
@@ -132,7 +141,7 @@ export function getPreCompressionTriggerTokens(config: CompressionConfig): numbe
 
 export function shouldCompress(inputTokens: number, config: CompressionConfig): boolean {
   if (!config.enabled || config.contextLength <= 0) return false
-  // The native worker owns summarizer failure handling and falls back to local
+  // The Main TS runtime owns summarizer failure handling and falls back to local
   // truncation when needed, so the renderer should keep triggering above the
   // token threshold to guarantee the context stays bounded.
   return inputTokens >= getCompressionTriggerTokens(config)
@@ -143,6 +152,258 @@ export function shouldPreCompress(inputTokens: number, config: CompressionConfig
   void config
   void getPreCompressionTriggerTokens
   return false
+}
+
+function compressionMessageText(message: UnifiedMessage): string {
+  if (typeof message.content === 'string') return message.content.trim()
+  if (!Array.isArray(message.content)) return ''
+  return message.content
+    .map((block) => {
+      const value = block as unknown as Record<string, unknown>
+      switch (value.type) {
+        case 'text':
+          return typeof value.text === 'string' ? value.text : ''
+        case 'tool_use': {
+          const input = value.input
+          let serialized = '{}'
+          try {
+            serialized = JSON.stringify(input ?? {})
+          } catch {
+            serialized = '{}'
+          }
+          return `[Tool call: ${typeof value.name === 'string' ? value.name : ''}] ${serialized.slice(0, 500)}`
+        }
+        case 'tool_result': {
+          let serialized = ''
+          try {
+            serialized =
+              typeof value.content === 'string'
+                ? value.content
+                : JSON.stringify(value.content ?? '')
+          } catch {
+            serialized = ''
+          }
+          const suffix = value.isError === true ? ' error' : ''
+          return `[Tool result${suffix}] ${serialized.slice(0, 800)}`
+        }
+        case 'image':
+          return '[image attachment]'
+        case 'image_error':
+          return `[Image error: ${typeof value.message === 'string' ? value.message : ''}]`
+        case 'agent_error':
+          return `[Agent error: ${typeof value.message === 'string' ? value.message : ''}]`
+        default:
+          return ''
+      }
+    })
+    .filter(Boolean)
+    .join('\n')
+    .trim()
+}
+
+function compressionToolBlocks(message: UnifiedMessage): Record<string, unknown>[] {
+  if (!Array.isArray(message.content)) return []
+  return message.content.map((block) => block as unknown as Record<string, unknown>)
+}
+
+function findCompressionBoundary(
+  messages: readonly UnifiedMessage[],
+  initialBoundary: number
+): number {
+  let boundary = Math.max(1, Math.min(initialBoundary, messages.length))
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const compressedToolUseIds = new Set<string>()
+    for (const message of messages.slice(0, boundary)) {
+      for (const block of compressionToolBlocks(message)) {
+        if (block.type === 'tool_use' && typeof block.id === 'string' && block.id) {
+          compressedToolUseIds.add(block.id)
+        }
+      }
+    }
+    let split = false
+    for (const message of messages.slice(boundary)) {
+      for (const block of compressionToolBlocks(message)) {
+        if (
+          block.type === 'tool_result' &&
+          typeof block.toolUseId === 'string' &&
+          compressedToolUseIds.has(block.toolUseId)
+        ) {
+          split = true
+          break
+        }
+      }
+      if (split) break
+    }
+    if (!split) return boundary
+    boundary = Math.max(1, boundary - 1)
+  }
+  return boundary
+}
+
+function findOriginalCompressionTask(messages: readonly UnifiedMessage[]): UnifiedMessage | null {
+  return (
+    messages.find((message) => {
+      if (message.role !== 'user' || message.meta?.compactSummary) return false
+      if (typeof message.content === 'string') return Boolean(message.content.trim())
+      if (!Array.isArray(message.content)) return false
+      return message.content.some((block) => ['text', 'image'].includes(block.type))
+    }) ?? null
+  )
+}
+
+function buildCompressionPrompt(
+  messages: readonly UnifiedMessage[],
+  focusPrompt?: string,
+  pinnedContext?: string
+): string {
+  const parts: string[] = []
+  const originalTask = findOriginalCompressionTask(messages)
+  if (originalTask) {
+    parts.push('## Original Task', compressionMessageText(originalTask))
+  }
+  if (pinnedContext?.trim()) parts.push('## Pinned Plan Context', pinnedContext.trim())
+  parts.push(
+    '## Full Conversation History',
+    messages
+      .map((message) => {
+        const role = message.role.toUpperCase()
+        const content = compressionMessageText(message)
+        return content ? `[${role}]: ${content}` : ''
+      })
+      .filter(Boolean)
+      .join('\n\n')
+  )
+  const focus = focusPrompt?.trim()
+    ? `\n\nSpecial focus requested by the user: ${focusPrompt.trim()}`
+    : ''
+  return `Summarize the conversation below so another agent can continue from the current state.${focus}\n\nReturn only the summary.\n\n${parts.join('\n\n')}`
+}
+
+function normalizeCompressionSummary(value: string): string {
+  return value
+    .replace(/<think\b[^>]*>[\s\S]*?(?:<\/think>|$)/gi, '')
+    .replace(/<analysis\b[^>]*>[\s\S]*?(?:<\/analysis>|$)/gi, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
+async function tryTsRuntimeCompression(args: {
+  messages: UnifiedMessage[]
+  provider: ProviderConfig
+  signal?: AbortSignal
+  preserveCount: number
+  focusPrompt?: string
+  pinnedContext?: string
+  trigger: 'auto' | 'manual'
+  preTokens: number
+}): Promise<{ messages: UnifiedMessage[]; result: CompressionResult } | null> {
+  const originalCount = args.messages.length
+  const minMessagesToCompress = args.trigger === 'manual' ? 1 : 2
+  const effectivePreserveCount = Math.min(
+    Math.max(0, args.preserveCount),
+    Math.max(0, originalCount - minMessagesToCompress)
+  )
+  if (originalCount < effectivePreserveCount + minMessagesToCompress) {
+    return {
+      messages: args.messages,
+      result: { compressed: false, originalCount, newCount: originalCount }
+    }
+  }
+  const boundaryIndex = findCompressionBoundary(
+    args.messages,
+    args.messages.length - effectivePreserveCount
+  )
+  const messagesToCompress = args.messages.slice(0, boundaryIndex)
+  const messagesToPreserve = args.messages.slice(boundaryIndex)
+  if (messagesToCompress.length < minMessagesToCompress) {
+    return {
+      messages: args.messages,
+      result: { compressed: false, originalCount, newCount: originalCount }
+    }
+  }
+
+  const binding = resolveTsRuntimeModelBinding(args.provider)
+  if (!binding || !(await isTsRuntimeAvailable())) return null
+
+  const prompt = buildCompressionPrompt(messagesToCompress, args.focusPrompt, args.pinnedContext)
+  const eligibility = assessTsRuntimeTextEligibility({
+    messages: [{ id: 'context-compression', role: 'user', content: prompt, createdAt: Date.now() }],
+    provider: args.provider,
+    modelSource: binding.modelSource
+  })
+  if (!eligibility.eligible) return null
+
+  let summary = ''
+  try {
+    for await (const event of streamTsRuntimeTextTurn({
+      workspaceId: binding.workspaceId,
+      sessionId: `context-compression:${crypto.randomUUID()}`,
+      modelSource: binding.modelSource,
+      modelOptions: {
+        ...eligibility.modelOptions,
+        systemPrompt: TS_COMPRESSION_SYSTEM_PROMPT,
+        thinking: { type: 'disabled' },
+        temperature: 0,
+        responsesSessionScope: TS_COMPRESSION_SESSION_SCOPE
+      },
+      prompt,
+      maxTurns: 1,
+      signal: args.signal
+    })) {
+      if (event.type === 'text_delta' && event.text) summary += event.text
+      if (event.type === 'loop_end') break
+      if (event.type === 'error') throw event.error
+    }
+  } catch (error) {
+    if (args.signal?.aborted) throw error
+    return null
+  }
+  summary = normalizeCompressionSummary(summary)
+  if (!summary) return null
+
+  const summaryId = `oc_${crypto.randomUUID()}`
+  const boundaryId = `oc_${crypto.randomUUID()}`
+  const headId = messagesToPreserve[0]?.id
+  const tailId = messagesToPreserve.at(-1)?.id
+  const boundary: UnifiedMessage = {
+    id: boundaryId,
+    role: 'system',
+    content: 'Conversation compacted',
+    createdAt: Date.now(),
+    meta: {
+      compactBoundary: {
+        trigger: args.trigger,
+        preTokens: args.preTokens,
+        messagesSummarized: messagesToCompress.length,
+        ...(headId && tailId ? { preservedSegment: { headId, anchorId: summaryId, tailId } } : {})
+      }
+    }
+  }
+  const summaryMessage: UnifiedMessage = {
+    id: summaryId,
+    role: 'user',
+    content:
+      `[Context Memory Compressed Summary]\n\nThe following summary covers ${messagesToCompress.length} earlier messages. ` +
+      'Continue from this summary plus any messages that appear after the compression point.\n\n' +
+      summary,
+    createdAt: Date.now(),
+    meta: {
+      compactSummary: {
+        messagesSummarized: messagesToCompress.length,
+        recentMessagesPreserved: messagesToPreserve.length > 0
+      }
+    }
+  }
+  const compressedMessages = [boundary, summaryMessage, ...messagesToPreserve]
+  return {
+    messages: compressedMessages,
+    result: {
+      compressed: true,
+      originalCount,
+      newCount: compressedMessages.length,
+      messagesSummarized: messagesToCompress.length
+    }
+  }
 }
 
 export function isCompactBoundaryMessage(message: UnifiedMessage): boolean {
@@ -548,7 +809,19 @@ export async function compressMessages(
     throw new Error('aborted')
   }
 
-  const result = await runSidecarContextCompression({
+  const tsResult = await tryTsRuntimeCompression({
+    messages,
+    provider: providerConfig,
+    signal,
+    preserveCount,
+    ...(focusPrompt ? { focusPrompt } : {}),
+    ...(pinnedContext?.trim() ? { pinnedContext: pinnedContext.trim() } : {}),
+    trigger,
+    preTokens
+  })
+  if (tsResult) return tsResult
+
+  const result = await runTsContextCompression({
     messages,
     provider: providerConfig,
     signal,

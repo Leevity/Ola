@@ -1,5 +1,6 @@
 ﻿import { ipcMain } from 'electron'
 import { initializeDatabase } from '../db/database'
+import { businessWritePromotionStatus } from '../db/business-write-canary'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { authorizeMessageSearchWorkspace } from './message-search-workspace'
 import { authorizeDbWorkspace } from './db-workspace-authorization'
@@ -235,7 +236,11 @@ function normalizeGoalEventMetadata(value: unknown): Record<string, unknown> | n
 }
 
 export async function registerDbHandlers(options: RegisterDbHandlersOptions = {}): Promise<void> {
-  await initializeDatabase()
+  if (businessWritePromotionStatus().promoted) {
+    console.log('[DB][TS] business ownership already promoted; skipping Native initialization')
+  } else {
+    await initializeDatabase()
+  }
 
   async function addMessagesBatch(
     msgs: messagesDao.MessageInput[]

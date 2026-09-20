@@ -6,7 +6,10 @@ import type {
   UnifiedMessage
 } from '@renderer/lib/api/types'
 import { resolveLanguageName as resolveAppLanguageName } from '@renderer/lib/i18n-language'
-import { streamSidecarProviderTurn } from '@renderer/lib/ipc/agent-bridge'
+import { streamTsProviderTurn } from '@renderer/lib/ipc/agent-bridge'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 
 export interface StreamAiTranslationOptions {
   text: string
@@ -76,7 +79,56 @@ export async function streamAiTranslation({
     }
   ]
 
-  for await (const event of streamSidecarProviderTurn({
+  const workspaceStore = useWorkspaceStore.getState()
+  const managedWorkspaceId = providerConfig.providerId?.startsWith('ola-managed:')
+    ? providerConfig.providerId.slice('ola-managed:'.length)
+    : undefined
+  const workspace = managedWorkspaceId
+    ? workspaceStore.getWorkspaces().find((item) => item.id === managedWorkspaceId)
+    : workspaceStore.getActiveWorkspace()
+  const modelSource = workspace
+    ? explicitTsRuntimeModelSource({
+        providerId: providerConfig.providerId,
+        modelId: providerConfig.model,
+        managedWorkspaceKind:
+          workspace.kind === 'ola-personal' || workspace.kind === 'ola-team'
+            ? workspace.kind
+            : undefined
+      })
+    : null
+
+  if (workspace && modelSource && (await isTsRuntimeAvailable())) {
+    for await (const event of streamTsRuntimeTextTurn({
+      workspaceId: workspace.id,
+      sessionId: `translate:${nanoid()}`,
+      modelSource,
+      modelOptions: {
+        systemPrompt,
+        ...(providerConfig.maxTokens !== undefined ? { maxTokens: providerConfig.maxTokens } : {}),
+        ...(providerConfig.temperature !== undefined
+          ? { temperature: providerConfig.temperature }
+          : {}),
+        thinking: { type: 'disabled' }
+      },
+      prompt: `<source_text>\n${text}\n</source_text>`,
+      signal
+    })) {
+      if (signal.aborted) break
+      if (event.type === 'text_delta' && event.text) onTextDelta?.(stripThinkTags(event.text))
+      else if (event.type === 'message_end') {
+        onMessageEnd?.({
+          usage: event.usage,
+          timing: event.timing,
+          providerResponseId: event.providerResponseId
+        })
+      } else if (event.type === 'error') {
+        throw new Error(event.error?.message ?? 'Translation failed')
+      }
+    }
+    return
+  }
+
+  for await (const event of streamTsProviderTurn({
     messages,
     tools: [],
     provider: {

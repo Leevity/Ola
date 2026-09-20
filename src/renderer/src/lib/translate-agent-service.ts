@@ -1,13 +1,9 @@
 import { nanoid } from 'nanoid'
-import type {
-  ProviderConfig,
-  UnifiedMessage,
-  ToolDefinition,
-  TextBlock
-} from '@renderer/lib/api/types'
+import type { ProviderConfig, ToolDefinition } from '@renderer/lib/api/types'
 import { resolveLanguageName as resolveAppLanguageName } from '@renderer/lib/i18n-language'
-import { runAgentViaSidecar } from '@renderer/lib/agent/run-agent-via-sidecar'
-import { buildSidecarAgentRunRequest } from '@renderer/lib/ipc/sidecar-protocol'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 
 // ── Tool definitions ────────────────────────────────────────────────────────
 
@@ -95,12 +91,17 @@ export interface RunTranslationAgentOptions {
   targetLanguage: string
   providerConfig: ProviderConfig
   signal: AbortSignal
+  fileRoot?: string
   onEvent: (event: TranslationAgentEvent) => void
 }
 
 // ── System prompt ────────────────────────────────────────────────────────────
 
-function buildAgentSystemPrompt(sourceLanguage: string, targetLanguage: string): string {
+function buildAgentSystemPrompt(
+  sourceLanguage: string,
+  targetLanguage: string,
+  hasFileRead: boolean
+): string {
   const targetName = resolveAppLanguageName(targetLanguage)
   const sourceName =
     sourceLanguage === 'auto' ? 'auto-detected' : resolveAppLanguageName(sourceLanguage)
@@ -117,7 +118,7 @@ You have access to four tools that operate on a shared translation buffer:
 - Write(content): Replace the entire buffer with full translated text only. Use this once for the initial complete translation.
 - Edit(old_string, new_string): Find and replace a specific substring in the buffer.
 - Read(): Read the current buffer contents to review your translation.
-- FileRead(file_path): Read a file from disk if you need to access additional context or the source file directly.
+${hasFileRead ? '- FileRead(file_path): Read a file from the selected source folder if you need additional context.' : ''}
 </tools_available>
 
 <translation_process>
@@ -150,68 +151,7 @@ You have access to four tools that operate on a shared translation buffer:
 
 // ── Structured user message builder ─────────────────────────────────────────
 
-function buildUserMessage(
-  sourceText: string,
-  sourceLanguage: string,
-  targetLanguage: string,
-  iteration: number
-): UnifiedMessage {
-  const targetName = resolveAppLanguageName(targetLanguage)
-  const sourceName =
-    sourceLanguage === 'auto'
-      ? 'auto-detect the source language'
-      : `the source language is ${resolveAppLanguageName(sourceLanguage)}`
-
-  const systemRemind: TextBlock = {
-    type: 'text',
-    text: `<system-remind>
-You are performing translation task #${iteration}.
-Target language: ${targetName}.
-Source language: ${sourceName}.
-Use your translation tools (Write, Edit, Read, FileRead) to build the translation in the buffer.
-Never output translated text directly in your message — use Write/Edit for translation content only.
-When finished, stop calling tools and reply exactly "TRANSLATION_DONE" (plain text, no tool calls).
-Do not call Write() with completion/status text.
-</system-remind>`
-  }
-
-  const taskRequirements: TextBlock = {
-    type: 'text',
-    text: `Please translate the following source text into ${targetName}.
-
-Translation requirements:
-- Produce a complete, faithful, and natural translation
-- Preserve all formatting, structure, code blocks, and special syntax exactly
-- Maintain the original tone and register
-- Start by calling Write() with the complete translation, then use Edit() to refine if needed
-- Never use Write() for completion/status text like "translation complete" or "翻译已完成"
-- Do NOT include any commentary or explanation in the buffer — only the translated text`
-  }
-
-  const sourceContent: TextBlock = {
-    type: 'text',
-    text: `<source_text>\n${sourceText}\n</source_text>`
-  }
-
-  return {
-    id: nanoid(),
-    role: 'user',
-    content: [systemRemind, taskRequirements, sourceContent],
-    createdAt: Date.now()
-  }
-}
-
 // ── Main agent loop ───────────────────────────────────────────────────────────
-
-function stringifyToolOutput(output: unknown): string {
-  if (typeof output === 'string') return output
-  if (output == null) return ''
-  try {
-    return JSON.stringify(output)
-  } catch {
-    return String(output)
-  }
-}
 
 export async function runTranslationAgent({
   text,
@@ -219,84 +159,102 @@ export async function runTranslationAgent({
   targetLanguage,
   providerConfig,
   signal,
+  fileRoot,
   onEvent
 }: RunTranslationAgentOptions): Promise<void> {
-  const systemPrompt = buildAgentSystemPrompt(sourceLanguage, targetLanguage)
+  const systemPrompt = buildAgentSystemPrompt(sourceLanguage, targetLanguage, Boolean(fileRoot))
   const MAX_ITERATIONS = 12
 
-  const conversationMessages: UnifiedMessage[] = [
-    buildUserMessage(text, sourceLanguage, targetLanguage, 1)
-  ]
+  const workspaceStore = useWorkspaceStore.getState()
+  const managedWorkspaceId = providerConfig.providerId?.startsWith('ola-managed:')
+    ? providerConfig.providerId.slice('ola-managed:'.length)
+    : undefined
+  const workspace = managedWorkspaceId
+    ? workspaceStore.getWorkspaces().find((item) => item.id === managedWorkspaceId)
+    : workspaceStore.getActiveWorkspace()
+  const modelSource = workspace
+    ? explicitTsRuntimeModelSource({
+        providerId: providerConfig.providerId,
+        modelId: providerConfig.model,
+        managedWorkspaceKind:
+          workspace.kind === 'ola-personal' || workspace.kind === 'ola-team'
+            ? workspace.kind
+            : undefined
+      })
+    : null
 
-  const request = buildSidecarAgentRunRequest({
-    messages: conversationMessages,
-    tools: TRANSLATION_TOOLS,
-    provider: { ...providerConfig, systemPrompt, thinkingEnabled: false, temperature: 0.2 },
-    maxIterations: MAX_ITERATIONS,
-    forceApproval: false,
-    translation: {
-      enabled: true,
-      sourceLanguage,
-      targetLanguage
+  if (workspace && modelSource && (await isTsRuntimeAvailable())) {
+    onEvent({ type: 'iteration', iteration: 1 })
+    for await (const event of streamTsRuntimeTextTurn({
+      workspaceId: workspace.id,
+      sessionId: `translate-agent:${nanoid()}`,
+      modelSource,
+      modelOptions: {
+        systemPrompt,
+        ...(providerConfig.maxTokens !== undefined ? { maxTokens: providerConfig.maxTokens } : {}),
+        temperature: 0.2,
+        thinking: { type: 'disabled' }
+      },
+      prompt: text,
+      ...(fileRoot
+        ? { translationContext: { sourceLanguage, targetLanguage, fileRoot } }
+        : {
+            translationContext: { sourceLanguage, targetLanguage }
+          }),
+      toolNames: TRANSLATION_TOOLS.filter((tool) => tool.name !== 'FileRead' || fileRoot).map(
+        (tool) => tool.name
+      ),
+      maxTurns: MAX_ITERATIONS,
+      signal
+    })) {
+      if (signal.aborted) return
+      if (event.type === 'text_delta' && event.text)
+        onEvent({ type: 'agent_text', text: event.text })
+      else if (event.type === 'tool_use_generated')
+        onEvent({
+          type: 'tool_use',
+          name: event.toolUseBlock.name,
+          input: event.toolUseBlock.input
+        })
+      else if (event.type === 'tool_call_result') {
+        const output = event.toolCall.output
+        try {
+          const parsed: unknown = JSON.parse(output)
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            (parsed as { __olaTranslationBufferUpdate?: unknown }).__olaTranslationBufferUpdate ===
+              true &&
+            typeof (parsed as { content?: unknown }).content === 'string'
+          ) {
+            onEvent({ type: 'buffer_update', content: (parsed as { content: string }).content })
+          }
+        } catch {
+          // Ordinary tool output is still forwarded to the activity log.
+        }
+        onEvent({
+          type: 'tool_result',
+          name: event.toolCall.name,
+          output,
+          ...(event.toolCall.status === 'error' ? { isError: true } : {})
+        })
+      } else if (event.type === 'message_end') {
+        onEvent({
+          type: 'message_end',
+          usage: event.usage,
+          timing: event.timing,
+          providerResponseId: event.providerResponseId
+        })
+      } else if (event.type === 'error') {
+        onEvent({ type: 'error', message: event.error?.message ?? 'Translation failed' })
+        return
+      } else if (event.type === 'loop_end') {
+        onEvent({ type: 'done' })
+        return
+      }
     }
-  })
-
-  if (!request) {
-    onEvent({ type: 'error', message: 'Failed to build native translation request' })
     return
   }
 
-  try {
-    for await (const event of runAgentViaSidecar(request, {
-      signal,
-      routeSubAgentEventsToBus: false
-    })) {
-      if (signal.aborted) return
-
-      switch (event.type) {
-        case 'iteration_start':
-          onEvent({ type: 'iteration', iteration: event.iteration })
-          break
-        case 'translation_buffer_update':
-          onEvent({ type: 'buffer_update', content: event.content })
-          break
-        case 'text_delta':
-          if (event.text) onEvent({ type: 'agent_text', text: event.text })
-          break
-        case 'tool_use_generated':
-          onEvent({
-            type: 'tool_use',
-            name: event.toolUseBlock.name,
-            input: event.toolUseBlock.input
-          })
-          break
-        case 'tool_call_result':
-          onEvent({
-            type: 'tool_result',
-            name: event.toolCall.name,
-            output: event.toolCall.error ?? stringifyToolOutput(event.toolCall.output),
-            isError: event.toolCall.status === 'error' || Boolean(event.toolCall.error)
-          })
-          break
-        case 'message_end':
-          onEvent({
-            type: 'message_end',
-            usage: event.usage,
-            timing: event.timing,
-            providerResponseId: event.providerResponseId
-          })
-          break
-        case 'error':
-          onEvent({ type: 'error', message: event.error.message })
-          return
-        case 'loop_end':
-          onEvent({ type: 'done' })
-          return
-      }
-    }
-  } catch (err) {
-    if (!signal.aborted) {
-      onEvent({ type: 'error', message: err instanceof Error ? err.message : String(err) })
-    }
-  }
+  onEvent({ type: 'error', message: 'TS_RUNTIME_TRANSLATION_UNAVAILABLE' })
 }

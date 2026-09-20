@@ -9,7 +9,10 @@ export function registerPromptsHandlers(): void {
     userDirectory: join(olaDataRoot(), 'prompts'),
     bundledDirectoryCandidates: getBundledResourceDirCandidates('prompts')
   })
-  void catalog.ensure()
+  registerMessagePackHandler<undefined, { success: boolean; error?: string }>(
+    'prompts:ensure',
+    async () => await catalog.ensure()
+  )
 
   registerMessagePackHandler<undefined, string[]>('prompts:list', async () => {
     return await catalog.list()

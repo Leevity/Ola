@@ -2,7 +2,7 @@
  * Plugin Auto-Reply Hook
  *
  * Listens for `plugin:auto-reply-task` window events and runs an
- * independent native sidecar Agent Loop with
+ * independent TypeScript Agent Loop with
  * the full main-agent configuration: all tools, system prompt with
  * plugin context, thinking, context compression, etc.
  *
@@ -12,9 +12,6 @@
 
 import { useEffect } from 'react'
 import { nanoid } from 'nanoid'
-import { runAgentViaSidecar } from '@renderer/lib/agent/run-agent-via-sidecar'
-import { buildSidecarAgentRunRequest } from '@renderer/lib/ipc/sidecar-protocol'
-import { agentBridge } from '@renderer/lib/ipc/agent-bridge'
 import { toolRegistry } from '@renderer/lib/agent/tool-registry'
 import {
   buildSystemPrompt,
@@ -45,6 +42,7 @@ import {
   getDefaultPluginToolNamesForType
 } from '@renderer/lib/channel/plugin-tools'
 import { DEFAULT_PLUGIN_PERMISSIONS } from '@renderer/lib/channel/types'
+import { TS_RUNTIME_CHANNEL_TOOL_NAMES } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import {
   loadLayeredMemorySnapshot,
   type SessionMemoryScope
@@ -123,7 +121,6 @@ interface PluginAutoReplyTask {
 }
 
 const PLUGIN_STREAM_DELTA_FLUSH_MS = 66
-const OPENAI_AUDIO_NATIVE_TIMEOUT_MS = 10 * 60 * 1000
 const pluginTaskChains = new Map<string, Promise<void>>()
 const queuedPluginTasksByScope = new Map<string, number>()
 const queuedPluginTasksBySession = new Map<string, number>()
@@ -842,9 +839,8 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     sessionId
   }
 
-  // Tool execution / channel permissions now live on the sidecar side. Plugin
-  // and SSH context are propagated via buildSidecarAgentRunRequest → sidecar →
-  // renderer-tool-bridge, so the static toolCtx/loopConfig are no longer needed.
+  // Tool execution and channel permissions are Main-owned. Plugin and SSH
+  // context are propagated through the TS Agent Loop directly.
   void permissions
   void homedir
 
@@ -1029,17 +1025,7 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     })
     const tsChannelToolNames = effectiveToolDefs
       .map((tool) => tool.name)
-      .filter((name) =>
-        [
-          'PluginGetGroupMessages',
-          'PluginGetCurrentChatMessages',
-          'PluginListGroups',
-          'PluginSendMessage',
-          'PluginReplyMessage',
-          'FeishuListChatMembers',
-          'FeishuSendImage'
-        ].includes(name)
-      )
+      .filter((name) => TS_RUNTIME_CHANNEL_TOOL_NAMES.has(name))
     const tsEligibility = tsModelSource
       ? assessTsRuntimeAgentEligibility({
           mode: 'execute',
@@ -1051,44 +1037,26 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
           hasPlan: false,
           hasGoal: false,
           hasSsh: Boolean(session.sshConnectionId),
-          // Channel delivery is handled by this hook after the run; the TS
-          // path intentionally exposes no plugin tools in this first safe
-          // slice, so a model cannot bypass the channel send boundary.
-          hasPlugin: false,
-          hasChannels: false,
+          // Main owns the channel tool authorization. The explicit context
+          // binds every unattended read/write to this inbound chat.
+          hasPlugin: true,
+          hasChannels: true,
           hasTeam: false,
-          hasImages: false
+          hasImages: false,
+          channelContext: { pluginId, chatId, messageId: task.messageId }
         })
       : { eligible: false as const, reason: 'MODEL_SOURCE_NOT_MIGRATED' }
     const useTsChannelRuntime =
       !task.images?.length &&
       !task.audio &&
-      !session.sshConnectionId &&
       Boolean(tsModelSource) &&
       tsEligibility.eligible &&
       (await isTsRuntimeAvailable().catch(() => false))
 
-    const sidecarRequest = buildSidecarAgentRunRequest({
-      messages: historyMessages,
-      provider: agentProviderConfig,
-      tools: effectiveToolDefs,
-      sessionId,
-      workingFolder: session.workingFolder,
-      maxIterations: 15,
-      forceApproval: false,
-      pluginId,
-      pluginChatId: chatId,
-      pluginChatType: task.chatType,
-      pluginSenderId: task.senderId,
-      pluginSenderName: task.senderName,
-      sshConnectionId: session.sshConnectionId
-    })
-    if (!sidecarRequest && !useTsChannelRuntime) {
-      throw new Error('Failed to build sidecar agent request for plugin auto-reply')
-    }
-    // Both paths project into the existing agent event vocabulary. The TS
-    // projection is intentionally consumed at this boundary as an event
-    // stream so legacy tool-specific event refinements remain unchanged.
+    if (!useTsChannelRuntime || !tsModelSource || !tsEligibility.eligible)
+      throw new Error('TS_RUNTIME_CHANNEL_UNAVAILABLE')
+    // The TS projection is consumed at this boundary as an event stream so
+    // existing channel streaming and CardKit rendering remain unchanged.
     const tsLoop = streamTsRuntimeTextTurn({
       workspaceId: task.workspaceId,
       sessionId,
@@ -1097,16 +1065,14 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
       modelOptions: tsEligibility.eligible ? tsEligibility.modelOptions : undefined,
       prompt: tsEligibility.eligible ? tsEligibility.prompt : effectiveContent,
       history: tsEligibility.eligible ? tsEligibility.history : undefined,
+      sshConnectionId: session.sshConnectionId ?? undefined,
       toolNames: tsChannelToolNames,
       channelContext: { pluginId, chatId, messageId: task.messageId },
       maxTurns: 15,
       unattended: true,
       signal: ac.signal
     }) as unknown as AsyncIterable<AgentEvent>
-    const loop: AsyncIterable<AgentEvent> =
-      useTsChannelRuntime && tsModelSource && tsEligibility.eligible
-        ? tsLoop
-        : runAgentViaSidecar(sidecarRequest!, { signal: ac.signal })
+    const loop: AsyncIterable<AgentEvent> = tsLoop
 
     for await (const event of loop) {
       if (ac.signal.aborted) break
@@ -1644,24 +1610,14 @@ async function transcribeFeishuAudio(params: {
   mediaType: string
   fileName: string
 }): Promise<string> {
-  const initialized = await agentBridge.initialize()
-  if (!initialized) {
-    throw new Error('Native worker unavailable for audio transcription.')
-  }
-
-  const result = (await agentBridge.request(
-    'openai-audio/transcribe',
-    {
-      provider: params.config,
-      file: {
-        base64: params.base64,
-        mediaType: params.mediaType,
-        fileName: params.fileName
-      }
-    },
-    OPENAI_AUDIO_NATIVE_TIMEOUT_MS
-  )) as { text?: string }
-
+  const result = (await ipcClient.invoke('pet:transcribe', {
+    provider: params.config,
+    file: {
+      base64: params.base64,
+      mediaType: params.mediaType,
+      fileName: params.fileName
+    }
+  })) as { text?: string }
   return result.text ?? ''
 }
 

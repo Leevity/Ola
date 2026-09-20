@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
 import type { AIModelConfig, AIProvider, ProviderConfig, UnifiedMessage } from '../api/types'
-import { runSidecarTextRequest } from '../ipc/agent-bridge'
+import { runTsTextRequest } from '../ipc/agent-bridge'
 import { isProviderAvailableForModelSelection, useProviderStore } from '../../stores/provider-store'
 
 const PET_CLAIM_OPTIMIZER_SYSTEM_PROMPT = `You are Ola's companion designer.
@@ -100,7 +100,7 @@ export async function optimizePetClaimDraft(args: {
     }
   ]
 
-  const output = await runSidecarTextRequest({
+  const output = await runTsTextRequest({
     messages,
     provider: {
       ...args.providerConfig,

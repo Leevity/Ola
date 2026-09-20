@@ -12,6 +12,7 @@ import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { useRemoteAccountStore } from '@renderer/stores/remote-account-store'
 import type {
   SyncConfig,
   SyncConflict,
@@ -61,6 +62,7 @@ function summarizeConflict(conflict: SyncConflict): string {
 export function SyncPage(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
+  const remoteToken = useRemoteAccountStore((state) => state.token)
   const [config, setConfig] = useState<SyncConfig | null>(null)
   const [provider, setProvider] = useState<SyncProviderConfig>(createFallbackProvider)
   const [status, setStatus] = useState<SyncStatus | null>(null)
@@ -71,6 +73,12 @@ export function SyncPage(): React.JSX.Element {
   const [choiceByConflictId, setChoiceByConflictId] = useState<Record<string, 'local' | 'remote'>>(
     {}
   )
+  const [workspaceRunning, setWorkspaceRunning] = useState(false)
+  const [workspaceResult, setWorkspaceResult] = useState<string | null>(null)
+  const [workspaceConflicts, setWorkspaceConflicts] = useState<SyncConflict[]>([])
+  const [workspaceChoiceByConflictId, setWorkspaceChoiceByConflictId] = useState<
+    Record<string, 'local' | 'remote'>
+  >({})
 
   const activeProviderId = config?.activeProviderId ?? provider.id
   const pendingConflicts = useMemo(() => status?.pendingConflicts ?? [], [status?.pendingConflicts])
@@ -101,7 +109,13 @@ export function SyncPage(): React.JSX.Element {
   }, [t])
 
   useEffect(() => {
-    if (workspaceId !== 'local-personal') return
+    if (workspaceId !== 'local-personal') {
+      // Managed workspaces use the v2 sync controls below and do not load the
+      // local WebDAV v1 configuration. Clear the local loading state so the
+      // workspace page cannot remain on an infinite spinner.
+      setLoading(false)
+      return
+    }
     void load()
     const offStatus = ipcClient.on(IPC.SYNC_STATUS_CHANGED, (payload) => {
       setStatus(payload as SyncStatus)
@@ -250,6 +264,66 @@ export function SyncPage(): React.JSX.Element {
     }
   }, [choiceByConflictId, pendingConflicts, t])
 
+  const runWorkspaceSync = useCallback(
+    async (resolutions?: SyncConflictResolution[]) => {
+      if (!workspaceId || workspaceId === 'local-personal' || workspaceRunning) return
+      setWorkspaceRunning(true)
+      setWorkspaceResult(null)
+      try {
+        const result = (await ipcClient.invoke(IPC.SYNC_WORKSPACE_RUN, {
+          workspaceId,
+          resolutions
+        })) as {
+          status?: string
+          conflicts?: SyncConflict[]
+          uploadedRecords?: number
+          downloadedRecords?: number
+        }
+        if (result.status === 'conflict') {
+          const conflicts = Array.isArray(result.conflicts) ? result.conflicts : []
+          setWorkspaceConflicts(conflicts)
+          setWorkspaceChoiceByConflictId({})
+          setWorkspaceResult(
+            t('sync.workspaceUnavailable.conflicts', {
+              defaultValue: 'Sync paused with {{count}} conflict(s).',
+              count: conflicts.length
+            })
+          )
+        } else {
+          setWorkspaceConflicts([])
+          setWorkspaceChoiceByConflictId({})
+          setWorkspaceResult(
+            t('sync.workspaceUnavailable.result', {
+              defaultValue:
+                'Workspace sync completed: {{uploaded}} uploaded, {{downloaded}} applied.',
+              uploaded: result.uploadedRecords ?? 0,
+              downloaded: result.downloadedRecords ?? 0
+            })
+          )
+        }
+      } catch (error) {
+        setWorkspaceResult(error instanceof Error ? error.message : String(error))
+      } finally {
+        setWorkspaceRunning(false)
+      }
+    },
+    [t, workspaceId, workspaceRunning]
+  )
+
+  const handleResolveWorkspaceConflicts = useCallback(async () => {
+    const resolutions: SyncConflictResolution[] = workspaceConflicts.map((conflict) => ({
+      conflictId: conflict.id,
+      choice: workspaceChoiceByConflictId[conflict.id]
+    }))
+    if (resolutions.some((resolution) => !resolution.choice)) {
+      toast.error(
+        t('sync.toast.chooseAll', { defaultValue: 'Choose a resolution for every conflict' })
+      )
+      return
+    }
+    await runWorkspaceSync(resolutions)
+  }, [runWorkspaceSync, t, workspaceChoiceByConflictId, workspaceConflicts])
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
@@ -263,14 +337,102 @@ export function SyncPage(): React.JSX.Element {
     return (
       <div className="mx-auto max-w-2xl px-6 py-12">
         <h1 className="text-xl font-semibold">
-          {t('sync.workspaceUnavailable.title', { defaultValue: 'Sync is unavailable here' })}
+          {t('sync.workspaceUnavailable.title', {
+            defaultValue: remoteToken ? 'Workspace sync' : 'Sync is unavailable here'
+          })}
         </h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          {t('sync.workspaceUnavailable.description', {
-            defaultValue:
-              'Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated.'
-          })}
+          {remoteToken
+            ? t('sync.workspaceUnavailable.v2Description', {
+                defaultValue:
+                  'This workspace uses isolated v2 WebDAV sync. It only runs after TS business ownership has been enabled for this device.'
+              })
+            : t('sync.workspaceUnavailable.description', {
+                defaultValue:
+                  'Sign in to sync a managed personal or team workspace. Local workspace data remains available offline.'
+              })}
         </p>
+        {remoteToken && (
+          <div className="mt-6 space-y-3">
+            <Button onClick={() => void runWorkspaceSync()} disabled={workspaceRunning}>
+              {workspaceRunning && <Loader2 className="mr-2 size-4 animate-spin" />}
+              {workspaceRunning
+                ? t('sync.workspaceUnavailable.running', { defaultValue: 'Syncing workspace…' })
+                : t('sync.workspaceUnavailable.action', { defaultValue: 'Sync workspace now' })}
+            </Button>
+            {workspaceResult && <p className="text-xs text-muted-foreground">{workspaceResult}</p>}
+            {workspaceConflicts.length > 0 && (
+              <div className="mt-6 rounded-lg border border-destructive/40 p-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-semibold text-destructive">
+                      {t('sync.conflicts.title', { defaultValue: 'Conflicts' })}
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                      {t('sync.conflicts.subtitle', {
+                        defaultValue: 'Choose which side should win for each record.'
+                      })}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => void handleResolveWorkspaceConflicts()}
+                    disabled={workspaceRunning}
+                  >
+                    {workspaceRunning && <Loader2 className="mr-1 size-3.5 animate-spin" />}
+                    {t('sync.conflicts.apply', { defaultValue: 'Apply choices' })}
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {workspaceConflicts.map((conflict) => (
+                    <div key={conflict.id} className="rounded-md border border-border/70 p-3">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium">{summarizeConflict(conflict)}</p>
+                          <p className="text-xs text-muted-foreground">{conflict.kind}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant={
+                              workspaceChoiceByConflictId[conflict.id] === 'local'
+                                ? 'default'
+                                : 'outline'
+                            }
+                            onClick={() =>
+                              setWorkspaceChoiceByConflictId((current) => ({
+                                ...current,
+                                [conflict.id]: 'local'
+                              }))
+                            }
+                          >
+                            {t('sync.conflicts.local', { defaultValue: 'Local' })}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={
+                              workspaceChoiceByConflictId[conflict.id] === 'remote'
+                                ? 'default'
+                                : 'outline'
+                            }
+                            onClick={() =>
+                              setWorkspaceChoiceByConflictId((current) => ({
+                                ...current,
+                                [conflict.id]: 'remote'
+                              }))
+                            }
+                          >
+                            {t('sync.conflicts.remote', { defaultValue: 'Remote' })}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   }

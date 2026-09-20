@@ -26,6 +26,7 @@ import { cn } from '@renderer/lib/utils'
 import { useTerminalStore } from '@renderer/stores/terminal-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { SshConnectionPicker } from './SshConnectionPicker'
@@ -73,6 +74,8 @@ export function TerminalPanel(): React.JSX.Element {
   const createLocalTab = useTerminalStore((s) => s.createTab)
   const closeLocalTab = useTerminalStore((s) => s.closeTab)
   const setLocalActiveTab = useTerminalStore((s) => s.setActiveTab)
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const setTerminalWorkspace = useTerminalStore((s) => s.setWorkspace)
 
   const sshConnections = useSshStore((s) => s.connections)
   const sshSessions = useSshStore((s) => s.sessions)
@@ -93,8 +96,9 @@ export function TerminalPanel(): React.JSX.Element {
   )
 
   useEffect(() => {
+    setTerminalWorkspace(workspaceId)
     initTerminal()
-  }, [initTerminal])
+  }, [initTerminal, setTerminalWorkspace, workspaceId])
 
   useEffect(() => {
     if (!sshLoaded) {

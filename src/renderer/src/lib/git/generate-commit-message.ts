@@ -2,7 +2,7 @@ import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import type { ProviderConfig, UnifiedMessage } from '@renderer/lib/api/types'
 import { resolveLanguageName, type AppLanguage } from '@renderer/lib/i18n-language'
-import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
+import { runTsTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { withWorkspacePromptCacheKey } from '@renderer/lib/agent/prompt-cache-key'
 
 const stripReasoningBlocks = (value: string): string =>
@@ -101,7 +101,7 @@ export async function generateCommitMessageFromStagedDiff(
     signal?.addEventListener('abort', onAbort, { once: true })
 
     const timeout = window.setTimeout(() => abortController.abort(), 60_000)
-    const text = await runSidecarTextRequest({
+    const text = await runTsTextRequest({
       provider: scopedConfig,
       messages,
       signal: abortController.signal

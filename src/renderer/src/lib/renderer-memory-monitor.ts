@@ -44,15 +44,6 @@ interface ProcessMemoryDiagnostics {
       sharedKb?: number
     } | null
   }>
-  nativeWorker: {
-    success?: boolean
-    pid?: number | null
-    managedBytes?: number
-    heapBytes?: number
-    fragmentedBytes?: number
-    workingSetBytes?: number
-    error?: string | null
-  } | null
 }
 
 let installed = false
@@ -166,16 +157,6 @@ async function sampleRendererMemory(): Promise<void> {
             rssMB: bytesToMb(processMemory.main.memory.rss),
             heapUsedMB: bytesToMb(processMemory.main.memory.heapUsed)
           },
-          nativeWorker: processMemory.nativeWorker
-            ? {
-                pid: processMemory.nativeWorker.pid ?? null,
-                success: processMemory.nativeWorker.success ?? null,
-                workingSetMB: bytesToMb(processMemory.nativeWorker.workingSetBytes),
-                managedMB: bytesToMb(processMemory.nativeWorker.managedBytes),
-                heapMB: bytesToMb(processMemory.nativeWorker.heapBytes),
-                error: processMemory.nativeWorker.error ?? null
-              }
-            : null,
           appMetrics: processMemory.appMetrics.map((metric) => ({
             pid: metric.pid,
             type: metric.type,

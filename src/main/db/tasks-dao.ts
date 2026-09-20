@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { canaryGetTask, canaryListTasks, canaryListTasksBySession } from './legacy-read-canary'
 import { businessWriteCanary } from './business-write-canary'
 
@@ -32,7 +32,11 @@ interface TaskMutationResult {
 }
 
 async function requestMutation(method: string, params: object): Promise<TaskMutationResult> {
-  const result = await getNativeWorker().request<TaskMutationResult>(method, params, 120_000)
+  const result = await getTsDatabaseRouteGuard().request<TaskMutationResult>(
+    method,
+    params,
+    120_000
+  )
   if (!result.success) {
     throw new Error(result.error || `Native task mutation failed: ${method}`)
   }
@@ -43,9 +47,11 @@ export async function listTasksBySession(
   sessionId: string,
   workspaceId = 'local-personal'
 ): Promise<TaskRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) return await writer.tasksBySession<TaskRow>(sessionId, workspaceId)
   const migrated = await canaryListTasksBySession(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<TaskRow[]>(
+  return getTsDatabaseRouteGuard().request<TaskRow[]>(
     'db/tasks-list-by-session',
     { sessionId, workspaceId },
     120_000
@@ -53,18 +59,22 @@ export async function listTasksBySession(
 }
 
 export async function listAllTasks(workspaceId = 'local-personal'): Promise<TaskRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) return await writer.tasks<TaskRow>(workspaceId)
   const migrated = await canaryListTasks(workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<TaskRow[]>('db/tasks-list-all', { workspaceId }, 120_000)
+  return getTsDatabaseRouteGuard().request<TaskRow[]>('db/tasks-list-all', { workspaceId }, 120_000)
 }
 
 export async function getTask(
   id: string,
   workspaceId = 'local-personal'
 ): Promise<TaskRow | undefined> {
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.task<TaskRow>(id, workspaceId)) ?? undefined
   const migrated = await canaryGetTask(id, workspaceId)
   if (migrated !== undefined) return migrated ?? undefined
-  const result = await getNativeWorker().request<TaskFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<TaskFindResult>(
     'db/tasks-get',
     { id, workspaceId },
     120_000

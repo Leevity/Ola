@@ -1,5 +1,5 @@
 import type { SyncRecord, SyncTombstone } from '../../shared/sync-types'
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { businessWriteCanary } from './business-write-canary'
 
 export interface DbSyncRecordDraft {
@@ -53,7 +53,7 @@ export async function captureSyncDbSnapshot(providerId: string): Promise<DbSyncS
     }
   }
   console.log('[SyncDb][Native] capture snapshot start')
-  const result = await getNativeWorker().request<DbSyncSnapshotResult>(
+  const result = await getTsDatabaseRouteGuard().request<DbSyncSnapshotResult>(
     'db/sync-capture-local',
     { providerId },
     120_000
@@ -88,7 +88,7 @@ export async function applySyncDbMerge(args: {
     apply: args.recordsToApply.length,
     delete: args.recordsToDelete.length
   })
-  const result = await getNativeWorker().request<DbSyncMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<DbSyncMutationResult>(
     'db/sync-apply-db-merge',
     args,
     120_000
@@ -112,7 +112,7 @@ export async function saveSyncDbMetadata(
     records: records.length,
     tombstones: tombstones.length
   })
-  const result = await getNativeWorker().request<DbSyncMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<DbSyncMutationResult>(
     'db/sync-save-metadata',
     { providerId, records, tombstones },
     120_000

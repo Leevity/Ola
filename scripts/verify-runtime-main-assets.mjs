@@ -7,7 +7,6 @@ const execute = promisify(execFile)
 const assets = [
   'out/main/journal-worker.mjs',
   'out/main/journal-schema.mjs',
-  'out/main/legacy-read-worker.mjs',
   'out/main/business-worker.mjs',
   'out/main/business-schema.mjs',
   'out/main/graph-store-worker.mjs',
@@ -25,12 +24,8 @@ const journal = await readFile('src/runtime/storage/run-journal.ts', 'utf8')
 assert.match(journal, /defaultApp/)
 assert.match(journal, /\.\.\/\.\.\/src\/runtime\/storage\/journal-worker\.mjs/)
 
-const legacyReader = await readFile('src/runtime/storage/legacy-read-repository.ts', 'utf8')
-assert.match(legacyReader, /defaultApp/)
-assert.match(legacyReader, /\.\.\/\.\.\/src\/runtime\/storage\/legacy-read-worker\.mjs/)
-
 const packaging = await readFile('electron-builder.yml', 'utf8')
-assert.match(packaging, /out\/main\/legacy-read-worker\.mjs/)
+assert.doesNotMatch(packaging, /legacy-read-worker\.mjs/)
 assert.match(packaging, /out\/storage\/lease-worker\.mjs/)
 
 const bridge = await readFile('src/renderer/src/lib/ipc/ts-runtime-bridge.ts', 'utf8')

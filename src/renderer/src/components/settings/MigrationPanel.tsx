@@ -67,6 +67,7 @@ type BusinessHandoverStatus = {
   enabled?: boolean
   handoverReady?: boolean
   handoverBlocker?: string
+  handoverWarning?: string
   manifestPath?: string
   backupPath?: string
 }
@@ -143,11 +144,19 @@ export function MigrationPanel(): React.JSX.Element {
         confirm: true
       })) as BusinessHandoverStatus
       setBusinessHandover(status)
-      toast.success(
-        t('migration.businessHandoverSuccess', {
-          defaultValue: 'Business data is now owned by the TS runtime.'
-        })
-      )
+      if (status.promoted) {
+        toast.success(
+          t('migration.businessHandoverSuccess', {
+            defaultValue: 'Business data is now owned by the TS runtime.'
+          })
+        )
+      } else {
+        toast.error(
+          t('migration.businessHandoverIncomplete', {
+            defaultValue: 'The handover did not reach TS ownership. Review the status and retry.'
+          })
+        )
+      }
     } catch (error) {
       toast.error(
         t('migration.businessHandoverFailed', {
@@ -156,8 +165,12 @@ export function MigrationPanel(): React.JSX.Element {
       )
     } finally {
       setBusinessHandoverLoading(false)
+      // Refresh readiness after both success and failure so the panel reflects
+      // a parked legacy writer, a generated rollback snapshot, or a blocker
+      // discovered during the final quiescence check.
+      await loadBusinessHandoverStatus()
     }
-  }, [t])
+  }, [loadBusinessHandoverStatus, t])
 
   useEffect(() => {
     void loadBusinessHandoverStatus()
@@ -331,10 +344,24 @@ export function MigrationPanel(): React.JSX.Element {
               })}
             </p>
           )}
+        {businessHandover && !businessHandover.promoted && businessHandover.handoverWarning && (
+          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+            {t('migration.businessHandoverWarning', {
+              defaultValue:
+                'Existing Native Project Wiki records will be preserved in the TS-owned archive during handover.'
+            })}
+          </p>
+        )}
         {businessHandover?.backupPath && (
           <p className="break-all text-[11px] text-muted-foreground">
             {t('migration.businessHandoverBackup', { defaultValue: 'Rollback snapshot' })}:{' '}
             {businessHandover.backupPath}
+          </p>
+        )}
+        {businessHandover?.manifestPath && (
+          <p className="break-all text-[11px] text-muted-foreground">
+            {t('migration.businessHandoverManifest', { defaultValue: 'Handover manifest' })}:{' '}
+            {businessHandover.manifestPath}
           </p>
         )}
       </section>

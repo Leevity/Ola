@@ -1,9 +1,8 @@
 # Ola Project Wiki
 
 Ola is a local-first Electron desktop application for AI-assisted work. It combines
-a React renderer, Electron main process, secure preload bridge, and a .NET native
-worker sidecar into one desktop agent runtime.
-
+a React renderer, Electron main process, secure preload bridge, and TypeScript
+runtime into one local-first desktop agent runtime.
 This document is the repository map for the Ola codebase. It describes the current
 project as an independent codebase and is intended for maintainers who need to
 understand where features live, how the app starts, and what should or should not be
@@ -14,7 +13,7 @@ committed.
 Ola is organized into four runtime layers:
 
 ```text
-Renderer (React 19) <-> Preload bridge <-> Electron main <-> Native worker
+Renderer (React 19) <-> Preload bridge <-> Electron main <-> TypeScript runtime
 ```
 
 - **Renderer**: React UI, Zustand stores, chat surface, settings, tool approvals,
@@ -22,10 +21,9 @@ Renderer (React 19) <-> Preload bridge <-> Electron main <-> Native worker
 - **Preload**: A narrow `contextBridge` surface that exposes safe APIs from the main
   process to the renderer.
 - **Main process**: Electron lifecycle, IPC handlers, filesystem/shell/SSH access,
-  sync, cron scheduling, channel integrations, MCP clients, and native worker
-  orchestration.
-- **Native worker**: .NET 10 AOT sidecar for SQLite, filesystem, Git, SSH, settings,
-  skills, user content, and provider runtime requests.
+  sync, cron scheduling, channel integrations, MCP clients, and runtime orchestration.
+- **TypeScript runtime**: Agent execution, scheduling, SQLite business ownership,
+  CodeGraph/WASM indexing, providers, tools, and local workspace state.
 
 ## Source Layout
 
@@ -34,7 +32,7 @@ src/
 ├── main/              Electron main process
 │   ├── channels/      Messaging integrations
 │   ├── cron/          Scheduled agent runtime
-│   ├── db/            DAO wrappers backed by the native worker
+│   ├── db/            BusinessRepository-backed data access
 │   ├── goals/         Goal runtime state and continuation logic
 │   ├── ipc/           Main-process IPC handlers
 │   ├── lib/           Main-process helpers
@@ -51,10 +49,11 @@ src/
 │   └── stores/        Zustand stores
 └── shared/            Cross-process TypeScript contracts
 
-sidecars/Ola.Native.Worker/
-├── Modules/           Native worker feature modules
-├── Protocol/          MessagePack transport protocol
-└── Runtime/           Runtime helpers such as API User-Agent handling
+runtime/
+├── agent/             Agent execution and orchestration
+├── codegraph/         WASM parser, indexer and graph store
+├── db/                SQLite business repository and migrations
+└── cli/               TypeScript CLI runtime entrypoint
 
 resources/
 ├── agents/            Built-in agent templates
@@ -69,8 +68,8 @@ resources/
 - Main process: `src/main/index.ts`
 - Preload bridge: `src/preload/index.ts`
 - Renderer app: `src/renderer/src/App.tsx`
-- Native worker project: `sidecars/Ola.Native.Worker/Ola.Native.Worker.csproj`
-- Native worker publish script: `scripts/publish-native-worker.mjs`
+- TypeScript runtime entrypoint: `src/runtime/index.ts`
+- TypeScript runtime build script: `scripts/build-ts-runtime.mjs`
 - Packaging config: `electron-builder.yml`
 - GitHub release workflow: `.github/workflows/build.yml`
 
@@ -95,7 +94,6 @@ The logic is centralized in:
 
 - `src/renderer/src/lib/api/api-user-agent.ts`
 - `src/main/lib/api-user-agent.ts`
-- `sidecars/Ola.Native.Worker/Runtime/ApiUserAgent.cs`
 
 Provider configuration can override the default with `provider.userAgent`. The
 settings UI exposes this field on each provider, which is useful for compatibility
@@ -105,7 +103,6 @@ testing against third-party APIs.
 
 ```bash
 npm install
-npm run native:publish
 npm run dev
 npm run typecheck
 npm run lint
@@ -139,7 +136,7 @@ Commit source, resources, docs, and build configuration. Do not commit:
 - `node_modules/`
 - `out/`
 - `dist/`
-- `resources/native-worker/`
+- `resources/codegraph/grammars/` (tracked WASM grammar assets are allowed)
 - `~/.ola/`
 - `.agents/`
 - `.plan/`
@@ -154,8 +151,9 @@ the repository remains easy to audit with a zero-hit search.
 
 - Keep app identity, package metadata, update metadata, User-Agent defaults, and
   docs aligned with Ola.
-- Keep schema changes additive. Existing SQLite migrations are applied by the
-  native worker.
+- Keep schema changes additive. SQLite migrations are applied by the TypeScript
+  BusinessRepository and covered by runtime tests.
 - Treat upstream projects and third-party services as references only; Ola's
   repository history and release process should remain independent.
-- Re-run native worker publishing after changes in `sidecars/Ola.Native.Worker/`.
+- Re-run the TypeScript runtime build and CodeGraph verification after runtime or
+  grammar changes.

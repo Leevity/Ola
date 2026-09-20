@@ -1,4 +1,5 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
+import { businessWriteCanary } from './business-write-canary'
 
 // ── SSH Groups ──
 
@@ -24,12 +25,14 @@ interface SshConnectionFindResult {
 
 function assertMutation(result: SshMutationResult, operation: string): void {
   if (!result.success) {
-    throw new Error(result.error || `Native SSH ${operation} failed`)
+    throw new Error(result.error || `SSH ${operation} failed`)
   }
 }
 
 export function listSshGroups(): Promise<SshGroupRow[]> {
-  return getNativeWorker().request<SshGroupRow[]>('db/ssh-groups-list', {}, 120_000)
+  const writer = businessWriteCanary()
+  if (writer) return writer.sshGroups<SshGroupRow>()
+  return getTsDatabaseRouteGuard().request<SshGroupRow[]>('db/ssh-groups-list', {}, 120_000)
 }
 
 export async function createSshGroup(group: {
@@ -39,7 +42,12 @@ export async function createSshGroup(group: {
   createdAt: number
   updatedAt: number
 }): Promise<void> {
-  const result = await getNativeWorker().request<SshMutationResult>(
+  const writer = businessWriteCanary()
+  if (writer) {
+    const result = await writer.createSshGroup(group)
+    return assertMutation(result, 'group create')
+  }
+  const result = await getTsDatabaseRouteGuard().request<SshMutationResult>(
     'db/ssh-groups-create',
     group,
     120_000
@@ -51,7 +59,9 @@ export async function updateSshGroup(
   id: string,
   patch: Partial<{ name: string; sortOrder: number; updatedAt: number }>
 ): Promise<void> {
-  const result = await getNativeWorker().request<SshMutationResult>(
+  const writer = businessWriteCanary()
+  if (writer) return assertMutation(await writer.updateSshGroup(id, patch), 'group update')
+  const result = await getTsDatabaseRouteGuard().request<SshMutationResult>(
     'db/ssh-groups-update',
     { id, patch },
     120_000
@@ -60,7 +70,9 @@ export async function updateSshGroup(
 }
 
 export async function deleteSshGroup(id: string): Promise<void> {
-  const result = await getNativeWorker().request<SshMutationResult>(
+  const writer = businessWriteCanary()
+  if (writer) return assertMutation(await writer.deleteSshGroup(id), 'group delete')
+  const result = await getTsDatabaseRouteGuard().request<SshMutationResult>(
     'db/ssh-groups-delete',
     { id },
     120_000
@@ -92,17 +104,25 @@ export interface SshConnectionRow {
 }
 
 export function listSshConnections(): Promise<SshConnectionRow[]> {
-  return getNativeWorker().request<SshConnectionRow[]>('db/ssh-connections-list', {}, 120_000)
+  const writer = businessWriteCanary()
+  if (writer) return writer.sshConnections<SshConnectionRow>()
+  return getTsDatabaseRouteGuard().request<SshConnectionRow[]>(
+    'db/ssh-connections-list',
+    {},
+    120_000
+  )
 }
 
 export async function getSshConnection(id: string): Promise<SshConnectionRow | undefined> {
-  const result = await getNativeWorker().request<SshConnectionFindResult>(
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.sshConnection<SshConnectionRow>(id)).connection ?? undefined
+  const result = await getTsDatabaseRouteGuard().request<SshConnectionFindResult>(
     'db/ssh-connections-get',
     { id },
     120_000
   )
   if (!result.success) {
-    throw new Error(result.error || 'Native SSH connection get failed')
+    throw new Error(result.error || 'SSH connection get failed')
   }
   return result.connection ?? undefined
 }
@@ -126,7 +146,12 @@ export async function createSshConnection(conn: {
   createdAt: number
   updatedAt: number
 }): Promise<void> {
-  const result = await getNativeWorker().request<SshMutationResult>(
+  const writer = businessWriteCanary()
+  if (writer) {
+    const result = await writer.createSshConnection(conn)
+    return assertMutation(result, 'connection create')
+  }
+  const result = await getTsDatabaseRouteGuard().request<SshMutationResult>(
     'db/ssh-connections-create',
     conn,
     120_000
@@ -155,7 +180,10 @@ export async function updateSshConnection(
     updatedAt: number
   }>
 ): Promise<void> {
-  const result = await getNativeWorker().request<SshMutationResult>(
+  const writer = businessWriteCanary()
+  if (writer)
+    return assertMutation(await writer.updateSshConnection(id, patch), 'connection update')
+  const result = await getTsDatabaseRouteGuard().request<SshMutationResult>(
     'db/ssh-connections-update',
     { id, patch },
     120_000
@@ -164,7 +192,9 @@ export async function updateSshConnection(
 }
 
 export async function deleteSshConnection(id: string): Promise<void> {
-  const result = await getNativeWorker().request<SshMutationResult>(
+  const writer = businessWriteCanary()
+  if (writer) return assertMutation(await writer.deleteSshConnection(id), 'connection delete')
+  const result = await getTsDatabaseRouteGuard().request<SshMutationResult>(
     'db/ssh-connections-delete',
     { id },
     120_000

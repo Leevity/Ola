@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { canaryGetPlan, canaryGetPlanBySession, canaryListPlans } from './legacy-read-canary'
 import { businessWriteCanary } from './business-write-canary'
 
@@ -28,7 +28,11 @@ interface PlanMutationResult {
 }
 
 async function requestMutation(method: string, params: object): Promise<PlanMutationResult> {
-  const result = await getNativeWorker().request<PlanMutationResult>(method, params, 120_000)
+  const result = await getTsDatabaseRouteGuard().request<PlanMutationResult>(
+    method,
+    params,
+    120_000
+  )
   if (!result.success) {
     throw new Error(result.error || `Native plan mutation failed: ${method}`)
   }
@@ -36,18 +40,22 @@ async function requestMutation(method: string, params: object): Promise<PlanMuta
 }
 
 export async function listPlans(workspaceId = 'local-personal'): Promise<PlanRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) return await writer.plans<PlanRow>(workspaceId)
   const migrated = await canaryListPlans(workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<PlanRow[]>('db/plans-list', { workspaceId }, 120_000)
+  return getTsDatabaseRouteGuard().request<PlanRow[]>('db/plans-list', { workspaceId }, 120_000)
 }
 
 export async function getPlan(
   id: string,
   workspaceId = 'local-personal'
 ): Promise<PlanRow | undefined> {
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.plan<PlanRow>(id, workspaceId)) ?? undefined
   const migrated = await canaryGetPlan(id, workspaceId)
   if (migrated !== undefined) return migrated ?? undefined
-  const result = await getNativeWorker().request<PlanFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<PlanFindResult>(
     'db/plans-get',
     { id, workspaceId },
     120_000
@@ -62,9 +70,11 @@ export async function getPlanBySession(
   sessionId: string,
   workspaceId = 'local-personal'
 ): Promise<PlanRow | undefined> {
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.planBySession<PlanRow>(sessionId, workspaceId)) ?? undefined
   const migrated = await canaryGetPlanBySession(sessionId, workspaceId)
   if (migrated !== undefined) return migrated ?? undefined
-  const result = await getNativeWorker().request<PlanFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<PlanFindResult>(
     'db/plans-get-by-session',
     { sessionId, workspaceId },
     120_000

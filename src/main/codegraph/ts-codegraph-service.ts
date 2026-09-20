@@ -35,6 +35,22 @@ export type TsCodeGraphProgress = {
 
 const MAX_QUERY_LIMIT = 500
 
+const CODEGRAPH_TOOLS = [
+  'codegraph_explore',
+  'codegraph_search',
+  'codegraph_node',
+  'codegraph_callers',
+  'codegraph_callees',
+  'codegraph_impact',
+  'codegraph_files',
+  'codegraph_status'
+] as const
+
+const CODEGRAPH_INDEXED_INSTRUCTIONS =
+  '# CodeGraph\n\nThis project has a TS/WASM CodeGraph index. Prefer `codegraph_explore` for understanding relationships between symbols.\n'
+const CODEGRAPH_NO_ROOT_INSTRUCTIONS =
+  '# CodeGraph\n\nThis project is not indexed yet. Run `codegraph/index` first, then prefer `codegraph_explore` for symbol relationships.\n'
+
 function error(
   kind: CodeGraphErrorKind,
   message: string
@@ -78,9 +94,8 @@ function asLimit(params: unknown, fallback: number): number {
 }
 
 /**
- * Main-owned TS/WASM CodeGraph adapter. It deliberately uses a separate data root
- * from the legacy .NET graph database, so an opt-in migration cannot corrupt or
- * race the current production index.
+ * Main-owned TS/WASM CodeGraph adapter. It uses an isolated data root so index
+ * replacement and recovery cannot corrupt or race the current production index.
  */
 export class TsCodeGraphService {
   private readonly projects = new Map<string, Project>()
@@ -93,8 +108,25 @@ export class TsCodeGraphService {
   async request(method: string, params: unknown = {}): Promise<unknown> {
     const root = asRoot(params)
     if (method === 'worker/ping') return { ok: true, runtime: 'ts-wasm' }
+    if (method === 'codegraph/db-smoke') {
+      return { success: true, runtime: 'ts-wasm', backend: 'node:sqlite' }
+    }
     if (method === 'codegraph/list-projects') return await this.listProjects()
     if (method === 'codegraph/remove-project') return await this.removeProject(params)
+    if (method === 'codegraph/instructions') {
+      const indexed = Boolean(root && (await this.indexed(root)))
+      return {
+        success: true,
+        text: indexed ? CODEGRAPH_INDEXED_INSTRUCTIONS : CODEGRAPH_NO_ROOT_INSTRUCTIONS,
+        indexed
+      }
+    }
+    if (method === 'codegraph/tools-list') {
+      return {
+        success: true,
+        tools: CODEGRAPH_TOOLS.map((name) => ({ name, readOnly: true }))
+      }
+    }
     if (!root) return error('invalid_args', 'workingFolder is required.')
     if (!isSafeProjectRoot(root))
       return error('path_refusal', `Refused to operate on a sensitive path: ${root}`)
@@ -112,6 +144,8 @@ export class TsCodeGraphService {
         return await this.filesTree(root, params)
       case 'codegraph/file-symbols':
         return await this.fileSymbols(root, params)
+      case 'codegraph/node':
+        return await this.node(root, params)
       case 'codegraph/search':
       case 'codegraph/explore':
       case 'codegraph/callers':
@@ -122,6 +156,8 @@ export class TsCodeGraphService {
         return await this.neighbors(root, params)
       case 'codegraph/analytics':
         return await this.analytics(root)
+      case 'codegraph/prompt-context':
+        return await this.promptContext(root, params)
       case 'codegraph/status':
         return await this.statusTool(root)
       case 'codegraph/files':
@@ -350,6 +386,160 @@ export class TsCodeGraphService {
     return { success: true, symbols: file?.symbols ?? [] }
   }
 
+  private async node(root: string, params: unknown): Promise<unknown> {
+    const file = asString(params, 'file')
+    if (file) return await this.fileSymbols(root, { path: file })
+    const symbol = asString(params, 'symbol') ?? asString(params, 'query')
+    if (!symbol) return error('invalid_args', 'symbol or file is required.')
+    return await this.search(root, 'codegraph/search', {
+      ...((params ?? {}) as object),
+      query: symbol
+    })
+  }
+
+  private async promptContext(root: string, params: unknown): Promise<unknown> {
+    const query = asString(params, 'query') ?? asString(params, 'symbol')
+    if (!query) return error('invalid_args', 'query or symbol is required.')
+    const result = await this.search(root, 'codegraph/explore', { query })
+    return {
+      success: true,
+      text: `TS CodeGraph context for ${query}:\n${(result as { text?: string }).text ?? ''}`
+    }
+  }
+
+  private async relationSearch(
+    project: Project,
+    method: 'codegraph/callers' | 'codegraph/callees' | 'codegraph/impact',
+    params: unknown
+  ): Promise<{ success: true; text: string; isError: false } | ReturnType<typeof error>> {
+    const symbolName = asString(params, 'symbol') ?? asString(params, 'query')
+    if (!symbolName) return error('invalid_args', 'query or symbol is required.')
+    const fileFilter = asString(params, 'file')
+    const depthValue =
+      params && typeof params === 'object' ? (params as Record<string, unknown>).depth : undefined
+    const depth =
+      typeof depthValue === 'number' && Number.isFinite(depthValue)
+        ? Math.max(1, Math.min(6, Math.floor(depthValue)))
+        : 2
+    const limit = asLimit(params, 50)
+    const files = (
+      await Promise.all(
+        (await project.store.listPaths()).map((path) => project.store.getFile(path))
+      )
+    ).filter((file): file is NonNullable<typeof file> => Boolean(file))
+    const definitions = files.flatMap((file) =>
+      file.symbols.map((symbol) => ({ ...symbol, path: file.path, language: file.language }))
+    )
+    const matches = definitions.filter(
+      (definition) =>
+        definition.name === symbolName && (!fileFilter || definition.path === fileFilter)
+    )
+    if (!matches.length) {
+      return { success: true, text: `No symbol named "${symbolName}" found.`, isError: false }
+    }
+
+    const enclosing = (path: string, line: number, column: number) => {
+      const candidates = definitions.filter(
+        (definition) =>
+          definition.path === path &&
+          (line > definition.startLine ||
+            (line === definition.startLine && column >= definition.startColumn)) &&
+          (line < definition.endLine ||
+            (line === definition.endLine && column <= definition.endColumn))
+      )
+      return candidates.sort(
+        (left, right) =>
+          left.endLine - left.startLine - (right.endLine - right.startLine) ||
+          left.endColumn - left.startColumn - (right.endColumn - right.startColumn)
+      )[0]
+    }
+
+    const callsFrom = new Map<string, Set<string>>()
+    const callsTo = new Map<string, Set<string>>()
+    const byName = new Map<string, typeof definitions>()
+    for (const definition of definitions) {
+      const list = byName.get(definition.name) ?? []
+      list.push(definition)
+      byName.set(definition.name, list)
+    }
+    for (const file of files) {
+      for (const reference of file.references) {
+        const owner = enclosing(file.path, reference.startLine, reference.startColumn)
+        if (!owner) continue
+        for (const target of byName.get(reference.name) ?? []) {
+          if (target.id === owner.id) continue
+          const outgoing = callsFrom.get(owner.id) ?? new Set<string>()
+          outgoing.add(target.id)
+          callsFrom.set(owner.id, outgoing)
+          const incoming = callsTo.get(target.id) ?? new Set<string>()
+          incoming.add(owner.id)
+          callsTo.set(target.id, incoming)
+        }
+      }
+    }
+
+    const format = (definition: (typeof definitions)[number]) =>
+      `${definition.name} (${definition.kind}) — ${definition.path}:${definition.startLine}`
+    const direct = (root: (typeof definitions)[number], reverse: boolean) => {
+      const ids = reverse ? callsTo.get(root.id) : callsFrom.get(root.id)
+      return definitions.filter((candidate) => ids?.has(candidate.id))
+    }
+    const results: Array<(typeof definitions)[number]> = []
+    const seen = new Set<string>()
+    for (const root of matches) {
+      const queue: Array<{ id: string; level: number }> = [{ id: root.id, level: 0 }]
+      const reverse = method === 'codegraph/callers'
+      while (queue.length && results.length < limit) {
+        const current = queue.shift()!
+        if (current.level >= depth) continue
+        const currentDefinition = definitions.find((candidate) => candidate.id === current.id)
+        if (!currentDefinition) continue
+        for (const next of direct(currentDefinition, reverse)) {
+          if (seen.has(next.id)) continue
+          seen.add(next.id)
+          results.push(next)
+          queue.push({ id: next.id, level: current.level + 1 })
+          if (results.length >= limit) break
+        }
+      }
+    }
+    if (method === 'codegraph/impact') {
+      const affected = new Map<string, (typeof definitions)[number]>()
+      for (const root of matches) {
+        const queue: Array<{ id: string; level: number }> = [{ id: root.id, level: 0 }]
+        const visited = new Set<string>([root.id])
+        while (queue.length && affected.size < limit) {
+          const current = queue.shift()!
+          if (current.level >= depth) continue
+          const currentDefinition = definitions.find((candidate) => candidate.id === current.id)
+          if (!currentDefinition) continue
+          for (const next of [
+            ...direct(currentDefinition, false),
+            ...direct(currentDefinition, true)
+          ]) {
+            if (visited.has(next.id)) continue
+            visited.add(next.id)
+            affected.set(next.id, next)
+            queue.push({ id: next.id, level: current.level + 1 })
+          }
+        }
+      }
+      results.splice(0, results.length, ...affected.values())
+    }
+    const heading =
+      method === 'codegraph/callers'
+        ? 'Callers'
+        : method === 'codegraph/callees'
+          ? 'Callees'
+          : 'Impact'
+    const text = results.length
+      ? `${heading} of ${symbolName} (${results.length} result(s), depth ${depth}):\n${results
+          .map((result) => `- ${format(result)}`)
+          .join('\n')}`
+      : `No ${heading.toLowerCase()} found for "${symbolName}".`
+    return { success: true, text, isError: false }
+  }
+
   private async search(root: string, method: string, params: unknown): Promise<unknown> {
     const project = await this.indexed(root)
     if (!project)
@@ -363,6 +553,12 @@ export class TsCodeGraphService {
       asString(params, method === 'codegraph/explore' ? 'query' : 'symbol') ??
       asString(params, 'query')
     if (!query) return error('invalid_args', 'query or symbol is required.')
+    if (
+      method === 'codegraph/callers' ||
+      method === 'codegraph/callees' ||
+      method === 'codegraph/impact'
+    )
+      return await this.relationSearch(project, method, params)
     const symbols = await (method === 'codegraph/search' || method === 'codegraph/explore'
       ? project.store.searchSymbols(query, asLimit(params, 30))
       : project.store.findSymbols(query, asLimit(params, 30)))
@@ -414,21 +610,83 @@ export class TsCodeGraphService {
         deadCodeTotal: 0
       })
     const snapshot = await this.snapshot(project)
-    const deadCode = snapshot.files.flatMap((file) =>
-      (file?.symbols ?? []).map((symbol) => ({
-        id: symbol.id,
-        name: symbol.name,
-        kind: symbol.kind,
-        filePath: file?.path ?? '',
-        startLine: symbol.startLine
-      }))
+    const files = snapshot.files.filter((file): file is NonNullable<typeof file> => Boolean(file))
+    const indexedPaths = new Set(files.map((file) => file.path))
+    const dependencies = new Map<string, string[]>()
+    for (const file of files) {
+      const targets = new Set<string>()
+      const resolved = await project.store.resolveImports(file.path)
+      for (const imported of file.imports) {
+        const target = resolved.find(
+          (candidate) =>
+            candidate.source === imported.source &&
+            candidate.targetPath &&
+            indexedPaths.has(candidate.targetPath)
+        )?.targetPath
+        if (target) targets.add(target)
+      }
+      dependencies.set(file.path, [...targets].sort())
+    }
+
+    const cycles: string[][] = []
+    const cycleKeys = new Set<string>()
+    const visit = (path: string, stack: string[], active: Set<string>): void => {
+      if (cycles.length >= 50) return
+      const position = stack.indexOf(path)
+      if (position >= 0) {
+        const cycle = stack.slice(position)
+        if (cycle.length > 1) {
+          const rotations = cycle.map((_, index) => [
+            ...cycle.slice(index),
+            ...cycle.slice(0, index)
+          ])
+          const canonicalRotation = rotations.sort((left, right) => {
+            const leftKey = left.join('\0')
+            const rightKey = right.join('\0')
+            return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
+          })[0]
+          const canonical = canonicalRotation?.join('\0')
+          if (canonical && canonicalRotation && !cycleKeys.has(canonical)) {
+            cycleKeys.add(canonical)
+            cycles.push(canonicalRotation)
+          }
+        }
+        return
+      }
+      if (active.has(path)) return
+      active.add(path)
+      const nextStack = [...stack, path]
+      for (const target of dependencies.get(path) ?? []) visit(target, nextStack, active)
+      active.delete(path)
+    }
+    for (const path of indexedPaths) visit(path, [], new Set())
+
+    const referencedNames = new Set(
+      files.flatMap((file) => file.references.map((reference) => reference.name))
     )
+    const allDeadCode = files
+      .flatMap((file) =>
+        file.symbols
+          .filter((symbol) => !symbol.exported && !referencedNames.has(symbol.name))
+          .map((symbol) => ({
+            id: symbol.id,
+            name: symbol.name,
+            kind: symbol.kind,
+            filePath: file.path,
+            startLine: symbol.startLine
+          }))
+      )
+      .sort(
+        (left, right) =>
+          left.filePath.localeCompare(right.filePath) || left.startLine - right.startLine
+      )
+    const deadCode = allDeadCode.slice(0, 200)
     return {
       success: true,
-      circularDependencies: [],
-      circularTotal: 0,
+      circularDependencies: cycles.slice(0, 50).map((files) => ({ files })),
+      circularTotal: cycles.length,
       deadCode,
-      deadCodeTotal: deadCode.length
+      deadCodeTotal: allDeadCode.length
     }
   }
 

@@ -104,9 +104,11 @@ func NewRouter(cfg config.Config, st store.Store, revoker DeviceSessionRevoker) 
 	mux.HandleFunc("/api/pairing/revoke", api.withAuth(api.revokePairing))
 	mux.HandleFunc("/api/pairing/resolve", api.withAuth(api.resolvePairing))
 	api.registerControlPlaneRoutes(mux)
+	api.registerAccountModelRoutes(mux)
 	api.registerMeshRoutes(mux)
 	mux.HandleFunc("/v1/models", api.withAuth(api.modelList))
-	mux.HandleFunc("/v1/chat/completions", api.withAuth(api.modelChatCompletions))
+	mux.HandleFunc("/v1/chat/completions", api.modelChatEndpoint)
+	mux.HandleFunc("/v1/responses", api.modelResponsesEndpoint)
 	return withCORS(mux, cfg.DevelopmentMode)
 }
 

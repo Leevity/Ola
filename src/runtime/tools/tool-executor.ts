@@ -8,6 +8,7 @@ import type {
   ModelToolCall as ToolCall,
   ModelToolResult as ToolResult
 } from '../../shared/runtime/model'
+import type { RunSnapshot } from '../../shared/runtime/contracts'
 export type {
   ModelToolCall as ToolCall,
   ModelToolResult as ToolResult
@@ -20,6 +21,11 @@ export interface ToolContext {
   requestInteraction?: (
     interaction: Omit<PendingRuntimeInteraction, 'runId' | 'workspaceId' | 'createdAt'>
   ) => Promise<unknown>
+  runNested?: (input: unknown) => Promise<RunSnapshot>
+  submitNested?: (
+    input: unknown,
+    onTerminal?: (snapshot: RunSnapshot) => Promise<void>
+  ) => Promise<import('../../shared/runtime/contracts').RunRecord>
 }
 export interface ToolDefinition {
   name: string

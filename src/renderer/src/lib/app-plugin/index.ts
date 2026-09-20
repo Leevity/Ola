@@ -112,7 +112,7 @@ export function updateAppPluginToolRegistration(): void {
     if (codeGraphWasEnabled) {
       codeGraphWasEnabled = false
       void agentBridge.stopCodeGraph().catch((error) => {
-        console.warn('[CodeGraph] failed to stop disabled worker:', error)
+        console.warn('[CodeGraph] failed to stop the disabled TS service:', error)
       })
     }
   }

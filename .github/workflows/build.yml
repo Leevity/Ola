@@ -55,15 +55,9 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
-            ~/.nuget/packages
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
-        with:
-          dotnet-version: 10.0.x
 
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -74,28 +68,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # TreeSitter grammar natives are gitignored; restore NuGet so verify:codegraph-worker
-      # can fall back to ~/.nuget/packages/.../runtimes/linux-x64/native on clean CI hosts.
-      - name: Restore CodeGraph NuGet packages
-        run: |
-          dotnet restore sidecars/Ola.CodeGraph.Core/Ola.CodeGraph.Core.csproj \
-            --source https://api.nuget.org/v3/index.json \
-            --source https://nuget.azure.cn/v3/index.json
-
       - name: Quality gates
         run: |
           npm audit --omit=dev --audit-level=high
           npm run typecheck
           npm run typecheck:runtime
+          npm run verify:ts-migration-ledger
           npm run test:runtime
           npm run runtime:build
-          dotnet test sidecars/Ola.CodeGraph.Tests/Ola.CodeGraph.Tests.csproj --verbosity minimal
           npm run lint:ci
           npm run format:check
           npm run verify:ci-core
           cd server && go test ./...
-        env:
-          OLA_NATIVE_WORKER_RID: linux-x64
 
   # ── 准备阶段：提取版本号与发布内容 ──
   prepare:
@@ -172,7 +156,6 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
-            ~/.nuget/packages
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
@@ -207,22 +190,18 @@ jobs:
             platform: win
             build_arch: x64
             artifact_arch: amd64
-            native_worker_rid: win-x64
           - os: windows-11-arm
             platform: win
             build_arch: arm64
             artifact_arch: arm64
-            native_worker_rid: win-arm64
           - os: ubuntu-latest
             platform: linux
             build_arch: x64
             artifact_arch: amd64
-            native_worker_rid: linux-x64
           - os: ubuntu-24.04-arm
             platform: linux
             build_arch: arm64
             artifact_arch: arm64
-            native_worker_rid: linux-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -245,15 +224,9 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
-            ~/.nuget/packages
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
-        with:
-          dotnet-version: 10.0.x
 
       # Linux 需要构建原生模块的依赖
       - name: Install Linux build dependencies
@@ -266,16 +239,6 @@ jobs:
       # 将 Release 版本号同步写入 package.json
       - name: Sync version to package.json
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
-
-      - name: Publish native worker (${{ matrix.native_worker_rid }})
-        run: npm run native:publish
-        env:
-          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
-
-      - name: Verify published worker assets
-        run: npm run worker:assets:verify
-        env:
-          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
 
       - name: Download compiled app
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
@@ -517,12 +480,10 @@ jobs:
             platform: mac
             build_arch: arm64
             artifact_arch: arm64
-            native_worker_rid: osx-arm64
           - os: macos-15-intel
             platform: mac
             build_arch: x64
             artifact_arch: amd64
-            native_worker_rid: osx-x64
 
     runs-on: ${{ matrix.os }}
 
@@ -545,15 +506,9 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
-            ~/.nuget/packages
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
-        with:
-          dotnet-version: 10.0.x
 
       - name: Install dependencies
         run: npm ci
@@ -564,16 +519,6 @@ jobs:
       # 将 Release 版本号同步写入 package.json
       - name: Sync version to package.json
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
-
-      - name: Publish native worker (${{ matrix.native_worker_rid }})
-        run: npm run native:publish
-        env:
-          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
-
-      - name: Verify published worker assets
-        run: npm run worker:assets:verify
-        env:
-          OLA_NATIVE_WORKER_RID: ${{ matrix.native_worker_rid }}
 
       - name: Download compiled app
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6

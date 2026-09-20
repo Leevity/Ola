@@ -26,7 +26,7 @@ import {
   createLegacyListDirectoryTool,
   createLegacyReadTool,
   createLegacyWriteTool
-} from '../tools/legacy-local-tools'
+} from '../tools/workspace-tools'
 import {
   RuntimeError,
   TERMINAL_STATUSES,
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
   const command = args[0]
   if (!command || command === 'help') {
     console.log(
-      'Ola staged TS runtime (Node 24+, local model protocols)\n\nserve --data-dir <isolated-dir> --provider <id> --model <id> --base-url <url> [--api-key-env <name>] [--workspace-root <path>] [--allow-write] [--protocol openai-chat|openai-responses|anthropic|gemini|vertex-ai]\nrun [--data-dir <dir>] --provider <id> --model <id> --prompt-file <file> [--session <id>] [--tools name[,name…]]\nlist [--data-dir <dir>]\nwatch [--data-dir <dir>] --run <id>\ncancel [--data-dir <dir>] --run <id>\nbackup-legacy-db [--data-dir <dir>] [--source <data.db>] [--backup-dir <dir>]\nverify-legacy-handover --manifest <manifest.json>\ndrill-legacy-rollback --manifest <manifest.json> --restore-dir <isolated-dir>\n\nWithout --data-dir, CLI connects to the running desktop Runtime through its protected local descriptor. Keys stay in the service environment; do not pass keys as CLI arguments. --workspace-root registers confined tools, but each run must explicitly opt in through --tools. --allow-write additionally makes create_text_file and write_text_file available for unattended runs in that root. backup-legacy-db first verifies the legacy business-schema contract, then creates a writable handover copy plus an independent read-only rollback baseline; it does not stop the Native Worker or perform a database migration. verify-legacy-handover is a read-only check for a completed handover manifest. drill-legacy-rollback creates a separate writable copy of the immutable baseline without touching the live source.'
+      'Ola staged TS runtime (Node 24+, local model protocols)\n\nserve --data-dir <isolated-dir> --provider <id> --model <id> --base-url <url> [--api-key-env <name>] [--workspace-root <path>] [--allow-write] [--protocol openai-chat|openai-responses|anthropic|gemini|vertex-ai]\nrun [--data-dir <dir>] --provider <id> --model <id> --prompt-file <file> [--session <id>] [--tools name[,name…]]\nlist [--data-dir <dir>]\nwatch [--data-dir <dir>] --run <id>\ncancel [--data-dir <dir>] --run <id>\nbackup-legacy-db [--data-dir <dir>] [--source <data.db>] [--backup-dir <dir>]\nverify-legacy-handover --manifest <manifest.json>\ndrill-legacy-rollback --manifest <manifest.json> --restore-dir <isolated-dir>\n\nWithout --data-dir, CLI connects to the running desktop Runtime through its protected local descriptor. Keys stay in the service environment; do not pass keys as CLI arguments. --workspace-root registers confined tools, but each run must explicitly opt in through --tools. --allow-write additionally makes create_text_file and write_text_file available for unattended runs in that root. backup-legacy-db first verifies the legacy business-schema contract, then creates a writable handover copy plus an independent read-only rollback baseline; it does not alter the live database. verify-legacy-handover is a read-only check for a completed handover manifest. drill-legacy-rollback creates a separate writable copy of the immutable baseline without touching the live source.'
     )
     return
   }

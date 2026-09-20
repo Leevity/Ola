@@ -1,6 +1,8 @@
 import { nanoid } from 'nanoid'
 import type { ProviderConfig, UnifiedMessage } from '../api/types'
-import { streamSidecarProviderTurn } from '../ipc/agent-bridge'
+import { streamTsProviderTurn } from '../ipc/agent-bridge'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '../ipc/ts-runtime-bridge'
+import { resolveTsRuntimeModelBinding } from '../ipc/ts-runtime-model-binding'
 import type { RiskItem } from '@renderer/stores/skills-store'
 
 /**
@@ -52,21 +54,41 @@ Be thorough but avoid false positives. Network calls and subprocess usage are wa
     const messages: UnifiedMessage[] = [userMessage]
     let fullResponse = ''
 
-    // Stream the response
-    for await (const event of streamSidecarProviderTurn({
-      messages,
-      tools: [],
-      provider: { ...providerConfig, systemPrompt },
-      signal
-    })) {
-      if (signal.aborted) break
+    const binding = resolveTsRuntimeModelBinding(providerConfig)
+    if (binding && (await isTsRuntimeAvailable())) {
+      for await (const event of streamTsRuntimeTextTurn({
+        workspaceId: binding.workspaceId,
+        sessionId: `skill-review:${nanoid()}`,
+        modelSource: binding.modelSource,
+        modelOptions: { systemPrompt, thinking: { type: 'disabled' } },
+        prompt: userMessage.content as string,
+        signal
+      })) {
+        if (signal.aborted) break
+        if (event.type === 'text_delta' && event.text) {
+          fullResponse += event.text
+          onProgress?.(fullResponse)
+        } else if (event.type === 'error') {
+          console.error('[Skill Reviewer] Stream error:', event.error)
+          break
+        }
+      }
+    } else {
+      for await (const event of streamTsProviderTurn({
+        messages,
+        tools: [],
+        provider: { ...providerConfig, systemPrompt },
+        signal
+      })) {
+        if (signal.aborted) break
 
-      if (event.type === 'text_delta' && event.text) {
-        fullResponse += event.text
-        onProgress?.(fullResponse)
-      } else if (event.type === 'error') {
-        console.error('[Skill Reviewer] Stream error:', event.error)
-        break
+        if (event.type === 'text_delta' && event.text) {
+          fullResponse += event.text
+          onProgress?.(fullResponse)
+        } else if (event.type === 'error') {
+          console.error('[Skill Reviewer] Stream error:', event.error)
+          break
+        }
       }
     }
 

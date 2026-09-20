@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid'
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { guardedCronWrite } from '../cron/cron-write-gate'
 import {
   canaryGetCronJob,
@@ -190,7 +190,11 @@ function assertMutation(result: CronMutationResult, operation: string): CronMuta
 
 async function cronMutation(method: string, params: object, operation: string): Promise<void> {
   await guardedCronWrite(async () => {
-    const result = await getNativeWorker().request<CronMutationResult>(method, params, 120_000)
+    const result = await getTsDatabaseRouteGuard().request<CronMutationResult>(
+      method,
+      params,
+      120_000
+    )
     assertMutation(result, operation)
   })
 }
@@ -296,7 +300,7 @@ export async function getCronJob(
 ): Promise<CronJobRecord | null> {
   const canary = await canaryGetCronJob({ jobId, workspaceId })
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<CronJobFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<CronJobFindResult>(
     'db/cron-jobs-get',
     { jobId, workspaceId },
     120_000
@@ -311,7 +315,7 @@ export async function listCronJobs(args: {
 }): Promise<CronJobRecord[]> {
   const canary = await canaryListCronJobs(args)
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<CronJobListResult>(
+  const result = await getTsDatabaseRouteGuard().request<CronJobListResult>(
     'db/cron-jobs-list',
     args,
     120_000
@@ -389,7 +393,17 @@ export async function markCronJobFired(
 export async function loadPersistedCronJobs(now = Date.now()): Promise<CronJobRecord[]> {
   const writer = businessWriteCanary()
   if (writer) {
-    const workspaceIds = new Set(['local-personal', ...(await loadOfflineWorkspaceIds())])
+    const workspaceIds = new Set(['local-personal'])
+    try {
+      for (const workspaceId of await loadOfflineWorkspaceIds()) workspaceIds.add(workspaceId)
+    } catch (error) {
+      console.warn(
+        '[CronScheduler] offline workspace directory unavailable; using local workspace',
+        {
+          error: error instanceof Error ? error.message : String(error)
+        }
+      )
+    }
     const jobs: CronJobRecord[] = []
     for (const workspaceId of workspaceIds) {
       const recovered = await writer.recoverCronJobs<CronJobRecord>(workspaceId, now)
@@ -398,7 +412,7 @@ export async function loadPersistedCronJobs(now = Date.now()): Promise<CronJobRe
     return jobs
   }
   return guardedCronWrite(async () => {
-    const result = await getNativeWorker().request<CronStartupLoadResult>(
+    const result = await getTsDatabaseRouteGuard().request<CronStartupLoadResult>(
       'db/cron-load-persisted-jobs',
       { now },
       120_000
@@ -420,7 +434,7 @@ export async function listCronRuns(args: {
 }): Promise<CronRunRecord[]> {
   const canary = await canaryListCronRuns(args)
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<CronRunListResult>(
+  const result = await getTsDatabaseRouteGuard().request<CronRunListResult>(
     'db/cron-runs-list',
     args,
     120_000
@@ -461,8 +475,10 @@ export async function updateCronRun(args: CronRunUpdateArgs): Promise<void> {
   const workspaceId = args.workspaceId
   if (writer) {
     if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
-    if (args.patch.status === 'running' || !args.patch.status)
-      throw new Error('TS_CRON_RUN_UPDATE_STATE_UNSUPPORTED')
+    // A TS runtime run is inserted as `running` by cron-run-start. There is
+    // no second running-state mutation; only terminal transitions are writes.
+    if (args.patch.status === 'running') return
+    if (!args.patch.status) throw new Error('CRON_RUN_STATUS_REQUIRED')
     await writer.finishCronRun({
       id: args.runId,
       workspaceId,
@@ -483,7 +499,7 @@ export async function getCronRun(
 ): Promise<CronRunRecord | null> {
   const canary = await canaryGetCronRun({ runId, workspaceId })
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<CronRunFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<CronRunFindResult>(
     'db/cron-runs-get',
     { runId, workspaceId },
     120_000
@@ -561,7 +577,7 @@ export async function getCronRunDetail(
     if (!canary) throw new Error(`Run "${runId}" not found`)
     return canary
   }
-  const result = await getNativeWorker().request<CronRunDetailResult>(
+  const result = await getTsDatabaseRouteGuard().request<CronRunDetailResult>(
     'db/cron-run-detail',
     { runId, workspaceId },
     120_000

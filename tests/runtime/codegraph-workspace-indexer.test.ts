@@ -48,23 +48,15 @@ describe('TS CodeGraph workspace indexer', () => {
     await writeFile(join(root, 'token.sol'), 'contract Token { function mint() public {} }')
     await writeFile(join(root, 'legacy.rb'), 'class Legacy; end')
     await writeFile(join(root, 'mobile.dart'), 'class Mobile {}')
+    await writeFile(join(root, 'legacy.hs'), 'module App where\nrun = pure ()')
+    await writeFile(join(root, 'legacy.jl'), 'module App\nrun() = nothing\nend')
+    await writeFile(join(root, 'page.razor'), '@page "/"\n<h1>@title</h1>')
     const store = new WasmCodeGraphStore(join(root, 'graph.db'))
     cleanup.push(() => store.close())
     const result = await indexWorkspaceWithWasm({ root, store })
     expect(result.errors).toEqual([])
-    expect(result).toMatchObject({ indexed: 1 })
-    expect(result.unsupported).toEqual([
-      {
-        path: 'legacy.rb',
-        language: 'ruby',
-        error: 'CODEGRAPH_GRAMMAR_UNAVAILABLE:ruby'
-      },
-      {
-        path: 'mobile.dart',
-        language: 'dart',
-        error: 'CODEGRAPH_GRAMMAR_UNAVAILABLE:dart'
-      }
-    ])
+    expect(result).toMatchObject({ indexed: 6 })
+    expect(result.unsupported).toEqual([])
     await expect(store.getFile('token.sol')).resolves.toMatchObject({ language: 'solidity' })
   })
 
@@ -73,12 +65,12 @@ describe('TS CodeGraph workspace indexer', () => {
     expect(languageForCodeGraphPath('script.py')).toBe('python')
     expect(languageForCodeGraphPath('mobile.kt')).toBe('kotlin')
     expect(languageForCodeGraphPath('App.swift')).toBe('swift')
-    expect(languageForCodeGraphPath('mobile.dart')).toBeNull()
-    expect(languageForCodeGraphPath('legacy.hs')).toBeNull()
-    expect(languageForCodeGraphPath('legacy.jl')).toBeNull()
-    expect(languageForCodeGraphPath('View.razor')).toBeNull()
+    expect(languageForCodeGraphPath('mobile.dart')).toBe('dart')
+    expect(languageForCodeGraphPath('legacy.hs')).toBe('haskell')
+    expect(languageForCodeGraphPath('legacy.jl')).toBe('julia')
+    expect(languageForCodeGraphPath('View.razor')).toBe('razor')
     expect(languageForCodeGraphPath('Token.sol')).toBe('solidity')
-    expect(languageForCodeGraphPath('legacy.rb')).toBeNull()
+    expect(languageForCodeGraphPath('legacy.rb')).toBe('ruby')
     expect(languageForCodeGraphPath('README.md')).toBeNull()
   })
 })

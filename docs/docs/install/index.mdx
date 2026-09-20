@@ -5,24 +5,22 @@ description: Install Ola, verify local dependencies, and start the desktop app o
 
 # Install
 
-Ola 是 Electron 桌面应用。发布版本从 GitHub Releases 获取；从源码开发需要 Node.js 22+、npm 10+、.NET 10 SDK，以及当前平台的原生构建工具链。
+Ola 是 Electron 桌面应用。发布版本从 GitHub Releases 获取；从源码开发需要 Node.js 22+、npm 10+。CodeGraph 由 TypeScript/WASM runtime 提供，不需要 .NET 或独立 Worker。
 
 <SignalGrid>
   <Signal title="release" value="Desktop first">
     面向日常使用优先选择安装包，避免本地 native module 环境差异。
   </Signal>
-  <Signal title="source" value="Node.js 22+ · npm 10+ · .NET 10 SDK">
-    从源码运行需要安装依赖、发布 Native Worker 与 CodeGraph Worker，并启动 Electron + Vite。
+  <Signal title="source" value="Node.js 22+ · npm 10+">
+    从源码运行需要安装依赖并启动 Electron + Vite；CodeGraph 随 runtime 构建。
   </Signal>
   <Signal title="data" value="Local only">
     运行时数据默认写入 `~/.ola/`，不要提交到仓库。
   </Signal>
 </SignalGrid>
 
-<Callout type="warn" title="Native toolchain and Worker">
-  Windows 需要 MSVC；macOS 需要 Xcode CLT；Linux 需要 `build-essential`。`npm run dev` 会检查 Native
-  Worker 和 CodeGraph Worker，缺失时自动执行 `npm run native:publish`，因此首次开发启动还需要 .NET
-  10 SDK。
+<Callout type="info" title="TypeScript CodeGraph">
+  Agent、业务数据和 CodeGraph 均由 TypeScript runtime 提供，不需要 .NET 或外部 Worker。
 </Callout>
 
 ## Desktop release
@@ -41,9 +39,9 @@ Ola 是 Electron 桌面应用。发布版本从 GitHub Releases 获取；从源�
   <CommandItem label="Clone" command="git clone https://github.com/Leevity/Ola.git" />
   <CommandItem label="Install" command="cd Ola && npm install" />
   <CommandItem
-    label="Publish workers"
-    command="npm run native:publish"
-    note="构建 Native Worker 和 CodeGraph Worker；运行时请先关闭 Ola，避免 Windows 锁定 Worker 文件。"
+    label="Verify CodeGraph"
+    command="npm run verify:ts-codegraph"
+    note="可选：验证 TypeScript/WASM 代码图资源和解析路径。"
   />
   <CommandItem
     label="Start app"

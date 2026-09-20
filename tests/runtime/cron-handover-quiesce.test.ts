@@ -10,18 +10,11 @@ vi.mock('../../src/main/db/cron-dao', () => ({
   createCronRun: vi.fn(),
   getCronRun: vi.fn(),
   loadPersistedCronJobs: vi.fn(),
-  markCronJobFired: vi.fn(),
   softDeleteCronJob: vi.fn(),
   updateCronRun: vi.fn()
 }))
-vi.mock('../../src/main/cron/cron-agent-background', () => ({
-  runCronAgentInBackground: vi.fn()
-}))
 vi.mock('../../src/main/cron/ts-cron-agent-background', () => ({
   runTsCronAgentInBackground: vi.fn()
-}))
-vi.mock('../../src/main/runtime/desktop-runtime', () => ({
-  desktopRuntime: { isAvailable: false }
 }))
 
 import {

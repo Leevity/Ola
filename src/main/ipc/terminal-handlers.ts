@@ -1,10 +1,15 @@
 import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
-import { safeSendMessagePackToWindow } from '../window-ipc'
+import {
+  getRegisteredWindowWorkspace,
+  getTrustedWorkspaceRegistrationWindow,
+  safeSendMessagePackToWindow
+} from '../window-ipc'
 import { buildShellEnvironment } from './shell-environment'
 import { registerMessagePackHandler } from './messagepack-handler'
 import { TerminalSessionManager } from '../terminal/terminal-session-manager'
 
 interface CreateTerminalSessionArgs {
+  workspaceId?: string
   cwd?: string
   shell?: string
   cols?: number
@@ -15,6 +20,7 @@ interface CreateTerminalSessionArgs {
 
 interface CreateTerminalSessionResult {
   id?: string
+  workspaceId?: string
   shell?: string
   cwd?: string
   cols?: number
@@ -44,6 +50,7 @@ interface TerminalExitEvent {
 
 interface TerminalSessionListEntry {
   id: string
+  workspaceId: string
   shell: string
   cwd: string
   cols: number
@@ -56,7 +63,7 @@ interface TerminalSessionListEntry {
   buffer?: TerminalOutputChunk[]
 }
 
-const terminalWindowIds = new Map<string, number | null>()
+const terminalWindowIds = new Map<string, { windowId: number | null; workspaceId: string }>()
 const terminalOutputListeners = new Set<(event: TerminalOutputEvent) => void>()
 const terminalExitListeners = new Set<(event: TerminalExitEvent) => void>()
 let terminalEventsRegistered = false
@@ -76,9 +83,25 @@ function isTrustedTerminalIpcSender(event: IpcMainInvokeEvent): boolean {
   )
 }
 
-function isTerminalOwnedBy(id: string, sender?: WebContents | null): boolean {
-  const ownerWindowId = terminalWindowIds.get(id)
-  return typeof ownerWindowId === 'number' && ownerWindowId === resolveOwnerWindowId(sender)
+function resolveSenderWorkspace(event: IpcMainInvokeEvent): string | null {
+  const win = getTrustedWorkspaceRegistrationWindow(event)
+  return win ? getRegisteredWindowWorkspace(win) : null
+}
+
+function isTerminalWorkspaceAuthorized(
+  id: string,
+  sender?: WebContents | null,
+  requestedWorkspaceId?: string
+): boolean {
+  const owner = terminalWindowIds.get(id)
+  const win = sender ? BrowserWindow.fromWebContents(sender) : null
+  const workspaceId = win ? getRegisteredWindowWorkspace(win) : null
+  return (
+    owner !== undefined &&
+    owner.windowId === resolveOwnerWindowId(sender) &&
+    owner.workspaceId === workspaceId &&
+    (!requestedWorkspaceId || requestedWorkspaceId === workspaceId)
+  )
 }
 
 function createWindowEvent(windowId: number | null, channel: string, payload: unknown): void {
@@ -113,11 +136,11 @@ function ensureTerminalEventBridge(): void {
   if (terminalEventsRegistered) return
   terminalEventsRegistered = true
   terminalSessions.onOutput((params) => {
-    createWindowEvent(terminalWindowIds.get(params.id) ?? null, 'terminal:output', params)
+    createWindowEvent(terminalWindowIds.get(params.id)?.windowId ?? null, 'terminal:output', params)
     emitTerminalOutput(params)
   })
   terminalSessions.onExit((params) => {
-    createWindowEvent(terminalWindowIds.get(params.id) ?? null, 'terminal:exit', params)
+    createWindowEvent(terminalWindowIds.get(params.id)?.windowId ?? null, 'terminal:exit', params)
     emitTerminalExit(params)
   })
 }
@@ -129,6 +152,7 @@ function toCreatedEvent(result: CreateTerminalSessionResult): TerminalSessionLis
 
   return {
     id: result.id,
+    workspaceId: result.workspaceId || 'local-personal',
     shell: result.shell,
     cwd: result.cwd,
     cols: result.cols ?? 80,
@@ -146,9 +170,17 @@ export async function createTerminalSession(
 ): Promise<CreateTerminalSessionResult> {
   ensureTerminalEventBridge()
   const ownerWindowId = resolveOwnerWindowId(sender)
+  const workspaceId = sender
+    ? (() => {
+        const win = BrowserWindow.fromWebContents(sender)
+        return win ? getRegisteredWindowWorkspace(win) : null
+      })()
+    : args.workspaceId?.trim() || 'local-personal'
+  if (!workspaceId) return { error: 'WINDOW_WORKSPACE_UNREGISTERED' }
   const result = (() => {
     try {
       return terminalSessions.create({
+        workspaceId,
         cwd: args.cwd || process.cwd(),
         ...(args.shell ? { shell: args.shell } : {}),
         cols: Math.max(20, Math.floor(args.cols ?? 80)),
@@ -163,7 +195,7 @@ export async function createTerminalSession(
   })()
 
   if ('id' in result && result.id) {
-    terminalWindowIds.set(result.id, ownerWindowId)
+    terminalWindowIds.set(result.id, { windowId: ownerWindowId, workspaceId })
     const created = toCreatedEvent(result)
     if (created) {
       createWindowEvent(ownerWindowId, 'terminal:created', created)
@@ -190,13 +222,18 @@ export function registerTerminalHandlers(): void {
 
   registerMessagePackHandler<CreateTerminalSessionArgs>('terminal:create', async (args, event) => {
     if (!isTrustedTerminalIpcSender(event)) return { error: 'Unauthorized terminal IPC sender' }
+    const workspaceId = resolveSenderWorkspace(event)
+    if (!workspaceId || (args.workspaceId && args.workspaceId !== workspaceId)) {
+      return { error: 'WINDOW_WORKSPACE_MISMATCH' }
+    }
     return await createTerminalSession(args, event.sender)
   })
 
   registerMessagePackHandler<{ id: string; data: string }>(
     'terminal:input',
     async (args, event) => {
-      if (!isTerminalOwnedBy(args.id, event.sender)) return { error: 'Terminal not found' }
+      if (!isTerminalWorkspaceAuthorized(args.id, event.sender))
+        return { error: 'Terminal not found' }
       return await writeTerminalSession(args.id, args.data)
     }
   )
@@ -204,7 +241,8 @@ export function registerTerminalHandlers(): void {
   registerMessagePackHandler<{ id: string; cols: number; rows: number }>(
     'terminal:resize',
     async (args, event) => {
-      if (!isTerminalOwnedBy(args.id, event.sender)) return { error: 'Terminal not found' }
+      if (!isTerminalWorkspaceAuthorized(args.id, event.sender))
+        return { error: 'Terminal not found' }
       const result = terminalSessions.resize(args.id, args.cols, args.rows)
       return result.success
         ? { success: true }
@@ -213,24 +251,33 @@ export function registerTerminalHandlers(): void {
   )
 
   registerMessagePackHandler<{ id: string }>('terminal:kill', async (args, event) => {
-    if (!isTerminalOwnedBy(args.id, event.sender)) return { error: 'Terminal not found' }
+    if (!isTerminalWorkspaceAuthorized(args.id, event.sender))
+      return { error: 'Terminal not found' }
     return await killTerminalSession(args.id)
   })
 
   registerMessagePackHandler<{ id: string }>('terminal:get', async (args, event) => {
-    if (!isTerminalOwnedBy(args.id, event.sender)) {
+    if (!isTerminalWorkspaceAuthorized(args.id, event.sender)) {
       return { success: false, error: 'Terminal not found' }
     }
     const session = await getTerminalSessionSnapshot(args.id)
     return session ? { success: true, session } : { success: false, error: 'Terminal not found' }
   })
 
-  registerMessagePackHandler<undefined>('terminal:list', async (_args, event) => {
-    ensureTerminalEventBridge()
-    const ownerWindowId = resolveOwnerWindowId(event.sender)
-    const sessions = terminalSessions.list()
-    return sessions.filter((session) => terminalWindowIds.get(session.id) === ownerWindowId)
-  })
+  registerMessagePackHandler<{ workspaceId?: string } | undefined>(
+    'terminal:list',
+    async (args, event) => {
+      ensureTerminalEventBridge()
+      const workspaceId = resolveSenderWorkspace(event)
+      if (!workspaceId || (args?.workspaceId && args.workspaceId !== workspaceId)) return []
+      const ownerWindowId = resolveOwnerWindowId(event.sender)
+      const sessions = terminalSessions.list(workspaceId)
+      return sessions.filter((session) => {
+        const owner = terminalWindowIds.get(session.id)
+        return owner?.windowId === ownerWindowId && owner.workspaceId === workspaceId
+      })
+    }
+  )
 }
 
 export async function getTerminalSessionSnapshot(
@@ -263,4 +310,8 @@ export function killAllTerminalSessions(): void {
   if (!terminalEventsRegistered) return
   terminalWindowIds.clear()
   terminalSessions.killAll()
+}
+
+export function hasActiveLocalTerminalSessions(workspaceId: string): boolean {
+  return terminalSessions.list(workspaceId).some((session) => session.exitCode === undefined)
 }

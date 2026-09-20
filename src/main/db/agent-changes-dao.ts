@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { canaryGetAgentChangeSet, canaryListAgentChangeSetsBySession } from './legacy-read-canary'
 import { businessWriteCanary } from './business-write-canary'
 
@@ -78,14 +78,14 @@ function unwrapChangeSetResult(
   operation: string
 ): StoredRunChangeSet | null {
   if (!result.success) {
-    throw new Error(result.error || `Native agent change ${operation} failed`)
+    throw new Error(result.error || `Agent change ${operation} failed`)
   }
   return result.changeSet ?? null
 }
 
 function assertMutation(result: AgentChangeMutationResult, operation: string): void {
   if (!result.success) {
-    throw new Error(result.error || `Native agent change ${operation} failed`)
+    throw new Error(result.error || `Agent change ${operation} failed`)
   }
 }
 
@@ -95,7 +95,9 @@ export async function getStoredRunChangeSet(
 ): Promise<StoredRunChangeSet | null> {
   const migrated = await canaryGetAgentChangeSet(runId, workspaceId)
   if (migrated !== undefined) return migrated
-  const result = await getNativeWorker().request<AgentChangeSetFindResult>(
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.agentChangeSet(runId, workspaceId)) as StoredRunChangeSet | null
+  const result = await getTsDatabaseRouteGuard().request<AgentChangeSetFindResult>(
     'db/agent-changes-get',
     { runId, workspaceId },
     120_000
@@ -109,7 +111,10 @@ export async function listStoredRunChangeSetsBySession(
 ): Promise<StoredRunChangeSet[]> {
   const migrated = await canaryListAgentChangeSetsBySession(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<StoredRunChangeSet[]>(
+  const writer = businessWriteCanary()
+  if (writer)
+    return (await writer.agentChangeSetsBySession(sessionId, workspaceId)) as StoredRunChangeSet[]
+  return getTsDatabaseRouteGuard().request<StoredRunChangeSet[]>(
     'db/agent-changes-list-session',
     { sessionId, workspaceId },
     120_000
@@ -125,7 +130,7 @@ export async function appendStoredFileChange(args: AppendFileChangeArgs): Promis
     })
     return
   }
-  const result = await getNativeWorker().request<AgentChangeMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<AgentChangeMutationResult>(
     'db/agent-changes-append-file',
     args,
     120_000
@@ -144,7 +149,7 @@ export async function markFileChangeReverted(args: {
     await writer.markAgentFileChangeReverted(args)
     return
   }
-  const result = await getNativeWorker().request<AgentChangeMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<AgentChangeMutationResult>(
     'db/agent-changes-mark-reverted',
     args,
     120_000
@@ -158,7 +163,7 @@ export async function recomputeRunStatus(runId: string, workspaceId: string): Pr
     await writer.recomputeAgentChangeSet(runId, workspaceId, Date.now())
     return
   }
-  const result = await getNativeWorker().request<AgentChangeMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<AgentChangeMutationResult>(
     'db/agent-changes-recompute',
     { runId, workspaceId, now: Date.now() },
     120_000
@@ -172,12 +177,12 @@ export async function deleteStoredFinalizedRunChangeSetsOlderThan(cutoff: number
     await writer.pruneFinalizedAgentChangeSets(cutoff)
     return
   }
-  const result = await getNativeWorker().request<AgentChangeDeleteResult>(
+  const result = await getTsDatabaseRouteGuard().request<AgentChangeDeleteResult>(
     'db/agent-changes-delete-finalized-before',
     { cutoff },
     120_000
   )
   if (!result.success) {
-    throw new Error(result.error || 'Native agent change delete finalized failed')
+    throw new Error(result.error || 'Agent change delete finalized failed')
   }
 }

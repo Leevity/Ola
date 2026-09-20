@@ -16,13 +16,6 @@ import {
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
 import { CHANNEL_PROVIDERS } from '../channels/channel-descriptors'
-import { getNativeWorker } from '../lib/native-worker'
-import {
-  canaryFindPluginSessionByChat,
-  canaryListAllPluginSessions,
-  canaryListPluginSessionMessages,
-  canaryListPluginSessions
-} from '../db/legacy-read-canary'
 import { businessWriteCanary } from '../db/business-write-canary'
 import {
   authorizeChannelSessionWorkspace,
@@ -60,7 +53,7 @@ void BrowserWindow
 
 let activeChannelManager: ChannelManager | null = null
 
-interface NativeProjectRow {
+interface ProjectRow {
   id: string
   name: string
   working_folder: string | null
@@ -72,7 +65,7 @@ interface NativeProjectRow {
   workspace_id?: string | null
 }
 
-interface NativePluginSessionRow {
+interface PluginSessionRow {
   id: string
   title: string
   icon: string | null
@@ -92,31 +85,24 @@ interface NativePluginSessionRow {
   model_selection_mode?: string | null
 }
 
-interface NativePluginSessionMessageRow {
+interface PluginSessionMessageRow {
   id: string
   role: string
   content: string
   created_at: number
 }
 
-interface NativePluginSessionMutationResult {
+interface PluginSessionMutationResult {
   success: boolean
   changed: number
   deleted: number
   error?: string | null
 }
 
-interface NativePluginSessionFindResult {
-  success: boolean
-  session?: NativePluginSessionRow | null
-  error?: string | null
-}
-
-async function requestNativeDb<T>(
-  method: string,
-  params: Record<string, unknown> = {}
-): Promise<T> {
-  return await getNativeWorker().request<T>(method, params, 120_000)
+function requireBusinessRepository() {
+  const writer = businessWriteCanary()
+  if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+  return writer
 }
 
 function registerChannelMessagePackHandler<TArgs>(
@@ -138,10 +124,10 @@ function registerChannelMessagePackHandler<TArgs>(
   })
 }
 
-function assertNativeMutation(
-  result: NativePluginSessionMutationResult,
+function assertPluginMutation(
+  result: PluginSessionMutationResult,
   label: string
-): NativePluginSessionMutationResult {
+): PluginSessionMutationResult {
   if (!result.success) {
     throw new Error(result.error || `${label} failed`)
   }
@@ -748,9 +734,10 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     const plugins = await readPlugins()
     const belongsToWorkspace = (plugin: ChannelInstance): boolean =>
       channelPluginInWorkspace(plugin, workspaceId)
-    const projects = (
-      await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
-    ).filter((project) => (project.workspace_id || 'local-personal') === workspaceId)
+    const writer = requireBusinessRepository()
+    const projects = (await writer.normalPluginProjects<ProjectRow>(workspaceId)).filter(
+      (project) => (project.workspace_id || 'local-personal') === workspaceId
+    )
     let changed = false
 
     // Migrate legacy unbound built-ins to the first normal project when there is only one.
@@ -901,7 +888,8 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     if (!instance.id || plugins.some((plugin) => plugin.id === instance.id))
       throw new Error('CHANNEL_PLUGIN_ID_UNAVAILABLE')
     if (instance.projectId) {
-      const projects = await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
+      const writer = requireBusinessRepository()
+      const projects = await writer.normalPluginProjects<ProjectRow>(workspaceId)
       const project = projects.find((item) => item.id === instance.projectId)
       if (!project || (project.workspace_id || 'local-personal') !== workspaceId)
         throw new Error('CHANNEL_PROJECT_WORKSPACE_MISMATCH')
@@ -929,6 +917,7 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     if (!patch || typeof patch !== 'object' || Array.isArray(patch))
       throw new Error('INVALID_CHANNEL_PATCH')
     const plugins = await readPlugins()
+    const writer = requireBusinessRepository()
     const idx = plugins.findIndex((p) => p.id === id)
     if (idx === -1) return { success: false, error: 'Plugin not found' }
     if (
@@ -938,7 +927,7 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
       throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
     let next = { ...plugins[idx], ...patch }
     if ('projectId' in patch && patch.projectId) {
-      const projects = await requestNativeDb<NativeProjectRow[]>('db/plugin-normal-projects')
+      const projects = await writer.normalPluginProjects<ProjectRow>(workspaceId)
       const project = projects.find((item) => item.id === patch.projectId)
       if (!project) return { success: false, error: 'Project not found' }
       if ((project.workspace_id || 'local-personal') !== workspaceId)
@@ -961,19 +950,14 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
       try {
         const providerId = next.providerId ?? null
         const modelId = providerId ? (next.model ?? null) : null
-        assertNativeMutation(
-          await requestNativeDb<NativePluginSessionMutationResult>(
-            'db/plugin-sync-session-models',
-            {
-              pluginId: id,
-              providerId,
-              modelId,
-              workspaceId: next.workspaceId,
-              modelSource: next.modelSource ? JSON.stringify(next.modelSource) : null
-            }
-          ),
-          'Sync channel session model'
-        )
+        const result = await writer.syncPluginSessionModels({
+          pluginId: id,
+          providerId,
+          modelId,
+          workspaceId,
+          modelSource: next.modelSource ? JSON.stringify(next.modelSource) : null
+        })
+        assertPluginMutation(result, 'Sync channel session model')
       } catch (err) {
         console.error('[Channels] Failed to sync channel session model:', err)
       }
@@ -981,17 +965,12 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
 
     if ('projectId' in patch) {
       try {
-        assertNativeMutation(
-          await requestNativeDb<NativePluginSessionMutationResult>(
-            'db/plugin-sync-session-project',
-            {
-              pluginId: id,
-              projectId: next.projectId ?? null,
-              workspaceId: next.workspaceId
-            }
-          ),
-          'Sync channel project binding'
-        )
+        const result = await writer.syncPluginSessionProject({
+          pluginId: id,
+          projectId: next.projectId ?? null,
+          workspaceId
+        })
+        assertPluginMutation(result, 'Sync channel project binding')
       } catch (err) {
         console.error('[Channels] Failed to sync channel project binding:', err)
       }
@@ -1006,6 +985,7 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     async ({ pluginId: id, workspaceId }) => {
       await authorizeChannelPluginWorkspace(id, workspaceId, readPlugins, loadOfflineWorkspaceIds)
       const allPlugins = await readPlugins()
+      const writer = requireBusinessRepository()
       const target = allPlugins.find((p) => p.id === id)
       if (!target) return { success: false, error: 'Plugin not found' }
       if (target?.builtin) {
@@ -1017,13 +997,9 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
       await writePlugins(plugins)
       // Cascade-delete plugin sessions and their messages
       try {
-        assertNativeMutation(
-          await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-remove-data', {
-            pluginId: id,
-            workspaceId: target?.workspaceId || 'local-personal'
-          }),
-          'Remove channel data'
-        )
+        const workspace = target?.workspaceId || 'local-personal'
+        const result = await writer.removePluginData({ pluginId: id, workspaceId: workspace })
+        assertPluginMutation(result, 'Remove channel data')
       } catch (err) {
         console.error('[Channels] Failed to cascade-delete sessions:', err)
       }
@@ -1102,14 +1078,9 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
       const plugin = (await readPlugins()).find((item) => item.id === pluginId)
       if (!plugin || (plugin.workspaceId || 'local-personal') !== workspaceId)
         throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
-      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
-        const migrated = await canaryListPluginSessions(pluginId, workspaceId)
-        if (migrated !== undefined) return migrated
-        return await requestNativeDb<NativePluginSessionRow[]>('db/plugin-sessions-list', {
-          pluginId,
-          workspaceId
-        })
-      })
+      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () =>
+        requireBusinessRepository().pluginSessions<PluginSessionRow>(pluginId, workspaceId)
+      )
     }
   )
 
@@ -1131,36 +1102,19 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
     const plugin = (await readPlugins()).find((item) => item.id === args.pluginId)
     if (!plugin || (plugin.workspaceId || 'local-personal') !== workspaceId)
       throw new Error('CHANNEL_WORKSPACE_UNAVAILABLE')
-    const writer = businessWriteCanary()
-    if (writer) {
-      await writer.createChannelSession({
-        id: args.id,
-        pluginId: args.pluginId,
-        title: args.title,
-        mode: args.mode,
-        workspaceId,
-        createdAt: args.createdAt,
-        updatedAt: args.updatedAt,
-        externalChatId: args.externalChatId ?? null,
-        projectId: plugin.projectId ?? null,
-        providerId: plugin.providerId ?? null,
-        modelId: plugin.model ?? null
-      })
-      return { success: true }
-    }
-    const result = await requestNativeDb<NativePluginSessionMutationResult>(
-      'db/plugin-sessions-create',
-      {
-        ...args,
-        workspaceId,
-        projectId: plugin?.projectId ?? null,
-        providerId: plugin?.providerId ?? null,
-        modelId: plugin?.model ?? null
-      }
-    )
-    if (!result.success) {
-      return { success: false, error: result.error || 'Create plugin session failed' }
-    }
+    await requireBusinessRepository().createChannelSession({
+      id: args.id,
+      pluginId: args.pluginId,
+      title: args.title,
+      mode: args.mode,
+      workspaceId,
+      createdAt: args.createdAt,
+      updatedAt: args.updatedAt,
+      externalChatId: args.externalChatId ?? null,
+      projectId: plugin.projectId ?? null,
+      providerId: plugin.providerId ?? null,
+      modelId: plugin.model ?? null
+    })
     return { success: true }
   })
 
@@ -1172,18 +1126,12 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         rawWorkspaceId,
         loadOfflineWorkspaceIds
       )
-      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
-        const migrated = await canaryFindPluginSessionByChat(externalChatId, workspaceId)
-        if (migrated !== undefined) return migrated
-        const result = await requestNativeDb<NativePluginSessionFindResult>(
-          'db/plugin-sessions-find-by-chat',
-          { externalChatId, workspaceId }
+      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, () =>
+        requireBusinessRepository().pluginSessionByChat<PluginSessionRow>(
+          externalChatId,
+          workspaceId
         )
-        if (!result.success) {
-          throw new Error(result.error || 'Find plugin session failed')
-        }
-        return result.session ?? null
-      })
+      )
     }
   )
 
@@ -1317,13 +1265,9 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         args?.workspaceId,
         loadOfflineWorkspaceIds
       )
-      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
-        const migrated = await canaryListAllPluginSessions(workspaceId)
-        if (migrated !== undefined) return migrated
-        return await requestNativeDb<NativePluginSessionRow[]>('db/plugin-sessions-list-all', {
-          workspaceId
-        })
-      })
+      return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, () =>
+        requireBusinessRepository().allPluginSessions<PluginSessionRow>(workspaceId)
+      )
     }
   )
 
@@ -1338,19 +1282,14 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
       args.workspaceId,
       loadOfflineWorkspaceIds
     )
-    return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, async () => {
-      const migrated = await canaryListPluginSessionMessages(
+    return await readAuthorizedChannelSession(workspaceId, loadOfflineWorkspaceIds, () =>
+      requireBusinessRepository().pluginSessionMessages<PluginSessionMessageRow>(
         args.sessionId,
         workspaceId,
         args.limit,
         args.offset
       )
-      if (migrated !== undefined) return migrated
-      return await requestNativeDb<NativePluginSessionMessageRow[]>('db/plugin-sessions-messages', {
-        ...args,
-        workspaceId
-      })
-    })
+    )
   })
 
   /** Clear all messages in a plugin session */
@@ -1361,19 +1300,11 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         args.workspaceId,
         loadOfflineWorkspaceIds
       )
-      const writer = businessWriteCanary()
-      if (writer) {
-        const deleted = await writer.clearChannelSession({ sessionId: args.sessionId, workspaceId })
-        return { deleted }
-      }
-      const result = assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-sessions-clear', {
-          ...args,
-          workspaceId
-        }),
-        'Clear plugin session'
-      )
-      return { deleted: result.deleted }
+      const deleted = await requireBusinessRepository().clearChannelSession({
+        sessionId: args.sessionId,
+        workspaceId
+      })
+      return { deleted }
     }
   )
 
@@ -1385,25 +1316,11 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         args.workspaceId,
         loadOfflineWorkspaceIds
       )
-      const writer = businessWriteCanary()
-      if (writer) {
-        const changed = await writer.deleteChannelSession({
-          sessionId: args.sessionId,
-          workspaceId
-        })
-        if (!changed) throw new Error('CHANNEL_SESSION_NOT_FOUND')
-        safeSendMessagePackToAllWindows('plugin:session-deleted', { sessionId: args.sessionId })
-        return { ok: true }
-      }
-      const result = assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-sessions-delete', {
-          ...args,
-          workspaceId
-        }),
-        'Delete plugin session'
-      )
-      if (result.changed === 0) throw new Error('CHANNEL_SESSION_NOT_FOUND')
-      // Notify renderer to remove from store
+      const changed = await requireBusinessRepository().deleteChannelSession({
+        sessionId: args.sessionId,
+        workspaceId
+      })
+      if (!changed) throw new Error('CHANNEL_SESSION_NOT_FOUND')
       const payload = { sessionId: args.sessionId }
       safeSendMessagePackToAllWindows('plugin:session-deleted', payload)
       return { ok: true }
@@ -1418,24 +1335,12 @@ export function registerChannelHandlers(channelManager: ChannelManager): void {
         args.workspaceId,
         loadOfflineWorkspaceIds
       )
-      const writer = businessWriteCanary()
-      if (writer) {
-        const changed = await writer.renameChannelSession({
-          sessionId: args.sessionId,
-          workspaceId,
-          title: args.title
-        })
-        if (!changed) throw new Error('CHANNEL_SESSION_NOT_FOUND')
-        return { ok: true }
-      }
-      const result = assertNativeMutation(
-        await requestNativeDb<NativePluginSessionMutationResult>('db/plugin-sessions-rename', {
-          ...args,
-          workspaceId
-        }),
-        'Rename plugin session'
-      )
-      if (result.changed === 0) throw new Error('CHANNEL_SESSION_NOT_FOUND')
+      const changed = await requireBusinessRepository().renameChannelSession({
+        sessionId: args.sessionId,
+        workspaceId,
+        title: args.title
+      })
+      if (!changed) throw new Error('CHANNEL_SESSION_NOT_FOUND')
       return { ok: true }
     }
   )

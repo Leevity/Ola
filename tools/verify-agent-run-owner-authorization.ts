@@ -1,25 +1,17 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 
-const manager = await readFile('src/main/ipc/sidecar-manager.ts', 'utf8')
+const manager = await readFile('src/main/ipc/ts-runtime-handlers.ts', 'utf8')
 const packageJson = await readFile('package.json', 'utf8')
 
-assert.match(
-  manager,
-  /function isAgentRunOwnedBy\(\n\s{2}event: IpcMainInvokeEvent,\n\s{2}runId: string \| undefined,\n\s{2}runWindowIds: Map<string, number>\n\): runId is string/
-)
-assert.match(manager, /sourceWindow\.webContents === event\.sender/)
-assert.match(manager, /runWindowIds\.get\(runId\) === sourceWindow\.id/)
-assert.match(manager, /agent:run-snapshot'[\s\S]*isAgentRunOwnedBy\(event, runId, runWindowIds\)/)
-assert.match(manager, /agent:cancel'[\s\S]*isAgentRunOwnedBy\(event, runId, runWindowIds\)/)
-assert.match(manager, /agent:request-stop'[\s\S]*isAgentRunOwnedBy\(event, runId, runWindowIds\)/)
-assert.match(
-  manager,
-  /agent:append-messages'[\s\S]*isAgentRunOwnedBy\(event, runId, runWindowIds\)/
-)
-assert.match(manager, /agent:cancel'[\s\S]*return \{ cancelled: false \}/)
-assert.match(manager, /agent:request-stop'[\s\S]*return \{ stopped: false \}/)
-assert.match(manager, /agent:append-messages'[\s\S]*return \{ appended: false, count: 0 \}/)
+assert.match(manager, /function trusted\(event: IpcMainInvokeEvent\): boolean/)
+assert.match(manager, /event\.senderFrame === event\.sender\.mainFrame/)
+assert.match(manager, /assertWindowWorkspace\(event, run\.workspaceId\)/)
+assert.match(manager, /'ts-runtime:run-submit'/)
+assert.match(manager, /'ts-runtime:run-snapshot'/)
+assert.match(manager, /'ts-runtime:run-cancel'/)
+assert.match(manager, /'ts-runtime:run-interact'/)
+assert.match(manager, /workspaceId: run\.workspaceId[\s\S]*runId: run\.runId/)
 assert.match(packageJson, /"verify:agent-run-owner-authorization"/)
 assert.match(packageJson, /npm run verify:agent-run-owner-authorization/)
 

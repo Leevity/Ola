@@ -25,7 +25,6 @@ import {
   getCronRunDetail,
   listCronJobs,
   listCronRuns,
-  markCronJobFired,
   replaceCronRunMessages,
   setCronJobEnabled,
   softDeleteCronJob,
@@ -35,19 +34,12 @@ import {
   type CronRunRecord
 } from '../db/cron-dao'
 import {
-  abortCronAgentRun,
-  getCronExecutionState,
-  runCronAgentInBackground
-} from '../cron/cron-agent-background'
-import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
 import { parseModelSource, type ModelSource } from '../../shared/runtime/model-source'
 import { parseCronModelBinding } from '../../shared/runtime/cron-model-binding'
-import { desktopRuntime } from '../runtime/desktop-runtime'
-import { canRunCronInTsRuntime } from '../cron/ts-cron-selection'
 import {
   abortTsCronAgentRun,
   getTsCronExecutionState,
@@ -345,7 +337,7 @@ function jobToApi(
   scheduledIds: Set<string>,
   runningIds: Set<string>
 ): CronJobApi {
-  const runtimeState = getCronExecutionState(r.id) ?? getTsCronExecutionState(r.id)
+  const runtimeState = getTsCronExecutionState(r.id)
   return {
     id: r.id,
     sessionId: r.session_id,
@@ -732,8 +724,6 @@ export function registerCronHandlers(): void {
         }
         sendCronWorkspaceEvent(row.workspace_id ?? 'local-personal', 'cron:fired', firedPayload)
 
-        await markCronJobFired(row.id, firedAt)
-
         const runOptions = {
           jobId: row.id,
           name: row.name,
@@ -757,9 +747,8 @@ export function registerCronHandlers(): void {
         const finished = () => {
           void markFinished(row.id)
         }
-        if (canRunCronInTsRuntime(runOptions, desktopRuntime.isAvailable))
-          runTsCronAgentInBackground(runOptions, finished)
-        else runCronAgentInBackground(runOptions, finished)
+        // “Run now” uses the same authoritative TS runtime as scheduled jobs.
+        runTsCronAgentInBackground(runOptions, finished)
 
         return { success: true, jobId: args.jobId }
       } catch (err) {
@@ -774,7 +763,7 @@ export function registerCronHandlers(): void {
       if (!args?.jobId) return { error: 'jobId is required' }
       if (!(await getCronJob(args.jobId, args.workspaceId)))
         return { error: `Job "${args.jobId}" not found` }
-      const aborted = abortTsCronAgentRun(args.jobId) || abortCronAgentRun(args.jobId)
+      const aborted = abortTsCronAgentRun(args.jobId)
       return aborted
         ? { success: true, jobId: args.jobId }
         : { error: `Job "${args.jobId}" is not running` }

@@ -15,7 +15,7 @@ const FILE_CONTEXT_BUDGET_MAX_TOKENS = 24_000
 const FILE_CONTEXT_FALLBACK_TOKENS = 12_000
 
 /**
- * Build a runtime reminder passed to the Native Worker as request context.
+ * Build a runtime reminder passed to the TypeScript runtime as request context.
  * Includes lightweight session state and selected file contents.
  */
 export async function buildRuntimeReminder(options: {

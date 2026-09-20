@@ -20,6 +20,18 @@ export function registerCommandsHandlers(): void {
     console.warn(`[Commands] Failed to initialize user command directory: ${String(error)}`)
   })
 
+  registerMessagePackHandler<undefined, { success: boolean; error?: string }>(
+    'commands:ensure',
+    async () => {
+      try {
+        await catalog.ensure()
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    }
+  )
+
   registerMessagePackHandler<undefined, CommandInfo[]>('commands:list', async () => {
     return await catalog.list()
   })

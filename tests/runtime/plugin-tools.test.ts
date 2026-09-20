@@ -33,12 +33,9 @@ describe('renderer channel tool bridge', () => {
     registerPluginTools()
     const handler = toolRegistry.get('PluginReplyMessage')
     const schema = handler?.definition.inputSchema
-    expect(schema && schema.type === 'object' && 'required' in schema ? schema.required : undefined).toEqual([
-      'plugin_id',
-      'chat_id',
-      'message_id',
-      'content'
-    ])
+    expect(
+      schema && schema.type === 'object' && 'required' in schema ? schema.required : undefined
+    ).toEqual(['plugin_id', 'chat_id', 'message_id', 'content'])
   })
 
   it('routes summarize and current-chat reads through the Main action', async () => {

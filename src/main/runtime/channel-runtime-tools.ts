@@ -306,6 +306,9 @@ export function createChannelProviderReadRuntimeTools(): ToolDefinition[] {
 }
 
 export function createChannelProviderWriteRuntimeTools(): ToolDefinition[] {
+  const sourceExtension = (source: string): string =>
+    source.split(/[?#]/, 1)[0].toLowerCase().split('.').at(-1) ?? ''
+
   const sendImage: ToolDefinition = {
     name: 'FeishuSendImage',
     description: 'Send an image to the authorized Feishu chat using a local path or HTTPS URL.',
@@ -672,6 +675,63 @@ export function createChannelProviderWriteRuntimeTools(): ToolDefinition[] {
       })
     }
   })
+  const makeFeishuTypedMedia = (
+    name: 'FeishuSendAudio' | 'FeishuSendVideo',
+    fileType: 'opus' | 'mp4',
+    extensions: readonly string[]
+  ): ToolDefinition => ({
+    name,
+    description: `Send a Feishu ${fileType === 'opus' ? 'voice recording' : 'video'} to the authorized chat.`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        plugin_id: { type: 'string', maxLength: 256 },
+        chat_id: { type: 'string', maxLength: 512 },
+        file_path: { type: 'string', minLength: 1, maxLength: 4096 }
+      },
+      required: ['plugin_id', 'chat_id', 'file_path'],
+      additionalProperties: false
+    },
+    effect: 'write',
+    validate: (value) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value))
+        throw new RuntimeError('INVALID_TOOL_INPUT')
+      const item = value as Record<string, unknown>
+      const pluginId = typeof item.plugin_id === 'string' ? item.plugin_id.trim() : ''
+      const chatId = typeof item.chat_id === 'string' ? item.chat_id.trim() : ''
+      const filePath = typeof item.file_path === 'string' ? item.file_path.trim() : ''
+      const extension = sourceExtension(filePath)
+      if (
+        !pluginId ||
+        !chatId ||
+        !filePath ||
+        pluginId.length > 256 ||
+        chatId.length > 512 ||
+        filePath.length > 4096 ||
+        (extension !== '' && !extensions.includes(extension))
+      )
+        throw new RuntimeError('INVALID_TOOL_INPUT')
+      return { pluginId, chatId, filePath, fileType }
+    },
+    resources: async (value) => [channelResource((value as { pluginId: string }).pluginId)],
+    execute: async (value, context) => {
+      const input = value as {
+        pluginId: string
+        chatId: string
+        filePath: string
+        fileType: string
+      }
+      const { executeChannelSpecificPluginTool } = await import('../ipc/channel-handlers')
+      return executeChannelSpecificPluginTool('plugin:feishu:send-file', {
+        pluginId: input.pluginId,
+        chatId: input.chatId,
+        filePath: input.filePath,
+        fileType: input.fileType,
+        workspaceId: context.run.workspaceId,
+        toolName: name
+      })
+    }
+  })
   return [
     sendImage,
     sendFile,
@@ -681,6 +741,8 @@ export function createChannelProviderWriteRuntimeTools(): ToolDefinition[] {
     makeWeixinMedia('WeixinSendFile', 'plugin:weixin:send-file'),
     makeBitableWrite('FeishuBitableCreateRecords', 'plugin:feishu:bitable:create-records'),
     makeBitableWrite('FeishuBitableUpdateRecords', 'plugin:feishu:bitable:update-records'),
-    makeBitableWrite('FeishuBitableDeleteRecords', 'plugin:feishu:bitable:delete-records', true)
+    makeBitableWrite('FeishuBitableDeleteRecords', 'plugin:feishu:bitable:delete-records', true),
+    makeFeishuTypedMedia('FeishuSendAudio', 'opus', ['opus']),
+    makeFeishuTypedMedia('FeishuSendVideo', 'mp4', ['mp4'])
   ]
 }

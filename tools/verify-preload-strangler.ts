@@ -8,7 +8,6 @@ const messagepackClient = await readFile(
   'src/renderer/src/lib/ipc/messagepack-ipc-client.ts',
   'utf8'
 )
-const streamReceiver = await readFile('src/renderer/src/lib/ipc/agent-stream-receiver.ts', 'utf8')
 const rendererToolBridge = await readFile(
   'src/renderer/src/lib/ipc/renderer-tool-bridge.ts',
   'utf8'
@@ -23,7 +22,6 @@ assert.match(ipcClient, /window\.ola\?\.ipc/)
 assert.doesNotMatch(ipcClient, /window\.electron\.ipcRenderer/)
 assert.match(messagepackClient, /window\.ola\.ipc\.invoke/)
 assert.doesNotMatch(messagepackClient, /window\.electron\.ipcRenderer/)
-assert.match(streamReceiver, /window\.ola\.ipc\.on\(/)
 assert.match(rendererToolBridge, /window\.ola\.ipc\.removeAllListeners/)
 assert.match(rendererToolBridge, /window\.ola\.ipc\.on\(/)
 assert.match(packageJson, /"verify:preload-strangler"/)

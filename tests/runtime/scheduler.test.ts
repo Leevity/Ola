@@ -52,6 +52,61 @@ describe('durable scheduler', () => {
     ).rejects.toThrow('SESSION_WORKSPACE_MISMATCH')
     expect(await journal.snapshot('team-run', 'team-a')).toBeNull()
   })
+  it('runs a nested task in an independent session and returns its durable snapshot', async () => {
+    const { journal, scheduler } = await setup(async (run, context) => {
+      if (run.runId === 'parent') {
+        const child = await context.runNested?.({
+          ...spec('child', 'child-session'),
+          taskId: 'subagent:child',
+          prompt: 'child work',
+          unattended: false
+        })
+        expect(child?.run.status).toBe('completed')
+        await context.emit('message.completed', { text: 'parent received child' })
+        return
+      }
+      await context.emit('message.completed', { text: 'child report' })
+    })
+    await scheduler.submit({ ...spec('parent', 'parent-session'), unattended: false })
+    await expect
+      .poll(async () => (await journal.snapshot('parent', 'local-personal'))?.run.status)
+      .toBe('completed')
+    await expect
+      .poll(async () => (await journal.snapshot('child', 'local-personal'))?.run.status)
+      .toBe('completed')
+    expect(
+      (await journal.snapshot('child', 'local-personal'))?.events.some(
+        (event) => event.type === 'message.completed'
+      )
+    ).toBe(true)
+  })
+
+  it('projects a background nested run exactly once after terminal transition', async () => {
+    let projected: string | undefined
+    let resolveProjection!: () => void
+    const projection = new Promise<void>((resolve) => {
+      resolveProjection = resolve
+    })
+    const { journal, scheduler } = await setup(async (run, context) => {
+      if (run.runId === 'parent') {
+        await context.submitNested?.(
+          { ...spec('background-child', 'background-session'), prompt: 'background work' },
+          async (snapshot) => {
+            projected = snapshot.run.status
+            resolveProjection()
+          }
+        )
+        return
+      }
+      await context.emit('message.completed', { text: 'background report' })
+    })
+    await scheduler.submit(spec('parent', 'parent-session'))
+    await projection
+    expect(projected).toBe('completed')
+    expect((await journal.snapshot('background-child', 'local-personal'))?.run.status).toBe(
+      'completed'
+    )
+  })
 
   it('cancels active and queued team runs on directory revocation without cancelling personal work', async () => {
     const entered: string[] = []
@@ -136,6 +191,7 @@ describe('durable scheduler', () => {
     })
     const input = {
       ...spec('a'),
+      promptImages: [{ mimeType: 'image/png' as const, data: 'aGVsbG8=' }],
       history: [
         { role: 'system' as const, text: 'Use concise answers.' },
         { role: 'user' as const, text: 'Earlier question' },
@@ -150,6 +206,7 @@ describe('durable scheduler', () => {
     expect((await journal.list('local-personal'))[0]).not.toHaveProperty('prompt')
     expect((await journal.list('local-personal'))[0]).not.toHaveProperty('history')
     expect((await journal.list('local-personal'))[0]).not.toHaveProperty('modelOptions')
+    expect((await journal.list('local-personal'))[0]).not.toHaveProperty('promptImages')
     expect((await journal.snapshot('a', 'local-personal'))?.run.history).toEqual(input.history)
     await expect(scheduler.submit({ ...spec('a'), prompt: 'different' })).rejects.toThrow(
       'REQUEST_CONFLICT'

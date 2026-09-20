@@ -48,8 +48,8 @@ export function registerSoulsHandlers(): void {
 
   registerMessagePackHandler<{ apiKey?: string } | undefined, { categories: SoulCategoryInfo[] }>(
     'souls:categories',
-    async (args = {}) => {
-      return { categories: await marketClient.categories(args.apiKey) }
+    async (args) => {
+      return { categories: await marketClient.categories(args?.apiKey) }
     }
   )
 
@@ -66,8 +66,8 @@ export function registerSoulsHandlers(): void {
 
   registerMessagePackHandler<{ projectRootPath?: string } | undefined>(
     'souls:get-target-paths',
-    async (args = {}) => {
-      return localCatalog.targetPaths(args.projectRootPath)
+    async (args) => {
+      return localCatalog.targetPaths(args?.projectRootPath)
     }
   )
 

@@ -21,6 +21,7 @@ import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
 import { ensureGeneratedImagesDirectory } from './lib/generated-image-path'
 import { authorizeGeneratedImageWorkspace } from './ipc/generated-image-workspace'
+import { registerImageGenerationHandlers } from './ipc/image-generation-handlers'
 
 // Delay import of @electron-toolkit/utils to avoid accessing app before ready
 let electronApp: { setAppUserModelId: (id: string) => void }
@@ -93,9 +94,7 @@ import { registerMigrationHandlers } from './ipc/migration-handlers'
 import { registerSyncHandlers } from './ipc/sync-handlers'
 import { registerWikiHandlers } from './ipc/wiki-handlers'
 import { registerProviderHandlers } from './ipc/provider-handlers'
-import { registerSidecarHandlers, getSidecarManager } from './ipc/sidecar-manager'
 import { registerCodeGraphHandlers } from './ipc/codegraph-handlers'
-import { getNativeWorker, parkNativeWorkerForHandover, stopNativeWorker } from './lib/native-worker'
 import { restoreBusinessHandoverIfEnabled } from './db/business-handover-state'
 import {
   quiesceDesktopLegacyBusinessWriter,
@@ -103,9 +102,15 @@ import {
 } from './runtime/business-handover-quiesce'
 import { desktopRuntime } from './runtime/desktop-runtime'
 import { registerTsRuntimeHandlers } from './ipc/ts-runtime-handlers'
-import { getCodeGraphWorker } from './lib/codegraph-worker'
+import { registerAgentRuntimeDataHandlers } from './ipc/agent-runtime-data-handlers'
+import {
+  forgetSessionWindow,
+  getSessionWindowIds,
+  setSessionWindowVisibility
+} from './ipc/session-visibility'
 import { stopCodeGraphSync } from './lib/codegraph-sync'
 import { registerTeamRuntimeHandlers } from './ipc/team-runtime-handlers'
+import { registerRuntimeJobHandlers } from './ipc/runtime-job-handlers'
 import { loadPersistedJobs, cancelAllJobs } from './cron/cron-scheduler'
 import { McpManager } from './mcp/mcp-manager'
 import { closeDb } from './db/database'
@@ -217,7 +222,6 @@ let sshWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let isQuiting = false
 const detachedSessionWindows = new Map<string, BrowserWindow>()
-const visibleSessionWindowIds = new Map<string, Set<number>>()
 
 function ensureGlobalMemoryHome(workspaceId = 'local-personal'): string {
   const rootPath = workspaceMemoryDataRoot(olaDataRoot(), workspaceId)
@@ -596,6 +600,25 @@ function attachWindowCrashLogging(window: BrowserWindow): void {
   let attemptedOomReload = false
   let lastOomReloadAt = 0
 
+  webContents.on('did-finish-load', () => {
+    const loadInfo = getWindowDiagnosticContext(window)
+    console.log('[Main] Renderer finished loading:', loadInfo)
+    recordCrash('window_did_finish_load', loadInfo)
+  })
+
+  webContents.on('console-message', (_event, level, message, line, sourceId) => {
+    const consoleInfo = {
+      ...getWindowDiagnosticContext(window),
+      level,
+      message,
+      line,
+      sourceId
+    }
+    if (level >= 2) console.error('[Main] Renderer console message:', consoleInfo)
+    else console.warn('[Main] Renderer console message:', consoleInfo)
+    recordCrash('window_console_message', consoleInfo)
+  })
+
   webContents.on('render-process-gone', (_event, details) => {
     const crashInfo = {
       ...getWindowDiagnosticContext(window),
@@ -777,11 +800,37 @@ function buildRendererUrl(searchParams?: URLSearchParams): string {
   return fileUrl.toString()
 }
 
+function buildBundledRendererUrl(searchParams?: URLSearchParams): string {
+  const fileUrl = pathToFileURL(join(__dirname, '../renderer/index.html'))
+  if (searchParams) {
+    for (const [key, value] of searchParams.entries()) {
+      fileUrl.searchParams.set(key, value)
+    }
+  }
+  return fileUrl.toString()
+}
+
 async function loadRendererWindow(
   window: BrowserWindow,
   searchParams?: URLSearchParams
 ): Promise<void> {
-  await window.loadURL(buildRendererUrl(searchParams))
+  const rendererUrl = buildRendererUrl(searchParams)
+  try {
+    await window.loadURL(rendererUrl)
+  } catch (error) {
+    // A detached dev process can outlive electron-vite and leave the window
+    // pointed at a dead localhost server. Keep the app usable by falling back
+    // to the last successful bundled renderer instead of showing a blank page.
+    if (!is.dev || rendererUrl.startsWith('file:')) throw error
+
+    const fallbackUrl = buildBundledRendererUrl(searchParams)
+    console.warn('[Main] Dev renderer failed to load; falling back to bundled renderer', {
+      rendererUrl,
+      fallbackUrl,
+      error: error instanceof Error ? error.message : String(error)
+    })
+    await window.loadURL(fallbackUrl)
+  }
 }
 
 function showSshWindow(): void {
@@ -859,7 +908,7 @@ function addRuntimeSyncTarget(
 
 function getSessionRuntimeSyncTargets(sessionId: string): BrowserWindow[] {
   const targets = new Map<number, BrowserWindow>()
-  const visibleWindowIds = visibleSessionWindowIds.get(sessionId)
+  const visibleWindowIds = getSessionWindowIds(sessionId)
 
   if (visibleWindowIds) {
     for (const windowId of Array.from(visibleWindowIds)) {
@@ -869,9 +918,6 @@ function getSessionRuntimeSyncTargets(sessionId: string): BrowserWindow[] {
       } else {
         visibleWindowIds.delete(windowId)
       }
-    }
-    if (visibleWindowIds.size === 0) {
-      visibleSessionWindowIds.delete(sessionId)
     }
   }
 
@@ -889,12 +935,7 @@ function getGlobalRuntimeSyncTargets(): BrowserWindow[] {
 }
 
 function forgetVisibleSessionWindow(windowId: number): void {
-  for (const [sessionId, windowIds] of visibleSessionWindowIds) {
-    windowIds.delete(windowId)
-    if (windowIds.size === 0) {
-      visibleSessionWindowIds.delete(sessionId)
-    }
-  }
+  forgetSessionWindow(windowId)
 }
 
 function rememberVisibleSessionWindow(
@@ -907,21 +948,10 @@ function rememberVisibleSessionWindow(
   if (!isUsableSyncWindow(window)) return
 
   if (payload?.visible === true) {
-    let windowIds = visibleSessionWindowIds.get(sessionId)
-    if (!windowIds) {
-      windowIds = new Set()
-      visibleSessionWindowIds.set(sessionId, windowIds)
-    }
-    windowIds.add(window.id)
+    setSessionWindowVisibility(sessionId, window.id, true)
     return
   }
-
-  const windowIds = visibleSessionWindowIds.get(sessionId)
-  if (!windowIds) return
-  windowIds.delete(window.id)
-  if (windowIds.size === 0) {
-    visibleSessionWindowIds.delete(sessionId)
-  }
+  setSessionWindowVisibility(sessionId, window.id, false)
 }
 
 function routeRuntimeSync(event: IpcMainEvent, channel: string, payload: unknown): void {
@@ -1129,6 +1159,7 @@ function registerWindowControlHandlers(): void {
         throw new Error('WINDOW_WORKSPACE_SUPERSEDED')
       if (targetWindow === mainWindow)
         void flushPendingChannelTasks(workspaceId).catch((error) => {
+          if (error instanceof Error && error.message === 'CHANNEL_HANDOVER_QUIESCED') return
           console.warn('[AutoReply] Failed to flush pending channel tasks:', error)
         })
       return { workspaceId }
@@ -1431,12 +1462,7 @@ function stopBackgroundServicesForQuit(): void {
   closeAllSshSessions()
   closeAllRemoteSessions()
   cancelAllJobs()
-  void stopNativeWorker()
   stopCodeGraphSync()
-  void getCodeGraphWorker().stop()
-  void getSidecarManager()
-    .stop()
-    .catch(() => {})
   closeDb()
   closeChannelTaskInbox()
 }
@@ -1557,50 +1583,116 @@ if (gotSingleInstanceLock) {
     // registered before creating that window; the runtime itself can still
     // report unavailable while the remaining startup work is in progress.
     registerTsRuntimeHandlers()
+    registerAgentRuntimeDataHandlers()
+    registerRuntimeJobHandlers()
     // Prompt cache and offline workspace initialization read config during the
-    // first renderer paint. This file-backed handler has no Native Worker
-    // dependency, so make it available before the initial window exists.
+    // first renderer paint, so make the file-backed handler available early.
     registerConfigHandlers()
     // Settings hydrate from the Main-owned local store and are requested by
     // the persisted offline workspace state during the first render.
     registerSettingsHandlers()
+    // Catalog and extension panes request their initial data during the first
+    // renderer paint. Register their TS MessagePack handlers before creating
+    // the window so startup cannot race handler installation.
+    registerAgentsHandlers()
+    registerExtensionHandlers()
+    // The first renderer paint hydrates several independent panes in parallel.
+    // Install every synchronous IPC surface before creating the window so a
+    // fast renderer cannot observe a partially registered Main process.
+    registerFsHandlers()
+    registerAgentChangeHandlers()
+    registerSubAgentHistoryHandlers()
+    registerShellHandlers()
+    registerApiProxyHandlers()
+    registerSkillsHandlers()
+    registerSoulsHandlers()
+    registerPromptsHandlers()
+    registerCommandsHandlers()
+    registerProcessManagerHandlers()
+    registerTerminalHandlers()
+    registerGoalRuntimeHandlers()
+    registerMemoryAutomationHandlers()
+    registerChannelHandlers(channelManager)
+    registerMcpHandlers(mcpManager)
+    registerCronHandlers()
+    registerScreenshotHandlers()
+    registerDesktopFlowHandlers()
+    registerInputHandlers()
+    registerHooksHandlers()
+    registerRemoteHandlers()
+    registerCodeGraphHandlers()
+    registerTeamRuntimeHandlers()
+    registerNotifyHandlers()
+    registerWebSearchHandlers()
+    registerBrowserHandlers()
+    registerAiCodingHandlers()
+    registerCredentialsHandlers()
+    registerOauthHandlers()
+    registerImageGifHandlers()
+    registerDrawGraphHandlers()
+    registerMediaRuntimeHandlers()
+    registerGitHandlers()
+    registerMigrationHandlers()
+    registerSyncHandlers()
+    registerWikiHandlers()
+    registerProviderHandlers()
+    registerImageGenerationHandlers()
+    registerMessagePackHandler<void>('app:homedir', () => olaExternalDataHome())
+    registerMessagePackHandler<{ workspaceId?: string } | undefined>(
+      'app:global-memory-home',
+      async (args) => {
+        const workspaceId = args?.workspaceId ?? 'local-personal'
+        if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
+          throw new Error('Memory workspace is not available')
+        return ensureGlobalMemoryHome(workspaceId)
+      }
+    )
+    registerMessagePackHandler<void>('app:system-info', () => ({
+      machineName: hostname(),
+      platform: process.platform,
+      arch: process.arch,
+      release: release()
+    }))
+    // The first renderer paint loads persisted projects and sessions. Register
+    // the TS-owned database IPC surface before creating the window so a fast
+    // renderer cannot race database handler installation.
+    await runLoggedStartupStepAsync('register_db_handlers', () =>
+      registerDbHandlers({
+        onSessionDeleted: (sessionId) => {
+          closeDetachedSessionWindow(sessionId)
+        }
+      })
+    )
+    registerWindowControlHandlers()
+    registerPetHandlers({
+      loadRendererWindow,
+      showMainWindow
+    })
+    await registerInputDraftHandlers()
+    setupAutoUpdater({
+      getMainWindow: () => mainWindow,
+      markAppWillQuit: () => {
+        isQuiting = true
+      }
+    })
     runLoggedStartupStep('create_main_window', createWindow)
 
     await runLoggedStartupStepAsync('restore_business_handover', async () => {
-      try {
-        const marker = await restoreBusinessHandoverIfEnabled()
-        if (marker) {
-          // Reapply the complete legacy-writer quiesce boundary on every
-          // restart, not only the Native Worker park. Cron, channels, sync,
-          // and Agent bridges must not issue late requests into a parked DB.
-          await quiesceDesktopLegacyBusinessWriter()
-          if (process.env.OLA_ENABLE_TS_CHANNEL_RESUME === '1') {
-            await resumeDesktopTsChannelWriter()
-          }
-          console.log(`[BusinessHandover] restored TS ownership from ${marker.manifestPath}`)
+      const marker = await restoreBusinessHandoverIfEnabled()
+      if (marker) {
+        // Reapply the complete legacy-writer quiesce boundary on every
+        // restart, so Cron, channels, and sync must not issue late writes.
+        await quiesceDesktopLegacyBusinessWriter()
+        if (process.env.OLA_ENABLE_TS_CHANNEL_RESUME === '1') {
+          await resumeDesktopTsChannelWriter()
         }
-      } catch (error) {
-        // Never let a stale or corrupt promotion marker silently reopen the
-        // legacy writer. Keep Native parked and surface the failure to logs.
-        await parkNativeWorkerForHandover().catch(() => undefined)
-        throw error
+        console.log(`[BusinessHandover] restored TS ownership from ${marker.manifestPath}`)
       }
     })
 
     await runLoggedStartupStepAsync('sync_macos_shell_environment', syncMacOSShellEnvironment)
-    try {
-      await runLoggedStartupStepAsync('native_worker_settings_startup', async () => {
-        await getNativeWorker().ensureStarted()
-        await initializeSettingsCache()
-      })
-      console.log('[NativeWorker] settings startup ready')
-    } catch (error) {
-      console.warn(
-        `[NativeWorker] settings startup failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      )
-    }
+    await runLoggedStartupStepAsync('ts_settings_startup', initializeSettingsCache)
+    console.log('[TS] settings startup ready')
     await runLoggedStartupStepAsync('reset_pet_desktop_state', markPetClosedForAppQuit)
     await runLoggedStartupStepAsync('configure_system_proxy', configureSystemProxy)
     const browserEmulationStatus = runLoggedStartupStep(
@@ -1632,67 +1724,11 @@ if (gotSingleInstanceLock) {
 
     // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
 
-    registerMessagePackHandler<void>('app:homedir', () => olaExternalDataHome())
-    registerMessagePackHandler<{ workspaceId?: string } | undefined>(
-      'app:global-memory-home',
-      async (args) => {
-        const workspaceId = args?.workspaceId ?? 'local-personal'
-        if (workspaceId !== 'local-personal' && !(await loadOfflineWorkspaceIds()).has(workspaceId))
-          throw new Error('Memory workspace is not available')
-        return ensureGlobalMemoryHome(workspaceId)
-      }
-    )
-    registerMessagePackHandler<void>('app:system-info', () => ({
-      machineName: hostname(),
-      platform: process.platform,
-      arch: process.arch,
-      release: release()
-    }))
-    registerWindowControlHandlers()
-    registerPetHandlers({
-      loadRendererWindow,
-      showMainWindow
-    })
-
     // Register IPC handlers
 
-    registerFsHandlers()
-    registerAgentChangeHandlers()
-    registerSubAgentHistoryHandlers()
-
-    registerShellHandlers()
-
-    registerApiProxyHandlers()
-
-    registerSkillsHandlers()
-    registerSoulsHandlers()
-    registerAgentsHandlers()
-    registerPromptsHandlers()
-    registerCommandsHandlers()
-    registerProcessManagerHandlers()
-    registerTerminalHandlers()
-
-    try {
-      await runLoggedStartupStepAsync('native_worker_startup', () =>
-        getNativeWorker().ensureStarted()
-      )
-      await runLoggedStartupStepAsync('native_worker_reap_stale_jobs', async () => {
-        const result = await getNativeWorker().request<{ reaped?: number }>(
-          'runtime/jobs-reap-stale',
-          {
-            maxAgeMs: 30 * 60 * 1000
-          }
-        )
-        if ((result.reaped ?? 0) > 0) {
-          console.warn(`[NativeWorker] marked ${result.reaped} stale runtime job(s) as failed`)
-        }
-      })
-      console.log('[NativeWorker] startup ready')
-    } catch (error) {
-      console.warn(
-        `[NativeWorker] startup failed: ${error instanceof Error ? error.message : String(error)}`
-      )
-    }
+    // Legacy capabilities are not started here. The offline workspace and TS
+    // runtime must be ready without a legacy executable.
+    console.log('[TS] legacy runtime global startup skipped; compatibility routes are lazy')
 
     // The runtime resolves local provider secrets in Main. Hydrate the mirror
     // before starting it so no renderer or socket client ever receives them.
@@ -1703,66 +1739,24 @@ if (gotSingleInstanceLock) {
       )
       console.log('[TsRuntime] desktop host ready')
     } catch (error) {
-      // The production agent still uses the native worker during the staged
-      // cutover. A failed staged runtime must not prevent existing sessions.
-      console.warn(
-        `[TsRuntime] desktop host unavailable: ${
+      // Production has no legacy runtime fallback. Fail the startup
+      // transaction explicitly so a broken TS runtime cannot become a blank
+      // window with an indefinitely spinning legacy request.
+      console.error(
+        `[TsRuntime] desktop host startup failed: ${
           error instanceof Error ? error.message : String(error)
         }`
       )
+      throw error
     }
 
-    await runLoggedStartupStepAsync('register_db_handlers', () =>
-      registerDbHandlers({
-        onSessionDeleted: (sessionId) => {
-          closeDetachedSessionWindow(sessionId)
-        }
-      })
-    )
-    registerGoalRuntimeHandlers()
-    registerMemoryAutomationHandlers()
-    registerExtensionHandlers()
     await runLoggedStartupStepAsync('register_ssh_handlers', registerSshHandlers)
-    registerChannelHandlers(channelManager)
-    registerMcpHandlers(mcpManager)
-    registerCronHandlers()
-    registerScreenshotHandlers()
-    registerDesktopFlowHandlers()
-    registerInputHandlers()
-    await registerInputDraftHandlers()
-    registerHooksHandlers()
-    registerRemoteHandlers()
 
-    registerSidecarHandlers()
-    registerCodeGraphHandlers()
-    registerTeamRuntimeHandlers()
-
-    try {
-      const sidecarReady = await runLoggedStartupStepAsync('sidecar_global_startup', () =>
-        getSidecarManager().ensureStarted()
-      )
-      console.log(`[Sidecar] global startup ${sidecarReady ? 'ready' : 'unavailable'}`)
-    } catch (error) {
-      console.warn(
-        `[Sidecar] global startup failed: ${error instanceof Error ? error.message : String(error)}`
-      )
-    }
+    // A packaged desktop finishes booting on the TypeScript runtime without
+    // waiting for or implicitly spawning a legacy executable.
+    console.log('[TS] TypeScript runtime is authoritative; legacy executable startup is removed')
 
     await runLoggedStartupStepAsync('load_persisted_jobs', loadPersistedJobs)
-    registerNotifyHandlers()
-    registerWebSearchHandlers()
-    registerBrowserHandlers()
-    registerAiCodingHandlers()
-    registerCredentialsHandlers()
-    registerOauthHandlers()
-    registerImageGifHandlers()
-    registerDrawGraphHandlers()
-    registerMediaRuntimeHandlers()
-    registerGitHandlers()
-    registerMigrationHandlers()
-    registerSyncHandlers()
-    registerWikiHandlers()
-    registerProviderHandlers()
 
     // Clipboard/image payloads can be large; renderer callers use MessagePack where possible.
     registerBinaryInvokeHandler<ClipboardWriteImageArgs>(
@@ -1846,13 +1840,6 @@ if (gotSingleInstanceLock) {
 
     createTray()
     void installBuiltinPets()
-
-    setupAutoUpdater({
-      getMainWindow: () => mainWindow,
-      markAppWillQuit: () => {
-        isQuiting = true
-      }
-    })
 
     recordStartupStep('app_when_ready', 'success')
 

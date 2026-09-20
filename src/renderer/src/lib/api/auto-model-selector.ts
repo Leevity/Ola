@@ -11,13 +11,8 @@ import type {
   AutoModelSelectionStatus,
   AutoModelTaskType
 } from '@renderer/stores/ui-store'
-import { agentBridge, canSidecarHandle, runSidecarCleanup } from '@renderer/lib/ipc/agent-bridge'
-import {
-  buildSidecarAgentRunRequest,
-  isNativeSidecarProviderConfig
-} from '@renderer/lib/ipc/sidecar-protocol'
-import { agentStream } from '@renderer/lib/ipc/agent-stream-receiver'
-import { toAgentEvent } from '@renderer/lib/agent/stream-event-adapter'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { resolveTsRuntimeModelBinding } from '@renderer/lib/ipc/ts-runtime-model-binding'
 import {
   RESPONSES_SESSION_SCOPE_AUTO_MODEL_ROUTING,
   withAuxiliaryResponsesRequestPolicy
@@ -887,205 +882,124 @@ export async function selectAutoModel(options: {
       RESPONSES_SESSION_SCOPE_AUTO_MODEL_ROUTING
     )
 
-    const messages: UnifiedMessage[] = [
-      {
-        id: 'auto-model-route',
-        role: 'user',
-        content: routingInput,
-        createdAt: Date.now()
-      }
-    ]
-
-    const sidecarRequest = buildSidecarAgentRunRequest({
-      messages,
-      provider: routingConfig,
-      tools: [],
-      maxIterations: 1,
-      forceApproval: false
-    })
-    if (!sidecarRequest) {
-      return finishSelection({
-        target: 'main',
-        config: mainConfig,
-        mode,
-        ...signalStatusFields(routingSignals),
-        toolsAllowed: allowTools,
-        decisionSource: 'fallback-main',
-        fallbackReason: 'sidecar_request_build_failed'
-      })
-    }
-
-    if (!isNativeSidecarProviderConfig(routingConfig)) {
-      return finishSelection({
-        target: 'main',
-        config: mainConfig,
-        mode,
-        ...signalStatusFields(routingSignals),
-        toolsAllowed: allowTools,
-        decisionSource: 'fallback-main',
-        fallbackReason: 'sidecar_provider_not_native'
-      })
-    }
-
-    const supportsAgentRun = await canSidecarHandle('agent.run')
-    const supportsProvider = await canSidecarHandle(`provider.${routingConfig.type}`)
-    if (!supportsAgentRun || !supportsProvider) {
-      return finishSelection({
-        target: 'main',
-        config: mainConfig,
-        mode,
-        ...signalStatusFields(routingSignals),
-        toolsAllowed: allowTools,
-        decisionSource: 'fallback-main',
-        fallbackReason: 'sidecar_capability_unavailable'
-      })
-    }
-
-    const initialized = await agentBridge.initialize()
-    if (!initialized) {
-      return finishSelection({
-        target: 'main',
-        config: mainConfig,
-        mode,
-        ...signalStatusFields(routingSignals),
-        toolsAllowed: allowTools,
-        decisionSource: 'fallback-main',
-        fallbackReason: 'sidecar_unavailable'
-      })
-    }
-
-    const result = await agentBridge.runAgent(sidecarRequest)
-    let output = ''
-    let finished = false
-    let unsubscribe: (() => void) | null = null
-
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const onAbort = async (): Promise<void> => {
-          try {
-            await agentBridge.cancelAgent(result.runId)
-          } catch {
-            // ignore cancellation races
-          }
-          reject(new Error('aborted'))
-        }
-
-        if (abortController.signal.aborted) {
-          void onAbort()
-          return
-        }
-
-        abortController.signal.addEventListener(
-          'abort',
-          () => {
-            void onAbort()
-          },
-          { once: true }
-        )
-
-        unsubscribe = agentStream.subscribeAll((eventRunId, _sessionId, streamEvent) => {
-          if (eventRunId !== result.runId) return
-          const event = toAgentEvent(streamEvent)
-          if (!event) return
-
-          if (event.type === 'text_delta' && event.text) {
-            output += event.text
-            if (output.length >= 512) {
-              finished = true
-              resolve()
-            }
-            return
-          }
-
-          if (event.type === 'loop_end') {
-            finished = true
-            resolve()
-            return
-          }
-
-          if (event.type === 'error') {
-            finished = true
-            reject(event.error)
-          }
-        })
-      })
-    } finally {
-      runSidecarCleanup(unsubscribe)
-      if (!finished) {
-        try {
-          await agentBridge.cancelAgent(result.runId)
-        } catch {
-          // ignore cancellation races
-        }
-      }
-    }
-
-    const normalizedOutput = stripRoutingArtifacts(output)
-    const parsed = tryParseClassifierResult(normalizedOutput)
-    if (!parsed) {
-      return finishSelection({
-        target: 'main',
-        config: mainConfig,
-        mode,
-        ...signalStatusFields(routingSignals),
-        toolsAllowed: allowTools,
-        decisionSource: 'fallback-main',
-        fallbackReason: 'invalid_classifier_output'
-      })
-    }
-
-    if (allowTools && parsed.route === 'fast' && !getFastModelSupportsTools()) {
-      return finishSelection({
-        target: 'main',
-        config: mainConfig,
-        mode,
-        ...signalStatusFields(routingSignals),
-        taskType: parsed.taskType,
-        confidence: parsed.confidence,
-        classifierRoute: parsed.route,
-        toolsAllowed: allowTools,
-        decisionSource: 'fallback-main',
-        fallbackReason: 'fast_model_tools_unsupported'
-      })
-    }
-
-    const policyDecision = applyAutoRoutingPolicy({
-      classifierResult: parsed,
-      signals: routingSignals,
-      sessionId: options.sessionId,
-      mode,
-      allowTools
-    })
-
-    return policyDecision.route === 'fast'
-      ? finishSelection({
-          target: 'fast',
-          config: fastConfig,
-          mode,
-          ...signalStatusFields(routingSignals),
-          taskType: policyDecision.taskType,
-          confidence: policyDecision.confidence,
-          classifierRoute: parsed.route,
-          toolsAllowed: allowTools,
-          decisionSource: policyDecision.decisionSource,
-          ...(policyDecision.fallbackReason
-            ? { fallbackReason: policyDecision.fallbackReason }
-            : {})
-        })
-      : finishSelection({
+    const finishClassifierOutput = (rawOutput: string): AutoModelSelectionStatus => {
+      const normalizedOutput = stripRoutingArtifacts(rawOutput)
+      const parsed = tryParseClassifierResult(normalizedOutput)
+      if (!parsed) {
+        return finishSelection({
           target: 'main',
           config: mainConfig,
           mode,
           ...signalStatusFields(routingSignals),
-          taskType: policyDecision.taskType,
-          confidence: policyDecision.confidence,
+          toolsAllowed: allowTools,
+          decisionSource: 'fallback-main',
+          fallbackReason: 'invalid_classifier_output'
+        })
+      }
+
+      if (allowTools && parsed.route === 'fast' && !getFastModelSupportsTools()) {
+        return finishSelection({
+          target: 'main',
+          config: mainConfig,
+          mode,
+          ...signalStatusFields(routingSignals),
+          taskType: parsed.taskType,
+          confidence: parsed.confidence,
           classifierRoute: parsed.route,
           toolsAllowed: allowTools,
-          decisionSource: policyDecision.decisionSource,
-          ...(policyDecision.fallbackReason
-            ? { fallbackReason: policyDecision.fallbackReason }
-            : {})
+          decisionSource: 'fallback-main',
+          fallbackReason: 'fast_model_tools_unsupported'
         })
+      }
+
+      const policyDecision = applyAutoRoutingPolicy({
+        classifierResult: parsed,
+        signals: routingSignals,
+        sessionId: options.sessionId,
+        mode,
+        allowTools
+      })
+
+      return policyDecision.route === 'fast'
+        ? finishSelection({
+            target: 'fast',
+            config: fastConfig,
+            mode,
+            ...signalStatusFields(routingSignals),
+            taskType: policyDecision.taskType,
+            confidence: policyDecision.confidence,
+            classifierRoute: parsed.route,
+            toolsAllowed: allowTools,
+            decisionSource: policyDecision.decisionSource,
+            ...(policyDecision.fallbackReason
+              ? { fallbackReason: policyDecision.fallbackReason }
+              : {})
+          })
+        : finishSelection({
+            target: 'main',
+            config: mainConfig,
+            mode,
+            ...signalStatusFields(routingSignals),
+            taskType: policyDecision.taskType,
+            confidence: policyDecision.confidence,
+            classifierRoute: parsed.route,
+            toolsAllowed: allowTools,
+            decisionSource: policyDecision.decisionSource,
+            ...(policyDecision.fallbackReason
+              ? { fallbackReason: policyDecision.fallbackReason }
+              : {})
+          })
+    }
+
+    const tsBinding = resolveTsRuntimeModelBinding(routingConfig)
+    if (tsBinding && (await isTsRuntimeAvailable())) {
+      let output = ''
+      try {
+        for await (const event of streamTsRuntimeTextTurn({
+          workspaceId: tsBinding.workspaceId,
+          sessionId: `auto-model-routing:${crypto.randomUUID()}`,
+          modelSource: tsBinding.modelSource,
+          modelOptions: {
+            maxTokens: routingConfig.maxTokens,
+            temperature: routingConfig.temperature,
+            thinking: { type: 'disabled' },
+            systemPrompt: routingConfig.systemPrompt,
+            responsesSessionScope: routingConfig.responsesSessionScope
+          },
+          prompt: routingInput,
+          maxTurns: 1,
+          signal: abortController.signal
+        })) {
+          if (event.type === 'text_delta' && event.text) {
+            output += event.text
+            if (output.length >= 512) break
+          }
+          if (event.type === 'loop_end') break
+          if (event.type === 'error') throw event.error
+        }
+        return finishClassifierOutput(output)
+      } catch {
+        return finishSelection({
+          target: 'main',
+          config: mainConfig,
+          mode,
+          ...signalStatusFields(routingSignals),
+          toolsAllowed: allowTools,
+          decisionSource: 'fallback-main',
+          fallbackReason: 'classification_failed'
+        })
+      }
+    }
+
+    return finishSelection({
+      target: 'main',
+      config: mainConfig,
+      mode,
+      ...signalStatusFields(routingSignals),
+      toolsAllowed: allowTools,
+      decisionSource: 'fallback-main',
+      fallbackReason: 'ts_runtime_routing_unavailable'
+    })
   } catch {
     return finishSelection({
       target: 'main',

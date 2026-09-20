@@ -546,6 +546,19 @@ export const LEGACY_BUSINESS_DATABASE_CONTRACT: Readonly<Record<string, readonly
   desktop_flow_runs: ['id', 'flow_id', 'state', 'error_message', 'started_at', 'finished_at']
 }
 
+const NATIVE_PROJECT_WIKI_CONTRACT: Readonly<Record<string, readonly string[]>> = {
+  wiki_documents: [
+    'id',
+    'project_id',
+    'name',
+    'slug',
+    'content_markdown',
+    'created_at',
+    'updated_at'
+  ],
+  wiki_generation_runs: ['id', 'project_id', 'mode', 'status', 'created_at', 'updated_at']
+}
+
 function inspect(database: DatabaseSync): SchemaInspection {
   const integrity = database.prepare('PRAGMA integrity_check').all() as Array<{
     integrity_check?: unknown
@@ -582,10 +595,19 @@ function columnsForTable(database: DatabaseSync, table: string): Set<string> {
   )
 }
 
+function hasColumns(database: DatabaseSync, table: string, required: readonly string[]): boolean {
+  const columns = columnsForTable(database, table)
+  return required.every((column) => columns.has(column))
+}
+
 export interface LegacyBusinessDatabaseContract {
   sourcePath: string
   userVersion: number
   tables: string[]
+  nativeProjectWiki?: {
+    documents: number
+    generationRuns: number
+  }
 }
 
 /**
@@ -604,14 +626,31 @@ export async function verifyLegacyBusinessDatabaseContract(input: {
   const database = new DatabaseSync(sourcePath, { readOnly: true })
   try {
     const inspection = inspect(database)
+    let nativeProjectWiki: LegacyBusinessDatabaseContract['nativeProjectWiki']
     for (const [table, requiredColumns] of Object.entries(LEGACY_BUSINESS_DATABASE_CONTRACT)) {
       if (!inspection.tables.includes(table))
         throw new RuntimeError(`LEGACY_DATABASE_SCHEMA_UNSUPPORTED:${table}`)
+      if (
+        (table === 'wiki_documents' || table === 'wiki_generation_runs') &&
+        hasColumns(database, table, NATIVE_PROJECT_WIKI_CONTRACT[table])
+      ) {
+        nativeProjectWiki ??= { documents: 0, generationRuns: 0 }
+        const count = Number(
+          (
+            database.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as {
+              count?: unknown
+            }
+          ).count ?? 0
+        )
+        if (table === 'wiki_documents') nativeProjectWiki.documents = count
+        else nativeProjectWiki.generationRuns = count
+        continue
+      }
       const columns = columnsForTable(database, table)
       const missing = requiredColumns.find((column) => !columns.has(column))
       if (missing) throw new RuntimeError(`LEGACY_DATABASE_SCHEMA_UNSUPPORTED:${table}.${missing}`)
     }
-    return { sourcePath, ...inspection }
+    return { sourcePath, ...inspection, ...(nativeProjectWiki ? { nativeProjectWiki } : {}) }
   } finally {
     database.close()
   }
@@ -886,12 +925,12 @@ export async function verifyLegacyDatabaseHandoverSnapshot(input: {
   if ((backupStat.mode & 0o077) !== 0) throw new RuntimeError('LEGACY_DATABASE_BACKUP_INSECURE')
   await verifyLegacyRollbackBaseline(input)
   const contract = await verifyLegacyBusinessDatabaseContract({ sourcePath: backupPath })
-  const tsOwnedTables = new Set([
-    'ola_ts_schema_migrations',
-    'ola_ts_sync_baselines_v2',
-    'ola_ts_sync_tombstones_v2'
-  ])
-  const legacyTables = contract.tables.filter((table) => !tsOwnedTables.has(table))
+  // Handover may add TS-owned compatibility/archive tables after the initial
+  // snapshot (notably the preserved Native Project Wiki archive). They must
+  // not be mistaken for a post-cutover legacy schema drift.
+  const legacyTables = contract.tables.filter(
+    (table) => !table.startsWith('ola_ts_') && !table.startsWith('ola_native_wiki_')
+  )
   if (
     contract.userVersion !== snapshot.userVersion ||
     JSON.stringify(legacyTables) !== JSON.stringify(snapshot.tables)

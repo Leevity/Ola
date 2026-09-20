@@ -133,6 +133,47 @@ describe('TS runtime renderer event projection', () => {
     ])
   })
 
+  it('projects a Main-owned image result into the existing image message stream', () => {
+    expect(
+      projectTsRuntimeEvents([
+        event('tool.result', {
+          id: 'image-call',
+          name: 'ImageGenerate',
+          isError: false,
+          output: {
+            __olaImageResult: true,
+            images: [{ filePath: '/tmp/ola-image.png', mediaType: 'image/png' }]
+          }
+        })
+      ])
+    ).toEqual([
+      {
+        type: 'image_generated',
+        imageBlock: {
+          type: 'image',
+          source: {
+            type: 'base64',
+            mediaType: 'image/png',
+            filePath: '/tmp/ola-image.png'
+          }
+        }
+      },
+      {
+        type: 'tool_call_result',
+        toolCall: {
+          id: 'image-call',
+          name: 'ImageGenerate',
+          input: {},
+          status: 'completed',
+          output:
+            '{"__olaImageResult":true,"images":[{"filePath":"/tmp/ola-image.png","mediaType":"image/png"}]}',
+          requiresApproval: false,
+          completedAt: 1
+        }
+      }
+    ])
+  })
+
   it('keeps persisted interaction identity for a scoped renderer response', () => {
     expect(
       projectTsRuntimeInteraction({

@@ -94,6 +94,11 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
     return await readServers()
   })
 
+  // Read one configured MCP server without exposing the backing file to Renderer.
+  registerMcpMessagePackHandler<string>('mcp:get', async (id) => {
+    return await mcpConfigStore.get(id)
+  })
+
   // Add a new MCP server config
   registerMcpMessagePackHandler<McpServerConfig>('mcp:add', async (config) => {
     return await addServer(config)

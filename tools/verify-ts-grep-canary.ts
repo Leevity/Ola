@@ -4,7 +4,10 @@ const source = await readFile(new URL('../src/main/ipc/fs-handlers.ts', import.m
 if (!source.includes('if (canUseTsLocalGrep(args))')) {
   throw new Error('Supported local grep semantics must use the TS engine by default')
 }
-if (!source.includes("nativeToolRequest<GrepToolResult>(\n      'fs/grep'")) {
-  throw new Error('Native grep fallback must remain for unsupported advanced semantics')
+if (source.includes('legacyNativeCompatibilityEnabled()')) {
+  throw new Error('Legacy grep compatibility must not remain in the production path')
 }
-console.log('TS grep default route and fallback boundary verification passed')
+if (!source.includes("error: 'TS_GREP_UNSUPPORTED_OPTIONS'")) {
+  throw new Error('Unsupported grep semantics must fail explicitly in production')
+}
+console.log('TS grep default route and explicit compatibility boundary verification passed')

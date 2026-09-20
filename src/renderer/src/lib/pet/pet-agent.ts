@@ -1,14 +1,17 @@
 import { nanoid } from 'nanoid'
-import { runAgentViaSidecar } from '@renderer/lib/agent/run-agent-via-sidecar'
-import { buildSidecarAgentRunRequest } from '@renderer/lib/ipc/sidecar-protocol'
 import { buildSystemPrompt } from '@renderer/lib/agent/system-prompt'
 import { recordUsageEvent } from '@renderer/lib/usage-analytics'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
 import { usePetsStore } from '@renderer/stores/pets-store'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import type { RuntimeImage, RuntimeTextMessage } from '../../../../shared/runtime/contracts'
 import type {
   ContentBlock,
+  ProviderConfig,
   TextBlock,
   ToolDefinition,
   UnifiedMessage
@@ -56,7 +59,7 @@ export function buildPetSystemPrompt(template: string, context: PetAgentContext)
   return context.memorySection ? `${rendered}\n\n${context.memorySection}` : rendered
 }
 
-// Read-only subset of the native tool executor's tools: the pet is a full
+// Read-only subset of the TypeScript tool executor's tools: the pet is a full
 // main agent, but it never mutates the project.
 const PET_AGENT_TOOLS: ToolDefinition[] = [
   {
@@ -112,6 +115,125 @@ const PET_AGENT_TOOLS: ToolDefinition[] = [
   }
 ]
 
+function runtimeImage(image: PetChatImage): RuntimeImage | null {
+  const mimeType = image.mediaType.toLowerCase()
+  if (
+    mimeType !== 'image/png' &&
+    mimeType !== 'image/jpeg' &&
+    mimeType !== 'image/gif' &&
+    mimeType !== 'image/webp'
+  )
+    return null
+  return { mimeType, data: image.data }
+}
+
+function runtimeMessage(message: UnifiedMessage): RuntimeTextMessage | null {
+  if (message.role !== 'system' && message.role !== 'user' && message.role !== 'assistant')
+    return null
+  if (typeof message.content === 'string') return { role: message.role, text: message.content }
+  const text = message.content
+    .filter((block): block is TextBlock => block.type === 'text')
+    .map((block) => block.text)
+    .join('')
+  const images = message.content
+    .filter((block) => block.type === 'image')
+    .map((block) => {
+      const source = block.source
+      return source.type === 'base64' &&
+        typeof source.data === 'string' &&
+        typeof source.mediaType === 'string'
+        ? runtimeImage({ data: source.data, mediaType: source.mediaType })
+        : null
+    })
+    .filter((image): image is RuntimeImage => image !== null)
+  if (!text && !images.length) return null
+  return { role: message.role, text, ...(images.length ? { images } : {}) }
+}
+
+async function tryRunPetChatOnTsRuntime(
+  args: PetChatArgs,
+  input: {
+    systemPrompt: string
+    workingFolder?: string
+    tools: ToolDefinition[]
+    config: ProviderConfig
+    messages: UnifiedMessage[]
+  }
+): Promise<string> {
+  if (!(await isTsRuntimeAvailable())) throw new Error('TS_RUNTIME_PET_UNAVAILABLE')
+  const workspaceStore = useWorkspaceStore.getState()
+  const workspace = args.providerId.startsWith('ola-managed:')
+    ? workspaceStore
+        .getWorkspaces()
+        .find((item) => item.id === args.providerId.slice('ola-managed:'.length))
+    : workspaceStore.getActiveWorkspace()
+  if (!workspace) throw new Error('TS_RUNTIME_PET_WORKSPACE_REQUIRED')
+  const modelSource = explicitTsRuntimeModelSource({
+    providerId: args.providerId,
+    modelId: args.modelId,
+    managedWorkspaceKind:
+      workspace.kind === 'ola-personal' || workspace.kind === 'ola-team'
+        ? workspace.kind
+        : undefined
+  })
+  if (!modelSource) throw new Error('TS_RUNTIME_PET_MODEL_REQUIRED')
+  const current = input.messages.at(-1)
+  if (!current) throw new Error('TS_RUNTIME_PET_MESSAGE_REQUIRED')
+  const currentMessage = runtimeMessage(current)
+  const history = input.messages.slice(0, -1).map(runtimeMessage)
+  if (!currentMessage || history.some((message) => !message))
+    throw new Error('TS_RUNTIME_PET_MESSAGE_INVALID')
+  let reply = ''
+  for await (const event of streamTsRuntimeTextTurn({
+    workspaceId: workspace.id,
+    sessionId: `pet:${args.petId ?? usePetsStore.getState().activePetId ?? 'active'}`,
+    modelSource,
+    modelOptions: {
+      systemPrompt: `${input.systemPrompt}\n\n<system-remind>\n${args.persona}\n</system-remind>`,
+      ...(input.config.maxTokens !== undefined ? { maxTokens: input.config.maxTokens } : {}),
+      ...(input.config.temperature !== undefined ? { temperature: input.config.temperature } : {}),
+      thinking: { type: 'disabled' }
+    },
+    prompt: currentMessage.text,
+    ...(currentMessage.images?.length ? { promptImages: currentMessage.images } : {}),
+    ...(history.length ? { history: history as RuntimeTextMessage[] } : {}),
+    ...(input.workingFolder ? { workingDirectory: input.workingFolder } : {}),
+    ...(input.tools.length ? { toolNames: input.tools.map((tool) => tool.name) } : {}),
+    maxTurns: 8,
+    signal: args.signal
+  })) {
+    if (args.signal?.aborted) break
+    if (event.type === 'text_delta' && event.text) {
+      reply = stripThinkTags(reply + event.text)
+      if (reply.trim()) args.onDelta?.(reply)
+    } else if (event.type === 'tool_use_generated') {
+      args.onToolUse?.(event.toolUseBlock.name)
+    } else if (event.type === 'message_end') {
+      const usage = event.usage
+      if (usage) {
+        const tokens = usage.inputTokens + usage.outputTokens + (usage.cacheReadTokens ?? 0)
+        const petId = args.petId ?? usePetsStore.getState().activePetId ?? null
+        if (petId && tokens > 0) {
+          void import('./pet-exp').then(({ accruePetExpFromUsage }) =>
+            accruePetExpFromUsage({ modelId: args.modelId, modelName: args.modelId, tokens, petId })
+          )
+        }
+        void recordUsageEvent({
+          sourceKind: 'pet-chat',
+          providerId: args.providerId,
+          modelId: args.modelId,
+          usage
+        })
+      }
+    } else if (event.type === 'error') {
+      throw new Error(event.error?.message ?? 'pet TS runtime failed')
+    } else if (event.type === 'loop_end') {
+      return reply.trim()
+    }
+  }
+  return reply.trim()
+}
+
 export interface PetChatImage {
   /** base64 without the data-url prefix */
   data: string
@@ -142,10 +264,10 @@ export interface PetChatArgs {
 
 /**
  * One full main-agent turn for the pet: the regular main-agent system prompt
- * and native agent loop, with the pet persona injected via a <system-remind>
+ * and TypeScript agent loop, with the pet persona injected via a <system-remind>
  * block in the user message (same pattern as the translation agent), rolling
  * multi-turn history, and — when a project is bound — read-only tools executed
- * by the native worker inside the project's working folder.
+ * by the TypeScript runtime inside the project's working folder.
  */
 export async function runPetChat(args: PetChatArgs): Promise<string> {
   await ensureProviderAuthReady(args.providerId)
@@ -181,73 +303,11 @@ export async function runPetChat(args: PetChatArgs): Promise<string> {
     { id: nanoid(), role: 'user', content: userBlocks, createdAt: Date.now() }
   ]
 
-  const request = buildSidecarAgentRunRequest({
-    messages,
-    tools,
-    provider: { ...config, systemPrompt, thinkingEnabled: false },
-    maxIterations: 8,
-    forceApproval: false,
+  return await tryRunPetChatOnTsRuntime(args, {
+    systemPrompt,
     workingFolder,
-    sessionMode: 'chat'
+    tools,
+    config,
+    messages
   })
-  if (!request) throw new Error('failed to build pet agent request')
-
-  // The final reply is the text of the last iteration (text produced before a
-  // tool call belongs to intermediate turns).
-  let iterationRaw = ''
-  let reply = ''
-  for await (const event of runAgentViaSidecar(request, {
-    signal: args.signal,
-    routeSubAgentEventsToBus: false
-  })) {
-    if (args.signal?.aborted) break
-    switch (event.type) {
-      case 'iteration_start':
-        iterationRaw = ''
-        break
-      case 'text_delta':
-        if (event.text) {
-          iterationRaw += event.text
-          reply = stripThinkTags(iterationRaw)
-          if (reply.trim()) args.onDelta?.(reply)
-        }
-        break
-      case 'tool_use_generated':
-        args.onToolUse?.(event.toolUseBlock.name)
-        break
-      case 'message_end':
-        {
-          const usage = event.usage
-          const tokens =
-            (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0) + (usage?.cacheReadTokens ?? 0)
-          const petId = args.petId ?? usePetsStore.getState().activePetId ?? null
-          if (petId && tokens > 0) {
-            // Hand off to the exp pipeline; price classification happens in
-            // pet-exp.ts based on the model config the renderer can resolve.
-            void import('./pet-exp').then(({ accruePetExpFromUsage }) =>
-              accruePetExpFromUsage({
-                modelId: args.modelId,
-                modelName: args.modelId,
-                tokens,
-                petId
-              })
-            )
-          }
-          void recordUsageEvent({
-            sourceKind: 'pet-chat',
-            providerId: args.providerId,
-            modelId: args.modelId,
-            usage,
-            timing: event.timing,
-            providerResponseId: event.providerResponseId
-          })
-        }
-        break
-      case 'error':
-        throw new Error(event.error.message)
-      case 'loop_end':
-        return reply.trim()
-    }
-  }
-  return reply.trim()
 }

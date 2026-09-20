@@ -1,5 +1,6 @@
 import {
   Bot,
+  Activity,
   FileCode,
   FileDiff,
   FolderOpen,
@@ -26,6 +27,7 @@ interface RightPanelHeaderProps {
   onSelectTab: (tabId: string) => void
   onCloseTab: (tabId: string) => void
   onOpenFiles: () => void
+  onOpenExecution: () => void
   onAddBrowser: () => void
   onClosePanel: () => void
   t: (key: string, options?: Record<string, unknown>) => string
@@ -33,6 +35,7 @@ interface RightPanelHeaderProps {
 
 function TabIcon({ tab }: { tab: RightPanelTabInstance }): React.JSX.Element {
   if (tab.kind === 'review') return <FileDiff className="size-3.5" />
+  if (tab.kind === 'execution') return <Activity className="size-3.5" />
   if (tab.kind === 'browser') return <Globe className="size-3.5" />
   if (tab.kind === 'subagent') return <Bot className="size-3.5" />
   if (tab.kind === 'terminal') return <Terminal className="size-3.5" />
@@ -46,6 +49,7 @@ export function RightPanelHeader({
   onSelectTab,
   onCloseTab,
   onOpenFiles,
+  onOpenExecution,
   onAddBrowser,
   onClosePanel,
   t
@@ -103,6 +107,10 @@ export function RightPanelHeader({
           <DropdownMenuItem onSelect={onOpenFiles}>
             <FolderOpen className="size-4" />
             {t('preview.openFile', { defaultValue: 'Open file' })}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenExecution}>
+            <Activity className="size-4" />
+            {t('rightPanel.execution', { defaultValue: 'Execution' })}
           </DropdownMenuItem>
           <DropdownMenuItem disabled={!browserEnabled} onSelect={onAddBrowser}>
             <Globe className="size-4" />

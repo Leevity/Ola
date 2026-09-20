@@ -5,7 +5,7 @@
 // previous one. Challenge detection is checked AFTER submit and BEFORE
 // the success check; any challenge pauses the flow immediately.
 //
-// The orchestrator does not call Native Worker directly. It uses the
+// The orchestrator does not call a legacy worker directly. It uses the
 // public Browser* tools already registered in the renderer. Password
 // injection still happens via the IPC `credentials:fill-password` channel
 // which lives in the main process (see credentials-handlers.ts).

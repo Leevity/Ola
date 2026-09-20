@@ -1,4 +1,4 @@
-import type Parser from 'web-tree-sitter'
+import type { Node } from 'web-tree-sitter'
 import { withWasmSyntaxTree, type WasmCodeGraphLanguage } from './wasm-parser'
 
 export type WasmSymbolKind = 'class' | 'function' | 'method' | 'interface' | 'type' | 'variable'
@@ -37,8 +37,6 @@ export interface WasmFileIndex {
   references: WasmCodeGraphReference[]
 }
 
-type Node = Parser.SyntaxNode
-
 const TYPE_KIND: Readonly<Record<string, WasmSymbolKind>> = {
   class_declaration: 'class',
   class_definition: 'class',
@@ -50,13 +48,17 @@ const TYPE_KIND: Readonly<Record<string, WasmSymbolKind>> = {
   type_definition: 'type',
   function_declaration: 'function',
   function_definition: 'function',
+  function: 'function',
+  function_definition_item: 'function',
   function_item: 'function',
+  method: 'method',
   method_definition: 'method',
   method_declaration: 'method',
   method_definition_item: 'method',
   lexical_declaration: 'variable',
   variable_declaration: 'variable',
   variable_declarator: 'variable',
+  variable_name: 'variable',
   field_declaration: 'variable'
 }
 
@@ -72,11 +74,25 @@ function declarationName(node: Node): string | undefined {
   const field = node.childForFieldName('name')
   if (field?.text.trim()) return field.text.trim()
   const direct = node.namedChildren.find((child) => {
-    return ['identifier', 'property_identifier', 'type_identifier', 'field_identifier'].includes(
-      child.type
-    )
+    return [
+      'identifier',
+      'property_identifier',
+      'type_identifier',
+      'field_identifier',
+      'variable'
+    ].includes(child?.type ?? '')
   })
-  return direct?.text.trim() || undefined
+  if (direct?.text.trim()) return direct.text.trim()
+  if (node.type === 'function_definition') {
+    const stack = [...node.namedChildren]
+    while (stack.length) {
+      const child = stack.shift()!
+      if (['identifier', 'variable'].includes(child.type) && child.text.trim())
+        return child.text.trim()
+      stack.unshift(...child.namedChildren)
+    }
+  }
+  return undefined
 }
 
 function isExported(node: Node): boolean {
@@ -115,7 +131,7 @@ function importSource(node: Node): string | undefined {
     direct ??
     node.namedChildren.find((child) =>
       ['string', 'string_literal', 'interpreted_string_literal', 'raw_string_literal'].includes(
-        child.type
+        child?.type ?? ''
       )
     )
   return literal ? unquoteImportSource(literal.text) : undefined
@@ -138,14 +154,25 @@ function addImport(imports: WasmCodeGraphImport[], node: Node): void {
 function isDeclarationName(node: Node): boolean {
   const parent = node.parent
   if (!parent || !TYPE_KIND[parent.type]) return false
-  return parent.childForFieldName('name')?.id === node.id
+  if (parent.childForFieldName('name')?.id === node.id) return true
+  if (parent.type === 'function' || parent.type === 'function_definition') {
+    return parent.namedChildren[0]?.id === node.id
+  }
+  return false
 }
 
 function addReference(references: WasmCodeGraphReference[], node: Node): void {
-  if (node.type !== 'identifier' || isDeclarationName(node)) return
+  if (!['identifier', 'variable', 'variable_name'].includes(node.type) || isDeclarationName(node))
+    return
   const parent = node.parent
   // Import module names and member-property labels are not lexical references.
-  if (parent && (IMPORT_NODE_TYPES.has(parent.type) || parent.type === 'member_expression')) return
+  if (
+    parent &&
+    (IMPORT_NODE_TYPES.has(parent.type) ||
+      parent.type === 'member_expression' ||
+      (parent.type === 'call_expression' && parent.parent?.type === 'signature'))
+  )
+    return
   const start = node.startPosition
   const end = node.endPosition
   references.push({
@@ -161,7 +188,7 @@ function addReference(references: WasmCodeGraphReference[], node: Node): void {
  * Extracts declaration symbols from the grammar tree without regex fallback.
  * The resulting data is intentionally file-local: cross-file resolution,
  * references, persistence and incremental invalidation remain separate P7
- * work and must not be mixed with the production .NET graph yet.
+ * work and must not be mixed with unrelated indexing state.
  */
 export async function indexWithWasm(
   language: WasmCodeGraphLanguage,
@@ -178,7 +205,7 @@ export async function indexWithWasm(
       if (kind) addSymbol(symbols, node, kind)
       if (IMPORT_NODE_TYPES.has(node.type)) addImport(imports, node)
       addReference(references, node)
-      stack.push(...node.namedChildren)
+      stack.push(...node.namedChildren.filter((child): child is Node => child !== null))
     }
     symbols.sort(
       (left, right) =>
@@ -198,6 +225,6 @@ export async function indexWithWasm(
         left.startColumn - right.startColumn ||
         left.source.localeCompare(right.source)
     )
-    return { language, hasParseError: root.hasError(), symbols, imports, references }
+    return { language, hasParseError: root.hasError, symbols, imports, references }
   })
 }

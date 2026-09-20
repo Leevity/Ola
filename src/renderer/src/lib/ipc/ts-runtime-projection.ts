@@ -85,6 +85,29 @@ function toolOutput(value: unknown): string {
   }
 }
 
+function imageBlocks(value: unknown): Array<{
+  type: 'image'
+  source: { type: 'base64'; mediaType: string; filePath: string }
+}> {
+  const item = record(value)
+  if (!item || item.__olaImageResult !== true || !Array.isArray(item.images)) return []
+  return item.images.flatMap((image) => {
+    const row = record(image)
+    return typeof row?.filePath === 'string' && row.filePath.trim()
+      ? [
+          {
+            type: 'image' as const,
+            source: {
+              type: 'base64' as const,
+              mediaType: typeof row.mediaType === 'string' ? row.mediaType : 'image/png',
+              filePath: row.filePath
+            }
+          }
+        ]
+      : []
+  })
+}
+
 /** Projects persisted TS runtime events into the existing provider-stream vocabulary. */
 export function projectTsRuntimeEvents(
   events: readonly RunEvent[],
@@ -126,6 +149,10 @@ export function projectTsRuntimeEvents(
     ) {
       const failed = data.isError === true
       const outputValue = toolOutput(data.output)
+      if (!failed && data.name === 'ImageGenerate') {
+        for (const imageBlock of imageBlocks(data.output))
+          output.push({ type: 'image_generated', imageBlock })
+      }
       const generated = state.toolCalls.get(data.id)
       // A result can be recovered after reconnect without its earlier event
       // batch. Preserve the result in that case, but never invent an input.

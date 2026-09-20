@@ -1,7 +1,7 @@
 import * as os from 'os'
 import * as path from 'path'
 import { randomUUID } from 'node:crypto'
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { olaDataRoot } from '../lib/ola-data-root'
 import { readSettings } from '../ipc/settings-handlers'
 import {
@@ -67,18 +67,26 @@ function withProjectBaseDirectory<T extends object>(params: T): T & { baseDirect
 }
 
 export async function listProjects(workspaceId = 'local-personal'): Promise<ProjectRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) return await writer.projects<ProjectRow>(workspaceId)
   const migrated = await canaryListProjects(workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<ProjectRow[]>('db/projects-list', { workspaceId }, 120_000)
+  return getTsDatabaseRouteGuard().request<ProjectRow[]>(
+    'db/projects-list',
+    { workspaceId },
+    120_000
+  )
 }
 
 export async function getProject(
   id: string,
   workspaceId = 'local-personal'
 ): Promise<ProjectRow | undefined> {
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.project<ProjectRow>(id, workspaceId)) ?? undefined
   const migrated = await canaryGetProject(id, workspaceId)
   if (migrated !== undefined) return migrated ?? undefined
-  const result = await getNativeWorker().request<ProjectFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<ProjectFindResult>(
     'db/projects-get',
     { id, workspaceId },
     120_000
@@ -93,9 +101,11 @@ export async function findProjectByPluginId(
   pluginId: string,
   workspaceId = 'local-personal'
 ): Promise<ProjectRow | undefined> {
+  const writer = businessWriteCanary()
+  if (writer) return (await writer.projectByPlugin<ProjectRow>(pluginId, workspaceId)) ?? undefined
   const migrated = await canaryFindProjectByPlugin(pluginId, workspaceId)
   if (migrated !== undefined) return migrated ?? undefined
-  const result = await getNativeWorker().request<ProjectFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<ProjectFindResult>(
     'db/projects-find-by-plugin',
     { pluginId, workspaceId },
     120_000
@@ -136,7 +146,7 @@ export async function createProject(project: {
       modelSource: project.modelSource ?? null
     })
   }
-  return getNativeWorker().request<ProjectRow>(
+  return getTsDatabaseRouteGuard().request<ProjectRow>(
     'db/projects-create',
     withProjectBaseDirectory(project),
     120_000
@@ -167,7 +177,7 @@ export async function updateProject(
     })
     return
   }
-  const result = await getNativeWorker().request<ProjectFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<ProjectFindResult>(
     'db/projects-update',
     withProjectBaseDirectory({ id, workspaceId, patch }),
     120_000
@@ -186,7 +196,7 @@ export async function deleteProject(
     const deleted = await writer.deleteProject({ id, workspaceId })
     return deleted ? { success: true, deleted: true, projectId: id, sessionIds: [] } : null
   }
-  const result = await getNativeWorker().request<ProjectDeleteResult>(
+  const result = await getTsDatabaseRouteGuard().request<ProjectDeleteResult>(
     'db/projects-delete',
     { id, workspaceId },
     120_000
@@ -205,7 +215,7 @@ export async function ensureDefaultProject(workspaceId = 'local-personal'): Prom
       baseDirectory: getPreferredLocalProjectBaseDirectory()
     })
   }
-  return getNativeWorker().request<ProjectRow>(
+  return getTsDatabaseRouteGuard().request<ProjectRow>(
     'db/projects-ensure-default',
     withProjectBaseDirectory({ workspaceId }),
     120_000
@@ -226,7 +236,7 @@ export async function ensurePluginProject(
       baseDirectory: getPreferredLocalProjectBaseDirectory()
     })
   }
-  return getNativeWorker().request<ProjectRow>(
+  return getTsDatabaseRouteGuard().request<ProjectRow>(
     'db/projects-ensure-plugin',
     withProjectBaseDirectory({ pluginId, preferredName, workspaceId }),
     120_000

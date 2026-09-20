@@ -26,6 +26,7 @@ export interface TeamMember {
   role?: 'lead' | 'worker'
   status: TeamMemberStatus
   currentTaskId: string | null
+  runId?: string
   iteration: number
   toolCalls: ToolCallState[]
   streamingText: string
@@ -34,7 +35,7 @@ export interface TeamMember {
   usage?: TokenUsage
 }
 
-export type TeamTaskStatus = 'pending' | 'in_progress' | 'completed'
+export type TeamTaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
 
 export interface TeamTask {
   id: string

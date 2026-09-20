@@ -1,10 +1,27 @@
 import assert from 'node:assert/strict'
-import {
-  buildDeterministicFinalOutcome,
-  generateFinalOutcome,
-  resolveFinalOutcomeStatus
-} from '../src/renderer/src/lib/agent/final-outcome.ts'
+import { encodeMessagePackPayload } from '../src/shared/messagepack/binary-ipc.ts'
 import type { ToolCallState } from '../src/renderer/src/lib/agent/types.ts'
+
+const storage = new Map<string, string>()
+Object.assign(globalThis, {
+  window: {
+    localStorage: {
+      getItem: (key: string) => storage.get(key) ?? null,
+      setItem: (key: string, value: string) => storage.set(key, value),
+      removeItem: (key: string) => storage.delete(key)
+    },
+    ola: {
+      ipc: {
+        invoke: async () => encodeMessagePackPayload({ applied: true }),
+        send: () => undefined,
+        on: () => () => undefined
+      }
+    }
+  }
+})
+
+const { buildDeterministicFinalOutcome, generateFinalOutcome, resolveFinalOutcomeStatus } =
+  await import('../src/renderer/src/lib/agent/final-outcome.ts')
 
 function tool(
   id: string,

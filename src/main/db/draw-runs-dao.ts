@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { canaryListDrawRuns } from './legacy-read-canary'
 import { businessWriteCanary } from './business-write-canary'
@@ -42,7 +42,9 @@ export async function listDrawRuns(workspaceId: string): Promise<DrawRunRow[]> {
   const scopedWorkspaceId = await requireDrawWorkspace(workspaceId)
   const canary = await canaryListDrawRuns(scopedWorkspaceId)
   if (canary !== undefined) return canary
-  return getNativeWorker().request<DrawRunRow[]>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.drawRuns<DrawRunRow>(scopedWorkspaceId)
+  return getTsDatabaseRouteGuard().request<DrawRunRow[]>(
     'db/draw-runs-list',
     { workspaceId: scopedWorkspaceId },
     120_000
@@ -82,7 +84,7 @@ export async function saveDrawRun(run: {
     })
     return
   }
-  const result = await getNativeWorker().request<DrawRunMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<DrawRunMutationResult>(
     'db/draw-runs-save',
     { ...run, workspaceId },
     120_000
@@ -97,7 +99,7 @@ export async function deleteDrawRun(id: string, workspaceId: string): Promise<vo
     await writer.deleteDrawRun(id, scopedWorkspaceId)
     return
   }
-  const result = await getNativeWorker().request<DrawRunMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<DrawRunMutationResult>(
     'db/draw-runs-delete',
     { id, workspaceId: scopedWorkspaceId },
     120_000
@@ -112,7 +114,7 @@ export async function clearDrawRuns(workspaceId: string): Promise<void> {
     await writer.clearDrawRuns(scopedWorkspaceId)
     return
   }
-  const result = await getNativeWorker().request<DrawRunMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<DrawRunMutationResult>(
     'db/draw-runs-clear',
     { workspaceId: scopedWorkspaceId },
     120_000

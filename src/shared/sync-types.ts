@@ -51,6 +51,8 @@ export interface SyncRecord {
   hash: string
   value: unknown
   updatedAt?: number | null
+  /** Present on v2 records whose row has no direct workspace_id column. */
+  workspaceId?: string
 }
 
 export interface SyncTombstone {

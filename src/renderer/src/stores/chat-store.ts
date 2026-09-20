@@ -63,7 +63,6 @@ import {
   isSessionForeground
 } from '../lib/agent/session-runtime-router'
 import { mergeUsageSnapshot } from '../lib/agent/usage-merge'
-import { agentStream } from '../lib/ipc/agent-stream-receiver'
 import { parseChatRoute } from '../lib/chat-route'
 import {
   summarizeToolInputForHistory,
@@ -2759,12 +2758,6 @@ export const useChatStore = create<ChatStore>()(
       })
       if (prevSessionId !== nextSessionId) {
         invalidateVisibleSessionCache()
-        if (prevSessionId) {
-          agentStream.notifySessionVisibility(prevSessionId, false)
-        }
-        if (nextSessionId) {
-          agentStream.notifySessionVisibility(nextSessionId, true)
-        }
       }
       useUIStore.getState().syncSessionScopedState(nextSessionId, id)
       scheduleDeferredSessionMaintenance(get)
@@ -2791,7 +2784,6 @@ export const useChatStore = create<ChatStore>()(
       })
       if (prevSessionId) {
         invalidateVisibleSessionCache()
-        agentStream.notifySessionVisibility(prevSessionId, false)
       }
       useAgentStore.getState().switchToolCallSession(prevSessionId, null)
       useTaskStore.getState().clearTasks()
@@ -3949,12 +3941,6 @@ export const useChatStore = create<ChatStore>()(
         return
       const prevId = get().activeSessionId
       invalidateVisibleSessionCache()
-      if (prevId && prevId !== id) {
-        agentStream.notifySessionVisibility(prevId, false)
-      }
-      if (id) {
-        agentStream.notifySessionVisibility(id, true)
-      }
       set((state) => {
         state.activeSessionId = id
         const activeSession = state.sessions.find((session) => session.id === id)

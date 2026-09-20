@@ -91,7 +91,7 @@ export interface RequestDebugInfo {
   providerId?: string
   providerBuiltinId?: string
   model?: string
-  executionPath?: 'sidecar' | 'ts-runtime'
+  executionPath?: 'ts-runtime' | 'unavailable'
   transport?: 'http' | 'websocket'
   fallbackReason?: string
   reusedConnection?: boolean

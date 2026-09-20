@@ -111,11 +111,11 @@ function verifySyncBundle(value: unknown, scope?: WorkspaceSyncScope): SyncBundl
     if (record.domain.startsWith('db:') && record.value && typeof record.value === 'object') {
       const row = (record.value as { row?: unknown }).row
       if (scope) {
-        if (
-          !row ||
-          typeof row !== 'object' ||
-          (row as { workspace_id?: unknown }).workspace_id !== scope.workspaceId
-        )
+        const rowWorkspaceId =
+          row && typeof row === 'object'
+            ? (row as { workspace_id?: unknown }).workspace_id
+            : undefined
+        if (record.workspaceId !== scope.workspaceId && rowWorkspaceId !== scope.workspaceId)
           throw new Error('SYNC_BUNDLE_WORKSPACE_MISMATCH')
       } else if (row && typeof row === 'object' && 'workspace_id' in row) {
         if ((row as { workspace_id: unknown }).workspace_id !== 'local-personal')

@@ -73,7 +73,7 @@ export const IPC = {
   SUB_AGENT_HISTORY_MIGRATION_STATUS: 'agent:sub-agent-history:migration-status',
   SUB_AGENT_HISTORY_MIGRATION_MARK: 'agent:sub-agent-history:migration-mark',
 
-  // CodeGraph worker
+  // TS/WASM CodeGraph service
   CODEGRAPH_REQUEST: 'codegraph:request',
   CODEGRAPH_STATUS: 'codegraph:status',
   CODEGRAPH_STOP: 'codegraph:stop',
@@ -139,6 +139,7 @@ export const IPC = {
   SYNC_CONNECTION_TEST: 'sync:connection:test',
   SYNC_STATUS: 'sync:status',
   SYNC_RUN: 'sync:run',
+  SYNC_WORKSPACE_RUN: 'sync:workspace-run',
   SYNC_CONFLICTS_RESOLVE: 'sync:conflicts:resolve',
   SYNC_STATUS_CHANGED: 'sync:status-changed',
   SYNC_RUN_PROGRESS: 'sync:run-progress',
@@ -354,6 +355,12 @@ export const IPC = {
   BROWSER_TAKE_RUN_CONTROL: 'browser:take-run-control',
   BROWSER_TAKE_GUEST_RUN_CONTROL: 'browser:take-guest-run-control',
   BROWSER_UNREGISTER_TAB: 'browser:unregister-tab',
+  BROWSER_VIEW_CREATE: 'browser:view-create',
+  BROWSER_VIEW_STATUS: 'browser:view-status',
+  BROWSER_VIEW_EVENT: 'browser:view-event',
+  BROWSER_VIEW_SET_BOUNDS: 'browser:view-set-bounds',
+  BROWSER_VIEW_NAVIGATE: 'browser:view-navigate',
+  BROWSER_VIEW_DESTROY: 'browser:view-destroy',
 
   // AI Coding
   AI_CODING_CONFIGS_LIST: 'ai-coding:configs-list',
@@ -438,9 +445,13 @@ export const IPC = {
   SSH_FS_DISCONNECT: 'ssh:fs:disconnect',
   SSH_FS_UPLOAD_START: 'ssh:fs:upload:start',
   SSH_FS_UPLOAD_CANCEL: 'ssh:fs:upload:cancel',
+  SSH_FS_UPLOAD_ABORT: 'ssh:fs:upload:abort',
+  SSH_FS_DOWNLOAD_ABORT: 'ssh:fs:download:abort',
+  SSH_FS_REMOTE_COPY_ABORT: 'ssh:fs:remote-copy:abort',
   SSH_FS_UPLOAD_EVENTS: 'ssh:fs:upload:events',
   SSH_FS_TRANSFER_START: 'ssh:fs:transfer:start',
   SSH_FS_TRANSFER_CANCEL: 'ssh:fs:transfer:cancel',
+  SSH_FS_TRANSFER_SCAN: 'ssh:fs:transfer:scan',
   SSH_FS_TRANSFER_EVENTS: 'ssh:fs:transfer:events',
 
   // SSH Auth

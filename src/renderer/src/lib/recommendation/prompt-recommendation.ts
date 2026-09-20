@@ -8,7 +8,7 @@ import {
   type ImageAttachment
 } from '@renderer/lib/image-attachments'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
-import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
+import { runTsTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { RESPONSES_SESSION_SCOPE_PROMPT_RECOMMENDATION } from '@renderer/lib/api/responses-session-policy'
 import type { ContentBlock, ProviderConfig, UnifiedMessage } from '@renderer/lib/api/types'
 import { useSettingsStore } from '@renderer/stores/settings-store'
@@ -282,7 +282,7 @@ export async function requestPromptRecommendation(
       sessionId: context.sessionId ?? undefined
     }
 
-    const accumulated = await runSidecarTextRequest({
+    const accumulated = await runTsTextRequest({
       provider: requestConfig,
       messages: requestMessages,
       signal: controller.signal,

@@ -134,7 +134,8 @@ vi.mock('../../src/main/db/capability-dao', () => ({
       await new Promise<void>((resolve) => {
         state.releaseNativeDelete = resolve
       })
-    return false
+    state.deletedFlowIds.push(teamFlow.id)
+    return true
   },
   finishPersistedDesktopFlowRun: async (_id: string, workspaceId: string, runState: string) => {
     if (state.auditFinishError) throw new Error('Native finish unavailable')
@@ -149,7 +150,7 @@ vi.mock('../../src/main/db/capability-dao', () => ({
   listPersistedDesktopFlows: async (workspaceId: string) => {
     state.listedScopes.push(workspaceId)
     if (state.revokeDuringList) state.available = new Set()
-    return [teamFlow]
+    return state.deletedFlowIds.includes(teamFlow.id) ? [] : [teamFlow]
   },
   persistDesktopFlow: async (_flow: unknown, workspaceId: string) => {
     state.nativeSaveEntered = true
@@ -215,9 +216,7 @@ it('lists and saves only flows owned by the sender window workspace', async () =
   const list = state.handlers.get('desktop-flow:list')!
   await expect(list(event, { workspaceId: 'team-a' })).resolves.toEqual([teamFlow])
   expect(state.listedScopes).toEqual(['team-a'])
-  await expect(list(event, { workspaceId: 'local-personal' })).rejects.toThrow(
-    'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE'
-  )
+  await expect(list(event, { workspaceId: 'local-personal' })).resolves.toEqual([])
   const save = state.handlers.get('desktop-flow:save')!
   await expect(save(event, teamFlow)).resolves.toEqual(teamFlow)
   expect(state.savedScopes).toEqual(['team-a'])
@@ -226,7 +225,7 @@ it('lists and saves only flows owned by the sender window workspace', async () =
   )
 })
 
-it('merges offline-created flows and hides tombstoned Native flows', async () => {
+it('lists only TS-persisted flows for the authorized workspace', async () => {
   state.localFlows = [
     {
       id: '22222222-2222-4222-8222-222222222222',
@@ -238,13 +237,10 @@ it('merges offline-created flows and hides tombstoned Native flows', async () =>
   ]
   const list = state.handlers.get('desktop-flow:list')!
   const merged = (await list(event, { workspaceId: 'team-a' })) as Array<{ name: string }>
-  expect(merged.map((flow) => flow.name)).toEqual(['Offline', 'Team flow'])
-  state.deletedFlowIds = [teamFlow.id]
-  const afterDelete = (await list(event, { workspaceId: 'team-a' })) as Array<{ name: string }>
-  expect(afterDelete.map((flow) => flow.name)).toEqual(['Offline'])
+  expect(merged.map((flow) => flow.name)).toEqual(['Team flow'])
 })
 
-it('reconciles a local-only flow through the authorized Main IPC boundary', async () => {
+it('keeps the compatibility sync endpoint a no-op because TS is authoritative', async () => {
   state.localFlows = [
     {
       id: '22222222-2222-4222-8222-222222222222',
@@ -257,16 +253,18 @@ it('reconciles a local-only flow through the authorized Main IPC boundary', asyn
   const sync = state.handlers.get('desktop-flow:sync')!
   await expect(sync(event, { workspaceId: 'team-a' })).resolves.toMatchObject({
     available: true,
-    savedFlows: 1,
+    savedFlows: 0,
     failed: 0
   })
-  expect(state.savedScopes).toEqual(['team-a'])
-  await expect(sync(event, { workspaceId: 'team-b' })).rejects.toThrow(
-    'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE'
-  )
+  expect(state.savedScopes).toEqual([])
+  await expect(sync(event, { workspaceId: 'team-b' })).resolves.toMatchObject({
+    available: false,
+    savedFlows: 0,
+    failed: 0
+  })
 })
 
-it('does not return a successful reconciliation after team authorization is revoked mid-write', async () => {
+it('does not attempt a second-store reconciliation after team authorization changes', async () => {
   state.localFlows = [
     {
       id: '22222222-2222-4222-8222-222222222222',
@@ -278,12 +276,10 @@ it('does not return a successful reconciliation after team authorization is revo
   ]
   state.revokeDuringNativeSave = true
   const sync = state.handlers.get('desktop-flow:sync')!
-  await expect(sync(event, { workspaceId: 'team-a' })).rejects.toThrow(
-    'CHANNEL_WORKSPACE_UNAVAILABLE'
-  )
+  await expect(sync(event, { workspaceId: 'team-a' })).resolves.toMatchObject({ available: true })
 })
 
-it('keeps a locally deleted flow hidden if a stale Native list later returns it', async () => {
+it('uses the TS repository result for deletion', async () => {
   const remove = state.handlers.get('desktop-flow:delete')!
   await expect(remove(event, { workspaceId: 'team-a', id: teamFlow.id })).resolves.toEqual({
     success: true
@@ -308,20 +304,20 @@ it('does not return team run history after authorization is revoked during listi
   )
 })
 
-it('keeps flow listing available when only run history persistence is unavailable', async () => {
+it('fails closed when TS run history persistence is unavailable', async () => {
   state.runsListError = true
   state.localRuns = [{ id: 'local-run', flowId: teamFlow.id, state: 'cancelled', startedAt: 2 }]
   const listRuns = state.handlers.get('desktop-flow:runs-list')!
-  await expect(listRuns(event, { workspaceId: 'team-a' })).resolves.toEqual(state.localRuns)
+  await expect(listRuns(event, { workspaceId: 'team-a' })).rejects.toThrow('Native unavailable')
   const listFlows = state.handlers.get('desktop-flow:list')!
   await expect(listFlows(event, { workspaceId: 'team-a' })).resolves.toEqual([teamFlow])
 })
 
-it('merges Native and offline run history for the authorized workspace', async () => {
+it('lists only TS-persisted run history for the authorized workspace', async () => {
   state.localRuns = [{ id: 'local-run', flowId: teamFlow.id, state: 'cancelled', startedAt: 2 }]
   const listRuns = state.handlers.get('desktop-flow:runs-list')!
   const rows = (await listRuns(event, { workspaceId: 'team-a' })) as Array<{ id: string }>
-  expect(rows.map((row) => row.id)).toEqual(['local-run', 'run-a'])
+  expect(rows.map((row) => row.id)).toEqual(['run-a'])
 })
 
 it('does not create a local fallback when Native detects a cross-workspace ID collision', async () => {
@@ -450,7 +446,7 @@ it('rejects omitted typing steps before starting an audit run or desktop input',
   expect(state.clicks).toBe(0)
 })
 
-it('keeps local flow replay available when the Native run journal cannot start', async () => {
+it('fails replay when the TS run journal cannot start', async () => {
   state.auditStartError = true
   const replay = state.handlers.get('desktop-flow:replay')!
   await expect(
@@ -458,22 +454,22 @@ it('keeps local flow replay available when the Native run journal cannot start',
       workspaceId: 'team-a',
       flow: { ...teamFlow, steps: [] }
     })
-  ).resolves.toMatchObject({ success: true })
+  ).rejects.toThrow('Native unavailable')
   expect(state.startedRuns).toEqual([])
   expect(state.finishedRuns).toEqual([])
-  expect(state.localStartedRuns).toEqual([{ flowId: teamFlow.id, workspaceId: 'team-a' }])
-  expect(state.localFinishedRuns).toEqual([{ workspaceId: 'team-a', state: 'succeeded' }])
+  expect(state.localStartedRuns).toEqual([])
+  expect(state.localFinishedRuns).toEqual([])
 })
 
-it('recovers a Native run finish failure into the offline journal', async () => {
+it('does not fall back when the TS run journal cannot finish', async () => {
   state.auditFinishError = true
   const replay = state.handlers.get('desktop-flow:replay')!
-  await expect(replay(event, { workspaceId: 'team-a', flow: teamFlow })).resolves.toMatchObject({
-    success: true
-  })
+  await expect(replay(event, { workspaceId: 'team-a', flow: teamFlow })).rejects.toThrow(
+    'Native finish unavailable'
+  )
   expect(state.startedRuns).toEqual([{ flowId: teamFlow.id, workspaceId: 'team-a' }])
-  expect(state.localStartedRuns).toEqual([{ flowId: teamFlow.id, workspaceId: 'team-a' }])
-  expect(state.localFinishedRuns).toEqual([{ workspaceId: 'team-a', state: 'succeeded' }])
+  expect(state.localStartedRuns).toEqual([])
+  expect(state.localFinishedRuns).toEqual([])
 })
 
 it('does not begin replay while deletion of the same flow is pending', async () => {

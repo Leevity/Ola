@@ -13,6 +13,7 @@ import {
   isOfflineTransportError,
   type OfflineWorkspaceSnapshot
 } from './offline-workspace-cache'
+import type { WorkspaceSyncScope } from '../../shared/sync-types'
 
 type RemoteAuthState = {
   apiBaseUrl: string
@@ -779,7 +780,7 @@ export async function openManagedModelRequest(input: {
   signal: AbortSignal
 }): Promise<Response> {
   // This function is the last capability boundary before a short-lived
-  // account ticket is attached. Do not rely on a renderer, sidecar, or future
+  // account ticket is attached. Do not rely on a renderer or future
   // TS runtime adapter to have already constrained the endpoint or payload.
   if (!MANAGED_MODEL_ENDPOINTS.has(input.endpoint))
     throw new Error('Unsupported Ola model endpoint')
@@ -852,6 +853,21 @@ export async function loadManagedWorkspaceIds(): Promise<Set<string>> {
   if (!state?.token) return new Set()
   const directory = await fetchWorkspaceDirectory(state)
   return new Set(directory.workspaces.map((workspace) => workspace.id))
+}
+
+/** Resolve the authenticated, offline-capable identity used by v2 workspace sync. */
+export async function loadWorkspaceSyncScope(workspaceId: string): Promise<WorkspaceSyncScope> {
+  if (!workspaceId || workspaceId.length > 1024) throw new Error('Invalid Ola workspace')
+  const state = await loadState()
+  if (!state?.token || typeof state.account.id !== 'string' || !state.account.id)
+    throw new Error('Remote login is required for workspace sync')
+  if (workspaceId === 'local-personal') {
+    return { accountId: state.account.id, apiBaseUrl: state.apiBaseUrl, workspaceId }
+  }
+  const directory = await offlineCapableWorkspaceDirectory(state)
+  if (!directory.workspaces.some((workspace) => workspace.id === workspaceId))
+    throw new Error('SYNC_WORKSPACE_UNAVAILABLE')
+  return { accountId: state.account.id, apiBaseUrl: state.apiBaseUrl, workspaceId }
 }
 
 /** Local-only workspace data may use a recent encrypted, account-bound directory while offline. */

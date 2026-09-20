@@ -5,16 +5,12 @@ import {
   createCronRun,
   getCronRun,
   loadPersistedCronJobs,
-  markCronJobFired,
   softDeleteCronJob,
   updateCronRun,
   type CronJobRecord,
   type CronRunRecord
 } from '../db/cron-dao'
-import { runCronAgentInBackground } from './cron-agent-background'
 import { runTsCronAgentInBackground } from './ts-cron-agent-background'
-import { canRunCronInTsRuntime } from './ts-cron-selection'
-import { desktopRuntime } from '../runtime/desktop-runtime'
 import { parseCronModelBinding } from '../../shared/runtime/cron-model-binding'
 import { quiesceCronWritesForHandover } from './cron-write-gate'
 
@@ -245,17 +241,9 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
     const finished = () => {
       void markFinished(job.id)
     }
-    const useTsRuntime = canRunCronInTsRuntime(runOptions, desktopRuntime.isAvailable)
-    // TS cron atomically creates the run snapshot and advances fire_count. Native
-    // keeps the legacy two-step path until its runtime is retired.
-    if (!useTsRuntime) {
-      await markCronJobFired(job.id, firedAt, job.workspace_id ?? 'local-personal')
-    }
-    if (useTsRuntime) {
-      runTsCronAgentInBackground(runOptions, finished)
-    } else {
-      runCronAgentInBackground(runOptions, finished)
-    }
+    // The TypeScript runtime is authoritative. It atomically creates the run
+    // snapshot and advances fire_count; there is no legacy execution fallback.
+    runTsCronAgentInBackground(runOptions, finished)
 
     // Handle delete_after_run: stop the schedule handle now (prevent re-fire),
     // but defer DB deletion + UI removal until the agent run finishes (cron:run-finished).

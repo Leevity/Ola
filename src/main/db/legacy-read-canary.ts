@@ -1,5 +1,5 @@
-import { join } from 'node:path'
-import { promotedBusinessWriteRepository } from './business-write-canary'
+import { BusinessRepository } from '../../runtime/storage/business-repository'
+import { businessWriteCanary } from './business-write-canary'
 import type { ProjectWikiDocument } from '../../shared/project-wiki'
 import type { CronJobRecord, CronRunLogRow, CronRunMessageRow, CronRunRecord } from './cron-dao'
 import type { DrawRunRow } from './draw-runs-dao'
@@ -13,136 +13,70 @@ import type {
   MemoryRootDescriptor,
   MemoryStage1Output
 } from '../../shared/memory-automation-types'
-import { getDataDir } from './database'
-import {
-  LegacyReadRepository,
-  type LegacyMessageContentMatch,
-  type LegacyMessageLocatorRow,
-  type LegacyMessageWindowResult,
-  type LegacyPluginSessionRow,
-  type LegacyPluginSessionMessageRow,
-  type LegacyChannelSessionStatus,
-  type LegacyChannelSessionUsageStats,
-  type LegacyProjectRow,
-  type LegacySessionRow,
-  type LegacyTaskRow,
-  type LegacyPlanRow,
-  type LegacyGoalRow,
-  type LegacyGoalEventRow,
-  type LegacyMessageRow,
-  type LegacyAgentChangeSet
-} from '../../runtime/storage/legacy-read-repository'
+import type {
+  LegacyMessageContentMatch,
+  LegacyMessageLocatorRow,
+  LegacyMessageWindowResult,
+  LegacyPluginSessionRow,
+  LegacyPluginSessionMessageRow,
+  LegacyChannelSessionStatus,
+  LegacyChannelSessionUsageStats,
+  LegacyProjectRow,
+  LegacySessionRow,
+  LegacyTaskRow,
+  LegacyPlanRow,
+  LegacyGoalRow,
+  LegacyGoalEventRow,
+  LegacyMessageRow,
+  LegacyAgentChangeSet
+} from '../../runtime/storage/business-read-types'
 
-let repository: LegacyReadRepository | null = null
+let repository: BusinessRepository | null = null
 
-function sessionReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_SESSION_READS !== '0'
+function reader(): BusinessRepository {
+  const current = businessWriteCanary()
+  if (!current) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+  return (repository ??= current)
 }
 
-function projectReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_PROJECT_READS !== '0'
-}
-
-function planReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_PLAN_READS !== '0'
-}
-
-function taskReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_TASK_READS !== '0'
-}
-
-function messageReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_MESSAGE_READS !== '0'
-}
-
-function goalReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_GOAL_READS !== '0'
-}
-
-function usageEventReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_USAGE_EVENT_READS !== '0'
-}
-
-function usageAnalyticsReadsEnabled(): boolean {
-  return (
-    promotedBusinessWriteRepository() !== null || process.env.OLA_TS_USAGE_ANALYTICS_READS !== '0'
-  )
-}
-
-function channelSessionReadsEnabled(): boolean {
-  return (
-    promotedBusinessWriteRepository() !== null || process.env.OLA_TS_CHANNEL_SESSION_READS !== '0'
-  )
-}
-
-function agentChangeReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_AGENT_CHANGE_READS !== '0'
-}
-
-function qqWakeupReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_QQ_WAKEUP_READS !== '0'
-}
-
-function wikiReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_WIKI_READS !== '0'
-}
-
-function desktopFlowReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_DESKTOP_FLOW_READS !== '0'
-}
-
-function desktopFlowRunReadsEnabled(): boolean {
-  return (
-    promotedBusinessWriteRepository() !== null || process.env.OLA_TS_DESKTOP_FLOW_RUN_READS !== '0'
-  )
-}
-
-function drawRunReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_DRAW_RUN_READS !== '0'
-}
-
-function subAgentHistoryReadsEnabled(): boolean {
-  return (
-    promotedBusinessWriteRepository() !== null || process.env.OLA_TS_SUB_AGENT_HISTORY_READS !== '0'
-  )
-}
-
-function runtimeToolResultReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_TOOL_RESULT_READS !== '0'
-}
-
-function memoryRootReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_MEMORY_ROOT_READS !== '0'
-}
-
-function cronJobReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_CRON_JOB_READS !== '0'
-}
-
-function cronRunReadsEnabled(): boolean {
-  return promotedBusinessWriteRepository() !== null || process.env.OLA_TS_CRON_RUN_READS !== '0'
-}
-
-function reader(): LegacyReadRepository {
-  const promoted = promotedBusinessWriteRepository()
-  if (promoted) return promoted as unknown as LegacyReadRepository
-  const path = process.env.OLA_TS_LEGACY_READ_PATH?.trim() || join(getDataDir(), 'data.db')
-  return (repository ??= new LegacyReadRepository(path))
-}
+// Retain the old adapter predicates as always-on compatibility shims while
+// callers are incrementally renamed. They no longer consult environment
+// switches and cannot select a legacy reader.
+const sessionReadsEnabled = (): boolean => true
+const projectReadsEnabled = (): boolean => true
+const planReadsEnabled = (): boolean => true
+const taskReadsEnabled = (): boolean => true
+const messageReadsEnabled = (): boolean => true
+const goalReadsEnabled = (): boolean => true
+const usageEventReadsEnabled = (): boolean => true
+const usageAnalyticsReadsEnabled = (): boolean => true
+const channelSessionReadsEnabled = (): boolean => true
+const agentChangeReadsEnabled = (): boolean => true
+const qqWakeupReadsEnabled = (): boolean => true
+const wikiReadsEnabled = (): boolean => true
+const desktopFlowReadsEnabled = (): boolean => true
+const desktopFlowRunReadsEnabled = (): boolean => true
+const drawRunReadsEnabled = (): boolean => true
+const subAgentHistoryReadsEnabled = (): boolean => true
+const runtimeToolResultReadsEnabled = (): boolean => true
+const memoryRootReadsEnabled = (): boolean => true
+const cronJobReadsEnabled = (): boolean => true
+const cronRunReadsEnabled = (): boolean => true
 
 async function discardFailedReader(): Promise<void> {
-  if (promotedBusinessWriteRepository()) return
-  const current = repository
-  repository = null
-  await current?.close().catch(() => undefined)
+  // The repository is shared with TS writes; never close or replace it here.
+}
+
+function failReadInProduction(_label: string, error: unknown): never {
+  throw error instanceof Error ? error : new Error(String(error))
 }
 
 /**
- * Allows scoped TS reads while C# remains the only writer. Sessions,
+ * Compatibility-shaped adapters for the TS-owned repository. Sessions,
  * projects, plans, tasks, goals, scoped messages, channel sessions, agent changes,
  * usage reads, QQ wakeup eligibility, Project Wiki, and desktop flows are
- * default-on slices with independent off switches. Calls without an explicit
- * workspace never enter this path. Writes remain Native-owned.
+ * are all served by the same TS BusinessRepository that owns writes. Calls
+ * without an explicit workspace fail closed and never reach another reader.
  */
 export async function canaryListSessions(args: {
   workspaceId?: string
@@ -153,11 +87,8 @@ export async function canaryListSessions(args: {
   try {
     return await reader().sessions(args.workspaceId, args.limit, args.offset)
   } catch (error) {
-    console.warn('[TS legacy read canary] sessions list failed; using Native Worker', {
-      error: error instanceof Error ? error.message : 'LEGACY_READ_FAILED'
-    })
     await discardFailedReader()
-    return null
+    return failReadInProduction('sessions list', error)
   }
 }
 
@@ -169,11 +100,8 @@ export async function canaryGetSession(args: {
   try {
     return await reader().session(args.id, args.workspaceId)
   } catch (error) {
-    console.warn('[TS legacy read canary] session get failed; using Native Worker', {
-      error: error instanceof Error ? error.message : 'LEGACY_READ_FAILED'
-    })
     await discardFailedReader()
-    return undefined
+    throw error instanceof Error ? error : new Error(String(error))
   }
 }
 
@@ -184,7 +112,11 @@ export async function canaryListCronJobs(args: {
 }): Promise<CronJobRecord[] | undefined> {
   if (!cronJobReadsEnabled() || !args.workspaceId?.trim()) return undefined
   return await canaryRead('cron jobs list', () =>
-    reader().cronJobs<CronJobRecord>({ ...args, workspaceId: args.workspaceId! })
+    reader().cronJobs<CronJobRecord>(args.workspaceId!, {
+      includeDeleted: args.includeDeleted,
+      limit: 2000,
+      offset: 0
+    })
   )
 }
 
@@ -208,7 +140,7 @@ export async function canaryListCronRuns(args: {
 }): Promise<CronRunRecord[] | undefined> {
   if (!cronRunReadsEnabled() || !args.workspaceId?.trim()) return undefined
   return await canaryRead('cron runs list', () =>
-    reader().cronRuns<CronRunRecord>({ ...args, workspaceId: args.workspaceId! })
+    reader().cronRuns<CronRunRecord>(args.workspaceId!, args.limit ?? 200, 0)
   )
 }
 
@@ -237,10 +169,12 @@ export async function canaryGetCronRunDetail(args: {
 > {
   if (!cronRunReadsEnabled() || !args.workspaceId?.trim()) return undefined
   return await canaryRead('cron run detail', () =>
-    reader().cronRunDetail<CronRunRecord, CronJobRecord, CronRunMessageRow, CronRunLogRow>(
-      args.runId,
-      args.workspaceId!
-    )
+    reader().cronRunDetail<{
+      run: CronRunRecord
+      job: CronJobRecord | null
+      messages: CronRunMessageRow[]
+      logs: CronRunLogRow[]
+    }>(args.runId, args.workspaceId!)
   )
 }
 
@@ -297,19 +231,26 @@ export async function canaryGetUsageActivity<T>(
   }
 ): Promise<{ row?: T; rows?: T[] } | undefined> {
   if (!usageAnalyticsReadsEnabled() || !query.workspaceId.trim()) return undefined
-  return await canaryRead(`usage ${operation}`, () => reader().usageActivity<T>(operation, query))
+  const dimension = operation.endsWith('by-model')
+    ? 'models'
+    : operation.endsWith('by-provider')
+      ? 'providers'
+      : 'daily'
+  return await canaryRead(`usage ${operation}`, async () => ({
+    rows: await reader().usageActivity<T>({
+      workspaceId: query.workspaceId,
+      fromDay: new Date(query.from).toISOString().slice(0, 10),
+      toDay: new Date(query.to).toISOString().slice(0, 10),
+      dimension,
+      limit: query.limit,
+      offset: query.offset
+    })
+  }))
 }
 
 async function canaryRead<T>(label: string, operation: () => Promise<T>): Promise<T | undefined> {
-  try {
-    return await operation()
-  } catch (error) {
-    console.warn(`[TS legacy read canary] ${label} failed; using Native Worker`, {
-      error: error instanceof Error ? error.message : 'LEGACY_READ_FAILED'
-    })
-    await discardFailedReader()
-    return undefined
-  }
+  void label
+  return await operation()
 }
 
 export async function canaryGetWikiDocument(
@@ -340,7 +281,9 @@ export async function canaryResolveQqWakeupEligibility(input: {
 
 export async function canaryListDesktopFlows(workspaceId: string): Promise<string[] | undefined> {
   if (!desktopFlowReadsEnabled() || !workspaceId.trim()) return undefined
-  return await canaryRead('desktop flows list', () => reader().desktopFlows(workspaceId))
+  return (await canaryRead('desktop flows list', () => reader().desktopFlows(workspaceId))) as
+    | string[]
+    | undefined
 }
 
 export async function canaryListDesktopFlowRuns(
@@ -348,9 +291,9 @@ export async function canaryListDesktopFlowRuns(
   limit = 100
 ): Promise<string[] | undefined> {
   if (!desktopFlowRunReadsEnabled() || !workspaceId.trim()) return undefined
-  return await canaryRead('desktop flow runs list', () =>
+  return (await canaryRead('desktop flow runs list', () =>
     reader().desktopFlowRuns(workspaceId, limit)
-  )
+  )) as string[] | undefined
 }
 
 export async function canaryListDrawRuns(workspaceId: string): Promise<DrawRunRow[] | undefined> {
@@ -365,8 +308,8 @@ export async function canaryIndexSubAgentHistory(
 ): Promise<SubAgentHistoryRow[] | undefined> {
   if (!subAgentHistoryReadsEnabled()) return undefined
   return canaryRead('sub-agent history index', () =>
-    reader().subAgentHistoryIndex<SubAgentHistoryRow>(sessionId, workspaceId, limit)
-  )
+    reader().subAgentHistoryIndex(sessionId, workspaceId, limit)
+  ) as Promise<SubAgentHistoryRow[] | undefined>
 }
 
 export async function canaryListSubAgentHistory(args: {
@@ -376,9 +319,7 @@ export async function canaryListSubAgentHistory(args: {
   offset: number
 }): Promise<SubAgentHistoryPage | undefined> {
   if (!subAgentHistoryReadsEnabled()) return undefined
-  return canaryRead('sub-agent history list', () =>
-    reader().subAgentHistoryPage<SubAgentHistoryPage>(args)
-  )
+  return canaryRead('sub-agent history list', () => reader().subAgentHistoryPage(args))
 }
 
 export async function canaryLookupRuntimeToolResults(args: {
@@ -387,14 +328,16 @@ export async function canaryLookupRuntimeToolResults(args: {
   toolUseIds: string[]
 }): Promise<unknown[] | undefined> {
   if (!runtimeToolResultReadsEnabled()) return undefined
-  return canaryRead('runtime tool results lookup', () => reader().runtimeToolResults<unknown>(args))
+  return canaryRead('runtime tool results lookup', () =>
+    reader().runtimeToolResults(args.sessionId, args.workspaceId, args.toolUseIds)
+  )
 }
 
 export async function canaryListMemoryRoots(
   query: MemoryPipelineListRootsQuery & { workspaceId: string }
 ): Promise<MemoryRootDescriptor[] | undefined> {
   if (!memoryRootReadsEnabled() || !query.workspaceId.trim()) return undefined
-  return await canaryRead('memory roots list', () => reader().memoryRoots(query))
+  return await canaryRead('memory roots list', () => reader().memoryRoots(query.workspaceId))
 }
 
 export async function canaryGetMemoryRoot(
@@ -409,7 +352,9 @@ export async function canaryListMemoryJobs(
   query: MemoryPipelineListJobsQuery & { workspaceId: string }
 ): Promise<MemoryPipelineJob[] | undefined> {
   if (!memoryRootReadsEnabled() || !query.workspaceId.trim()) return undefined
-  return await canaryRead('memory jobs list', () => reader().memoryJobs(query))
+  return await canaryRead('memory jobs list', () =>
+    reader().memoryJobs(query.workspaceId, query.limit)
+  )
 }
 
 export async function canaryGetMemoryJob(
@@ -426,14 +371,23 @@ export async function canaryListMemoryStage1Outputs(args: {
   limit?: number
 }): Promise<MemoryStage1Output[] | undefined> {
   if (!memoryRootReadsEnabled() || !args.workspaceId.trim()) return undefined
-  return await canaryRead('memory stage1 list', () => reader().memoryStage1Outputs(args))
+  return await canaryRead('memory stage1 list', () =>
+    reader().memoryStage1Outputs(args.memoryRootId, args.workspaceId, args.limit)
+  )
 }
 
 export async function canaryListMemoryAutomationEntries(
   query: MemoryAutomationListQuery & { workspaceId: string }
 ): Promise<MemoryAutomationEntry[] | undefined> {
   if (!memoryRootReadsEnabled() || !query.workspaceId.trim()) return undefined
-  return await canaryRead('memory automation list', () => reader().memoryAutomationEntries(query))
+  return await canaryRead('memory automation list', () =>
+    reader().memoryAutomationEntries(
+      query.workspaceId,
+      query.limit,
+      query.offset,
+      query.includeContentSnapshots
+    )
+  )
 }
 
 export async function canaryGetMemoryAutomationEntry(
@@ -597,7 +551,10 @@ export async function canaryListGoalEvents(args: {
 }): Promise<LegacyGoalEventRow[] | undefined> {
   if (!goalReadsEnabled() || !args.workspaceId?.trim()) return undefined
   return await canaryRead('goal events list', () =>
-    reader().goalEvents({ ...args, workspaceId: args.workspaceId! })
+    reader().goalEvents(args.sessionId, args.workspaceId!, {
+      goalId: args.goalId,
+      limit: args.limit
+    })
   )
 }
 
@@ -606,7 +563,9 @@ export async function canaryGetAgentChangeSet(
   workspaceId: string
 ): Promise<LegacyAgentChangeSet | null | undefined> {
   if (!agentChangeReadsEnabled() || !workspaceId.trim()) return undefined
-  return await canaryRead('agent change get', () => reader().agentChangeSet(runId, workspaceId))
+  return (await canaryRead('agent change get', () =>
+    reader().agentChangeSet(runId, workspaceId)
+  )) as LegacyAgentChangeSet | null | undefined
 }
 
 export async function canaryListAgentChangeSetsBySession(
@@ -614,9 +573,9 @@ export async function canaryListAgentChangeSetsBySession(
   workspaceId: string
 ): Promise<LegacyAgentChangeSet[] | undefined> {
   if (!agentChangeReadsEnabled() || !workspaceId.trim()) return undefined
-  return await canaryRead('agent changes list', () =>
+  return (await canaryRead('agent changes list', () =>
     reader().agentChangeSetsBySession(sessionId, workspaceId)
-  )
+  )) as LegacyAgentChangeSet[] | undefined
 }
 
 export async function canaryListMessages(
@@ -717,7 +676,5 @@ export async function canarySearchMessageContent(
 }
 
 export async function closeLegacyReadCanary(): Promise<void> {
-  const current = repository
-  repository = null
-  await current?.close()
+  // BusinessRepository lifecycle is owned by business-write-canary/database.
 }

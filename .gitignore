@@ -3,6 +3,8 @@ dist
 out
 dist-local-release-smoke/
 release-local-smoke/
+# Temporary multi-platform staging directories used for local release verification.
+dist-staged-*/
 .DS_Store
 .eslintcache
 *.log*

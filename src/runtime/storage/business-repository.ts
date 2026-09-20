@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
+import { fileURLToPath } from 'node:url'
 import { RuntimeError } from '../../shared/runtime/contracts'
 import type { ProjectWikiDocument } from '../../shared/project-wiki'
 import type { DesktopFlow, DesktopFlowRun } from '../../shared/desktop-flow'
@@ -15,8 +17,20 @@ import type {
   SubAgentHistoryMigrationStatus,
   SubAgentHistoryUpsertItem
 } from '../../shared/sub-agent-history-types'
+import type { WorkspaceSyncBundle } from '../../shared/sync-types'
 
 type WorkerMessage = { id: number; result?: unknown; error?: string }
+
+function businessWorkerUrl(): URL {
+  // electron-vite clears out/main after launch-dev prepares copied runtime
+  // assets. The development Electron process can always use the source worker;
+  // packaged builds continue to use the colocated asset.
+  if ((process as NodeJS.Process & { defaultApp?: boolean }).defaultApp)
+    return new URL('../../src/runtime/storage/business-worker.mjs', import.meta.url)
+  const colocated = new URL('./business-worker.mjs', import.meta.url)
+  if (existsSync(fileURLToPath(colocated))) return colocated
+  return new URL('../runtime/business-worker.mjs', colocated)
+}
 
 export interface BusinessCronJobInput {
   id: string
@@ -245,9 +259,9 @@ export interface BusinessMessageInput {
 }
 
 /**
- * TS-owned repository for a verified handover copy. It is deliberately never
- * pointed at the active Native Worker database; P8 promotes it only after the
- * legacy writer has stopped and the backup has passed its contract check.
+ * TS-owned repository for the local business database. Direct mode is used by
+ * the production desktop; handover mode is retained only for opening a verified
+ * migration copy and running an isolated rollback drill.
  */
 export class BusinessRepository {
   private readonly worker: Worker
@@ -259,9 +273,16 @@ export class BusinessRepository {
     { resolve: (value: unknown) => void; reject: (error: Error) => void }
   >()
 
-  constructor(input: { path: string; handoverManifestPath: string }) {
-    this.worker = new Worker(new URL('./business-worker.mjs', import.meta.url), {
-      workerData: input
+  constructor(input: {
+    path: string
+    handoverManifestPath?: string
+    mode?: 'handover' | 'direct'
+  }) {
+    this.worker = new Worker(businessWorkerUrl(), {
+      workerData: {
+        ...input,
+        mode: input.mode ?? 'handover'
+      }
     })
     this.worker.on('message', (message: WorkerMessage) => {
       const pending = this.pending.get(message.id)
@@ -291,8 +312,23 @@ export class BusinessRepository {
     })
   }
 
+  /** Main-process adapter for the shared TS database route contract. */
+  request<T>(method: string, params: unknown = {}): Promise<T> {
+    const normalized = method.startsWith('db/') ? method.slice(3) : method
+    const args = params && typeof params === 'object' ? (params as object) : {}
+    return this.call<T>(normalized, args)
+  }
+
   wikiDocument(projectRoot: string, workspaceId: string): Promise<ProjectWikiDocument | null> {
     return this.call('wiki-get', { projectRoot, workspaceId })
+  }
+
+  /** Counts the preserved Native Project Wiki records after TS schema migration. */
+  legacyProjectWikiCounts(workspaceId?: string): Promise<{
+    documents: number
+    generationRuns: number
+  }> {
+    return this.call('legacy-wiki-counts', workspaceId ? { workspaceId } : {})
   }
 
   saveWikiDocument(
@@ -586,6 +622,44 @@ export class BusinessRepository {
     return this.call('workspace-draw-sync-commit', input)
   }
 
+  captureWorkspaceSyncSnapshot(input: {
+    scopeHash: string
+    workspaceId: string
+    providerId: string
+    deviceId: string
+    appVersion: string
+    createdAt: number
+  }): Promise<{
+    scopeHash: string
+    records: Array<{
+      domain: string
+      recordId: string
+      value: unknown
+      updatedAt?: number | null
+      workspaceId?: string
+    }>
+    baseline: BusinessWorkspaceSyncBaseline[]
+    tombstones: BusinessWorkspaceSyncTombstone[]
+    revisionToken: string
+  }> {
+    return this.call('workspace-sync-capture', input)
+  }
+
+  commitWorkspaceSync(input: {
+    scopeHash: string
+    workspaceId: string
+    providerId: string
+    expectedRevisionToken: string
+    syncedAt: number
+    records: unknown[]
+    deleted: Array<{ domain: string; recordId: string }>
+    expectedBundle: WorkspaceSyncBundle
+    baseline: BusinessWorkspaceSyncBaseline[]
+    tombstones: BusinessWorkspaceSyncTombstone[]
+  }): Promise<{ saved: number; deleted: number; revisionToken: string }> {
+    return this.call('workspace-sync-commit', input)
+  }
+
   deleteDrawRun(id: string, workspaceId: string): Promise<boolean> {
     return this.call('draw-run-delete', { id, workspaceId })
   }
@@ -695,6 +769,56 @@ export class BusinessRepository {
     return this.call('channel-session-usage-stats', { sessionId, workspaceId })
   }
 
+  sshGroups<T>(): Promise<T[]> {
+    return this.call('ssh-groups-list')
+  }
+
+  createSshGroup(input: {
+    id: string
+    name: string
+    sortOrder?: number
+    createdAt: number
+    updatedAt: number
+  }): Promise<{ success: boolean; changed: number }> {
+    return this.call('ssh-groups-create', input)
+  }
+
+  updateSshGroup(
+    id: string,
+    patch: { name?: string; sortOrder?: number; updatedAt?: number }
+  ): Promise<{ success: boolean; changed: number }> {
+    return this.call('ssh-groups-update', { id, patch })
+  }
+
+  deleteSshGroup(id: string): Promise<{ success: boolean; changed: number }> {
+    return this.call('ssh-groups-delete', { id })
+  }
+
+  sshConnections<T>(): Promise<T[]> {
+    return this.call('ssh-connections-list')
+  }
+
+  sshConnection<T>(id: string): Promise<{ success: boolean; connection: T | null }> {
+    return this.call('ssh-connections-get', { id })
+  }
+
+  createSshConnection(
+    input: Record<string, unknown>
+  ): Promise<{ success: boolean; changed: number }> {
+    return this.call('ssh-connections-create', input)
+  }
+
+  updateSshConnection(
+    id: string,
+    patch: Record<string, unknown>
+  ): Promise<{ success: boolean; changed: number }> {
+    return this.call('ssh-connections-update', { id, patch })
+  }
+
+  deleteSshConnection(id: string): Promise<{ success: boolean; changed: number }> {
+    return this.call('ssh-connections-delete', { id })
+  }
+
   createChannelSession<T>(input: {
     id: string
     pluginId: string
@@ -801,12 +925,12 @@ export class BusinessRepository {
     return this.call('channel-data-remove', input)
   }
 
-  projects<T>(workspaceId: string, limit?: number, offset?: number): Promise<T[]> {
+  projects<T>(workspaceId: string, limit = 200, offset = 0): Promise<T[]> {
     return this.call('projects-list', { workspaceId, limit, offset })
   }
 
   allProjects<T>(workspaceId: string): Promise<T[]> {
-    return this.call('projects-list', { workspaceId, limit: 10_000, offset: 0 })
+    return this.call('projects-list', { workspaceId, limit: 2000, offset: 0 })
   }
 
   project<T>(id: string, workspaceId: string): Promise<T | null> {
@@ -1157,12 +1281,12 @@ export class BusinessRepository {
     return this.call('project-ensure-plugin', input)
   }
 
-  plans<T>(workspaceId: string, limit?: number, offset?: number): Promise<T[]> {
+  plans<T>(workspaceId: string, limit = 200, offset = 0): Promise<T[]> {
     return this.call('plans-list', { workspaceId, limit, offset })
   }
 
   allPlans<T>(workspaceId: string): Promise<T[]> {
-    return this.call('plans-list', { workspaceId, limit: 10_000, offset: 0 })
+    return this.call('plans-list', { workspaceId, limit: 2000, offset: 0 })
   }
 
   plan<T>(id: string, workspaceId: string): Promise<T | null> {

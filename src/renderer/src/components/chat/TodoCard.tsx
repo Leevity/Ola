@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { ChevronDown, ChevronUp, ListChecks, Loader2 } from 'lucide-react'
+import { ChevronDown, ChevronUp, CircleX, ListChecks, Loader2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@renderer/lib/utils'
 import type { ToolResultContent } from '@renderer/lib/api/types'
@@ -39,6 +39,10 @@ function StatusDot({ status }: { status: TaskItem['status'] }): React.JSX.Elemen
           <Loader2 className="size-3.5 animate-spin text-blue-500" />
         </span>
       )
+    case 'failed':
+      return <CircleX className="size-3.5 text-red-500" />
+    case 'cancelled':
+      return <CircleX className="size-3.5 text-amber-500" />
     case 'pending':
     default:
       return (

@@ -10,7 +10,7 @@ src/
 │   ├── index.ts       # App bootstrap, window lifecycle, zoom
 │   ├── channels/      # Messaging plugins (Feishu, DingTalk, Discord, QQ, etc.)
 │   ├── cron/          # Scheduled task agent runtime
-│   ├── db/            # Thin SQLite IPC wrappers backed by the Native Worker
+│   ├── db/            # BusinessRepository-backed data access
 │   ├── ipc/           # IPC handlers (main ↔ renderer bridge)
 │   ├── mcp/           # Model Context Protocol client
 │   ├── goals/         # Goal/task persistence and lifecycle
@@ -19,6 +19,7 @@ src/
 │   ├── migration/     # Legacy migration helpers
 │   └── ssh/           # SSH/terminal support
 ├── preload/           # Secure bridge — narrow API surface
+├── runtime/           # Independent TypeScript Agent, scheduler, storage, providers, CodeGraph
 ├── renderer/src/      # React 19 UI
 │   ├── components/    # UI components (chat, cowork, settings, ssh, tasks)
 │   ├── hooks/         # React hooks
@@ -33,12 +34,13 @@ src/
 **Key architectural patterns:**
 
 - **IPC:** Renderer calls `ipcClient.invoke(channel)`, main handles in `src/main/ipc/*-handlers.ts`.
-- **Agent runtime:** Runs in `Ola.Native.Worker`; main bridges MessagePack streams and renderer
-  reverse requests through `native-agent-runtime.ts` and `sidecar-manager.ts`.
+- **Agent runtime:** TypeScript runtime is the production target. Any remaining compatibility
+  boundary is fail-closed and must not start an external worker; the exact exit state is tracked
+  in the migration acceptance ledger.
 - **Tool system:** Tools in `src/renderer/src/lib/tools/`, registered in phases (core → skills → sub-agents → teams).
 - **Session modes:** `chat`, `clarify`, `cowork`, `code`, `acp` — each with distinct prompts/tools/UI.
-- **SQLite schema:** Owned by the Native Worker `DbSchemaMigrator`; migrations are additive and old
-  columns are not dropped.
+- **SQLite schema:** The TS BusinessRepository owns desktop writes. Preserve historical data and
+  use versioned, tested migrations.
 - **Data directory:** `~/.ola/` — never commit its contents.
 
 ## Build, Test, and Development Commands
@@ -52,10 +54,12 @@ npm run build:linux  # Linux .AppImage/.deb
 npm run lint         # ESLint with cache
 npm run typecheck    # TypeScript check (tsc --noEmit for both tsconfig.node.json & tsconfig.web.json)
 npm run format       # Prettier (single quotes, no semicolons, 100-col width)
-npm run postinstall  # Prepare native Electron dependencies and the .NET Native Worker
+npm run postinstall  # Prepare native Electron dependencies
+npm run verify:ts-migration-ledger  # Check migration acceptance inventory
+npm run verify:ts-migration-exit    # Strict final gate; expected to fail until full migration
 ```
 
-**CI:** GitHub Actions (`build.yml`) builds on push to release tag across Windows (x64, arm64), macOS (arm64, amd64), and Linux (x64, arm64). Artifacts uploaded to the GitHub Release.
+**CI:** GitHub Actions (`build.yml`) runs the TypeScript runtime, Electron, CodeGraph and Go quality gates on pull requests and `main`; the manual release workflow builds Windows, macOS and Linux on x64/arm64. No .NET worker or CodeGraph build is part of the production workflow.
 
 ## Coding Style & Naming Conventions
 
@@ -83,9 +87,10 @@ npm run postinstall  # Prepare native Electron dependencies and the .NET Native 
 
 When adding behavioral changes, run the affected behavioral tests and typechecks.
 
-`src/runtime/` is a staged TS implementation; the desktop still uses Native Worker.
-See `docs/migrations/ts-runtime/README.md` for actual migration status. Do not remove the
-legacy engine or switch production data ownership before parity gates pass.
+`src/runtime/` is the TypeScript implementation, but full Agent, channel, Cron and CodeGraph parity
+has not passed. See `docs/migrations/ts-runtime/SUPPLEMENTAL-ACCEPTANCE.md` and
+`acceptance-ledger.json` for the current migration gate. Remove each legacy path only after its
+contract, data and end-to-end acceptance evidence is recorded.
 
 ## Commit & Pull Request Guidelines
 

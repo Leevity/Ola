@@ -1,5 +1,6 @@
 out
 dist
+dist-staged-*
 dist-local-release-smoke
 release-local-smoke
 pnpm-lock.yaml

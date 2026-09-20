@@ -7,7 +7,8 @@ import type {
   UnifiedMessage
 } from '../api/types'
 import type { LoopEndReason, ToolCallState } from './types'
-import { streamSidecarProviderTurn } from '../ipc/agent-bridge'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '../ipc/ts-runtime-bridge'
+import { resolveTsRuntimeModelBinding } from '../ipc/ts-runtime-model-binding'
 import type { TaskProfile } from '../task-profile'
 
 const MAX_CONTEXT_CHARS = 24_000
@@ -252,30 +253,44 @@ async function runSummaryAttempt(
     createdAt: Date.now(),
     content: `Create the final user-facing outcome from this execution record. Return JSON only.\n\n${buildSummaryContext(input)}`
   }
-  let response = ''
-  let failed = false
   const profileGuidance =
     input.taskProfile === 'code'
       ? 'For Code, emphasize changed files, commands, tests, builds, Git state and verification.'
       : 'For Work, emphasize conclusions, documents or other artifacts, sources, completed items and next steps.'
   const systemPrompt = `You summarize completed agent tool runs without using tools. Never invent work, files, verification, commits, URLs, or success. The required status is ${expectedStatus}. ${profileGuidance} Return exactly one JSON object with: status, title, summary, completedItems (string[]), artifacts ({label,path?,kind?}[]), verification ({label,status:passed|failed|not_run,detail?}[]), warnings (string[]), nextSteps (string[]). Keep it concise and use the user's language when evident from the goal.`
-  for await (const event of streamSidecarProviderTurn({
-    messages: [message],
-    tools: [],
-    provider: { ...provider, systemPrompt },
-    signal: input.signal
-  })) {
-    if (event.type === 'text_delta' && event.text) response += event.text
-    if (event.type === 'error') failed = true
+  const binding = resolveTsRuntimeModelBinding(provider)
+  if (binding && (await isTsRuntimeAvailable())) {
+    let tsResponse = ''
+    for await (const event of streamTsRuntimeTextTurn({
+      workspaceId: binding.workspaceId,
+      sessionId: `final-outcome:${nanoid()}`,
+      modelSource: binding.modelSource,
+      modelOptions: {
+        systemPrompt,
+        ...(provider.maxTokens !== undefined ? { maxTokens: provider.maxTokens } : {}),
+        thinking: { type: 'disabled' }
+      },
+      prompt: message.content as string,
+      signal: input.signal
+    })) {
+      if (input.signal?.aborted) return null
+      if (event.type === 'text_delta' && event.text) tsResponse += event.text
+      else if (event.type === 'error') throw new Error(event.error?.message ?? 'summary failed')
+      else if (event.type === 'loop_end') break
+    }
+    const match = tsResponse.match(/\{[\s\S]*\}/)
+    if (!match) return null
+    try {
+      return normalizeOutcome(JSON.parse(match[0]), expectedStatus, attemptCount, input.taskProfile)
+    } catch {
+      return null
+    }
   }
-  if (failed || !response.trim()) return null
-  const match = response.match(/\{[\s\S]*\}/)
-  if (!match) return null
-  try {
-    return normalizeOutcome(JSON.parse(match[0]), expectedStatus, attemptCount, input.taskProfile)
-  } catch {
-    return null
-  }
+  // There is no production legacy-runtime fallback. A deterministic outcome is
+  // safer than attempting to revive a removed execution path after TS failure.
+  void provider
+  void systemPrompt
+  return null
 }
 
 /** Main model first, then fast/fallback configs, with a deterministic conclusion after three failures. */

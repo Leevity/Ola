@@ -20,6 +20,7 @@ export interface BusinessHandoverResult {
 export interface BusinessHandoverReadiness {
   ready: boolean
   reason?: string
+  warning?: string
 }
 
 /** Read-only gate used by settings to explain why promotion is unavailable. */
@@ -28,11 +29,17 @@ export async function businessHandoverReadiness(input: {
   backupDirectory?: string
 }): Promise<BusinessHandoverReadiness> {
   try {
-    await verifyLegacyBusinessDatabaseContract({ sourcePath: input.sourcePath })
+    const contract = await verifyLegacyBusinessDatabaseContract({ sourcePath: input.sourcePath })
     const minimumFreeBytes = await minimumLegacyHandoverFreeBytes(input.sourcePath)
     if (input.backupDirectory)
       await inspectLegacyHandoverBackupDirectory(input.backupDirectory, minimumFreeBytes)
-    return { ready: true }
+    const wiki = contract.nativeProjectWiki
+    return {
+      ready: true,
+      ...(wiki && (wiki.documents > 0 || wiki.generationRuns > 0)
+        ? { warning: 'LEGACY_NATIVE_WIKI_DATA_WILL_BE_PRESERVED_IN_TS_ARCHIVE' }
+        : {})
+    }
   } catch (error) {
     return {
       ready: false,
@@ -51,13 +58,25 @@ export async function handoverBusinessDatabase(input: {
   backupDirectory: string
   quiesceLegacyWriter: () => Promise<void>
 }): Promise<BusinessHandoverResult> {
-  await verifyLegacyBusinessDatabaseContract({ sourcePath: input.sourcePath })
+  const initialContract = await verifyLegacyBusinessDatabaseContract({
+    sourcePath: input.sourcePath
+  })
   await prepareLegacyHandoverBackupDirectory(
     input.backupDirectory,
     await minimumLegacyHandoverFreeBytes(input.sourcePath)
   )
   await input.quiesceLegacyWriter()
-  await verifyLegacyBusinessDatabaseContract({ sourcePath: input.sourcePath })
+  const quiescedContract = await verifyLegacyBusinessDatabaseContract({
+    sourcePath: input.sourcePath
+  })
+  if (
+    initialContract.nativeProjectWiki &&
+    (!quiescedContract.nativeProjectWiki ||
+      quiescedContract.nativeProjectWiki.documents < initialContract.nativeProjectWiki.documents ||
+      quiescedContract.nativeProjectWiki.generationRuns <
+        initialContract.nativeProjectWiki.generationRuns)
+  )
+    throw new Error('LEGACY_NATIVE_WIKI_SOURCE_CHANGED_DURING_HANDOVER')
   const snapshot = await createLegacyDatabaseHandoverSnapshot({
     ...input,
     requireQuiescedSource: true
@@ -74,6 +93,16 @@ export async function handoverBusinessDatabase(input: {
   })
   try {
     await repository.migrationStatus()
+    const sourceWiki = initialContract.nativeProjectWiki
+    if (sourceWiki) {
+      const archivedWiki = await repository.legacyProjectWikiCounts()
+      if (
+        archivedWiki.documents < sourceWiki.documents ||
+        archivedWiki.generationRuns < sourceWiki.generationRuns
+      ) {
+        throw new Error('LEGACY_NATIVE_WIKI_ARCHIVE_INCOMPLETE')
+      }
+    }
     // Native used to repair historical ordering as a read side effect. Once
     // parked, only the promoted copy may be changed; the rollback stays exact.
     await repository.normalizeMessageSortOrders()

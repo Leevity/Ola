@@ -18,7 +18,8 @@ import {
   type RunSnapshot,
   type RunSpec
 } from '../../shared/runtime/contracts'
-import type { CronAgentRunOptions } from './cron-agent-background'
+import type { CronAgentRunOptions, AgentDefinition } from './cron-runtime-types'
+import { resolveCronAgentDefinition } from './cron-agent-definition'
 
 const CRON_SYSTEM_PROMPT =
   'You are CronAgent, a scheduled task assistant. You execute tasks autonomously on a timer. ' +
@@ -86,18 +87,47 @@ function setProgress(
   })
 }
 
-function cronPrompt(options: CronAgentRunOptions): string {
+function cronPrompt(options: CronAgentRunOptions, definition: AgentDefinition): string {
   const channelInfo = options.deliveryTarget ? `\nTarget session: ${options.deliveryTarget}` : ''
-  const delivery =
-    options.deliveryMode === 'none'
+  const channelDelivery =
+    options.pluginId && options.pluginChatId
+      ? `When finished, call PluginSendMessage exactly once with plugin_id="${options.pluginId}" and chat_id="${options.pluginChatId}". Send only the concise result summary, then stop.`
+      : null
+  const delivery = channelDelivery
+    ? channelDelivery
+    : options.deliveryMode === 'none'
       ? 'Do not send a desktop notification. Give the final result in your response.'
       : 'When finished, call Notify exactly once with a concise, friendly desktop result summary.'
-  return `You are a scheduled task assistant running cron job (ID: ${options.jobId}).${channelInfo}\n\n## Your Task\n${options.prompt}\n\n## Delivery Instructions\n${delivery}\n\nMatch the language of the task prompt in your delivery message (Chinese task → Chinese reply, English task → English reply). Be concise and friendly.\n\nBegin working on this task now.`
+  return `${definition.systemPrompt}\n\nYou are a scheduled task assistant running cron job (ID: ${options.jobId}).${channelInfo}\n\n## Your Task\n${options.prompt}\n\n## Delivery Instructions\n${delivery}\n\nMatch the language of the task prompt in your delivery message (Chinese task → Chinese reply, English task → English reply). Be concise and friendly.\n\nBegin working on this task now.`
 }
 
-function toolNames(options: CronAgentRunOptions): string[] {
-  const names = options.deliveryMode === 'none' ? [] : ['Notify']
-  if (options.workingFolder) names.push('Read', 'Write', 'Edit', 'LS', 'Glob', 'Grep', 'Bash')
+const TS_CRON_WORKSPACE_TOOL_NAMES = new Set([
+  'Read',
+  'Write',
+  'Edit',
+  'LS',
+  'Glob',
+  'Grep',
+  'Bash'
+])
+
+function toolNames(options: CronAgentRunOptions, definition: AgentDefinition): string[] {
+  const allowed = new Set(definition.allowedTools)
+  const names =
+    options.pluginId && options.pluginChatId
+      ? allowed.has('PluginSendMessage')
+        ? ['PluginSendMessage']
+        : []
+      : options.deliveryMode === 'none'
+        ? []
+        : allowed.has('Notify')
+          ? ['Notify']
+          : []
+  if (options.workingFolder || options.sshConnectionId) {
+    for (const name of definition.allowedTools) {
+      if (TS_CRON_WORKSPACE_TOOL_NAMES.has(name) && !names.includes(name)) names.push(name)
+    }
+  }
   return names
 }
 
@@ -117,9 +147,30 @@ function resolveWorkspaceId(options: CronAgentRunOptions): string {
 }
 
 /** Creates an explicit, credential-free runtime request from a persisted Cron binding. */
-export function createTsCronRunSpec(options: CronAgentRunOptions, runId: string): RunSpec {
+export function createTsCronRunSpec(
+  options: CronAgentRunOptions,
+  runId: string,
+  agentDefinition?: AgentDefinition
+): RunSpec {
   if (!options.modelSource) throw new Error('MODEL_NOT_SELECTED')
   const workspaceId = resolveWorkspaceId(options)
+  const definition: AgentDefinition = agentDefinition ?? {
+    name: 'CronAgent',
+    description: 'Scheduled task agent for cron jobs',
+    allowedTools: [
+      'Read',
+      'Write',
+      'Edit',
+      'LS',
+      'Glob',
+      'Grep',
+      'Bash',
+      'Notify',
+      'PluginSendMessage'
+    ],
+    maxIterations: 15,
+    systemPrompt: CRON_SYSTEM_PROMPT
+  }
   return {
     runId,
     taskId: `cron:${options.jobId}`,
@@ -129,11 +180,18 @@ export function createTsCronRunSpec(options: CronAgentRunOptions, runId: string)
     workspaceId,
     environmentId: 'local',
     ...(options.workingFolder ? { workingDirectory: options.workingFolder } : {}),
-    toolNames: toolNames(options),
-    maxTurns: Math.max(1, Math.min(options.maxIterations ?? 15, 128)),
+    ...(options.sshConnectionId ? { sshConnectionId: options.sshConnectionId } : {}),
+    ...(options.pluginId && options.pluginChatId
+      ? { channelContext: { pluginId: options.pluginId, chatId: options.pluginChatId } }
+      : {}),
+    toolNames: toolNames(options, definition),
+    maxTurns: Math.max(1, Math.min(options.maxIterations ?? definition.maxIterations, 128)),
     modelSource: options.modelSource,
-    modelOptions: { systemPrompt: CRON_SYSTEM_PROMPT },
-    prompt: cronPrompt(options),
+    modelOptions: {
+      systemPrompt: definition.systemPrompt,
+      ...(definition.temperature !== undefined ? { temperature: definition.temperature } : {})
+    },
+    prompt: cronPrompt(options, definition),
     unattended: true
   }
 }
@@ -252,6 +310,7 @@ async function projectEvent(
 async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun): Promise<void> {
   if (!options.modelSource) throw new Error('MODEL_NOT_SELECTED')
   const runId = `run-${nanoid(8)}`
+  const agentDefinition = await resolveCronAgentDefinition(options.agentId)
   const workspaceId = resolveWorkspaceId(options)
   active.runId = runId
   active.workspaceId = workspaceId
@@ -312,7 +371,7 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
   })
   await appendLog(options, runId, 'start', options.prompt.slice(0, 400))
   try {
-    await desktopRuntime.request('run.submit', createTsCronRunSpec(options, runId))
+    await desktopRuntime.request('run.submit', createTsCronRunSpec(options, runId, agentDefinition))
     let afterSeq = 0
     let snapshot: RunSnapshot | null = null
     let cancellationRequested = false

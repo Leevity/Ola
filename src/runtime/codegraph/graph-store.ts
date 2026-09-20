@@ -1,6 +1,8 @@
+import { existsSync } from 'node:fs'
 import { Worker } from 'node:worker_threads'
 import { createHash } from 'node:crypto'
 import { dirname, join, normalize } from 'node:path/posix'
+import { fileURLToPath } from 'node:url'
 import type { WasmCodeGraphLanguage } from './wasm-parser'
 import {
   indexWithWasm,
@@ -8,6 +10,14 @@ import {
   type WasmCodeGraphReference,
   type WasmCodeGraphSymbol
 } from './wasm-indexer'
+
+function graphStoreWorkerUrl(): URL {
+  if ((process as NodeJS.Process & { defaultApp?: boolean }).defaultApp)
+    return new URL('../../src/runtime/codegraph/graph-store-worker.mjs', import.meta.url)
+  const colocated = new URL('./graph-store-worker.mjs', import.meta.url)
+  if (existsSync(fileURLToPath(colocated))) return colocated
+  return new URL('../runtime/graph-store-worker.mjs', colocated)
+}
 
 export interface IndexedCodeGraphSymbol extends WasmCodeGraphSymbol {
   id: string
@@ -85,7 +95,7 @@ export class WasmCodeGraphStore {
   >()
 
   constructor(path: string) {
-    this.worker = new Worker(new URL('./graph-store-worker.mjs', import.meta.url), {
+    this.worker = new Worker(graphStoreWorkerUrl(), {
       workerData: { path }
     })
     this.worker.on('message', (message: { id: number; result?: unknown; error?: string }) => {

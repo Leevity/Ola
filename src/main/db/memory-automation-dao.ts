@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { businessWriteCanary } from './business-write-canary'
 import {
   canaryGetMemoryAutomationEntry,
@@ -66,7 +66,7 @@ export async function addMemoryAutomationEntry(
       sshConnectionId: input.sshConnectionId ?? null
     })
   }
-  const result = await getNativeWorker().request<MemoryAutomationEntryResult>(
+  const result = await getTsDatabaseRouteGuard().request<MemoryAutomationEntryResult>(
     'db/memory-automation-add',
     input,
     120_000
@@ -84,7 +84,9 @@ export async function getMemoryAutomationEntry(
 ): Promise<MemoryAutomationEntry | null> {
   const canary = await canaryGetMemoryAutomationEntry(id, workspaceId)
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<MemoryAutomationEntryResult>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.memoryAutomationEntry<MemoryAutomationEntry>(id, workspaceId)
+  const result = await getTsDatabaseRouteGuard().request<MemoryAutomationEntryResult>(
     'db/memory-automation-get',
     { id, workspaceId },
     120_000
@@ -102,7 +104,16 @@ export async function listMemoryAutomationEntries(
     })
     if (canary !== undefined) return canary
   }
-  return getNativeWorker().request<MemoryAutomationEntry[]>(
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.memoryAutomationEntries<MemoryAutomationEntry>(
+      query.workspaceId ?? 'local-personal',
+      query.limit,
+      query.offset,
+      query.includeContentSnapshots
+    )
+  }
+  return getTsDatabaseRouteGuard().request<MemoryAutomationEntry[]>(
     'db/memory-automation-list',
     query,
     120_000
@@ -124,7 +135,7 @@ export async function markMemoryAutomationUndo(
       workspaceId
     })
   }
-  const result = await getNativeWorker().request<MemoryAutomationEntryResult>(
+  const result = await getTsDatabaseRouteGuard().request<MemoryAutomationEntryResult>(
     'db/memory-automation-mark-undo',
     { id, status, error, workspaceId },
     120_000
@@ -139,7 +150,20 @@ export async function hasProcessedRollup(args: {
   sourceDate: string
   contentHash: string
 }): Promise<boolean> {
-  const result = await getNativeWorker().request<MemoryAutomationRollupResult>(
+  const writer = businessWriteCanary()
+  if (writer) {
+    const rows = await writer.memoryRollups<Record<string, unknown>>(
+      args.workspaceId ?? 'local-personal'
+    )
+    return rows.some(
+      (row) =>
+        row.scope === args.scope &&
+        row.target_path === args.targetPath &&
+        row.source_date === args.sourceDate &&
+        row.content_hash === args.contentHash
+    )
+  }
+  const result = await getTsDatabaseRouteGuard().request<MemoryAutomationRollupResult>(
     'db/memory-automation-rollup-has',
     args,
     120_000
@@ -170,7 +194,7 @@ export async function markProcessedRollup(args: {
     })
     return
   }
-  const result = await getNativeWorker().request<MemoryAutomationRollupResult>(
+  const result = await getTsDatabaseRouteGuard().request<MemoryAutomationRollupResult>(
     'db/memory-automation-rollup-mark',
     args,
     120_000

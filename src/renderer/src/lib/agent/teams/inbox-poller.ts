@@ -7,10 +7,16 @@ import type {
 import { useAgentStore } from '../../../stores/agent-store'
 import { useTeamStore } from '../../../stores/team-store'
 import type { TeamMessage } from './types'
-import { appendTeamRuntimeMessage, consumeTeamRuntimeMessages } from './runtime-client'
+import {
+  appendTeamRuntimeMessage,
+  consumeTeamRuntimeMessages,
+  getTeamRuntimeSnapshot
+} from './runtime-client'
 
 let pollerTimer: ReturnType<typeof setInterval> | null = null
 let lastLeadMessageTimestamp = 0
+let lastTeamKey = ''
+let pollInFlight = false
 const seenMessageIds = new Set<string>()
 const approvalRequestToToolCallId = new Map<string, string>()
 
@@ -168,15 +174,32 @@ export function startTeamInboxPoller(): void {
   pollerTimer = setInterval(() => {
     const team = useTeamStore.getState().activeTeam
     if (!team?.name) return
+    const teamKey = `${team.name}\0${team.sessionId ?? ''}`
+    if (teamKey !== lastTeamKey) {
+      lastTeamKey = teamKey
+      lastLeadMessageTimestamp = 0
+      seenMessageIds.clear()
+    }
+    if (pollInFlight) return
+    pollInFlight = true
 
-    void consumeTeamRuntimeMessages({
-      teamName: team.name,
-      afterTimestamp: lastLeadMessageTimestamp,
-      recipient: 'lead',
-      includeBroadcast: true,
-      limit: 20
-    })
-      .then(async (messages) => {
+    void (async () => {
+      try {
+        const [snapshot, messages] = await Promise.all([
+          getTeamRuntimeSnapshot({ teamName: team.name, limit: 20 }),
+          consumeTeamRuntimeMessages({
+            teamName: team.name,
+            afterTimestamp: lastLeadMessageTimestamp,
+            recipient: 'lead',
+            includeBroadcast: true,
+            limit: 20
+          })
+        ])
+        const currentTeam = useTeamStore.getState().activeTeam
+        if (`${currentTeam?.name ?? ''}\0${currentTeam?.sessionId ?? ''}` !== teamKey) return
+        if (snapshot) {
+          useTeamStore.getState().syncRuntimeSnapshot(snapshot, team.sessionId)
+        }
         for (const message of messages) {
           await handleLeadMessage({
             id: message.id,
@@ -188,10 +211,12 @@ export function startTeamInboxPoller(): void {
             timestamp: message.timestamp
           })
         }
-      })
-      .catch((error) => {
-        console.error('[TeamRuntime] Lead inbox poll failed:', error)
-      })
+      } catch (error) {
+        console.error('[TeamRuntime] Runtime snapshot poll failed:', error)
+      } finally {
+        pollInFlight = false
+      }
+    })()
   }, 1000)
 }
 
@@ -200,4 +225,9 @@ export function stopTeamInboxPoller(): void {
     clearInterval(pollerTimer)
     pollerTimer = null
   }
+  pollInFlight = false
+  lastTeamKey = ''
+  lastLeadMessageTimestamp = 0
+  seenMessageIds.clear()
+  approvalRequestToToolCallId.clear()
 }

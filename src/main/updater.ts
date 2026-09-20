@@ -665,6 +665,16 @@ export function setupAutoUpdater(options: AutoUpdateOptions): void {
     return
   }
 
+  // A source checkout is not a release installation. electron-updater's
+  // forced development mode expects dev-app-update.yml next to the compiled
+  // Main entry, which electron-vite does not copy into out/main. Do not turn
+  // a normal local startup into an updater ENOENT; packaged builds retain the
+  // normal startup check and manual checks still report their own result.
+  if (!app.isPackaged) {
+    console.log('[Updater] Source checkout detected. Skip startup update check.')
+    return
+  }
+
   // Check for updates immediately on startup
   void checkForUpdatesSafely().catch((error) => {
     if (isTransientUpdateError(error)) {

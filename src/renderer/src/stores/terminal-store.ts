@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import i18n from '@renderer/locales'
+import { LOCAL_PERSONAL_WORKSPACE_ID } from '../../../shared/runtime/model-source'
 
 export type LocalTerminalStatus = 'running' | 'exited' | 'error'
 
@@ -45,11 +46,13 @@ interface TerminalListEntry {
 }
 
 interface TerminalStore {
+  workspaceId: string
   tabs: LocalTerminalTab[]
   sessions: Record<string, LocalTerminalSession>
   activeTabId: string | null
   initialized: boolean
   init: () => void
+  setWorkspace: (workspaceId: string) => void
   refreshSessions: () => Promise<void>
   createTab: (
     cwd?: string,
@@ -122,10 +125,16 @@ function buildNextTitle(
 }
 
 export const useTerminalStore = create<TerminalStore>()((set, get) => ({
+  workspaceId: LOCAL_PERSONAL_WORKSPACE_ID,
   tabs: [],
   sessions: {},
   activeTabId: null,
   initialized: false,
+  setWorkspace: (workspaceId) => {
+    if (!workspaceId || workspaceId === get().workspaceId) return
+    set({ workspaceId, tabs: [], sessions: {}, activeTabId: null })
+    void get().refreshSessions()
+  },
   init: () => {
     if (subscribed) {
       if (!get().initialized) set({ initialized: true })
@@ -162,7 +171,9 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
   },
   refreshSessions: async () => {
     try {
-      const result = await ipcClient.invoke(IPC.TERMINAL_LIST)
+      const result = await ipcClient.invoke(IPC.TERMINAL_LIST, {
+        workspaceId: get().workspaceId
+      })
       const entries = Array.isArray(result) ? (result as TerminalListEntry[]) : []
       const sessions: Record<string, LocalTerminalSession> = {}
       for (const entry of entries) {
@@ -178,7 +189,8 @@ export const useTerminalStore = create<TerminalStore>()((set, get) => ({
     const title = buildNextTitle(get().tabs, preferredTitle, projectId)
     const result = (await ipcClient.invoke(IPC.TERMINAL_CREATE, {
       cwd,
-      title
+      title,
+      workspaceId: get().workspaceId
     })) as
       | {
           id?: string

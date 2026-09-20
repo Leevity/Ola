@@ -1,7 +1,9 @@
 import { toolRegistry } from '../agent/tool-registry'
 import type { ToolHandler } from '../tools/tool-types'
 import type { McpServerConfig, McpTool, McpResource } from './types'
-import { encodeToolError } from '../tools/tool-result-format'
+import { encodeStructuredToolResult } from '../tools/tool-result-format'
+import { ipcClient } from '../ipc/ipc-client'
+import { IPC } from '../ipc/channels'
 
 /**
  * MCP Tool & Resource Bridge — dynamically maps MCP server tools and resources
@@ -17,12 +19,6 @@ const MCP_TOOL_PREFIX = 'mcp__'
 
 /** Track registered MCP tool/resource names for cleanup */
 let _registeredMcpNames: string[] = []
-
-function nativeOnlyMcpResult(toolName: string): string {
-  return encodeToolError(
-    `${toolName} executes in the .NET Native Worker and is unavailable through the renderer boundary.`
-  )
-}
 
 /** Build a prefixed tool name */
 function mcpToolName(serverId: string, toolName: string): string {
@@ -50,7 +46,8 @@ export function isMcpTool(name: string): boolean {
 
 /**
  * Register MCP tools for all active servers.
- * Execution is owned by the .NET Native Worker; renderer keeps definitions only.
+ * Execution is owned by Main's connected MCP manager and crosses the trusted
+ * MessagePack IPC boundary; the renderer only keeps definitions and routing.
  */
 export function registerMcpTools(
   activeServers: McpServerConfig[],
@@ -78,7 +75,15 @@ export function registerMcpTools(
             required: (mcpTool.inputSchema?.required as string[]) ?? []
           }
         },
-        execute: async () => nativeOnlyMcpResult(name),
+        execute: async (input, ctx) => {
+          const result = await ipcClient.invoke(IPC.MCP_CALL_TOOL, {
+            serverId: server.id,
+            toolName: mcpTool.name,
+            args: input
+          })
+          ctx.signal.throwIfAborted()
+          return encodeStructuredToolResult(result as Record<string, unknown> | unknown[])
+        },
         requiresApproval: () => true
       }
 
@@ -106,7 +111,7 @@ function mcpResourceToolName(serverId: string, resourceName: string): string {
 
 /**
  * Register MCP resources as tools for all active servers.
- * Execution is owned by the .NET Native Worker; renderer keeps definitions only.
+ * Resource reads use the same trusted Main MCP bridge as dynamic tools.
  */
 export function registerMcpResources(
   activeServers: McpServerConfig[],
@@ -128,7 +133,15 @@ export function registerMcpResources(
             properties: {}
           }
         },
-        execute: async () => nativeOnlyMcpResult(name),
+        execute: async (_input, ctx) => {
+          const result = await ipcClient.invoke(IPC.MCP_READ_RESOURCE, {
+            serverId: server.id,
+            uri: resource.uri,
+            resourceName: resource.name
+          })
+          ctx.signal.throwIfAborted()
+          return encodeStructuredToolResult(result as Record<string, unknown> | unknown[])
+        },
         requiresApproval: () => true
       }
 

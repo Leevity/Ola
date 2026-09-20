@@ -7,11 +7,7 @@ import { toast } from 'sonner'
 import { useLiveCompressionStore } from '@renderer/stores/live-compression-store'
 import i18n from '@renderer/locales'
 import { useChatStore, type Session } from '@renderer/stores/chat-store'
-import {
-  clampMaxParallelToolCalls,
-  resolveReasoningEffortForModel,
-  useSettingsStore
-} from '@renderer/stores/settings-store'
+import { resolveReasoningEffortForModel, useSettingsStore } from '@renderer/stores/settings-store'
 import {
   modelSupportsComputerUse,
   modelExplicitlyRejectsVision,
@@ -53,13 +49,16 @@ import { useTeamStore, type ActiveTeam } from '@renderer/stores/team-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { decodeIpcMessagePack, invokeMessagePack } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
-import { resolveSidecarApprovalRequest } from '@renderer/lib/ipc/sidecar-approval-registry'
+import { resolveRuntimeApprovalRequest } from '@renderer/lib/ipc/runtime-approval-registry'
 import {
   DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL,
-  SIDECAR_APPROVAL_REQUEST_MSGPACK_CHANNEL,
-  SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL
+  RUNTIME_APPROVAL_REQUEST_MSGPACK_CHANNEL,
+  RUNTIME_APPROVAL_RESPONSE_MSGPACK_CHANNEL
 } from '../../../shared/messagepack/binary-ipc'
-import { clearPendingQuestions } from '@renderer/lib/tools/ask-user-tool'
+import {
+  clearPendingQuestions,
+  handleNativeAskUserRequest
+} from '@renderer/lib/tools/ask-user-tool'
 import type { HookEvent, HookOutput } from '../../../shared/hooks/types'
 
 import { ACP_MODE_ALLOWED_TOOLS, PLAN_MODE_ALLOWED_TOOLS } from '@renderer/lib/tools/plan-tool'
@@ -88,11 +87,7 @@ import type {
   SelectedFileReference,
   RunOutcomeMeta
 } from '@renderer/lib/api/types'
-import {
-  setLastDebugInfo,
-  setRequestTraceInfo,
-  shouldKeepFullDebugBody
-} from '@renderer/lib/debug-store'
+import { setLastDebugInfo, setRequestTraceInfo } from '@renderer/lib/debug-store'
 import { estimateTokens } from '@renderer/lib/format-tokens'
 import {
   QUEUED_IMAGE_ONLY_TEXT,
@@ -123,9 +118,7 @@ import {
   isCompactSummaryMessage,
   mergeCompressedMessagesKeepHistory,
   mergeLoopEndMessagesKeepHistory,
-  resolveCompressionContextLength,
-  resolveCompressionReservedOutputBudget,
-  resolveCompressionThreshold
+  resolveCompressionContextLength
 } from '@renderer/lib/agent/context-compression'
 import { applyRecentVisualContext } from '@renderer/lib/agent/visual-context'
 import {
@@ -155,7 +148,6 @@ import {
   installSessionControlSyncListener,
   type SessionControlSyncEvent
 } from '@renderer/lib/session-control-sync'
-import type { CompressionConfig } from '@renderer/lib/agent/context-compression'
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { useAppPluginStore } from '@renderer/stores/app-plugin-store'
 import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
@@ -214,12 +206,7 @@ import {
   type TailToolExecutionState
 } from '@renderer/components/chat/transcript-utils'
 import type { AutoModelSelectionStatus } from '@renderer/stores/ui-store'
-import {
-  agentBridge,
-  canSidecarHandle,
-  runSidecarContextCompression,
-  streamSidecarProviderTurn
-} from '@renderer/lib/ipc/agent-bridge'
+import { runTsContextCompression } from '@renderer/lib/ipc/agent-bridge'
 import {
   isTsRuntimeAvailable,
   respondTsRuntimeInteraction,
@@ -235,15 +222,7 @@ import {
   supportsTsRuntimeReadOnlyTools
 } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { assessTsRuntimeAgentEligibility } from '@renderer/lib/ipc/ts-runtime-agent-eligibility'
-import {
-  buildSidecarAgentRunRequest,
-  isNativeSidecarProviderConfig,
-  normalizeSidecarApprovalRequest
-} from '@renderer/lib/ipc/sidecar-protocol'
-import { agentStream } from '@renderer/lib/ipc/agent-stream-receiver'
-import { sessionSidecarRunIds } from '@renderer/lib/agent/session-run-registry'
-import { toAgentEvent, toSubAgentEvent } from '@renderer/lib/agent/stream-event-adapter'
-import type { AgentStreamEvent } from '../../../shared/agent-stream-protocol'
+import { normalizeRuntimeApprovalRequest } from '@renderer/lib/ipc/runtime-approval-protocol'
 
 /** Per-session abort controllers — module-level so concurrent sessions don't overwrite each other */
 const sessionAbortControllers = new Map<string, AbortController>()
@@ -252,7 +231,7 @@ const stopAfterCurrentRequestSessions = new Set<string>()
 const continuingToolExecutionSessions = new Set<string>()
 const pendingGoalContinuationSessions = new Set<string>()
 const scheduledGoalContinuationSessions = new Set<string>()
-const SIDECAR_CONTEXT_SOURCE_MAX_MESSAGES = 160
+const RUNTIME_CONTEXT_SOURCE_MAX_MESSAGES = 160
 const CONTINUE_TOOL_TAIL_WINDOW_MESSAGES = 120
 
 function requestLikelyRequiresExecute(input: string): boolean {
@@ -268,6 +247,42 @@ function requestLikelyRequiresExecute(input: string): boolean {
   return /\b(create|write|edit|modify|delete|remove|rename|move|copy|run|execute|install|uninstall|build|test|commit|push|pull|merge|deploy|publish|send|post|order|upload|download)\b|(?:帮我|请|直接).*(?:创建|新建|写入|修改|编辑|删除|移除|重命名|移动|复制|运行|执行|安装|卸载|构建|测试|提交|推送|拉取|合并|部署|发布|发送|下单|上传|下载)/i.test(
     normalized
   )
+}
+
+async function resolveTsRuntimeQuestion(
+  event: TsRuntimeInteractionEvent,
+  sessionId: string
+): Promise<void> {
+  const payload =
+    event.interaction.payload &&
+    typeof event.interaction.payload === 'object' &&
+    !Array.isArray(event.interaction.payload)
+      ? (event.interaction.payload as Record<string, unknown>)
+      : {}
+  const resolved = await handleNativeAskUserRequest({
+    questions: payload.questions,
+    toolUseId: event.interaction.interactionId,
+    sessionId
+  })
+  await respondTsRuntimeInteraction({
+    workspaceId: event.interaction.workspaceId,
+    runId: event.interaction.runId,
+    interactionId: event.interaction.interactionId,
+    response: resolved
+  })
+}
+
+function refreshTsRuntimePlan(sessionId: string, toolName: string, status: string): void {
+  if (status !== 'completed' || !['EnterPlanMode', 'ExitPlanMode'].includes(toolName)) return
+  void usePlanStore
+    .getState()
+    .loadPlanForSession(sessionId, true)
+    .then((plan) => {
+      if (!plan) return
+      usePlanStore.getState().setActivePlan(plan.id)
+      if (toolName === 'EnterPlanMode') useUIStore.getState().enterPlanMode(sessionId)
+      else useUIStore.getState().exitPlanMode(sessionId)
+    })
 }
 installSessionControlSyncListener((event) => {
   applySessionControlSyncEvent(event)
@@ -289,8 +304,8 @@ useChatStore.subscribe((state) => {
   }
   knownSessionIds = currentIds
 })
-type SidecarApprovalIpcPayload = { requestId: string; method: string; params: unknown }
-type SidecarApprovalIpcResponse = { requestId: string; approved: boolean; reason?: string }
+type RuntimeApprovalIpcPayload = { requestId: string; method: string; params: unknown }
+type RuntimeApprovalIpcResponse = { requestId: string; approved: boolean; reason?: string }
 
 async function emitHooks(
   event: HookEvent,
@@ -307,16 +322,16 @@ async function emitHooks(
   return (await ipcClient.invoke('hooks:emit', { event, invocation })) as HookOutput[]
 }
 
-async function sendSidecarApprovalResponse(response: SidecarApprovalIpcResponse): Promise<void> {
-  await invokeMessagePack(SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL, response)
+async function sendRuntimeApprovalResponse(response: RuntimeApprovalIpcResponse): Promise<void> {
+  await invokeMessagePack(RUNTIME_APPROVAL_RESPONSE_MSGPACK_CHANNEL, response)
 }
 
-async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload): Promise<void> {
+async function handleRuntimeApprovalRequest(payload: RuntimeApprovalIpcPayload): Promise<void> {
   if (payload?.method !== 'approval/request' || !payload.requestId) return
 
-  const request = normalizeSidecarApprovalRequest(payload.params)
+  const request = normalizeRuntimeApprovalRequest(payload.params)
   if (!request) {
-    await sendSidecarApprovalResponse({
+    await sendRuntimeApprovalResponse({
       requestId: payload.requestId,
       approved: false,
       reason: 'Invalid approval request payload'
@@ -342,7 +357,7 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
   )?.permissionDecision
   const hookBlock = hookOutputs.find((output) => output.block)?.block
   if (hookDecision === 'deny' || hookBlock) {
-    await sendSidecarApprovalResponse({
+    await sendRuntimeApprovalResponse({
       requestId: payload.requestId,
       approved: false,
       reason: hookBlock?.reason ?? 'Denied by trusted hook'
@@ -350,9 +365,9 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
     return
   }
 
-  const registeredDecision = await resolveSidecarApprovalRequest(request)
+  const registeredDecision = await resolveRuntimeApprovalRequest(request)
   if (registeredDecision) {
-    await sendSidecarApprovalResponse({
+    await sendRuntimeApprovalResponse({
       requestId: payload.requestId,
       approved: registeredDecision.approved,
       ...(registeredDecision.reason ? { reason: registeredDecision.reason } : {})
@@ -361,7 +376,7 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
   }
 
   if (hookDecision === 'allow') {
-    await sendSidecarApprovalResponse({ requestId: payload.requestId, approved: true })
+    await sendRuntimeApprovalResponse({ requestId: payload.requestId, approved: true })
     return
   }
 
@@ -371,7 +386,7 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
     if (!autoApprove) {
       agentStore.addApprovedTool(request.toolCall.name)
     }
-    await sendSidecarApprovalResponse({
+    await sendRuntimeApprovalResponse({
       requestId: payload.requestId,
       approved: true
     })
@@ -399,16 +414,16 @@ async function handleSidecarApprovalRequest(payload: SidecarApprovalIpcPayload):
   if (approved) {
     agentStore.addApprovedTool(request.toolCall.name)
   }
-  await sendSidecarApprovalResponse({
+  await sendRuntimeApprovalResponse({
     requestId: payload.requestId,
     approved,
     ...(approved ? {} : { reason: 'User denied permission' })
   })
 }
 
-ipcClient.on(SIDECAR_APPROVAL_REQUEST_MSGPACK_CHANNEL, async (data: unknown) => {
-  await handleSidecarApprovalRequest(
-    decodeIpcMessagePack<SidecarApprovalIpcPayload>(data as ArrayBuffer | ArrayBufferView)
+ipcClient.on(RUNTIME_APPROVAL_REQUEST_MSGPACK_CHANNEL, async (data: unknown) => {
+  await handleRuntimeApprovalRequest(
+    decodeIpcMessagePack<RuntimeApprovalIpcPayload>(data as ArrayBuffer | ArrayBufferView)
   )
 })
 
@@ -1558,10 +1573,6 @@ function buildStreamingContextUsage(
   }
 }
 
-function getConfiguredMaxParallelTools(): number {
-  return clampMaxParallelToolCalls(useSettingsStore.getState().maxParallelToolCalls)
-}
-
 function buildProviderConfigWithRuntimeSettings(
   providerConfig: ProviderConfig | null,
   modelConfig: AIModelConfig | null,
@@ -2018,38 +2029,10 @@ function abortCurrentRunImmediately(sessionId: string): void {
   if (activeAbortController && !activeAbortController.signal.aborted) {
     activeAbortController.abort()
   }
-  void cancelSidecarRun(sessionId)
-}
-
-async function requestSidecarRunStopAfterCurrentIteration(sessionId: string): Promise<boolean> {
-  const runId = sessionSidecarRunIds.get(sessionId)
-  if (!runId) return false
-  try {
-    const result = await agentBridge.requestStopAgent(runId)
-    if (result.stopped) {
-      console.log('[ChatActions] sidecar graceful stop requested', { sessionId, runId })
-      return true
-    }
-  } catch (error) {
-    console.warn('[ChatActions] sidecar graceful stop request failed', {
-      sessionId,
-      runId,
-      error: error instanceof Error ? error.message : String(error)
-    })
-  }
-  return false
 }
 
 function stopActiveRunAfterCurrentRequest(sessionId: string): void {
   if (!stopAfterCurrentRequestSessions.delete(sessionId)) return
-  if (sessionSidecarRunIds.has(sessionId)) {
-    void requestSidecarRunStopAfterCurrentIteration(sessionId).then((stopped) => {
-      if (!stopped) {
-        abortCurrentRunImmediately(sessionId)
-      }
-    })
-    return
-  }
   abortCurrentRunImmediately(sessionId)
 }
 
@@ -2083,7 +2066,6 @@ export function promotePendingSessionMessageForImmediateDispatch(
       if (activeAbortController && !activeAbortController.signal.aborted) {
         activeAbortController.abort()
       }
-      void cancelSidecarRun(sessionId)
     })
   } else {
     dispatchNextQueuedMessage(sessionId)
@@ -3013,7 +2995,6 @@ function finishStoppingSession(sessionId: string): void {
     sessionAbortControllers.delete(sessionId)
   }
 
-  void cancelSidecarRun(sessionId)
   void ipcClient
     .invoke('hooks:cancel', { key: sessionId })
     .then(() => {
@@ -3083,7 +3064,13 @@ const BACKGROUND_STREAM_DELTA_FLUSH_MS = 300
 const TOOL_INPUT_FLUSH_MS = 300
 const AGENT_TOOL_INPUT_FLUSH_MS = 300
 const BACKGROUND_TOOL_INPUT_FLUSH_MS = 300
-const NATIVE_TASK_TOOL_NAMES = new Set(['TaskCreate', 'TaskGet', 'TaskUpdate', 'TaskList'])
+const PERSISTED_TASK_TOOL_NAMES = new Set([
+  'TaskCreate',
+  'TaskGet',
+  'TaskUpdate',
+  'TaskDelete',
+  'TaskList'
+])
 const NATIVE_GOAL_TOOL_NAMES = new Set(['get_goal', 'create_goal', 'update_goal'])
 // SubAgent text can arrive from multiple inner loops at high frequency.
 // Buffering it separately avoids waking large parts of the UI on every tiny delta.
@@ -3239,293 +3226,6 @@ function applyRequestRetryState(
 
 function clearRequestRetryState(sessionId: string): void {
   useAgentStore.getState().setSessionRequestRetryState(sessionId, null)
-}
-
-async function canUseSidecarForAgentRun(args: {
-  messages: UnifiedMessage[]
-  provider: ProviderConfig
-  tools: ToolDefinition[]
-  sessionId?: string
-  workingFolder?: string
-  sshConnectionId?: string
-  maxIterations: number
-  forceApproval: boolean
-  compression?: CompressionConfig | null
-  isPlanMode: boolean
-  sessionMode: string
-  desktopControlMode: string
-  hasChannels: boolean
-  hasMcps: boolean
-  teamToolsActive: boolean
-  activeTeamName?: string
-  imagePluginProvider?: ProviderConfig | null
-}): Promise<boolean> {
-  const maxParallelTools = getConfiguredMaxParallelTools()
-  const sidecarRequest = buildSidecarAgentRunRequest({
-    messages: args.messages,
-    provider: args.provider,
-    tools: args.tools,
-    sessionId: args.sessionId,
-    workingFolder: args.workingFolder,
-    sshConnectionId: args.sshConnectionId,
-    maxIterations: args.maxIterations,
-    forceApproval: args.forceApproval,
-    maxParallelTools,
-    compression: args.compression,
-    sessionMode: 'agent',
-    planMode: args.isPlanMode,
-    planModeAllowedTools: args.isPlanMode ? [...PLAN_MODE_ALLOWED_TOOLS] : undefined,
-    teamToolsActive: args.teamToolsActive,
-    activeTeamName: args.activeTeamName,
-    imagePluginProvider: args.imagePluginProvider,
-    contextSource: args.sessionId
-      ? {
-          sessionId: args.sessionId,
-          maxMessages: SIDECAR_CONTEXT_SOURCE_MAX_MESSAGES,
-          compressionMode: args.compression ? 'auto' : 'none'
-        }
-      : undefined
-  })
-  if (!sidecarRequest) return false
-
-  const requestedToolNames = [...new Set(sidecarRequest.tools.map((tool) => tool.name))]
-  const nativeProvider = isNativeSidecarProviderConfig(args.provider)
-
-  if (!nativeProvider) {
-    console.log('[ChatActions] Sidecar agent skipped: provider is not native-migrated', {
-      sessionId: args.sessionId,
-      providerType: args.provider.type
-    })
-    return false
-  }
-
-  // Only route runtime work through sidecar when the capability exists in the
-  // native worker. The agent loop stays in .NET; tool execution crosses the
-  // renderer bridge only for UI/plugin boundaries that are not native modules yet.
-  const needsDesktopCapability =
-    args.desktopControlMode === 'computer-use' ||
-    requestedToolNames.some((toolName) => toolName.startsWith('Desktop'))
-
-  const capabilityChecks = await Promise.all([
-    canSidecarHandle('agent.run'),
-    canSidecarHandle(`provider.${args.provider.type}`),
-    ...(needsDesktopCapability ? [canSidecarHandle('desktop.input')] : [])
-  ])
-  const ok = capabilityChecks.every(Boolean)
-  if (!ok) {
-    console.warn('[ChatActions] Sidecar agent gating failed', {
-      sessionId: args.sessionId,
-      providerType: sidecarRequest.provider.type,
-      requestedToolNames,
-      needsDesktopCapability,
-      hasChannels: args.hasChannels,
-      hasMcps: args.hasMcps,
-      capabilityChecks
-    })
-  }
-  return ok
-}
-
-async function cancelSidecarRun(sessionId: string): Promise<void> {
-  const runId = sessionSidecarRunIds.get(sessionId)
-  if (!runId) return
-  sessionSidecarRunIds.delete(sessionId)
-  try {
-    await agentBridge.cancelAgent(runId)
-  } catch {
-    // Ignore cancellation race / process shutdown.
-  }
-}
-
-const SIDECAR_FIRST_PROGRESS_TIMEOUT_MS = 45_000
-
-function isProgressAgentEvent(event: AgentEvent): boolean {
-  return event.type !== 'request_debug'
-}
-
-function emitRuntimeHookForAgentEvent(sessionId: string, event: AgentEvent): void {
-  const projectPath = useChatStore
-    .getState()
-    .sessions.find((item) => item.id === sessionId)?.workingFolder
-  const base = { sessionId, projectPath, cancellationKey: sessionId }
-  let emission: Promise<HookOutput[]> | null = null
-  if (event.type === 'context_compression_start') {
-    emission = emitHooks('preCompact', base)
-  } else if (event.type === 'context_compressed') {
-    emission = emitHooks('postCompact', base)
-  } else if (event.type === 'loop_end' || event.type === 'error') {
-    emission = emitHooks('stop', base)
-  }
-  void emission?.catch((error) => console.warn('[Hooks] runtime event failed:', error))
-}
-
-function createSidecarEventStream(options: {
-  sessionId: string
-  sidecarRequest: unknown
-  signal?: AbortSignal
-  logLabel: 'chat' | 'agent'
-  onRunIdAssigned?: (runId: string) => void
-}): AsyncIterable<AgentEvent> {
-  const { sessionId, sidecarRequest, signal, logLabel, onRunIdAssigned } = options
-
-  return {
-    async *[Symbol.asyncIterator]() {
-      const queue: AgentEvent[] = []
-      const pendingEvents: Array<{ runId: string; event: AgentStreamEvent }> = []
-      let finished = false
-      let pendingFailure: Error | null = null
-      let notify: (() => void) | null = null
-      let runId = ''
-      let sawProgressEvent = false
-      let firstProgressTimer: ReturnType<typeof setTimeout> | null = null
-
-      const wake = (): void => {
-        if (!notify) return
-        const resolver = notify
-        notify = null
-        resolver()
-      }
-
-      const clearFirstProgressTimer = (): void => {
-        if (!firstProgressTimer) return
-        clearTimeout(firstProgressTimer)
-        firstProgressTimer = null
-      }
-
-      const finish = (): void => {
-        finished = true
-        wake()
-      }
-
-      const fail = (error: Error): void => {
-        pendingFailure = error
-        finish()
-      }
-
-      const markProgress = (): void => {
-        if (sawProgressEvent) return
-        sawProgressEvent = true
-        clearFirstProgressTimer()
-      }
-
-      const startFirstProgressTimer = (): void => {
-        clearFirstProgressTimer()
-        firstProgressTimer = setTimeout(() => {
-          const error = new Error(
-            `Sidecar run started but produced no progress within ${Math.round(
-              SIDECAR_FIRST_PROGRESS_TIMEOUT_MS / 1000
-            )}s`
-          )
-          console.warn('[ChatActions] Sidecar run stalled before first progress event', {
-            sessionId,
-            runId,
-            logLabel
-          })
-          if (runId) {
-            void agentBridge.cancelAgent(runId).catch(() => {})
-          }
-          fail(error)
-        }, SIDECAR_FIRST_PROGRESS_TIMEOUT_MS)
-      }
-
-      const pushEvent = (normalized: AgentEvent): void => {
-        if (finished || pendingFailure) return
-        if (isProgressAgentEvent(normalized)) {
-          markProgress()
-        }
-        queue.push(normalized)
-        if (normalized.type === 'loop_end' || normalized.type === 'error') {
-          finished = true
-          if (runId) {
-            sessionSidecarRunIds.delete(sessionId)
-          }
-        }
-        wake()
-      }
-
-      const dispatchStreamEvent = (event: AgentStreamEvent): void => {
-        if (finished || pendingFailure) return
-        const subEvent = toSubAgentEvent(event)
-        if (subEvent) {
-          markProgress()
-          subAgentEvents.emit(sessionId ?? null, subEvent)
-          return
-        }
-
-        const agentEvent = toAgentEvent(event)
-        if (agentEvent) {
-          emitRuntimeHookForAgentEvent(sessionId, agentEvent)
-          pushEvent(agentEvent)
-        }
-      }
-
-      const onAbort = (): void => {
-        clearFirstProgressTimer()
-        finish()
-      }
-
-      signal?.addEventListener('abort', onAbort, { once: true })
-
-      const unsub = agentStream.subscribeAll((eventRunId, _sessionId, event) => {
-        if (finished || pendingFailure) return
-
-        if (!runId) {
-          pendingEvents.push({ runId: eventRunId, event })
-          return
-        }
-
-        if (eventRunId && eventRunId !== runId) return
-        dispatchStreamEvent(event)
-      })
-
-      try {
-        const result = await agentBridge.runAgent(sidecarRequest)
-        runId = result.runId
-        sessionSidecarRunIds.set(sessionId, result.runId)
-        onRunIdAssigned?.(result.runId)
-        console.log(`[ChatActions] sidecar ${logLabel} stream started`, { sessionId, runId })
-
-        if (signal?.aborted) {
-          void agentBridge.cancelAgent(runId).catch(() => {})
-          finish()
-        } else {
-          startFirstProgressTimer()
-        }
-
-        const pendingSnapshot = pendingEvents.splice(0, pendingEvents.length)
-        for (const pending of pendingSnapshot) {
-          if (pending.runId && pending.runId !== runId) continue
-          dispatchStreamEvent(pending.event)
-          if (finished) break
-        }
-
-        while (!finished || queue.length > 0) {
-          if (queue.length === 0) {
-            await new Promise<void>((resolve) => {
-              notify = resolve
-              if (finished || queue.length > 0) {
-                wake()
-              }
-            })
-            continue
-          }
-          const next = queue.shift()
-          if (next) yield next
-        }
-
-        if (pendingFailure) {
-          throw pendingFailure
-        }
-      } finally {
-        clearFirstProgressTimer()
-        signal?.removeEventListener('abort', onAbort)
-        unsub()
-        if (runId) {
-          sessionSidecarRunIds.delete(sessionId)
-        }
-      }
-    }
-  }
 }
 
 function createSubAgentEventBuffer(sessionId: string): {
@@ -4277,7 +3977,6 @@ export function useChatActions(): {
         // If this session already has a running agent, abort it first
         const existingAc = sessionAbortControllers.get(sessionId)
         if (existingAc) existingAc.abort()
-        await cancelSidecarRun(sessionId)
         const abortController = new AbortController()
         sessionAbortControllers.set(sessionId, abortController)
 
@@ -4347,7 +4046,7 @@ export function useChatActions(): {
         // This is the first tool-capable TS chat slice. The whitelist is kept
         // deliberately narrow: it consists only of Main-owned read tools whose
         // schemas match the legacy Chat catalog. Any plugin, MCP, memory or
-        // unsupported tool continues through the complete sidecar agent path.
+        // Unsupported tools are rejected by the TS eligibility gate.
         const tsCompatibleChatTools =
           mode === 'chat' &&
           chatModeToolDefs.length > 0 &&
@@ -4462,7 +4161,6 @@ export function useChatActions(): {
             agentStore.setSessionStatus(sessionId, simpleChatStatus)
             useRuntimeProjectionStore.getState().finish(sessionId, simpleChatStatus)
             sessionAbortControllers.delete(sessionId)
-            sessionSidecarRunIds.delete(sessionId)
             stopAfterCurrentRequestSessions.delete(sessionId)
             if (sessionScope === 'main' && !abortController.signal.aborted) {
               void runMemoryAutomationForSession({
@@ -4758,7 +4456,6 @@ export function useChatActions(): {
           let compressionContextLength = resolvedModelConfig?.contextLength
             ? resolveCompressionContextLength(resolvedModelConfig)
             : 0
-          let compressionConfig: CompressionConfig | null = null
 
           agentStore.setRunning(true)
           preflightIndicatorActive = false
@@ -4818,13 +4515,11 @@ export function useChatActions(): {
           }
 
           try {
-            const contextCompressionAllowed =
-              settings.contextCompressionEnabled && options?.skipAutoContextCompression !== true
             let messagesToSend = await useChatStore
               .getState()
               .getSessionMessagesForRequest(sessionId, {
                 includeTrailingAssistantPlaceholder: !!existingAssistantMessage,
-                requestContextMaxMessages: SIDECAR_CONTEXT_SOURCE_MAX_MESSAGES
+                requestContextMaxMessages: RUNTIME_CONTEXT_SOURCE_MAX_MESSAGES
               })
             messagesToSend = ensureRequestContainsExpectedUserMessage(
               messagesToSend,
@@ -4838,18 +4533,6 @@ export function useChatActions(): {
             if (compressionContextLength <= 0) {
               compressionContextLength = findPersistedContextLength(messagesToSend)
             }
-            compressionConfig =
-              contextCompressionAllowed && compressionContextLength > 0
-                ? {
-                    enabled: true,
-                    contextLength: compressionContextLength,
-                    threshold: resolveCompressionThreshold(resolvedModelConfig),
-                    preCompressThreshold: 0.65,
-                    reservedOutputBudget:
-                      resolveCompressionReservedOutputBudget(resolvedModelConfig)
-                  }
-                : null
-
             // Build and inject a runtime reminder into the last user message
             const sessionSnapshot = useChatStore.getState().sessions.find((s) => s.id === sessionId)
             const sessionMode = sessionSnapshot?.mode ?? uiStore.mode
@@ -4930,36 +4613,6 @@ export function useChatActions(): {
               messages: messagesToSend
             })
 
-            const maxParallelTools = getConfiguredMaxParallelTools()
-            const sidecarRequest = buildSidecarAgentRunRequest({
-              messages: messagesToSend,
-              provider: agentProviderConfig,
-              tools: effectiveToolDefs,
-              runId: assistantMsgId,
-              sessionId,
-              workingFolder: sessionWorkingFolder,
-              maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
-              forceApproval: false,
-              maxParallelTools,
-              compression: compressionConfig,
-              imagePluginProvider: imagePluginConfig,
-              sessionMode: 'agent',
-              planMode: isPlanMode,
-              planModeAllowedTools: isPlanMode ? [...PLAN_MODE_ALLOWED_TOOLS] : undefined,
-              goalRunSource: source === 'continue' ? 'continue' : 'user_turn',
-              teamToolsActive: settings.teamToolsEnabled && !!activeTeam,
-              activeTeamName: activeTeam?.name,
-              pluginId: session?.pluginId,
-              pluginChatId: session?.externalChatId
-                ? extractPluginChatId(session.externalChatId)
-                : undefined,
-              pluginChatType: session?.pluginChatType,
-              pluginSenderId: session?.pluginSenderId,
-              pluginSenderName: session?.pluginSenderName,
-              sshConnectionId: session?.sshConnectionId,
-              includeFullDebugBody: settings.devMode && shouldKeepFullDebugBody()
-            })
-
             const tsAgentModelSource = explicitTsRuntimeModelSource({
               sessionModelSource: session?.modelSource,
               providerId: agentProviderConfig.providerId,
@@ -4967,6 +4620,25 @@ export function useChatActions(): {
             })
             const tsAgentWorkspaceId =
               session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId
+            const imageWorkspaceId = imagePluginConfig?.providerId?.startsWith('ola-managed:')
+              ? imagePluginConfig.providerId.slice('ola-managed:'.length)
+              : undefined
+            const imageWorkspace = imageWorkspaceId
+              ? useWorkspaceStore
+                  .getState()
+                  .getWorkspaces()
+                  .find((workspace) => workspace.id === imageWorkspaceId)
+              : undefined
+            const imageModelSource = imagePluginConfig
+              ? explicitTsRuntimeModelSource({
+                  providerId: imagePluginConfig.providerId,
+                  modelId: imagePluginConfig.model,
+                  managedWorkspaceKind:
+                    imageWorkspace?.kind === 'ola-personal' || imageWorkspace?.kind === 'ola-team'
+                      ? imageWorkspace.kind
+                      : undefined
+                })
+              : null
             // Capture the project activation at submit time. The Main-owned
             // runtime resolves extension configuration itself, so neither
             // extension secrets nor mutable Renderer state enter the run.
@@ -4975,7 +4647,7 @@ export function useChatActions(): {
               .getActiveExtensionIds(session?.projectId ?? null)
             // Only declarative HTTP extension names are equivalent to the
             // Main-owned runtime adapter. JS extensions deliberately retain
-            // their sidecar path until they have the same isolation contract.
+            // JS extensions remain unavailable until the TS isolation contract is complete.
             const tsAgentExtensionToolNames = new Set(
               useExtensionStore
                 .getState()
@@ -4999,71 +4671,45 @@ export function useChatActions(): {
               hasPlan: isPlanMode || Boolean(pendingPlanRevisionContext),
               hasGoal: hasGoalContextForRun,
               hasSsh: Boolean(session?.sshConnectionId),
+              sshConnectionId: session?.sshConnectionId,
               hasPlugin: Boolean(session?.pluginId),
               hasChannels: scopedActiveChannels.length > 0,
               hasTeam: Boolean(activeTeam),
               hasImages: messagesToSend.some(messageContainsImage),
-              extensionToolNames: [...tsAgentExtensionToolNames]
+              extensionToolNames: [...tsAgentExtensionToolNames],
+              ...(session?.pluginId && session.externalChatId
+                ? {
+                    channelContext: {
+                      pluginId: session.pluginId,
+                      chatId: extractPluginChatId(session.externalChatId) ?? session.externalChatId
+                    }
+                  }
+                : {})
             })
             const useTsAgent =
               !!tsAgentEligibility?.eligible && (await isTsRuntimeAvailable().catch(() => false))
 
-            const useSidecar =
-              !useTsAgent &&
-              (await canUseSidecarForAgentRun({
-                messages: messagesToSend,
-                provider: agentProviderConfig,
-                tools: effectiveToolDefs,
-                sessionId,
-                workingFolder: sessionWorkingFolder,
-                sshConnectionId: session?.sshConnectionId,
-                maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
-                forceApproval: false,
-                compression: compressionConfig,
-                isPlanMode,
-                sessionMode: mode,
-                desktopControlMode: promptAllowsToolContext ? desktopControlMode : 'disabled',
-                hasChannels: promptAllowsToolContext && scopedActiveChannels.length > 0,
-                hasMcps: promptAllowsToolContext && activeMcps.length > 0,
-                teamToolsActive: settings.teamToolsEnabled && !!activeTeam,
-                activeTeamName: activeTeam?.name,
-                imagePluginProvider: imagePluginConfig
-              }))
-
+            // The TS eligibility gate is authoritative; unsupported runs fail
+            // explicitly instead of entering a removed runtime route.
             console.log('[ChatActions] Agent execution path', {
               sessionId,
-              useSidecar,
               useTsAgent,
-              executionPath: useTsAgent ? 'ts-runtime' : 'sidecar',
+              executionPath: useTsAgent ? 'ts-runtime' : 'unavailable',
               providerType: agentProviderConfig.type,
               toolNames: effectiveToolDefs.map((tool) => tool.name),
-              hasSidecarRequest: !!sidecarRequest,
               isPlanMode,
               sessionMode: mode,
               hasChannels: promptAllowsToolContext && scopedActiveChannels.length > 0,
               hasMcps: promptAllowsToolContext && activeMcps.length > 0
             })
 
-            if (!useTsAgent && !useSidecar) {
-              throw new Error(
-                'Native sidecar agent runtime is required for this provider, but its capability check failed.'
-              )
-            }
-
-            if (!useTsAgent && !sidecarRequest) {
-              throw new Error('Main-process agent request build failed')
+            if (!useTsAgent) {
+              throw new Error('TS_RUNTIME_AGENT_UNAVAILABLE')
             }
 
             setRequestTraceInfo(assistantMsgId, {
-              executionPath: useTsAgent ? 'ts-runtime' : 'sidecar'
+              executionPath: useTsAgent ? 'ts-runtime' : 'unavailable'
             })
-
-            if (useSidecar) {
-              const initialized = await agentBridge.initialize()
-              if (!initialized) {
-                throw new Error('Sidecar unavailable')
-              }
-            }
 
             const loop: AsyncIterable<AgentEvent> | AsyncIterable<TsRuntimeProjectedEvent> =
               useTsAgent && tsAgentEligibility?.eligible && tsAgentModelSource
@@ -5071,13 +4717,28 @@ export function useChatActions(): {
                     workspaceId: tsAgentWorkspaceId,
                     sessionId,
                     assistantMessageId: assistantMsgId,
+                    ...(activeTeam
+                      ? {
+                          teamContext: {
+                            teamName: activeTeam.name,
+                            memberName: 'lead'
+                          }
+                        }
+                      : {}),
                     modelSource: tsAgentModelSource,
+                    ...(imageModelSource ? { imageModelSource } : {}),
                     prompt: tsAgentEligibility.prompt,
+                    ...(tsAgentEligibility.promptImages.length
+                      ? { promptImages: tsAgentEligibility.promptImages }
+                      : {}),
                     ...(tsAgentEligibility.history.length
                       ? { history: tsAgentEligibility.history }
                       : {}),
                     modelOptions: tsAgentEligibility.modelOptions,
                     ...(sessionWorkingFolder ? { workingDirectory: sessionWorkingFolder } : {}),
+                    ...(session?.sshConnectionId
+                      ? { sshConnectionId: session.sshConnectionId }
+                      : {}),
                     ...(tsAgentExtensionIds.length ? { extensionIds: tsAgentExtensionIds } : {}),
                     toolNames: effectiveToolDefs.map((tool) => tool.name),
                     maxTurns: DEFAULT_AGENT_MAX_ITERATIONS,
@@ -5085,14 +4746,9 @@ export function useChatActions(): {
                       useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId),
                     signal: abortController.signal
                   })
-                : createSidecarEventStream({
-                    sessionId,
-                    sidecarRequest,
-                    signal: abortController.signal,
-                    logLabel: 'agent',
-                    onRunIdAssigned: (runId) =>
-                      useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
-                  })
+                : (() => {
+                    throw new Error('TS_RUNTIME_AGENT_UNAVAILABLE')
+                  })()
 
             let thinkingDone = false
             let hasThinkingDelta = false
@@ -5648,6 +5304,10 @@ export function useChatActions(): {
                 }
 
                 case 'runtime_interaction_requested': {
+                  if (event.interaction.kind === 'question') {
+                    await resolveTsRuntimeQuestion(event, sessionId!)
+                    break
+                  }
                   // The TS scheduler persists this request before exposing it.
                   // Reuse the existing approval UI and always resolve malformed
                   // or unsupported interactions so an Execute run cannot stall.
@@ -5663,7 +5323,7 @@ export function useChatActions(): {
                     })
                     break
                   }
-                  const request = normalizeSidecarApprovalRequest({
+                  const request = normalizeRuntimeApprovalRequest({
                     runId: event.interaction.runId,
                     sessionId: sessionId!,
                     toolCall: event.interaction.payload
@@ -5709,6 +5369,7 @@ export function useChatActions(): {
                   runUsedTools = true
                   runToolCalls.set(event.toolCall.id, event.toolCall)
                   liveToolNames.set(event.toolCall.id, event.toolCall.name)
+                  refreshTsRuntimePlan(sessionId!, event.toolCall.name, event.toolCall.status)
                   clearToolInputPending(event.toolCall.id)
                   if (event.toolCall.name === 'Write') {
                     console.log('[WriteTrace] tool_call_result', {
@@ -5762,7 +5423,7 @@ export function useChatActions(): {
                   }
                   if (
                     event.toolCall.status === 'completed' &&
-                    NATIVE_TASK_TOOL_NAMES.has(event.toolCall.name) &&
+                    PERSISTED_TASK_TOOL_NAMES.has(event.toolCall.name) &&
                     !useTeamStore.getState().activeTeam &&
                     isSessionForeground(sessionId!)
                   ) {
@@ -5842,7 +5503,6 @@ export function useChatActions(): {
                         if (activeAbortController && !activeAbortController.signal.aborted) {
                           activeAbortController.abort()
                         }
-                        void cancelSidecarRun(sessionId!)
                       })
                     } else {
                       console.log(
@@ -6006,7 +5666,7 @@ export function useChatActions(): {
                           event.debugInfo.providerBuiltinId ??
                           agentProviderConfig.providerBuiltinId,
                         model: event.debugInfo.model ?? agentProviderConfig.model,
-                        executionPath: event.debugInfo.executionPath ?? 'sidecar'
+                        executionPath: event.debugInfo.executionPath ?? 'unavailable'
                       },
                       agentRequestCacheShape
                     )
@@ -6191,7 +5851,7 @@ export function useChatActions(): {
                 .getSessionMessages(sessionId!)
                 .find((message) => message.id === assistantMsgId)
               const runOutcome: RunOutcomeMeta = {
-                runId: sessionSidecarRunIds.get(sessionId!) ?? assistantMsgId,
+                runId: assistantMsgId,
                 lifecycle: outcome.status,
                 loopEndReason: resolvedLoopEndReason,
                 startedAt: loopStartedAt,
@@ -6293,7 +5953,6 @@ export function useChatActions(): {
             useRuntimeProjectionStore.getState().finish(sessionId, terminalStatus)
             setStreamingMessageIdWithSync(sessionId, null)
             sessionAbortControllers.delete(sessionId)
-            sessionSidecarRunIds.delete(sessionId)
             stopAfterCurrentRequestSessions.delete(sessionId)
             // Derive global isRunning from remaining running sessions
             const hasOtherRunning = Object.values(useAgentStore.getState().runningSessions).some(
@@ -6376,7 +6035,7 @@ export function useChatActions(): {
     })
   }, [])
 
-  // IPC listeners (session-control, sidecar tools/approval) are registered
+  // IPC listeners (session-control and runtime tools/approval) are registered
   // at module level above — no useEffect needed here.
 
   // Cron session delivery is handled by the main-process CronAgent background runtime.
@@ -6662,7 +6321,7 @@ export function useChatActions(): {
       }
 
       const preTokens = estimateManualCompressionInputTokens(messages, config)
-      const { messages: compressed, result } = await runSidecarContextCompression({
+      const { messages: compressed, result } = await runTsContextCompression({
         messages,
         provider: config,
         preTokens
@@ -6798,7 +6457,7 @@ export function useChatActions(): {
 
     try {
       const preTokens = estimateManualCompressionInputTokens(messages, config)
-      const { messages: compressed, result } = await runSidecarContextCompression({
+      const { messages: compressed, result } = await runTsContextCompression({
         messages,
         provider: config,
         focusPrompt: focusPrompt || undefined,
@@ -7080,7 +6739,7 @@ async function runSimpleChat(
   let requestMessages = ensureRequestContainsExpectedUserMessage(
     await chatStore.getSessionMessagesForRequest(sessionId, {
       includeTrailingAssistantPlaceholder: options?.includeTrailingAssistantPlaceholder ?? false,
-      requestContextMaxMessages: SIDECAR_CONTEXT_SOURCE_MAX_MESSAGES
+      requestContextMaxMessages: RUNTIME_CONTEXT_SOURCE_MAX_MESSAGES
     }),
     options?.expectedUserMessage
   )
@@ -7100,9 +6759,6 @@ async function runSimpleChat(
     messages: requestMessages
   })
   const streamDeltaBuffer = createStreamDeltaBuffer(sessionId, assistantMsgId)
-  const requestHasImages = requestMessages.some(messageContainsImage)
-  const settings = useSettingsStore.getState()
-  const useProviderTurnOnlyPath = settings.devMode || requestHasImages
   const session = chatStore.sessions.find((item) => item.id === sessionId)
   const workspaceId = session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId
   // Capture project activation at submission time. The Main runtime receives a
@@ -7116,10 +6772,6 @@ async function runSimpleChat(
     modelId: config.model
   })
   const tsRuntimeEligibility =
-    !requestHasImages &&
-    !isPlanMode &&
-    !session?.sshConnectionId &&
-    !session?.pluginId &&
     tsRuntimeModelSource &&
     (tsRuntimeModelSource.kind === 'local' || tsRuntimeModelSource.workspaceId === workspaceId)
       ? assessTsRuntimeTextEligibility({
@@ -7135,94 +6787,27 @@ async function runSimpleChat(
       workingDirectory: session?.workingFolder
     }) &&
     (await isTsRuntimeAvailable().catch(() => false))
-  const nativeProvider = isNativeSidecarProviderConfig(config)
-  const sidecarRequest = buildSidecarAgentRunRequest({
-    messages: requestMessages,
-    provider: config,
-    tools: toolDefinitions,
-    sessionId,
-    maxIterations: toolDefinitions.length ? DEFAULT_AGENT_MAX_ITERATIONS : 1,
-    forceApproval: false,
-    sessionMode: 'chat'
-  })
-
-  if (!sidecarRequest) {
-    console.warn('[ChatActions] Failed to build sidecar chat request', {
-      sessionId,
-      assistantMsgId,
-      providerType: config.type,
-      messageCount: requestMessages.length,
-      messageRoles: requestMessages.map((message) => message.role),
-      messageContentKinds: requestMessages.map((message) =>
-        typeof message.content === 'string'
-          ? 'string'
-          : message.content.map((block) => block.type).join(',')
-      )
-    })
-  }
-
-  const supportsAgentRun =
-    nativeProvider && !useProviderTurnOnlyPath && sidecarRequest
-      ? await canSidecarHandle('agent.run')
-      : false
-  const supportsProvider = sidecarRequest
-    ? nativeProvider &&
-      !useProviderTurnOnlyPath &&
-      (await canSidecarHandle(`provider.${config.type}`))
-    : false
-  const useSidecar =
-    nativeProvider &&
-    !useProviderTurnOnlyPath &&
-    !!sidecarRequest &&
-    supportsAgentRun &&
-    supportsProvider
-
-  console.log('[ChatActions] Simple chat sidecar decision', {
+  console.log('[ChatActions] Simple chat TS runtime decision', {
     sessionId,
     assistantMsgId,
     providerType: config.type,
-    mappedProviderType: sidecarRequest?.provider.type,
-    nativeProvider,
-    hasSidecarRequest: !!sidecarRequest,
-    supportsAgentRun,
-    supportsProvider,
-    requestHasImages,
-    devMode: settings.devMode,
-    useProviderTurnOnlyPath,
-    useSidecar,
     useTsRuntime,
     toolNames,
     tsRuntimeEligibility: tsRuntimeEligibility?.eligible ? 'eligible' : tsRuntimeEligibility?.reason
   })
 
-  if (!sidecarRequest && !useProviderTurnOnlyPath) {
-    throw new Error('Sidecar chat request build failed')
-  }
-  if (toolDefinitions.length && !useTsRuntime && !useSidecar) {
-    throw new Error('Tool-capable chat requires an available Agent runtime')
+  if (!useTsRuntime || !tsRuntimeEligibility?.eligible || !tsRuntimeModelSource) {
+    throw new Error('TS_RUNTIME_TEXT_REQUIRED')
   }
 
   setRequestTraceInfo(assistantMsgId, {
-    executionPath: useTsRuntime ? 'ts-runtime' : 'sidecar'
+    executionPath: 'ts-runtime'
   })
 
   let runFailed = false
   try {
     let stream: AsyncIterable<AgentEvent | StreamEvent | TsRuntimeProjectedEvent>
-    if (useSidecar) {
-      const initialized = await agentBridge.initialize()
-      if (!initialized) {
-        throw new Error('Sidecar unavailable')
-      }
-      stream = createSidecarEventStream({
-        sessionId,
-        sidecarRequest,
-        signal,
-        logLabel: 'chat',
-        onRunIdAssigned: (runId) =>
-          useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId)
-      })
-    } else if (useTsRuntime && tsRuntimeEligibility?.eligible && tsRuntimeModelSource) {
+    if (useTsRuntime && tsRuntimeEligibility?.eligible && tsRuntimeModelSource) {
       stream = streamTsRuntimeTextTurn({
         workspaceId,
         sessionId,
@@ -7234,17 +6819,13 @@ async function runSimpleChat(
         ...(session?.workingFolder?.trim()
           ? { workingDirectory: session.workingFolder.trim() }
           : {}),
+        ...(session?.sshConnectionId ? { sshConnectionId: session.sshConnectionId } : {}),
         ...(activeExtensionIds.length ? { extensionIds: activeExtensionIds } : {}),
         ...(toolNames.length ? { toolNames } : {}),
         signal
       })
     } else {
-      stream = streamSidecarProviderTurn({
-        messages: requestMessages,
-        tools: [],
-        provider: config,
-        signal
-      })
+      throw new Error('TS_RUNTIME_TEXT_REQUIRED')
     }
 
     let thinkingDone = false
@@ -7368,6 +6949,7 @@ async function runSimpleChat(
           }
           break
         case 'tool_call_result':
+          refreshTsRuntimePlan(sessionId, event.toolCall.name, event.toolCall.status)
           if (isSessionForeground(sessionId)) {
             useAgentStore.getState().updateToolCall(
               event.toolCall.id,
@@ -7382,6 +6964,10 @@ async function runSimpleChat(
           }
           break
         case 'runtime_interaction_requested': {
+          if (event.interaction.kind === 'question') {
+            await resolveTsRuntimeQuestion(event, sessionId)
+            break
+          }
           // The TS scheduler persists an interaction before it emits it. Reuse
           // the existing approval UI, but reject interaction kinds that do not
           // yet have a dedicated renderer rather than leaving a run stranded.
@@ -7397,7 +6983,7 @@ async function runSimpleChat(
             })
             break
           }
-          const request = normalizeSidecarApprovalRequest({
+          const request = normalizeRuntimeApprovalRequest({
             runId: event.interaction.runId,
             sessionId,
             toolCall: event.interaction.payload

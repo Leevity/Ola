@@ -5,7 +5,6 @@ import * as path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
 import { recordLocalTextWriteChange } from './agent-change-handlers'
 import { safeSendMessagePackToWindow } from '../window-ipc'
-import { getNativeWorker } from '../lib/native-worker'
 import {
   deleteLocalPath,
   globLocalFiles,
@@ -66,7 +65,7 @@ type GrepOutputMode = 'matches' | 'files_with_matches' | 'files_without_matches'
 type GrepLimitReason = 'max_results' | 'max_output_bytes' | 'timeout' | null
 type SearchBackend = 'local' | 'ssh' | 'cron'
 type SearchPathStyle = 'absolute' | 'relative_to_search_root'
-type SearchEngine = 'git_grep' | 'ripgrep' | 'native_aot' | 'node'
+type SearchEngine = 'git_grep' | 'ripgrep' | 'node'
 
 type SearchMeta = {
   backend: SearchBackend
@@ -142,14 +141,6 @@ function getParentDirectoryForWrite(filePath: string): string | null {
   return parent && parent !== '.' && parent !== trimmed ? parent : null
 }
 
-async function nativeToolRequest<T>(
-  method: string,
-  params: Record<string, unknown>,
-  timeoutMs?: number
-): Promise<T> {
-  return await getNativeWorker().request<T>(method, params, timeoutMs)
-}
-
 const GREP_IGNORE_DIR_NAMES = [
   'node_modules',
   '.git',
@@ -211,7 +202,6 @@ async function deletePreviousProfileAvatar(
   }
 }
 
-const GREP_TIMEOUT_MS = 30000
 const MAX_SEARCH_DEPTH = 50
 
 function createSearchMeta(args: {
@@ -753,17 +743,26 @@ async function handleFsSearchFiles(args: FsSearchFilesArgs): Promise<unknown> {
 async function handleFsGrep(args: FsGrepArgs): Promise<unknown> {
   const searchTarget = path.resolve(args.path || process.cwd())
   try {
-    // The TS engine is the default for the supported local-search surface.
-    // Advanced Git/index, pathspec, multiline and textconv modes retain the
-    // Native fallback until their parity gates are complete.
+    // The TS engine is the only production path. Unsupported advanced modes
+    // fail closed with a typed result instead of invoking a fallback runtime.
     if (canUseTsLocalGrep(args)) {
       return await grepLocalFiles({ ...args, path: searchTarget })
     }
-    return await nativeToolRequest<GrepToolResult>(
-      'fs/grep',
-      { ...args, path: searchTarget },
-      GREP_TIMEOUT_MS + 5_000
-    )
+    return {
+      kind: 'grep',
+      matches: [],
+      meta: createSearchMeta({
+        searchRoot: searchTarget,
+        pattern: typeof args.pattern === 'string' ? args.pattern : '',
+        include: typeof args.include === 'string' ? args.include : null,
+        exclude: typeof args.exclude === 'string' ? args.exclude : null,
+        outputMode: 'matches',
+        engine: 'node',
+        pathStyle: 'relative_to_search_root'
+      }),
+      output: '',
+      error: 'TS_GREP_UNSUPPORTED_OPTIONS'
+    } satisfies GrepToolResult
   } catch (err) {
     return {
       kind: 'grep',
@@ -774,7 +773,7 @@ async function handleFsGrep(args: FsGrepArgs): Promise<unknown> {
         include: typeof args.include === 'string' ? args.include : null,
         exclude: typeof args.exclude === 'string' ? args.exclude : null,
         outputMode: 'matches',
-        engine: 'native_aot',
+        engine: 'node',
         pathStyle: 'relative_to_search_root'
       }),
       output: '',

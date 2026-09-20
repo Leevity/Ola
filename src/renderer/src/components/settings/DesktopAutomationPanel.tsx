@@ -33,23 +33,34 @@ export function DesktopAutomationPanel(): React.JSX.Element {
   const [lastReplay, setLastReplay] = useState<DesktopFlowReplayResult | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
-    const nextStatus = (await ipcClient.invoke('desktop-recorder:status', {
-      workspaceId
-    })) as DesktopFlowRecordingStatus
-    const nextCurrent = (await ipcClient.invoke('desktop-recorder:current', {
-      workspaceId
-    })) as DesktopFlow | null
-    const nextFlows = (await ipcClient.invoke('desktop-flow:list', {
-      workspaceId
-    })) as DesktopFlow[]
-    const nextRuns = (await ipcClient.invoke('desktop-flow:runs-list', {
-      workspaceId
-    })) as DesktopFlowRun[]
-    if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
-    setStatus(nextStatus)
-    setCurrent(nextCurrent)
-    setFlows(nextFlows)
-    setRuns(nextRuns)
+    try {
+      const nextStatus = (await ipcClient.invoke('desktop-recorder:status', {
+        workspaceId
+      })) as DesktopFlowRecordingStatus
+      const nextCurrent = (await ipcClient.invoke('desktop-recorder:current', {
+        workspaceId
+      })) as DesktopFlow | null
+      const nextFlows = (await ipcClient.invoke('desktop-flow:list', {
+        workspaceId
+      })) as DesktopFlow[]
+      const nextRuns = (await ipcClient.invoke('desktop-flow:runs-list', {
+        workspaceId
+      })) as DesktopFlowRun[]
+      if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
+      setStatus(nextStatus)
+      setCurrent(nextCurrent)
+      setFlows(nextFlows)
+      setRuns(nextRuns)
+    } catch (error) {
+      // A local workspace may be unavailable while the account directory is
+      // offline or during a guarded workspace transition. Keep the page
+      // usable without leaking an unhandled rejection into the renderer.
+      if (!String(error).includes('DESKTOP_FLOW_WORKSPACE_UNAVAILABLE')) throw error
+      setStatus(null)
+      setCurrent(null)
+      setFlows([])
+      setRuns([])
+    }
   }, [workspaceId])
 
   useEffect(() => {
@@ -59,7 +70,7 @@ export function DesktopAutomationPanel(): React.JSX.Element {
     setFlows([])
     setRuns([])
     setLastReplay(null)
-    void refresh()
+    void refresh().catch(() => {})
     void (async () => {
       try {
         for (let round = 0; round < 10; round++) {
@@ -77,7 +88,8 @@ export function DesktopAutomationPanel(): React.JSX.Element {
         if (!cancelled && useWorkspaceStore.getState().activeWorkspaceId === workspaceId)
           await refresh()
       } catch {
-        // The local flow list remains usable while Native is unavailable.
+        // Refresh failures are surfaced by the next explicit refresh; there is
+        // no second persistence store to fall back to.
       }
     })()
     return () => {

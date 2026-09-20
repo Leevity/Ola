@@ -12,7 +12,7 @@ interface ConnectionActivity {
   connected: boolean
 }
 
-/** Tracks UI-owned SFTP links, including a connect still awaiting the Native Worker. */
+/** Tracks UI-owned SFTP links, including a connect still awaiting the Main runtime. */
 export class SftpWorkspaceActivity {
   private readonly byWindow = new Map<number, Map<string, ConnectionActivity>>()
   private nextEpoch = 0

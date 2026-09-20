@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const hosts = new Map<number, Record<string, unknown>>()
+const viewEvents = new Map<string, (...args: unknown[]) => void>()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -15,10 +16,23 @@ vi.mock('electron', () => ({
   },
   WebContentsView: class {
     webContents = {
+      id: 100,
       isDestroyed: () => false,
       once: vi.fn(),
+      on: vi.fn((event: string, listener: (...args: unknown[]) => void) => {
+        viewEvents.set(event, listener)
+      }),
+      setWindowOpenHandler: vi.fn(),
       close: vi.fn(),
-      loadURL: vi.fn(async () => undefined)
+      loadURL: vi.fn(async () => undefined),
+      getURL: vi.fn(() => 'https://example.com/'),
+      getTitle: vi.fn(() => 'Example'),
+      canGoBack: vi.fn(() => false),
+      canGoForward: vi.fn(() => false),
+      goBack: vi.fn(),
+      goForward: vi.fn(),
+      reload: vi.fn(),
+      stop: vi.fn()
     }
     setBounds = vi.fn()
   },
@@ -30,7 +44,10 @@ vi.mock('electron', () => ({
 import { WebContentsViewBrowserService } from '../../src/main/browser/web-contents-view-service'
 
 describe('WebContentsViewBrowserService', () => {
-  beforeEach(() => hosts.clear())
+  beforeEach(() => {
+    hosts.clear()
+    viewEvents.clear()
+  })
 
   it('creates an owned view and navigates only through its host', async () => {
     const host = { id: 10, once: vi.fn() }
@@ -45,7 +62,14 @@ describe('WebContentsViewBrowserService', () => {
     })
 
     expect(tab.ownership.controller).toBeNull()
-    await service.navigate('view-a', 10, 'https://example.com')
+    const events: unknown[] = []
+    service.onNavigationEvent((event) => events.push(event))
+    viewEvents.get('did-navigate')?.()
+    expect(events).toMatchObject([{ tabId: 'view-a', type: 'did-navigate' }])
+    const preventDefault = vi.fn()
+    viewEvents.get('will-navigate')?.({ preventDefault }, 'file:///tmp/blocked')
+    expect(preventDefault).toHaveBeenCalledOnce()
+    await service.navigate('view-a', 10, 'goto', 'https://example.com')
     expect(() => service.setBounds('view-a', 11, { x: 0, y: 0, width: 1, height: 1 })).toThrow(
       'BROWSER_TAB_NOT_FOUND'
     )
@@ -61,8 +85,22 @@ describe('WebContentsViewBrowserService', () => {
       hostWebContentsId: 10,
       bounds: { x: 0, y: 0, width: 100, height: 100 }
     })
-    await expect(service.navigate('view-b', 10, 'file:///tmp/x')).rejects.toThrow(
+    await expect(service.navigate('view-b', 10, 'goto', 'file:///tmp/x')).rejects.toThrow(
       'BROWSER_URL_INVALID'
     )
+  })
+
+  it('does not allow another host to destroy the view', () => {
+    hosts.set(10, { id: 10, once: vi.fn() })
+    const service = new WebContentsViewBrowserService()
+    service.createTab({
+      tabId: 'view-c',
+      workspaceId: 'local-personal',
+      profileId: 'profile-c',
+      hostWebContentsId: 10,
+      bounds: { x: 0, y: 0, width: 100, height: 100 }
+    })
+    expect(() => service.destroyTab('view-c', 11)).toThrow('BROWSER_TAB_NOT_FOUND')
+    expect(service.destroyTab('view-c', 10)).toBe(true)
   })
 })

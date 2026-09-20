@@ -10,6 +10,7 @@ import {
 } from '../../runtime/storage/business-handover-coordinator'
 import {
   businessWritePromotionStatus,
+  closeBusinessWriteCanary,
   promoteBusinessWriteRepository
 } from '../db/business-write-canary'
 import { writeBusinessHandoverMarker } from '../db/business-handover-state'
@@ -78,9 +79,13 @@ export function registerMigrationHandlers(): void {
       ...businessWritePromotionStatus(),
       inFlight: businessHandoverInFlight !== null,
       runtimeAvailable: desktopRuntime.isAvailable,
-      enabled: process.env.OLA_ENABLE_BUSINESS_HANDOVER === '1',
+      // Availability is gated by the read-only preflight below. The action
+      // itself still requires a trusted main frame and explicit confirmation
+      // immediately before quiescing legacy writers.
+      enabled: true,
       handoverReady: readiness.ready,
-      handoverBlocker: readiness.reason
+      handoverBlocker: readiness.reason,
+      handoverWarning: readiness.warning
     }
   })
 
@@ -88,8 +93,6 @@ export function registerMigrationHandlers(): void {
     'migration:business-handover',
     async (args, event) => {
       assertTrustedMainFrame(event)
-      if (process.env.OLA_ENABLE_BUSINESS_HANDOVER !== '1')
-        throw new Error('BUSINESS_HANDOVER_NOT_ENABLED')
       if (!desktopRuntime.isAvailable) throw new Error('TS_RUNTIME_NOT_READY')
       if (args?.confirm !== true) throw new Error('BUSINESS_HANDOVER_CONFIRMATION_REQUIRED')
       const current = businessWritePromotionStatus()
@@ -102,13 +105,22 @@ export function registerMigrationHandlers(): void {
         const result = await handoverBusinessDatabase({
           sourcePath,
           backupDirectory,
-          quiesceLegacyWriter: quiesceDesktopLegacyBusinessWriter
+          quiesceLegacyWriter: async () => {
+            await quiesceDesktopLegacyBusinessWriter()
+            // The default TS direct writer must release its SQLite lease before
+            // the handover snapshot is copied and a verified owner is promoted.
+            await closeBusinessWriteCanary()
+          }
         })
         writeBusinessHandoverMarker({
           manifestPath: result.snapshot.manifestPath,
           backupPath: result.snapshot.backupPath
         })
         promoteBusinessWriteRepository(result.repository, result.snapshot.manifestPath)
+        const promoted = businessWritePromotionStatus()
+        if (!promoted.promoted || promoted.handoverManifestPath !== result.snapshot.manifestPath) {
+          throw new Error('BUSINESS_HANDOVER_PROMOTION_NOT_CONFIRMED')
+        }
         if (process.env.OLA_ENABLE_TS_CHANNEL_RESUME === '1') {
           await resumeDesktopTsChannelWriter()
         }

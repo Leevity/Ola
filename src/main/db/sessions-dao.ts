@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { canaryGetSession, canaryListSessions } from './legacy-read-canary'
 import { businessWriteCanary } from './business-write-canary'
 
@@ -48,7 +48,11 @@ interface SessionClearAllResult {
 }
 
 async function requestMutation(method: string, params: object): Promise<SessionMutationResult> {
-  const result = await getNativeWorker().request<SessionMutationResult>(method, params, 120_000)
+  const result = await getTsDatabaseRouteGuard().request<SessionMutationResult>(
+    method,
+    params,
+    120_000
+  )
   if (!result.success) {
     throw new Error(result.error || `Native session mutation failed: ${method}`)
   }
@@ -60,9 +64,14 @@ export async function listSessions(
   offset = 0,
   workspaceId?: string
 ): Promise<SessionRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.sessions<SessionRow>(workspaceId, limit, offset)
+  }
   const migrated = await canaryListSessions({ workspaceId, limit, offset })
   if (migrated) return migrated
-  return getNativeWorker().request<SessionRow[]>(
+  return getTsDatabaseRouteGuard().request<SessionRow[]>(
     'db/sessions-list',
     { limit, offset, workspaceId },
     120_000
@@ -73,9 +82,14 @@ export async function getSession(
   id: string,
   workspaceId?: string
 ): Promise<SessionRow | undefined> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return (await writer.session<SessionRow>(id, workspaceId)) ?? undefined
+  }
   const migrated = await canaryGetSession({ id, workspaceId })
   if (migrated !== undefined) return migrated ?? undefined
-  const result = await getNativeWorker().request<SessionFindResult>(
+  const result = await getTsDatabaseRouteGuard().request<SessionFindResult>(
     'db/sessions-get',
     { id, workspaceId },
     120_000
@@ -180,7 +194,7 @@ export async function deleteSession(id: string, workspaceId?: string): Promise<v
 export async function clearAllSessions(workspaceId: string): Promise<SessionClearAllResult> {
   const writer = businessWriteCanary()
   if (writer) return writer.clearAllSessions(workspaceId)
-  const result = await getNativeWorker().request<SessionClearAllResult>(
+  const result = await getTsDatabaseRouteGuard().request<SessionClearAllResult>(
     'db/sessions-clear-all',
     { workspaceId },
     120_000

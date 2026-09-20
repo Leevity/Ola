@@ -1,5 +1,4 @@
 import * as path from 'path'
-import { getNativeWorker } from '../lib/native-worker'
 import { businessWriteCanary } from '../db/business-write-canary'
 import { olaDataRoot } from '../lib/ola-data-root'
 import { readChannelPlugins } from './channel-config-store'
@@ -10,16 +9,6 @@ import { safeSendMessagePackToWorkspaceWindow } from '../window-ipc'
 import type { ChannelEvent, ChannelInstance, ChannelIncomingMessageData } from './channel-types'
 import type { ChannelManager } from './channel-manager'
 import { tryHandleCommand } from './plugin-commands'
-
-interface NativePluginRouteSessionResult {
-  success: boolean
-  sessionId?: string | null
-  sessionTitle?: string | null
-  projectId?: string | null
-  workingFolder?: string | null
-  sshConnectionId?: string | null
-  error?: string | null
-}
 
 let _pluginManager: ChannelManager | null = null
 let channelTaskInbox: ChannelTaskInbox | null = null
@@ -189,17 +178,9 @@ async function handleChannelAutoReplyAsync(event: ChannelEvent): Promise<void> {
       modelSource: pluginInstance?.modelSource ? JSON.stringify(pluginInstance.modelSource) : null
     }
     const writer = businessWriteCanary()
-    const routedSession = writer
-      ? await writer.routeChannelSession(routeInput)
-      : await getNativeWorker().request<NativePluginRouteSessionResult>(
-          'db/plugin-route-session',
-          routeInput,
-          120_000
-        )
+    if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+    const routedSession = await writer.routeChannelSession(routeInput)
 
-    if ('success' in routedSession && (!routedSession.success || !routedSession.sessionId)) {
-      throw new Error(routedSession.error || 'Native plugin session routing failed')
-    }
     if (!routedSession.sessionId) throw new Error('Plugin session routing returned no session')
 
     const sessionId = routedSession.sessionId

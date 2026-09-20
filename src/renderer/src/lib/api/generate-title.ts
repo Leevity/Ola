@@ -1,6 +1,6 @@
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
-import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
+import { runTsTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { RESPONSES_SESSION_SCOPE_GENERATE_TITLE } from './responses-session-policy'
 import type { ProviderConfig, UnifiedMessage } from './types'
 import { SESSION_ICONS_PROMPT_LIST } from '@renderer/lib/constants/session-icons'
@@ -235,7 +235,7 @@ export async function generateSessionTitle(
     const abortController = new AbortController()
     const timeout = setTimeout(() => abortController.abort(), 15000)
 
-    const title = await runSidecarTextRequest({
+    const title = await runTsTextRequest({
       provider: scopedConfig,
       messages,
       signal: abortController.signal,

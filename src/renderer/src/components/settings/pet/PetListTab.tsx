@@ -36,7 +36,7 @@ import type {
   ProviderConfig,
   UnifiedMessage
 } from '@renderer/lib/api/types'
-import { streamNativeOpenAIImages } from '@renderer/lib/api/openai-images-provider'
+import { streamTsOpenAIImages } from '@renderer/lib/api/openai-images-provider'
 import { syncLegacyPetToDefaultPet } from '@renderer/lib/pet/default-pet-sync'
 import {
   optimizePetClaimDraft,
@@ -1034,7 +1034,7 @@ async function requestPetSpriteImage(
   ]
   let imageError: string | null = null
 
-  for await (const event of streamNativeOpenAIImages({ messages, config: provider })) {
+  for await (const event of streamTsOpenAIImages({ messages, config: provider })) {
     switch (event.type) {
       case 'image_generated': {
         const source = event.imageBlock?.source

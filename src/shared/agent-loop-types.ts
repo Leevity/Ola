@@ -1,4 +1,3 @@
-import type { RequestDebugInfoWire } from './agent-stream-protocol'
 import type {
   CanonicalContentBlock,
   ImageContentBlock,
@@ -38,6 +37,33 @@ export interface AgentRequestTiming {
   totalMs: number
   ttftMs?: number
   tps?: number
+}
+
+export interface RequestDebugInfoWire {
+  url: string
+  method: string
+  headers: Record<string, string>
+  body?: string
+  bodyRef?: string
+  bodyBytes?: number
+  contextWindowBody?: string
+  timestamp: number
+  providerId?: string
+  providerBuiltinId?: string
+  model?: string
+  transport?: 'http' | 'websocket'
+  fallbackReason?: string
+  reusedConnection?: boolean
+  websocketRequestKind?: 'warmup' | 'full' | 'incremental'
+  websocketIncrementalReason?: string
+  previousResponseId?: string
+  promptCacheKeyHash?: string
+  executionPath?: 'ts-runtime' | 'unavailable'
+  systemHash?: string
+  toolsHash?: string
+  messagePrefixHash?: string
+  toolCount?: number
+  cacheReadRatio?: number
 }
 
 // ---- Tool call state ----

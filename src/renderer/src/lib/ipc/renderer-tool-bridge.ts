@@ -4,12 +4,12 @@ import { handleNativePlanUiUpdate } from '@renderer/lib/tools/plan-native-ui'
 import { handleNativeTeamUiUpdate } from '@renderer/lib/agent/teams/team-native-ui'
 import { decodeIpcMessagePack, invokeMessagePack } from '@renderer/lib/ipc/messagepack-ipc-client'
 import {
-  SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL,
-  SIDECAR_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL
+  RUNTIME_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL,
+  RUNTIME_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL
 } from '../../../../shared/messagepack/binary-ipc'
 
-// Native AgentRuntime owns the loop and tool execution. This bridge is only
-// for renderer/UI boundaries that cannot live inside the native worker.
+// The TypeScript runtime owns the loop and tool execution. This bridge is only
+// for renderer/UI boundaries that cannot live inside the main process.
 
 type RendererToolRequestPayload = { requestId: string; method: string; params: unknown }
 type RendererToolResponsePayload = { requestId: string; result?: unknown; error?: string }
@@ -23,7 +23,7 @@ function getBridgeWindow(): RendererToolBridgeWindow {
 }
 
 async function sendRendererToolResponse(response: RendererToolResponsePayload): Promise<void> {
-  await invokeMessagePack(SIDECAR_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL, response)
+  await invokeMessagePack(RUNTIME_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL, response)
 }
 
 async function handleRendererToolRequest(payload: RendererToolRequestPayload): Promise<void> {
@@ -81,10 +81,10 @@ export function attachRendererToolBridge(): void {
   const bridgeWindow = getBridgeWindow()
   bridgeWindow.__olaRendererToolBridgeCleanup?.()
   bridgeWindow.__olaRendererToolBridgeCleanup = undefined
-  window.ola.ipc.removeAllListeners(SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL)
+  window.ola.ipc.removeAllListeners(RUNTIME_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL)
 
   const msgpackCleanup = window.ola.ipc.on(
-    SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL,
+    RUNTIME_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL,
     async (bytes: unknown) => {
       if (!(bytes instanceof ArrayBuffer || ArrayBuffer.isView(bytes))) return
       await handleRendererToolRequest(decodeIpcMessagePack<RendererToolRequestPayload>(bytes))

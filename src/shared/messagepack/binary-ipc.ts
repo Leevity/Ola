@@ -1,10 +1,10 @@
 ﻿import { decode, encode } from '@msgpack/msgpack'
 
-export const SIDECAR_APPROVAL_REQUEST_MSGPACK_CHANNEL = 'sidecar:approval-request:msgpack'
-export const SIDECAR_APPROVAL_RESPONSE_MSGPACK_CHANNEL = 'sidecar:approval-response:msgpack'
-export const SIDECAR_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL = 'sidecar:renderer-tool-request:msgpack'
-export const SIDECAR_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL =
-  'sidecar:renderer-tool-response:msgpack'
+export const RUNTIME_APPROVAL_REQUEST_MSGPACK_CHANNEL = 'runtime:approval-request:msgpack'
+export const RUNTIME_APPROVAL_RESPONSE_MSGPACK_CHANNEL = 'runtime:approval-response:msgpack'
+export const RUNTIME_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL = 'runtime:renderer-tool-request:msgpack'
+export const RUNTIME_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL =
+  'runtime:renderer-tool-response:msgpack'
 
 export const DIAGNOSTICS_MEMORY_SAMPLE_MSGPACK_CHANNEL = 'diagnostics:memory-sample:msgpack'
 

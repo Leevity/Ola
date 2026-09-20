@@ -9,10 +9,18 @@ import { teamCreateTool } from './tools/team-create'
 import { sendMessageTool } from './tools/send-message'
 import { teamDeleteTool } from './tools/team-delete'
 import { teamStatusTool } from './tools/team-status'
+import { teamTaskCreateTool, teamTaskUpdateTool } from './tools/team-task'
 import { getTeamRuntimeSnapshot } from './runtime-client'
 import { startTeamInboxPoller } from './inbox-poller'
 
-const TEAM_TOOLS = [teamCreateTool, sendMessageTool, teamStatusTool, teamDeleteTool]
+const TEAM_TOOLS = [
+  teamCreateTool,
+  sendMessageTool,
+  teamStatusTool,
+  teamDeleteTool,
+  teamTaskCreateTool,
+  teamTaskUpdateTool
+]
 
 export const TEAM_TOOL_NAMES = new Set(TEAM_TOOLS.map((t) => t.definition.name))
 

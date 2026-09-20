@@ -1,7 +1,10 @@
 import type { UnifiedMessage } from '../api/types'
 import type { ProviderConfig } from '../api/types'
 import { resolveLanguageName, type AppLanguage } from '../i18n-language'
-import { streamSidecarProviderTurn } from '../ipc/agent-bridge'
+import { streamTsProviderTurn } from '../ipc/agent-bridge'
+import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '../ipc/ts-runtime-bridge'
+import { resolveTsRuntimeModelBinding } from '../ipc/ts-runtime-model-binding'
+import { nanoid } from 'nanoid'
 
 export interface OptimizationOption {
   title: string
@@ -148,6 +151,78 @@ Begin with Step 1 now.`,
     }
   ]
 
+  const binding = resolveTsRuntimeModelBinding(providerConfig)
+  if (binding && (await isTsRuntimeAvailable())) {
+    for await (const event of streamTsRuntimeTextTurn({
+      workspaceId: binding.workspaceId,
+      sessionId: `prompt-optimizer:${nanoid()}`,
+      modelSource: binding.modelSource,
+      modelOptions: {
+        systemPrompt: OPTIMIZER_SYSTEM_PROMPT,
+        ...(providerConfig.maxTokens !== undefined ? { maxTokens: providerConfig.maxTokens } : {}),
+        ...(providerConfig.temperature !== undefined
+          ? { temperature: providerConfig.temperature }
+          : {}),
+        thinking: { type: 'disabled' }
+      },
+      prompt: messages[0].content as string,
+      toolNames: ['WriteOptimizedPrompts'],
+      maxTurns: 3,
+      signal
+    })) {
+      if (signal?.aborted) return
+      if (event.type === 'text_delta' && event.text) {
+        yield { type: 'text', content: event.text }
+      } else if (event.type === 'thinking_delta' && event.thinking) {
+        yield { type: 'thinking', content: event.thinking }
+      } else if (event.type === 'tool_use_generated') {
+        yield {
+          type: 'tool_call',
+          content: 'Generated optimization options',
+          toolCall: {
+            id: event.toolUseBlock.id,
+            name: event.toolUseBlock.name,
+            input: event.toolUseBlock.input
+          }
+        }
+      } else if (event.type === 'tool_call_result') {
+        try {
+          const parsed: unknown = JSON.parse(event.toolCall.output)
+          if (
+            parsed &&
+            typeof parsed === 'object' &&
+            (parsed as { __olaPromptOptimizationOptions?: unknown })
+              .__olaPromptOptimizationOptions === true &&
+            Array.isArray((parsed as { options?: unknown }).options)
+          ) {
+            const options = (parsed as { options: OptimizationOption[] }).options
+            if (options.length > 0) {
+              yield {
+                type: 'tool_call',
+                content: 'Generated optimization options',
+                options,
+                toolCall: {
+                  id: event.toolCall.id,
+                  name: event.toolCall.name,
+                  input: event.toolCall.input
+                }
+              }
+              yield { type: 'result', content: 'Optimization complete', options }
+              return
+            }
+          }
+        } catch {
+          // The compatibility result below keeps the UI stable on malformed output.
+        }
+      } else if (event.type === 'error') {
+        yield { type: 'result', content: '', options: [] }
+        return
+      }
+    }
+    yield { type: 'result', content: '', options: [] }
+    return
+  }
+
   let optimizedOptions: OptimizationOption[] = []
   let hasToolCall = false
   let iterationCount = 0
@@ -157,7 +232,7 @@ Begin with Step 1 now.`,
     iterationCount++
 
     try {
-      for await (const event of streamSidecarProviderTurn({
+      for await (const event of streamTsProviderTurn({
         messages,
         tools,
         provider: { ...providerConfig, systemPrompt: OPTIMIZER_SYSTEM_PROMPT },

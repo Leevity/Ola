@@ -56,7 +56,7 @@ import { ImageGenerationErrorCard } from '@renderer/components/chat/ImageGenerat
 import { ImagePreview } from '@renderer/components/chat/ImagePreview'
 import { ModelIcon, ProviderIcon } from '@renderer/components/settings/provider-icons'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
-import { streamNativeOpenAIImages } from '@renderer/lib/api/openai-images-provider'
+import { streamTsOpenAIImages } from '@renderer/lib/api/openai-images-provider'
 import type {
   AIModelConfig,
   AIProvider,
@@ -1137,7 +1137,7 @@ export function DrawPage(): React.JSX.Element {
     ]
 
     try {
-      for await (const event of streamNativeOpenAIImages({
+      for await (const event of streamTsOpenAIImages({
         messages,
         config: providerConfig,
         signal: controller.signal
@@ -1399,7 +1399,7 @@ export function DrawPage(): React.JSX.Element {
       let processed = false
 
       try {
-        for await (const event of streamNativeOpenAIImages({
+        for await (const event of streamTsOpenAIImages({
           messages,
           config: providerConfig,
           signal: controller.signal

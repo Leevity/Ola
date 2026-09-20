@@ -120,7 +120,7 @@ function classify(code: AgentErrorCode, message: string, errorType?: string): Ca
   const httpMatch = haystack.match(/\b([45]\d{2})\b/)
   const status = httpMatch ? Number(httpMatch[1]) : undefined
 
-  if (/sidecar|native worker|native runtime|local agent runtime/.test(haystack)) {
+  if (/ts-runtime|typescript runtime|local agent runtime/.test(haystack)) {
     return 'runtimeUnavailable'
   }
   if (/abort|cancel/.test(haystack)) return 'aborted'

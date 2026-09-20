@@ -92,7 +92,7 @@ import { cn } from '@renderer/lib/utils'
 import { WorkingFolderSelectorDialog } from '@renderer/components/chat/WorkingFolderSelectorDialog'
 import type { UnifiedMessage } from '@renderer/lib/api/types'
 import type { TaskProfile } from '@renderer/lib/task-profile'
-import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
+import { runTsTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { clampLeftSidebarWidth, LEFT_SIDEBAR_DEFAULT_WIDTH } from './right-panel-defs'
 
 const modeIcons: Record<SessionMode, React.ReactNode> = {
@@ -805,7 +805,7 @@ export function SessionListPanel(): React.JSX.Element {
           }
         ]
 
-        const nextTitle = await runSidecarTextRequest({
+        const nextTitle = await runTsTextRequest({
           messages,
           provider: {
             ...providerConfig,

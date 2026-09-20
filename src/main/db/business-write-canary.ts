@@ -1,5 +1,6 @@
-import { isAbsolute } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 import { BusinessRepository } from '../../runtime/storage/business-repository'
+import { olaDataRoot } from '../lib/ola-data-root'
 
 let repository: BusinessRepository | null = null
 let repositoryKey: string | null = null
@@ -7,26 +8,49 @@ let promotedRepository: BusinessRepository | null = null
 let promotedRepositoryKey: string | null = null
 
 /**
- * Explicit opt-in for a verified handover copy. An enabled writer never
- * falls back to Native after a failed mutation: doing so could split one user
- * action across two databases and make rollback impossible to reason about.
+ * TS is the default local business writer. An explicit handover configuration
+ * still opens a verified copy, and neither mode falls back to Native after a
+ * failed mutation: splitting one user action across two databases would make
+ * rollback impossible to reason about.
  */
 export function businessWriteCanary(): BusinessRepository | null {
   if (promotedRepository) return promotedRepository
-  if (process.env.OLA_TS_BUSINESS_WRITES !== '1') return null
-  const path = process.env.OLA_TS_BUSINESS_WRITE_PATH?.trim()
-  const handoverManifestPath = process.env.OLA_TS_BUSINESS_WRITE_MANIFEST?.trim()
-  if (!path || !handoverManifestPath || !isAbsolute(path) || !isAbsolute(handoverManifestPath))
+  const directPath = join(olaDataRoot(), 'data.db')
+  const handoverEnabled = process.env.OLA_TS_BUSINESS_WRITES === '1'
+  const path = handoverEnabled ? process.env.OLA_TS_BUSINESS_WRITE_PATH?.trim() : directPath
+  const handoverManifestPath = handoverEnabled
+    ? process.env.OLA_TS_BUSINESS_WRITE_MANIFEST?.trim()
+    : undefined
+  if (
+    !path ||
+    !isAbsolute(path) ||
+    (handoverEnabled && (!handoverManifestPath || !isAbsolute(handoverManifestPath)))
+  )
     throw new Error('TS_BUSINESS_WRITE_HANDOVER_REQUIRED')
   const key = `${path}\0${handoverManifestPath}`
   if (repository && repositoryKey !== key) {
     throw new Error('TS_BUSINESS_WRITE_HANDOVER_CHANGED')
   }
   if (!repository) {
-    repository = new BusinessRepository({ path, handoverManifestPath })
+    repository = new BusinessRepository({
+      path,
+      handoverManifestPath,
+      mode: handoverEnabled ? 'handover' : 'direct'
+    })
     repositoryKey = key
   }
   return repository
+}
+
+/** Main-process adapter for DAO routes that use the shared `db/*` contract. */
+export function getTsDatabaseRouteGuard(): {
+  request<T>(_method: string, _params?: unknown, _timeoutMs?: number): Promise<T>
+} {
+  const repository = businessWriteCanary()
+  if (!repository) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+  return {
+    request: <T>(method: string, params?: unknown) => repository.request<T>(method, params)
+  }
 }
 
 /**

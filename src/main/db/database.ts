@@ -1,24 +1,15 @@
-import { getNativeWorker } from '../lib/native-worker'
 import { olaDataRoot } from '../lib/ola-data-root'
 import { closeLegacyReadCanary } from './legacy-read-canary'
-import { closeBusinessWriteCanary } from './business-write-canary'
-
-interface DbInitializeResult {
-  success: boolean
-  dbPath: string
-  error?: string | null
-}
+import { businessWriteCanary, closeBusinessWriteCanary } from './business-write-canary'
 
 let initializePromise: Promise<void> | null = null
 
 export async function initializeDatabase(): Promise<void> {
-  initializePromise ??= getNativeWorker()
-    .request<DbInitializeResult>('db/initialize', {}, 120_000)
-    .then((result) => {
-      if (!result.success) {
-        throw new Error(result.error || 'Native DB initialization failed')
-      }
-      console.log('[DB][Native] initialized', { dbPath: result.dbPath })
+  initializePromise ??= Promise.resolve()
+    .then(() => businessWriteCanary())
+    .then((repository) => {
+      if (!repository) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+      console.log('[DB][TS] initialized', { dbPath: getDataDir() + '/data.db' })
     })
     .catch((error) => {
       initializePromise = null

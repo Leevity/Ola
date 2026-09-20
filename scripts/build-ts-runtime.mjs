@@ -9,11 +9,14 @@ await build({
   platform: 'node',
   format: 'esm',
   target: 'node24',
+  // ws is a CommonJS package with Node built-in imports. Keep it external so
+  // the ESM CLI loads its supported wrapper instead of an invalid inlined
+  // dynamic require shim.
+  external: ['ws'],
   sourcemap: true
 })
 await copyFile('src/runtime/storage/journal-worker.mjs', 'out/runtime/journal-worker.mjs')
 await copyFile('src/runtime/storage/journal-schema.mjs', 'out/runtime/journal-schema.mjs')
-await copyFile('src/runtime/storage/legacy-read-worker.mjs', 'out/runtime/legacy-read-worker.mjs')
 await copyFile('src/runtime/storage/business-worker.mjs', 'out/runtime/business-worker.mjs')
 await copyFile('src/runtime/storage/business-schema.mjs', 'out/runtime/business-schema.mjs')
 
@@ -21,7 +24,6 @@ await copyFile('src/runtime/storage/business-schema.mjs', 'out/runtime/business-
 // dynamic by design, so Rollup cannot discover this sibling asset.
 await copyFile('src/runtime/storage/journal-worker.mjs', 'out/main/journal-worker.mjs')
 await copyFile('src/runtime/storage/journal-schema.mjs', 'out/main/journal-schema.mjs')
-await copyFile('src/runtime/storage/legacy-read-worker.mjs', 'out/main/legacy-read-worker.mjs')
 await copyFile('src/runtime/storage/business-worker.mjs', 'out/main/business-worker.mjs')
 await copyFile('src/runtime/storage/business-schema.mjs', 'out/main/business-schema.mjs')
 

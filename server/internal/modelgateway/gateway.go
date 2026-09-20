@@ -33,6 +33,8 @@ type ProviderConfig struct {
 	Explicit bool
 }
 
+const maxModelRequestBytes = 32 << 20
+
 func New() *Gateway {
 	baseURL := strings.TrimRight(os.Getenv("OLA_MODEL_BASE_URL"), "/")
 	if baseURL == "" {
@@ -45,7 +47,7 @@ func New() *Gateway {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.DialContext = safeDialContext
 	return &Gateway{client: &http.Client{
-		Timeout: 120 * time.Second,
+		Timeout:   120 * time.Second,
 		Transport: transport,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -83,9 +85,13 @@ func (g *Gateway) ChatCompletionsWithConfig(w http.ResponseWriter, r *http.Reque
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxModelRequestBytes+1))
 	if err != nil {
 		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(body) > maxModelRequestBytes {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
 		return
 	}
 	var payload map[string]any
@@ -99,6 +105,37 @@ func (g *Gateway) ChatCompletionsWithConfig(w http.ResponseWriter, r *http.Reque
 	}
 	normalized, _ := json.Marshal(payload)
 	g.proxyWithConfig(w, r, "/chat/completions", normalized, config)
+}
+
+func (g *Gateway) Responses(w http.ResponseWriter, r *http.Request) {
+	g.ResponsesWithConfig(w, r, ProviderConfig{})
+}
+
+func (g *Gateway) ResponsesWithConfig(w http.ResponseWriter, r *http.Request, override ProviderConfig) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, maxModelRequestBytes+1))
+	if err != nil {
+		http.Error(w, "invalid request", http.StatusBadRequest)
+		return
+	}
+	if len(body) > maxModelRequestBytes {
+		http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
+		return
+	}
+	var payload map[string]any
+	if json.Unmarshal(body, &payload) != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	config := g.config(override)
+	if _, ok := payload["model"]; !ok {
+		payload["model"] = config.Model
+	}
+	normalized, _ := json.Marshal(payload)
+	g.proxyWithConfig(w, r, "/responses", normalized, config)
 }
 
 func (g *Gateway) proxy(w http.ResponseWriter, r *http.Request, path string, body []byte) {

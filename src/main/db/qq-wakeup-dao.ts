@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { authorizeChannelSessionWorkspace } from '../channels/channel-session-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { canaryResolveQqWakeupEligibility } from './legacy-read-canary'
@@ -43,7 +43,7 @@ export async function recordQqWakeupSource(args: {
     })
     return
   }
-  const result = await getNativeWorker().request<QqWakeupMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<QqWakeupMutationResult>(
     'db/qq-wakeup-record-source',
     { ...args, workspaceId, now: args.now ?? Date.now() },
     120_000
@@ -78,7 +78,7 @@ export async function resolveQqWakeupEligibility(
     return canary
   }
   console.log('[QqWakeup][Native] resolve start', { pluginId })
-  const result = await getNativeWorker().request<QqWakeupEligibilityResult>(
+  const result = await getTsDatabaseRouteGuard().request<QqWakeupEligibilityResult>(
     'db/qq-wakeup-resolve',
     { pluginId, openId, workspaceId, now },
     120_000
@@ -126,7 +126,7 @@ export async function markQqWakeupSent(args: {
     pluginId: args.pluginId,
     periodKey: args.periodKey
   })
-  const result = await getNativeWorker().request<QqWakeupMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<QqWakeupMutationResult>(
     'db/qq-wakeup-mark-sent',
     { ...args, workspaceId, now: args.now ?? Date.now() },
     120_000

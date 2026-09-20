@@ -3,7 +3,7 @@ productName: Ola
 # Pin to a 4-segment version so the Windows resource compiler accepts
 # FileVersion. Use a literal value (not ${version}) so electron-builder
 # does not concatenate the placeholder as a raw string into rcedit args.
-buildVersion: 1.0.4.0
+buildVersion: 1.0.5.0
 directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs
@@ -100,8 +100,6 @@ asarUnpack:
   # The desktop TS runtime opens this sibling Worker from Main.
   - out/main/journal-worker.mjs
   - out/main/journal-schema.mjs
-  # Production TS canary reads construct this Worker relative to the Main bundle.
-  - out/main/legacy-read-worker.mjs
   # The P8 handover repository uses the same dynamic Main-worker loading path.
   - out/main/business-worker.mjs
   - out/main/business-schema.mjs

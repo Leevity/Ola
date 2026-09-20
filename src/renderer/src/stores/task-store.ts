@@ -10,7 +10,14 @@ import {
 } from '../../../shared/messagepack/binary-ipc'
 import { useChatStore } from './chat-store'
 
-export type TaskStatus = 'pending' | 'in_progress' | 'in_review' | 'blocked' | 'completed'
+export type TaskStatus =
+  | 'pending'
+  | 'in_progress'
+  | 'in_review'
+  | 'blocked'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 
 export interface TaskBoardMetadata {
@@ -126,7 +133,9 @@ function normalizeTaskStatus(status: string): TaskStatus {
   return status === 'in_progress' ||
     status === 'in_review' ||
     status === 'blocked' ||
-    status === 'completed'
+    status === 'completed' ||
+    status === 'failed' ||
+    status === 'cancelled'
     ? status
     : 'pending'
 }

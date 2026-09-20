@@ -1,7 +1,7 @@
 import type { ProviderConfig, UnifiedMessage } from '@renderer/lib/api/types'
 import type { ModelOptions } from '../../../../shared/runtime/model'
 import { parseModelSource, type ModelSource } from '../../../../shared/runtime/model-source'
-import type { RuntimeTextMessage } from '../../../../shared/runtime/contracts'
+import type { RuntimeImage, RuntimeTextMessage } from '../../../../shared/runtime/contracts'
 import {
   assessTsRuntimeTextEligibility,
   supportsTsRuntimeAgentTools
@@ -12,6 +12,7 @@ export type TsRuntimeAgentEligibility =
       eligible: true
       modelSource: ModelSource
       prompt: string
+      promptImages: RuntimeImage[]
       history: RuntimeTextMessage[]
       modelOptions: ModelOptions
     }
@@ -19,7 +20,7 @@ export type TsRuntimeAgentEligibility =
 
 /**
  * Explicit migration gate for Execute mode. Keep it free of React/Electron so
- * every exclusion is testable and unsupported requests retain the sidecar.
+ * every exclusion is testable and unsupported requests fail closed.
  */
 export function assessTsRuntimeAgentEligibility(input: {
   mode: string
@@ -32,21 +33,26 @@ export function assessTsRuntimeAgentEligibility(input: {
   hasPlan: boolean
   hasGoal: boolean
   hasSsh: boolean
+  sshConnectionId?: string | null
   hasPlugin: boolean
   hasChannels: boolean
   hasTeam: boolean
+  /** Legacy UI hint; image blocks are now inspected by text eligibility. */
   hasImages: boolean
+  /** Required when channel tools are exposed to an unattended TS run. */
+  channelContext?: { pluginId: string; chatId: string; messageId?: string }
   /** Main-compatible declarative HTTP extension names captured at submission. */
   extensionToolNames?: readonly string[]
 }): TsRuntimeAgentEligibility {
   if (input.mode !== 'execute') return { eligible: false, reason: 'MODE_NOT_MIGRATED' }
-  if (input.hasPlan) return { eligible: false, reason: 'PLAN_NOT_MIGRATED' }
-  if (input.hasGoal) return { eligible: false, reason: 'GOAL_NOT_MIGRATED' }
-  if (input.hasSsh) return { eligible: false, reason: 'SSH_NOT_MIGRATED' }
-  if (input.hasPlugin) return { eligible: false, reason: 'PLUGIN_NOT_MIGRATED' }
-  if (input.hasChannels) return { eligible: false, reason: 'CHANNELS_NOT_MIGRATED' }
-  if (input.hasTeam) return { eligible: false, reason: 'TEAM_NOT_MIGRATED' }
-  if (input.hasImages) return { eligible: false, reason: 'ATTACHMENTS_NOT_MIGRATED' }
+  // Plan persistence is now Main-owned by the TS runtime. Advanced plan-only
+  // UI capabilities still remain explicit gates below through tool parity.
+  if (input.hasSsh && !input.sshConnectionId?.trim())
+    return { eligible: false, reason: 'SSH_NOT_MIGRATED' }
+  if (input.hasPlugin && !hasValidChannelContext(input.channelContext))
+    return { eligible: false, reason: 'PLUGIN_NOT_MIGRATED' }
+  if (input.hasChannels && !hasValidChannelContext(input.channelContext))
+    return { eligible: false, reason: 'CHANNELS_NOT_MIGRATED' }
   if (
     !supportsTsRuntimeAgentTools({
       toolNames: input.toolNames,
@@ -71,4 +77,10 @@ export function assessTsRuntimeAgentEligibility(input: {
     modelSource
   })
   return text.eligible ? { ...text, modelSource } : text
+}
+
+function hasValidChannelContext(
+  value: { pluginId: string; chatId: string; messageId?: string } | undefined
+): boolean {
+  return Boolean(value?.pluginId.trim() && value.chatId.trim())
 }

@@ -1,11 +1,7 @@
 import type { ToolHandler } from '@renderer/lib/tools/tool-types'
 import { DESKTOP_CLICK_TOOL_NAME } from './types'
-
-function nativeOnlyDesktopResult(toolName: string): string {
-  return JSON.stringify({
-    error: `${toolName} execution has migrated to .NET Native Worker.`
-  })
-}
+import { IPC } from '@renderer/lib/ipc/channels'
+import { encodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 
 export const desktopClickTool: ToolHandler = {
   definition: {
@@ -36,6 +32,9 @@ export const desktopClickTool: ToolHandler = {
       additionalProperties: false
     }
   },
-  execute: async () => nativeOnlyDesktopResult('DesktopClick'),
+  execute: async (input, ctx) =>
+    encodeStructuredToolResult(
+      (await ctx.ipc.invoke(IPC.DESKTOP_INPUT_CLICK, input)) as Record<string, unknown>
+    ),
   requiresApproval: () => true
 }

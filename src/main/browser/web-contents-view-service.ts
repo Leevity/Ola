@@ -22,6 +22,32 @@ export interface WebContentsViewTab {
   view: WebContentsView
 }
 
+export interface WebContentsViewNavigationState {
+  webContentsId: number
+  url: string
+  title: string
+  canGoBack: boolean
+  canGoForward: boolean
+}
+
+export type WebContentsViewNavigationEventType =
+  | 'did-start-loading'
+  | 'did-stop-loading'
+  | 'did-navigate'
+  | 'did-navigate-in-page'
+  | 'page-title-updated'
+  | 'did-fail-load'
+
+export interface WebContentsViewNavigationEvent {
+  tabId: string
+  hostWebContentsId: number
+  type: WebContentsViewNavigationEventType
+  state: WebContentsViewNavigationState
+  error?: { code: number; description: string; url: string }
+}
+
+type WebContentsViewNavigationListener = (event: WebContentsViewNavigationEvent) => void
+
 function required(value: string, field: string): string {
   const trimmed = value.trim()
   if (!trimmed) throw new RuntimeError(`BROWSER_${field.toUpperCase()}_REQUIRED`)
@@ -48,6 +74,12 @@ function safeUrl(value: string): string {
 export class WebContentsViewBrowserService {
   private readonly ownership = new BrowserOwnershipRegistry()
   private readonly tabs = new Map<string, WebContentsViewTab>()
+  private readonly listeners = new Set<WebContentsViewNavigationListener>()
+
+  onNavigationEvent(listener: WebContentsViewNavigationListener): () => void {
+    this.listeners.add(listener)
+    return () => this.listeners.delete(listener)
+  }
 
   createTab(input: WebContentsViewTabInput): WebContentsViewTab {
     const tabId = required(input.tabId, 'tab_id')
@@ -85,6 +117,37 @@ export class WebContentsViewBrowserService {
     const idleOwnership = { ...ownership, controller: null }
     const tab = { tabId, ownership: idleOwnership, hostWebContentsId: host.id, view }
     this.tabs.set(tabId, tab)
+    const emit = (
+      type: WebContentsViewNavigationEventType,
+      error?: { code: number; description: string; url: string }
+    ): void => {
+      if (!this.tabs.has(tabId)) return
+      const event: WebContentsViewNavigationEvent = {
+        tabId,
+        hostWebContentsId: host.id,
+        type,
+        state: this.getNavigationState(tabId, host.id),
+        ...(error ? { error } : {})
+      }
+      for (const listener of this.listeners) listener(event)
+    }
+    view.webContents.on('did-start-loading', () => emit('did-start-loading'))
+    view.webContents.on('did-stop-loading', () => emit('did-stop-loading'))
+    view.webContents.on('did-navigate', () => emit('did-navigate'))
+    view.webContents.on('did-navigate-in-page', () => emit('did-navigate-in-page'))
+    view.webContents.on('page-title-updated', () => emit('page-title-updated'))
+    view.webContents.on('will-navigate', (event, url) => {
+      try {
+        safeUrl(url)
+      } catch {
+        event.preventDefault()
+      }
+    })
+    view.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    view.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+      if (errorCode === -3) return
+      emit('did-fail-load', { code: errorCode, description: errorDescription, url: validatedURL })
+    })
     const cleanup = (): void => {
       this.destroyTab(tabId)
     }
@@ -98,16 +161,48 @@ export class WebContentsViewBrowserService {
     tab.view.setBounds(bounds)
   }
 
-  async navigate(tabId: string, hostWebContentsId: number, url: string): Promise<void> {
+  async navigate(
+    tabId: string,
+    hostWebContentsId: number,
+    action: 'back' | 'forward' | 'reload' | 'stop' | 'goto',
+    url?: string
+  ): Promise<WebContentsViewNavigationState> {
     const tab = this.requireTab(tabId, hostWebContentsId)
-    await tab.view.webContents.loadURL(safeUrl(url))
+    if (action === 'goto') {
+      if (!url) throw new RuntimeError('BROWSER_URL_REQUIRED')
+      await tab.view.webContents.loadURL(safeUrl(url))
+    } else if (action === 'back') {
+      if (tab.view.webContents.canGoBack()) tab.view.webContents.goBack()
+    } else if (action === 'forward') {
+      if (tab.view.webContents.canGoForward()) tab.view.webContents.goForward()
+    } else if (action === 'reload') {
+      tab.view.webContents.reload()
+    } else {
+      tab.view.webContents.stop()
+    }
+    return this.getNavigationState(tabId, hostWebContentsId)
   }
 
-  destroyTab(tabId: string): boolean {
+  getNavigationState(tabId: string, hostWebContentsId: number): WebContentsViewNavigationState {
+    const tab = this.requireTab(tabId, hostWebContentsId)
+    return {
+      webContentsId: tab.view.webContents.id,
+      url: tab.view.webContents.getURL(),
+      title: tab.view.webContents.getTitle(),
+      canGoBack: tab.view.webContents.canGoBack(),
+      canGoForward: tab.view.webContents.canGoForward()
+    }
+  }
+
+  destroyTab(tabId: string, hostWebContentsId?: number): boolean {
     const tab = this.tabs.get(tabId)
     if (!tab) return false
+    if (hostWebContentsId !== undefined && tab.hostWebContentsId !== hostWebContentsId) {
+      throw new RuntimeError('BROWSER_TAB_NOT_FOUND')
+    }
     this.tabs.delete(tabId)
-    const window = BrowserWindow.fromWebContents(webContents.fromId(tab.hostWebContentsId)!)
+    const host = webContents.fromId(tab.hostWebContentsId)
+    const window = host ? BrowserWindow.fromWebContents(host) : null
     if (window && !window.isDestroyed()) window.contentView.removeChildView(tab.view)
     if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
     this.ownership.remove(tab.ownership.tabId)

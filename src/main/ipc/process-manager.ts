@@ -1,7 +1,6 @@
 import { app, BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { safeSendMessagePackToWindow } from '../window-ipc'
 import { registerMessagePackHandler } from './messagepack-handler'
-import { getNativeWorker } from '../lib/native-worker'
 import {
   createTerminalSession,
   getTerminalSessionSnapshot,
@@ -36,16 +35,6 @@ interface ManagedProcess {
   cleanup?: () => void
 }
 
-interface NativeWorkerMemorySample {
-  success?: boolean
-  pid?: number | null
-  managedBytes?: number
-  heapBytes?: number
-  fragmentedBytes?: number
-  workingSetBytes?: number
-  error?: string | null
-}
-
 interface ProcessMemorySample {
   sampledAt: number
   main: {
@@ -61,7 +50,6 @@ interface ProcessMemorySample {
       privateKb?: number
     } | null
   }>
-  nativeWorker: NativeWorkerMemorySample | null
 }
 
 const processes = new Map<string, ManagedProcess>()
@@ -163,31 +151,6 @@ export function registerProcessManagerHandlers(): void {
   registerMessagePackHandler<unknown, ProcessMemorySample>(
     'diagnostics:memory-sample',
     async () => {
-      const nativeWorker = getNativeWorker()
-      let nativeWorkerMemory: NativeWorkerMemorySample | null = null
-
-      if (nativeWorker.isRunning) {
-        try {
-          nativeWorkerMemory = await nativeWorker.request<NativeWorkerMemorySample>(
-            'worker/memory',
-            {},
-            5_000
-          )
-        } catch (error) {
-          nativeWorkerMemory = {
-            success: false,
-            pid: nativeWorker.processId,
-            error: error instanceof Error ? error.message : String(error)
-          }
-        }
-      } else if (nativeWorker.processId) {
-        nativeWorkerMemory = {
-          success: false,
-          pid: nativeWorker.processId,
-          error: 'Native worker is not connected'
-        }
-      }
-
       return {
         sampledAt: Date.now(),
         main: {
@@ -204,8 +167,7 @@ export function registerProcessManagerHandlers(): void {
                 privateKb: metric.memory.privateBytes
               }
             : null
-        })),
-        nativeWorker: nativeWorkerMemory
+        }))
       }
     }
   )

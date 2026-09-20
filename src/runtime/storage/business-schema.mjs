@@ -1,4 +1,4 @@
-export const LATEST_BUSINESS_SCHEMA_VERSION = 2
+export const LATEST_BUSINESS_SCHEMA_VERSION = 3
 
 const REQUIRED_COLUMNS = {
   sessions: [
@@ -231,6 +231,27 @@ const REQUIRED_COLUMNS = {
     'content_hash',
     'processed_at'
   ],
+  ssh_groups: ['id', 'name', 'sort_order', 'created_at', 'updated_at'],
+  ssh_connections: [
+    'id',
+    'group_id',
+    'name',
+    'host',
+    'port',
+    'username',
+    'auth_type',
+    'encrypted_password',
+    'private_key_path',
+    'encrypted_passphrase',
+    'startup_command',
+    'default_directory',
+    'proxy_jump',
+    'keep_alive_interval',
+    'sort_order',
+    'last_connected_at',
+    'created_at',
+    'updated_at'
+  ],
   memory_citation_usage: [
     'id',
     'memory_root_id',
@@ -436,6 +457,149 @@ function columnsForTable(db, table) {
   )
 }
 
+const FRESH_PRIMARY_KEYS = {
+  sessions: ['id'],
+  messages: ['id'],
+  projects: ['id'],
+  plans: ['id'],
+  tasks: ['id'],
+  draw_runs: ['id'],
+  session_goals: ['session_id'],
+  session_goal_events: ['id'],
+  cron_jobs: ['id'],
+  cron_runs: ['id'],
+  cron_run_messages: ['id'],
+  cron_run_logs: ['id'],
+  agent_change_sets: ['run_id'],
+  agent_file_changes: ['id'],
+  sub_agent_history: ['session_id', 'tool_use_id'],
+  app_migrations: ['key'],
+  runtime_tool_results: ['session_id', 'tool_use_id'],
+  runtime_jobs: ['job_id'],
+  runtime_job_events: ['job_id', 'seq'],
+  qq_wakeup_windows_v2: ['workspace_id', 'plugin_id', 'open_id', 'period_key'],
+  usage_events: ['id'],
+  usage_activity_daily_v2: ['workspace_id', 'day'],
+  usage_activity_daily_models_v2: ['workspace_id', 'day', 'provider_id', 'model_id'],
+  usage_activity_daily_providers_v2: ['workspace_id', 'day', 'provider_id'],
+  memory_roots: ['id'],
+  memory_stage1_outputs: ['memory_root_id', 'source_session_id', 'fingerprint'],
+  memory_jobs: ['id'],
+  memory_citation_usage: ['id'],
+  memory_automation_entries: ['id'],
+  memory_automation_rollups_v2: ['workspace_id', 'scope', 'target', 'target_path', 'source_date'],
+  ssh_groups: ['id'],
+  ssh_connections: ['id'],
+  wiki_documents: ['project_root'],
+  wiki_nodes: ['project_root', 'node_path'],
+  wiki_file_snapshots: ['project_root', 'file_path'],
+  wiki_generation_runs: ['id'],
+  desktop_flows: ['id'],
+  desktop_flow_steps: ['flow_id', 'step_id'],
+  desktop_flow_runs: ['id']
+}
+
+const FRESH_AUXILIARY_TABLES = {
+  wiki_documents: ['project_root', 'document_json', 'generated_at', 'updated_at', 'workspace_id'],
+  wiki_nodes: ['project_root', 'node_path', 'node_json', 'updated_at', 'workspace_id'],
+  wiki_file_snapshots: [
+    'project_root',
+    'file_path',
+    'content_hash',
+    'size_bytes',
+    'modified_at',
+    'updated_at',
+    'workspace_id'
+  ],
+  wiki_generation_runs: [
+    'id',
+    'project_root',
+    'state',
+    'error_message',
+    'started_at',
+    'finished_at',
+    'workspace_id'
+  ],
+  desktop_flows: ['id', 'name', 'flow_json', 'created_at', 'updated_at', 'workspace_id'],
+  desktop_flow_steps: ['flow_id', 'step_id', 'sort_order', 'step_json', 'updated_at'],
+  desktop_flow_runs: ['id', 'flow_id', 'state', 'error_message', 'started_at', 'finished_at'],
+  provider_health: ['provider_id', 'payload_json', 'updated_at'],
+  provider_request_metrics: [
+    'id',
+    'provider_id',
+    'status_code',
+    'latency_ms',
+    'success',
+    'created_at'
+  ],
+  sync_record_state: ['provider_id', 'domain', 'record_id', 'content_hash', 'synced_at'],
+  sync_tombstones: ['provider_id', 'domain', 'record_id', 'deleted_at', 'origin_device_id'],
+  qq_wakeup_windows: [
+    'plugin_id',
+    'open_id',
+    'period_key',
+    'source_message_id',
+    'source_timestamp',
+    'sent_at',
+    'created_at',
+    'updated_at'
+  ]
+}
+
+function freshColumnType(column) {
+  if (
+    column.endsWith('_at') ||
+    column.endsWith('_count') ||
+    column.endsWith('_tokens') ||
+    column.endsWith('_ms') ||
+    column.endsWith('_bytes') ||
+    column.endsWith('_order') ||
+    column === 'line' ||
+    column === 'seq' ||
+    column === 'enabled' ||
+    column === 'pinned' ||
+    column === 'is_generating' ||
+    column === 'is_error' ||
+    column === 'deleted_at' ||
+    column === 'sort_order'
+  )
+    return 'INTEGER'
+  return 'TEXT'
+}
+
+/** Create the additive legacy-shaped schema for a brand-new direct TS database. */
+function createFreshBusinessTables(db) {
+  for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
+    const key = FRESH_PRIMARY_KEYS[table]
+    const definitions = columns.map(
+      (column) =>
+        `${column} ${freshColumnType(column)}${column === 'workspace_id' ? " DEFAULT 'local-personal'" : ''}`
+    )
+    if (key) definitions.push(`PRIMARY KEY (${key.join(',')})`)
+    db.exec(`CREATE TABLE IF NOT EXISTS ${table} (${definitions.join(',')})`)
+  }
+  const auxiliaryKeys = {
+    wiki_documents: ['project_root'],
+    wiki_nodes: ['project_root', 'node_path'],
+    wiki_file_snapshots: ['project_root', 'file_path'],
+    wiki_generation_runs: ['id'],
+    desktop_flows: ['id'],
+    desktop_flow_steps: ['flow_id', 'step_id'],
+    desktop_flow_runs: ['id'],
+    provider_health: ['provider_id'],
+    provider_request_metrics: ['id'],
+    sync_record_state: ['provider_id', 'domain', 'record_id'],
+    sync_tombstones: ['provider_id', 'domain', 'record_id'],
+    qq_wakeup_windows: ['plugin_id', 'open_id', 'period_key']
+  }
+  for (const [table, columns] of Object.entries(FRESH_AUXILIARY_TABLES)) {
+    const definitions = columns.map((column) => `${column} ${freshColumnType(column)}`)
+    const key = auxiliaryKeys[table]
+    if (key) definitions.push(`PRIMARY KEY (${key.join(',')})`)
+    db.exec(`CREATE TABLE IF NOT EXISTS ${table} (${definitions.join(',')})`)
+  }
+}
+
 function verifyLegacyBusinessTables(db) {
   const tables = new Set(
     db
@@ -453,12 +617,51 @@ function verifyLegacyBusinessTables(db) {
   if (foreignKeyErrors.length) throw new Error('BUSINESS_SCHEMA_FOREIGN_KEY_FAILED')
 }
 
+function normalizeNativeProjectWikiTables(db) {
+  const documentColumns = columnsForTable(db, 'wiki_documents')
+  const runColumns = columnsForTable(db, 'wiki_generation_runs')
+  const isNativeProjectWiki =
+    documentColumns.has('project_id') &&
+    documentColumns.has('content_markdown') &&
+    !documentColumns.has('project_root') &&
+    runColumns.has('project_id') &&
+    runColumns.has('status') &&
+    !runColumns.has('project_root')
+  if (!isNativeProjectWiki) return
+
+  // The current Native Project Wiki schema is a separate product surface from
+  // the legacy scan/index wiki. Keep it intact under a versioned name on the
+  // promoted copy, then give the TS runtime its stable compatibility tables.
+  // This is deliberately performed only after the database has been copied to
+  // the handover destination; the live Native database is never rewritten.
+  db.exec(`
+    ALTER TABLE wiki_documents RENAME TO ola_native_wiki_documents_v1;
+    ALTER TABLE wiki_generation_runs RENAME TO ola_native_wiki_generation_runs_v1;
+    CREATE TABLE wiki_documents (
+      project_root TEXT PRIMARY KEY,
+      document_json TEXT NOT NULL,
+      generated_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+    CREATE TABLE wiki_generation_runs (
+      id TEXT PRIMARY KEY,
+      project_root TEXT NOT NULL,
+      state TEXT NOT NULL,
+      error_message TEXT,
+      started_at INTEGER NOT NULL,
+      finished_at INTEGER
+    );
+  `)
+}
+
 /**
  * The native schema has no trustworthy PRAGMA user_version history. TS keeps
  * its own append-only migration ledger instead, so it can take ownership of a
  * verified backup without claiming that a legacy additive migration completed.
  */
-export function migrateBusinessSchema(db) {
+export function migrateBusinessSchema(db, options = {}) {
+  if (options.direct) createFreshBusinessTables(db)
+  normalizeNativeProjectWikiTables(db)
   verifyLegacyBusinessTables(db)
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -509,6 +712,48 @@ export function migrateBusinessSchema(db) {
         db.prepare(
           'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
         ).run(version, Date.now(), 'workspace-scoped sync baseline and tombstones')
+      } else if (version === 3) {
+        const columns = (table) =>
+          new Set(
+            db
+              .prepare(`PRAGMA table_info(${table})`)
+              .all()
+              .map((row) => row.name)
+          )
+        for (const table of [
+          'wiki_documents',
+          'wiki_nodes',
+          'wiki_file_snapshots',
+          'wiki_generation_runs'
+        ]) {
+          if (!columns(table).has('workspace_id'))
+            db.exec(`ALTER TABLE ${table} ADD COLUMN workspace_id TEXT`)
+        }
+        db.exec(`
+          UPDATE wiki_documents
+          SET workspace_id='local-personal'
+          WHERE workspace_id IS NULL AND project_root NOT LIKE 'workspace-wiki:%';
+          UPDATE wiki_nodes
+          SET workspace_id='local-personal'
+          WHERE workspace_id IS NULL AND project_root NOT LIKE 'workspace-wiki:%';
+          UPDATE wiki_file_snapshots
+          SET workspace_id='local-personal'
+          WHERE workspace_id IS NULL AND project_root NOT LIKE 'workspace-wiki:%';
+          UPDATE wiki_generation_runs
+          SET workspace_id='local-personal'
+          WHERE workspace_id IS NULL AND project_root NOT LIKE 'workspace-wiki:%';
+          CREATE INDEX IF NOT EXISTS idx_wiki_documents_workspace
+            ON wiki_documents(workspace_id, updated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_wiki_nodes_workspace
+            ON wiki_nodes(workspace_id, updated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_wiki_file_snapshots_workspace
+            ON wiki_file_snapshots(workspace_id, updated_at DESC);
+          CREATE INDEX IF NOT EXISTS idx_wiki_generation_runs_workspace
+            ON wiki_generation_runs(workspace_id, started_at DESC);
+        `)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'workspace ownership for project wiki tables')
       }
     }
     db.exec('COMMIT')

@@ -10,6 +10,7 @@ import { registerMessagePackHandler } from './messagepack-handler'
 import { readConfig } from './secure-key-store'
 import { createTerminalSession } from './terminal-handlers'
 import { buildShellEnvironment } from './shell-environment'
+import { resolveMainProviderSecret } from '../providers/provider-main-store'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -124,12 +125,13 @@ export function registerAiCodingHandlers(): void {
         return { success: false, error: 'cli_missing', cli }
       }
 
-      const apiKey =
+      const legacyCredential =
         typeof provider.apiKey === 'string' && provider.apiKey.trim()
           ? provider.apiKey
           : typeof (provider.oauth as Record<string, unknown> | undefined)?.accessToken === 'string'
             ? String((provider.oauth as Record<string, unknown>).accessToken)
             : ''
+      const apiKey = await resolveMainProviderSecret(String(provider.id), legacyCredential)
       if (!apiKey && provider.requiresApiKey !== false) {
         return { success: false, error: 'credential_unavailable' }
       }

@@ -149,7 +149,7 @@ export function parseAgentMarkdown(content: string): AgentInfo | null {
   }
 }
 
-/** Main-owned replacement for the Native Worker agent file catalog. */
+/** Main-owned agent file catalog. */
 export class AgentCatalog {
   constructor(private readonly options: AgentCatalogOptions) {}
 

@@ -30,7 +30,10 @@ describe('public run model options', () => {
           enablePromptCache: true,
           cacheTtl: '1h',
           serviceTier: 'priority',
-          promptCacheKey: 'workspace:local'
+          promptCacheKey: 'workspace:local',
+          responsesSessionScope: 'main',
+          bodyOverrides: { response_format: { type: 'json_object' } },
+          omitBodyKeys: ['top_p']
         }
       }).modelOptions
     ).toEqual({
@@ -43,7 +46,10 @@ describe('public run model options', () => {
       enablePromptCache: true,
       cacheTtl: '1h',
       serviceTier: 'priority',
-      promptCacheKey: 'workspace:local'
+      promptCacheKey: 'workspace:local',
+      responsesSessionScope: 'main',
+      bodyOverrides: { response_format: { type: 'json_object' } },
+      omitBodyKeys: ['top_p']
     })
   })
 
@@ -51,10 +57,20 @@ describe('public run model options', () => {
     [{ apiKey: 'secret' }],
     [{ headers: { authorization: 'Bearer secret' } }],
     [{ bodyOverrides: { api_key: 'secret' } }],
+    [{ bodyOverrides: { nested: { token: 'secret' } } }],
     [{ temperature: -0.1 }],
     [{ thinking: { type: 'enabled', budgetTokens: 1 } }]
   ])('rejects credentials and invalid execution parameters', (modelOptions) => {
     expect(() => parseRunSpec({ ...spec, modelOptions })).toThrow('INVALID_RUN')
+  })
+
+  it('rejects malformed public body override shapes', () => {
+    expect(() => parseRunSpec({ ...spec, modelOptions: { bodyOverrides: [] } })).toThrow(
+      'INVALID_RUN'
+    )
+    expect(() =>
+      parseRunSpec({ ...spec, modelOptions: { omitBodyKeys: ['top_p', 'top_p'] } })
+    ).toThrow('INVALID_RUN')
   })
 
   it('persists only a bounded public assistant message correlation', () => {
@@ -62,6 +78,57 @@ describe('public run model options', () => {
       'assistant-1'
     )
     expect(() => parseRunSpec({ ...spec, assistantMessageId: '' })).toThrow('INVALID_RUN')
+  })
+
+  it('accepts bounded image content but rejects unsafe or oversized images', () => {
+    expect(
+      parseRunSpec({
+        ...spec,
+        prompt: '',
+        promptImages: [
+          { mimeType: 'image/png', data: 'aGVsbG8=' },
+          { mimeType: 'image/webp', assetId: '00000000-0000-0000-0000-000000000000' }
+        ],
+        history: [
+          {
+            role: 'user',
+            text: 'Earlier',
+            images: [{ mimeType: 'image/jpeg', url: 'https://example.test/image.jpg' }]
+          }
+        ]
+      })
+    ).toMatchObject({
+      prompt: '',
+      promptImages: [
+        { mimeType: 'image/png', data: 'aGVsbG8=' },
+        { mimeType: 'image/webp', assetId: '00000000-0000-0000-0000-000000000000' }
+      ],
+      history: [{ images: [{ mimeType: 'image/jpeg' }] }]
+    })
+    expect(() =>
+      parseRunSpec({
+        ...spec,
+        promptImages: [{ mimeType: 'image/png', url: 'http://example.test/image.png' }]
+      })
+    ).toThrow('INVALID_RUN')
+    expect(() =>
+      parseRunSpec({
+        ...spec,
+        promptImages: [{ mimeType: 'image/png', data: 'x'.repeat(768 * 1024 + 1) }]
+      })
+    ).toThrow('INVALID_RUN')
+    expect(() =>
+      parseRunSpec({
+        ...spec,
+        promptImages: [
+          {
+            mimeType: 'image/png',
+            data: 'aGVsbG8=',
+            assetId: '00000000-0000-0000-0000-000000000000'
+          }
+        ]
+      })
+    ).toThrow('INVALID_RUN')
   })
 
   it('binds channel tool context to the run', () => {

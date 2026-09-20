@@ -1,10 +1,9 @@
 import type { ToolHandler } from '@renderer/lib/tools/tool-types'
 import { IMAGE_GENERATE_TOOL_NAME } from './types'
 
-function nativeOnlyImageGenerateResult(): string {
+function tsRuntimeImageGenerateResult(): string {
   return JSON.stringify({
-    error:
-      'ImageGenerate executes in the .NET Native Worker and is unavailable through the renderer boundary.'
+    error: 'ImageGenerate must execute through the Main-owned TypeScript runtime.'
   })
 }
 
@@ -47,6 +46,6 @@ export const imageGenerateTool: ToolHandler = {
       required: ['prompt']
     }
   },
-  execute: async () => nativeOnlyImageGenerateResult(),
+  execute: async () => tsRuntimeImageGenerateResult(),
   requiresApproval: () => false
 }

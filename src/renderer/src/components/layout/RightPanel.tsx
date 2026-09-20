@@ -20,6 +20,7 @@ import { BrowserPanel } from './BrowserPanel'
 import { PreviewPanel } from './PreviewPanel'
 import { SubAgentsPanel } from './SubAgentsPanel'
 import { SubAgentExecutionDetail } from './SubAgentExecutionDetail'
+import { ExecutionRecordsPanel } from './ExecutionRecordsPanel'
 import { SessionChangeReviewPanel } from '@renderer/components/layout/SessionChangeReviewPanel'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
@@ -125,6 +126,7 @@ export function RightPanel({ compact = false, sessionId }: RightPanelProps): Rea
   const setRightPanelActiveTab = useUIStore((state) => state.setRightPanelActiveTab)
   const closeRightPanelTab = useUIStore((state) => state.closeRightPanelTab)
   const ensureBrowserTab = useUIStore((state) => state.ensureBrowserTab)
+  const ensureExecutionTab = useUIStore((state) => state.ensureExecutionTab)
   const openFilePreview = useUIStore((state) => state.openFilePreview)
   const activeScopedSessionId = useUIStore((state) => state.activeScopedSessionId)
 
@@ -257,6 +259,9 @@ export function RightPanel({ compact = false, sessionId }: RightPanelProps): Rea
     if (tab.kind === 'review') {
       return <SessionChangeReviewPanel />
     }
+    if (tab.kind === 'execution') {
+      return <ExecutionRecordsPanel />
+    }
     if (tab.kind === 'preview') {
       return <PreviewPanel embedded showTabStrip={false} />
     }
@@ -308,6 +313,7 @@ export function RightPanel({ compact = false, sessionId }: RightPanelProps): Rea
               onSelectTab={setRightPanelActiveTab}
               onCloseTab={closeRightPanelTab}
               onOpenFiles={() => void handleOpenLocalFiles()}
+              onOpenExecution={ensureExecutionTab}
               onAddBrowser={() => ensureBrowserTab(undefined, panelSessionId)}
               onClosePanel={() => setRightPanelOpen(false)}
               t={t}

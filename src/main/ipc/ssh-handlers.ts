@@ -1,5 +1,5 @@
 import { app, ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
-import { Client, type ConnectConfig, type ClientChannel } from 'ssh2'
+import { Client, type ConnectConfig, type ClientChannel, type SFTPWrapper, type Stats } from 'ssh2'
 import * as fs from 'fs'
 import * as path from 'path'
 import { SftpWorkspaceActivity } from '../ssh/sftp-workspace-activity'
@@ -45,7 +45,6 @@ import {
   type FileSnapshot
 } from './agent-change-handlers'
 import { safeSendMessagePackToAllWindows, safeSendMessagePackToWindow } from '../window-ipc'
-import { getNativeWorker } from '../lib/native-worker'
 import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
@@ -130,14 +129,13 @@ const TEXT_READ_BLOCKED_EXTENSIONS = new Set([
   '.tar'
 ])
 let sshConfigWatcherAttached = false
-let nativeSshEventsRegistered = false
 let accountRevocationSubscribed = false
 
 type SshClientSession = {
   connectionId: string
 }
 
-export interface NativeSshExecResult {
+export interface SshExecResult {
   success: boolean
   exitCode: number
   stdout: string
@@ -149,107 +147,6 @@ export interface NativeSshExecResult {
     timedOut: boolean
     engine: string
   }
-}
-
-interface NativeSshConnectionTestResult {
-  success: boolean
-  error?: string | null
-}
-
-interface NativeSshFileTransferResult {
-  success: boolean
-  error?: string | null
-  path?: string | null
-  bytes?: number | null
-}
-
-interface NativeSshUploadProgressEvent {
-  taskId: string
-  connectionId: string
-  stage: UploadStage
-  progress?: UploadProgress | null
-  message?: string | null
-}
-
-interface NativeSshTransferProgressEvent {
-  taskId: string
-  type: TransferTaskType
-  stage: TransferStage
-  sourceConnectionId?: string | null
-  targetConnectionId?: string | null
-  progress?: TransferProgress | null
-  message?: string | null
-  currentItem?: string | null
-  conflictPolicy?: SshConflictPolicy | null
-}
-
-interface NativeSshFileMutationResult {
-  success: boolean
-  error?: string | null
-  op?: 'create' | 'modify' | null
-}
-
-async function abortNativeSshTask(method: string, taskId: string): Promise<void> {
-  const result = await getNativeWorker().request<NativeSshFileMutationResult>(
-    method,
-    { taskId },
-    10_000
-  )
-  if (!result.success) throw new Error(result.error ?? `SSH task abort failed: ${method}`)
-}
-
-interface NativeSshFileHomeResult {
-  success: boolean
-  path?: string | null
-  error?: string | null
-}
-
-interface NativeSshFilePathResult {
-  success: boolean
-  path?: string | null
-  error?: string | null
-}
-
-interface NativeSshFileTextResult {
-  success: boolean
-  content?: string | null
-  name?: string | null
-  path?: string | null
-  lineCount?: number | null
-  maxLines?: number | null
-  truncated?: boolean | null
-  error?: string | null
-}
-
-interface NativeSshFileBinaryResult {
-  success: boolean
-  data?: string | null
-  error?: string | null
-}
-
-interface NativeSshFileStatResult {
-  success: boolean
-  exists: boolean
-  type?: 'file' | 'directory' | 'symlink' | 'other' | null
-  size?: number | null
-  mtimeMs?: number | null
-  error?: string | null
-}
-
-interface NativeSshFileListResult {
-  success: boolean
-  entries?: SshFileListEntry[] | null
-  hasMore?: boolean | null
-  nextCursor?: string | null
-  error?: string | null
-}
-
-type SshFileListEntry = {
-  name: string
-  path: string
-  type: 'file' | 'directory' | 'symlink'
-  size: number
-  modifyTime: number
 }
 
 interface ReadTextFileLinesResult {
@@ -482,55 +379,6 @@ function sendTransferEvent(evt: TransferEvent): void {
 
 function isSshTaskOwnedBy(event: IpcMainInvokeEvent, ownerWindowId: number): boolean {
   return BrowserWindow.fromWebContents(event.sender)?.id === ownerWindowId
-}
-
-function isNativeSshUploadProgressEvent(value: unknown): value is NativeSshUploadProgressEvent {
-  if (typeof value !== 'object' || value === null) return false
-  const event = value as NativeSshUploadProgressEvent
-  return (
-    typeof event.taskId === 'string' &&
-    typeof event.connectionId === 'string' &&
-    typeof event.stage === 'string'
-  )
-}
-
-function isNativeSshTransferProgressEvent(value: unknown): value is NativeSshTransferProgressEvent {
-  if (typeof value !== 'object' || value === null) return false
-  const event = value as NativeSshTransferProgressEvent
-  return (
-    typeof event.taskId === 'string' &&
-    typeof event.type === 'string' &&
-    typeof event.stage === 'string'
-  )
-}
-
-function ensureNativeSshEventBridge(): void {
-  if (nativeSshEventsRegistered) return
-  nativeSshEventsRegistered = true
-  getNativeWorker().onEvent('ssh/upload-progress', (params) => {
-    if (!isNativeSshUploadProgressEvent(params)) return
-    sendUploadEvent({
-      taskId: params.taskId,
-      connectionId: params.connectionId,
-      stage: params.stage,
-      progress: params.progress ?? undefined,
-      message: params.message ?? undefined
-    })
-  })
-  getNativeWorker().onEvent('ssh/transfer-progress', (params) => {
-    if (!isNativeSshTransferProgressEvent(params)) return
-    sendTransferEvent({
-      taskId: params.taskId,
-      type: params.type,
-      stage: params.stage,
-      sourceConnectionId: params.sourceConnectionId ?? null,
-      targetConnectionId: params.targetConnectionId ?? null,
-      progress: params.progress ?? undefined,
-      message: params.message ?? undefined,
-      currentItem: params.currentItem ?? undefined,
-      conflictPolicy: params.conflictPolicy ?? undefined
-    })
-  })
 }
 
 function nowStamp(): string {
@@ -834,7 +682,7 @@ async function resolveProxyJumpTarget(
   }
 }
 
-function formatNativeProxyJumpConnection(connection: SshConfigConnection): string {
+function formatProxyJumpConnection(connection: SshConfigConnection): string {
   const host = connection.host.includes(':') ? `[${connection.host}]` : connection.host
   const prefix = connection.username ? `${connection.username}@` : ''
   return connection.port && connection.port !== 22
@@ -848,12 +696,12 @@ function resolveNativeProxyJump(target: SshConfigConnection): string | null {
 
   const saved = getSshConnection(raw)
   if (saved) {
-    return formatNativeProxyJumpConnection(createDerivedConnection(saved, { proxyJump: null }))
+    return formatProxyJumpConnection(createDerivedConnection(saved, { proxyJump: null }))
   }
 
   const parsed = parseOpenSshJumpString(raw)
   if (!parsed || (!raw.includes('@') && !raw.includes(':'))) return raw
-  return formatNativeProxyJumpConnection(
+  return formatProxyJumpConnection(
     createDerivedConnection(target, {
       id: `jump:${raw}`,
       name: raw,
@@ -865,7 +713,7 @@ function resolveNativeProxyJump(target: SshConfigConnection): string | null {
   )
 }
 
-function toNativeSshConnection(connection: SshConfigConnection): Record<string, unknown> {
+function toSshConnectionPayload(connection: SshConfigConnection): Record<string, unknown> {
   const authFields: Record<string, unknown> = {}
   if (connection.authType === 'password') {
     authFields.password = connection.password
@@ -885,18 +733,16 @@ function toNativeSshConnection(connection: SshConfigConnection): Record<string, 
   }
 }
 
-export function getNativeSshConnectionPayload(
-  connectionId: string
-): Record<string, unknown> | null {
+export function getSshConnectionPayload(connectionId: string): Record<string, unknown> | null {
   const connection = getSshConnection(connectionId)
-  return connection ? toNativeSshConnection(connection) : null
+  return connection ? toSshConnectionPayload(connection) : null
 }
 
-export async function execNativeSshCommand(
+export async function execSshCommand(
   connectionId: string,
   command: string,
   timeout = 60_000
-): Promise<NativeSshExecResult> {
+): Promise<SshExecResult> {
   const connection = getSshConnection(connectionId)
   if (!connection) {
     return {
@@ -908,83 +754,101 @@ export async function execNativeSshCommand(
     }
   }
 
-  return await getNativeWorker().request<NativeSshExecResult>(
-    'ssh/exec',
-    {
-      connection: toNativeSshConnection(connection),
-      command,
-      timeoutMs: timeout
-    },
-    timeout + 30_000
-  )
+  const startedAt = Date.now()
+  let client: Client | undefined
+  let jumpClient: Client | undefined
+  let timer: NodeJS.Timeout | undefined
+  try {
+    const connected = await withSshWorkspace(currentSshWorkspaceId(), () =>
+      connectWithProxyJump(connection)
+    )
+    client = connected.client
+    jumpClient = connected.jumpClient
+    const result = await new Promise<SshExecResult>((resolve, reject) => {
+      let stdout = ''
+      let stderr = ''
+      let settled = false
+      const finish = (value: SshExecResult): void => {
+        if (settled) return
+        settled = true
+        if (timer) clearTimeout(timer)
+        resolve(value)
+      }
+      client?.exec(command, (error, stream) => {
+        if (error) {
+          reject(error)
+          return
+        }
+        stream.setEncoding('utf8')
+        stream.on('data', (chunk: string) => {
+          stdout += chunk
+        })
+        stream.stderr?.setEncoding('utf8')
+        stream.stderr?.on('data', (chunk: string) => {
+          stderr += chunk
+        })
+        stream.once('close', (code: number | null) => {
+          finish({
+            success: (code ?? 1) === 0,
+            exitCode: code ?? 1,
+            stdout,
+            stderr,
+            timing: {
+              totalMs: Date.now() - startedAt,
+              spawnMs: Date.now() - startedAt,
+              timedOut: false,
+              engine: 'ssh2'
+            }
+          })
+        })
+        timer = setTimeout(() => {
+          stream.destroy()
+          finish({
+            success: false,
+            exitCode: 124,
+            stdout,
+            stderr: `${stderr}${stderr ? '\n' : ''}Command timed out`,
+            error: 'SSH command timed out',
+            timing: {
+              totalMs: Date.now() - startedAt,
+              spawnMs: Date.now() - startedAt,
+              timedOut: true,
+              engine: 'ssh2'
+            }
+          })
+        }, timeout)
+        timer.unref?.()
+      })
+    })
+    return result
+  } catch (error) {
+    return {
+      success: false,
+      exitCode: 1,
+      stdout: '',
+      stderr: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error),
+      timing: {
+        totalMs: Date.now() - startedAt,
+        spawnMs: Date.now() - startedAt,
+        timedOut: false,
+        engine: 'ssh2'
+      }
+    }
+  } finally {
+    if (timer) clearTimeout(timer)
+    client?.end()
+    jumpClient?.end()
+  }
 }
 
-async function nativeSshFsRequest<T>(
-  method: string,
-  connectionId: string,
-  params: Record<string, unknown> = {},
-  timeout = 60_000
-): Promise<T> {
-  const connection = getSshConnection(connectionId)
-  if (!connection) {
-    throw new Error('Connection not found')
-  }
-
-  return await getNativeWorker().request<T>(
-    method,
-    {
-      connection: toNativeSshConnection(connection),
-      ...params
-    },
-    timeout + 30_000
-  )
-}
-
-async function nativeSshRemoteCopyRequest<T>(
-  method: string,
-  sourceConnectionId: string,
-  targetConnectionId: string,
-  params: Record<string, unknown> = {},
-  timeout = 60_000
-): Promise<T> {
-  const sourceConnection = getSshConnection(sourceConnectionId)
-  if (!sourceConnection) {
-    throw new Error('Source connection not found')
-  }
-  const targetConnection = getSshConnection(targetConnectionId)
-  if (!targetConnection) {
-    throw new Error('Target connection not found')
-  }
-
-  return await getNativeWorker().request<T>(
-    method,
-    {
-      sourceConnection: toNativeSshConnection(sourceConnection),
-      targetConnection: toNativeSshConnection(targetConnection),
-      sourceConnectionId,
-      targetConnectionId,
-      ...params
-    },
-    timeout + 30_000
-  )
-}
-
-async function resolveNativeSshPath(connectionId: string, inputPath: string): Promise<string> {
-  const result = await nativeSshFsRequest<NativeSshFilePathResult>(
-    'ssh/fs-resolve-path',
+async function resolveSshPath(connectionId: string, inputPath: string): Promise<string> {
+  const resolvedPath = await withSftp(
     connectionId,
-    { path: inputPath },
-    30_000
+    async (sftp) => await sftpRealPath(sftp, inputPath)
   )
-  if (!result.success || !result.path) {
-    throw new Error(result.error ?? 'Failed to resolve remote path')
-  }
-  logSshDebug('remote path resolved', {
-    connectionId,
-    inputPath,
-    resolvedPath: result.path
-  })
-  return result.path
+  logSshDebug('remote path resolved', { connectionId, inputPath, resolvedPath })
+  return resolvedPath
 }
 
 async function connectClient(client: Client, config: ConnectConfig): Promise<void> {
@@ -1039,6 +903,386 @@ async function connectWithProxyJump(
       ? toLayeredError('target_auth', message, err)
       : toLayeredError('target_connect', message, err)
   }
+}
+
+async function withSftp<T>(
+  connectionId: string,
+  operation: (sftp: SFTPWrapper) => Promise<T>
+): Promise<T> {
+  const connection = getSshConnection(connectionId)
+  if (!connection) throw new Error('Connection not found')
+  const connected = await withSshWorkspace(currentSshWorkspaceId(), () =>
+    connectWithProxyJump(connection)
+  )
+  try {
+    const sftp = await new Promise<SFTPWrapper>((resolve, reject) => {
+      connected.client.sftp((error, value) => (error ? reject(error) : resolve(value)))
+    })
+    return await operation(sftp)
+  } finally {
+    connected.client.end()
+    connected.jumpClient?.end()
+  }
+}
+
+export function sftpReadFile(sftp: SFTPWrapper, filePath: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    sftp.readFile(filePath, (error, value) => (error ? reject(error) : resolve(value)))
+  })
+}
+
+export function sftpWriteFile(
+  sftp: SFTPWrapper,
+  filePath: string,
+  content: string | Buffer
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.writeFile(filePath, content, (error) => (error ? reject(error) : resolve()))
+  })
+}
+
+function sftpAppendFile(sftp: SFTPWrapper, filePath: string, content: Buffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.open(filePath, 'a', (openError, handle) => {
+      if (openError || !handle) return reject(openError ?? new Error('Remote file open failed'))
+      sftp.write(handle, content, 0, content.length, 0, (writeError) => {
+        sftp.close(handle, (closeError) => {
+          if (writeError) return reject(writeError)
+          if (closeError) return reject(closeError)
+          resolve()
+        })
+      })
+    })
+  })
+}
+
+export function sftpReadRange(
+  sftp: SFTPWrapper,
+  filePath: string,
+  offset: number
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    sftp.open(filePath, 'r', (openError, handle) => {
+      if (openError || !handle) return reject(openError ?? new Error('Remote file open failed'))
+      sftp.stat(filePath, (statError, stats) => {
+        if (statError) {
+          sftp.close(handle, () => reject(statError))
+          return
+        }
+        const length = Math.max(0, stats.size - offset)
+        const output = Buffer.alloc(length)
+        if (length === 0) {
+          sftp.close(handle, (closeError) => (closeError ? reject(closeError) : resolve(output)))
+          return
+        }
+        sftp.read(handle, output, 0, length, offset, (readError, bytesRead) => {
+          sftp.close(handle, (closeError) => {
+            if (readError) return reject(readError)
+            if (closeError) return reject(closeError)
+            resolve(output.subarray(0, bytesRead))
+          })
+        })
+      })
+    })
+  })
+}
+
+export function sftpMakeDirectory(sftp: SFTPWrapper, directoryPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.stat(directoryPath, (statError, stats) => {
+      if (!statError)
+        return stats.isDirectory() ? resolve() : reject(new Error('Remote path is not a directory'))
+      sftp.mkdir(directoryPath, (error) => (error ? reject(error) : resolve()))
+    })
+  })
+}
+
+export function sftpDeleteFile(sftp: SFTPWrapper, filePath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.unlink(filePath, (error) => (error ? reject(error) : resolve()))
+  })
+}
+
+export function sftpMoveFile(sftp: SFTPWrapper, fromPath: string, toPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.rename(fromPath, toPath, (error) => (error ? reject(error) : resolve()))
+  })
+}
+
+export function sftpRealPath(sftp: SFTPWrapper, inputPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    sftp.realpath(inputPath, (error, value) => (error ? reject(error) : resolve(value)))
+  })
+}
+
+export function formatSshTextFileLines(
+  content: string,
+  filePath: string,
+  maxLines: number
+): ReadTextFileLinesResult {
+  const lines = content.replace(/\r\n/g, '\n').split('\n')
+  return {
+    content: lines.slice(0, maxLines).join('\n'),
+    name: path.basename(filePath),
+    path: filePath,
+    lineCount: lines.length,
+    maxLines,
+    truncated: lines.length > maxLines
+  }
+}
+
+export async function uploadSftpPath(
+  sftp: SFTPWrapper,
+  localPath: string,
+  remoteDir: string,
+  resume = false
+): Promise<number> {
+  let bytes = 0
+  const upload = async (source: string, destination: string): Promise<void> => {
+    const stats = await fs.promises.stat(source)
+    if (stats.isDirectory()) {
+      await sftpMakeDirectory(sftp, destination)
+      for (const entry of await fs.promises.readdir(source)) {
+        await upload(path.join(source, entry), path.posix.join(destination, entry))
+      }
+      return
+    }
+    const content = await fs.promises.readFile(source)
+    let offset = 0
+    if (resume) {
+      try {
+        const existing = await sftpStat(sftp, destination)
+        if (existing.size > 0 && existing.size < content.byteLength) offset = existing.size
+      } catch {
+        // A missing destination starts from zero.
+      }
+    }
+    if (offset > 0) await sftpAppendFile(sftp, destination, content.subarray(offset))
+    else await sftpWriteFile(sftp, destination, content)
+    bytes += content.byteLength - offset
+  }
+  await upload(localPath, path.posix.join(remoteDir, path.basename(localPath)))
+  return bytes
+}
+
+async function uploadLocalPath(
+  connectionId: string,
+  localPath: string,
+  remoteDir: string,
+  resume = false
+): Promise<number> {
+  return await withSftp(
+    connectionId,
+    async (sftp) => await uploadSftpPath(sftp, localPath, remoteDir, resume)
+  )
+}
+
+export function sftpStat(sftp: SFTPWrapper, remotePath: string): Promise<Stats> {
+  return new Promise((resolve, reject) => {
+    sftp.stat(remotePath, (error, value) => (error ? reject(error) : resolve(value)))
+  })
+}
+
+export async function downloadSftpPath(
+  sftp: SFTPWrapper,
+  remotePath: string,
+  localDir: string,
+  resume = false
+): Promise<number> {
+  let bytes = 0
+  const download = async (source: string, destination: string): Promise<void> => {
+    const stats = await sftpStat(sftp, source)
+    if (stats.isDirectory()) {
+      await fs.promises.mkdir(destination, { recursive: true })
+      const entries = await new Promise<Parameters<Parameters<SFTPWrapper['readdir']>[1]>[1]>(
+        (resolve, reject) => {
+          sftp.readdir(source, (error, list) => (error ? reject(error) : resolve(list)))
+        }
+      )
+      for (const entry of entries)
+        await download(
+          path.posix.join(source, entry.filename),
+          path.join(destination, entry.filename)
+        )
+      return
+    }
+    await fs.promises.mkdir(path.dirname(destination), { recursive: true })
+    let offset = 0
+    if (resume) {
+      try {
+        const existing = await fs.promises.stat(destination)
+        if (existing.size > 0 && existing.size < stats.size) offset = existing.size
+      } catch {
+        // A missing destination starts from zero.
+      }
+    }
+    const content =
+      offset > 0 ? await sftpReadRange(sftp, source, offset) : await sftpReadFile(sftp, source)
+    if (offset > 0) await fs.promises.appendFile(destination, content)
+    else await fs.promises.writeFile(destination, content)
+    bytes += content.byteLength - offset
+  }
+  await download(remotePath, path.join(localDir, path.posix.basename(remotePath)))
+  return bytes
+}
+
+async function downloadRemotePath(
+  connectionId: string,
+  remotePath: string,
+  localDir: string,
+  resume = false
+): Promise<number> {
+  return await withSftp(
+    connectionId,
+    async (sftp) => await downloadSftpPath(sftp, remotePath, localDir, resume)
+  )
+}
+
+export async function copySftpPath(
+  sourceSftp: SFTPWrapper,
+  targetSftp: SFTPWrapper,
+  sourcePath: string,
+  targetDir: string,
+  resume = false
+): Promise<number> {
+  let bytes = 0
+  const copy = async (source: string, destination: string): Promise<void> => {
+    const stats = await sftpStat(sourceSftp, source)
+    if (stats.isDirectory()) {
+      await sftpMakeDirectory(targetSftp, destination)
+      const entries = await new Promise<Parameters<Parameters<SFTPWrapper['readdir']>[1]>[1]>(
+        (resolve, reject) => {
+          sourceSftp.readdir(source, (error, list) => (error ? reject(error) : resolve(list)))
+        }
+      )
+      for (const entry of entries)
+        await copy(
+          path.posix.join(source, entry.filename),
+          path.posix.join(destination, entry.filename)
+        )
+      return
+    }
+    const content = await sftpReadFile(sourceSftp, source)
+    let offset = 0
+    if (resume) {
+      try {
+        const existing = await sftpStat(targetSftp, destination)
+        if (existing.size > 0 && existing.size < content.byteLength) offset = existing.size
+      } catch {
+        // A missing destination starts from zero.
+      }
+    }
+    if (offset > 0) await sftpAppendFile(targetSftp, destination, content.subarray(offset))
+    else await sftpWriteFile(targetSftp, destination, content)
+    bytes += content.byteLength - offset
+  }
+  await copy(sourcePath, path.posix.join(targetDir, path.posix.basename(sourcePath)))
+  return bytes
+}
+
+export type SftpTransferScanEntry = {
+  path: string
+  kind: 'file' | 'directory'
+  size: number
+}
+
+/** Enumerate a transfer source before execution so callers can preview scope and bytes. */
+export async function scanSftpPath(
+  sftp: SFTPWrapper,
+  remotePath: string
+): Promise<{ entries: SftpTransferScanEntry[]; bytes: number }> {
+  const entries: SftpTransferScanEntry[] = []
+  let bytes = 0
+  const scan = async (source: string): Promise<void> => {
+    const stats = await sftpStat(sftp, source)
+    const directory = stats.isDirectory()
+    entries.push({ path: source, kind: directory ? 'directory' : 'file', size: stats.size })
+    if (!directory) {
+      bytes += stats.size
+      return
+    }
+    const children = await new Promise<Parameters<Parameters<SFTPWrapper['readdir']>[1]>[1]>(
+      (resolve, reject) => {
+        sftp.readdir(source, (error, list) => (error ? reject(error) : resolve(list)))
+      }
+    )
+    for (const child of children) await scan(path.posix.join(source, child.filename))
+  }
+  await scan(remotePath)
+  return { entries, bytes }
+}
+
+async function copyRemotePath(
+  sourceConnectionId: string,
+  targetConnectionId: string,
+  sourcePath: string,
+  targetDir: string,
+  resume = false
+): Promise<number> {
+  return await withSftp(
+    sourceConnectionId,
+    async (sourceSftp) =>
+      await withSftp(
+        targetConnectionId,
+        async (targetSftp) =>
+          await copySftpPath(sourceSftp, targetSftp, sourcePath, targetDir, resume)
+      )
+  )
+}
+
+function sftpReadDirectory(sftp: SFTPWrapper, filePath: string): Promise<unknown[]> {
+  return new Promise((resolve, reject) => {
+    sftp.readdir(filePath, (error, entries) => {
+      if (error) return reject(error)
+      resolve(
+        entries.map((entry) => ({
+          name: entry.filename,
+          path: entry.filename,
+          type: entry.attrs.isDirectory() ? 'directory' : 'file',
+          size: entry.attrs.size,
+          mtimeMs: entry.attrs.mtime * 1000
+        }))
+      )
+    })
+  })
+}
+
+function sftpGlob(
+  sftp: SFTPWrapper,
+  rootPath: string,
+  pattern: string
+): Promise<Array<{ path: string; type: 'file' | 'directory' }>> {
+  const normalizedPattern = pattern.replaceAll('\\', '/').replace(/^\.\//, '')
+  const expression = new RegExp(
+    `^${normalizedPattern
+      .split('**')
+      .map((part) =>
+        part
+          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+          .replace(/\*/g, '[^/]*')
+          .replace(/\?/g, '[^/]')
+      )
+      .join('(?:.*/)?')}$`
+  )
+  const results: Array<{ path: string; type: 'file' | 'directory' }> = []
+  const visit = async (directory: string, depth: number): Promise<void> => {
+    if (results.length >= 1000 || depth > 32) return
+    const entries = await new Promise<Parameters<Parameters<SFTPWrapper['readdir']>[1]>[1]>(
+      (resolve, reject) => {
+        sftp.readdir(directory, (error, list) => (error ? reject(error) : resolve(list)))
+      }
+    )
+    for (const entry of entries) {
+      if (results.length >= 1000) break
+      const absolute = `${directory.replace(/\/$/, '')}/${entry.filename}`
+      const relative = absolute.replace(`${rootPath.replace(/\/$/, '')}/`, '')
+      const type = entry.attrs.isDirectory() ? 'directory' : 'file'
+      if (expression.test(relative) || expression.test(entry.filename))
+        results.push({ path: absolute, type })
+      if (type === 'directory') await visit(absolute, depth + 1)
+    }
+  }
+  return visit(rootPath, 0).then(() => results)
 }
 
 function recordOutput(session: SshSession, data: Buffer): void {
@@ -1279,13 +1523,7 @@ async function handleSshOutputBuffer(
 
 async function handleSshReadFile(args: SshReadFileArgs): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileTextResult>(
-      'ssh/fs-read-file',
-      args.connectionId,
-      { path: args.path }
-    )
-    if (!result.success) return { error: result.error ?? 'SSH read-file failed' }
-    const content = result.content ?? ''
+    const content = await readSshRuntimeText(args.connectionId, args.path)
 
     // Default to raw; only format with line numbers when raw is explicitly false.
     if (args.raw !== false) {
@@ -1313,20 +1551,8 @@ async function handleSshReadTextFileLines(args: SshReadTextFileLinesArgs): Promi
     if (TEXT_READ_BLOCKED_EXTENSIONS.has(path.extname(args.path).toLowerCase())) {
       return { error: 'This file type cannot be read as plain text' }
     }
-    const result = await nativeSshFsRequest<NativeSshFileTextResult>(
-      'ssh/fs-read-text-file-lines',
-      args.connectionId,
-      { path: args.path, maxLines }
-    )
-    if (!result.success) return { error: result.error ?? 'SSH read-text-file-lines failed' }
-    return {
-      content: result.content ?? '',
-      name: result.name ?? path.basename(args.path),
-      path: result.path ?? args.path,
-      lineCount: result.lineCount ?? 0,
-      maxLines: result.maxLines ?? maxLines,
-      truncated: result.truncated === true
-    } satisfies ReadTextFileLinesResult
+    const content = await readSshRuntimeText(args.connectionId, args.path)
+    return formatSshTextFileLines(content, args.path, maxLines)
   } catch (err) {
     return { error: String(err) }
   }
@@ -1334,18 +1560,21 @@ async function handleSshReadTextFileLines(args: SshReadTextFileLinesArgs): Promi
 
 async function handleSshStatPath(args: { connectionId: string; path: string }): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileStatResult>(
-      'ssh/fs-stat-path',
-      args.connectionId,
-      { path: args.path }
-    )
-    if (!result.success) return { error: result.error ?? 'SSH stat failed' }
-    return {
-      exists: result.exists,
-      type: result.type ?? null,
-      size: result.size ?? null,
-      mtimeMs: result.mtimeMs ?? null
-    }
+    return await withSftp(args.connectionId, async (sftp) => {
+      try {
+        const stats = await new Promise<Stats>((resolve, reject) => {
+          sftp.stat(args.path, (error, value) => (error ? reject(error) : resolve(value)))
+        })
+        return {
+          exists: true,
+          type: stats.isDirectory() ? 'directory' : stats.isSymbolicLink() ? 'symlink' : 'file',
+          size: stats.size,
+          mtimeMs: stats.mtime * 1000
+        }
+      } catch {
+        return { exists: false, type: null, size: null, mtimeMs: null }
+      }
+    })
   } catch (err) {
     return { error: String(err) }
   }
@@ -1362,12 +1591,7 @@ async function handleSshWriteFile(args: SshWriteFileArgs): Promise<unknown> {
         'File changed since it was read. Read the file again before editing or writing.'
       )
     }
-    const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-      'ssh/fs-write-file',
-      args.connectionId,
-      { path: args.path, content: args.content }
-    )
-    if (!result.success) return { error: result.error ?? 'SSH write-file failed' }
+    await writeSshTextFile(args.connectionId, args.path, args.content)
     await recordSshTextWriteChange({
       meta: args.changeMeta,
       connectionId: args.connectionId,
@@ -1375,7 +1599,7 @@ async function handleSshWriteFile(args: SshWriteFileArgs): Promise<unknown> {
       before,
       afterText: args.content
     })
-    return { success: true, op: result.op ?? (before.exists ? 'modify' : 'create') }
+    return { success: true, op: before.exists ? 'modify' : 'create' }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1383,15 +1607,11 @@ async function handleSshWriteFile(args: SshWriteFileArgs): Promise<unknown> {
 
 async function handleSshReadFileBinary(args: SshReadFileBinaryArgs): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileBinaryResult>(
-      'ssh/fs-read-file-binary',
+    const data = await withSftp(
       args.connectionId,
-      { path: args.path },
-      120_000
+      async (sftp) => await sftpReadFile(sftp, args.path)
     )
-    return result.success
-      ? { data: result.data ?? '' }
-      : { error: result.error ?? 'SSH read binary failed' }
+    return { data: data.toString('base64') }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1399,13 +1619,11 @@ async function handleSshReadFileBinary(args: SshReadFileBinaryArgs): Promise<unk
 
 async function handleSshWriteFileBinary(args: SshWriteFileBinaryArgs): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-      'ssh/fs-write-file-binary',
+    await withSftp(
       args.connectionId,
-      { path: args.path, data: args.data },
-      120_000
+      async (sftp) => await sftpWriteFile(sftp, args.path, Buffer.from(args.data, 'base64'))
     )
-    return result.success ? { success: true } : { error: result.error ?? 'SSH write binary failed' }
+    return { success: true }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1413,20 +1631,11 @@ async function handleSshWriteFileBinary(args: SshWriteFileBinaryArgs): Promise<u
 
 async function handleSshListDir(args: SshListDirArgs): Promise<unknown> {
   try {
-    if (args.cursor) return { error: 'Cursor pagination is not available for native SSH list-dir' }
-    const result = await nativeSshFsRequest<NativeSshFileListResult>(
-      'ssh/fs-list-dir',
-      args.connectionId,
-      { path: args.path, limit: args.limit ?? 1000 }
-    )
-    if (!result.success) return { error: result.error ?? 'SSH list-dir failed' }
+    if (args.cursor) return { error: 'Cursor pagination is not available for SFTP list-dir' }
+    const entries = await listSshRuntimeDirectory(args.connectionId, args.path)
     return args.limit
-      ? {
-          entries: result.entries ?? [],
-          hasMore: result.hasMore === true,
-          ...(result.nextCursor ? { nextCursor: result.nextCursor } : {})
-        }
-      : (result.entries ?? [])
+      ? { entries: entries.slice(0, args.limit), hasMore: entries.length > args.limit }
+      : entries
   } catch (err) {
     return { error: String(err) }
   }
@@ -1434,13 +1643,8 @@ async function handleSshListDir(args: SshListDirArgs): Promise<unknown> {
 
 async function handleSshHomeDir(args: { connectionId: string }): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileHomeResult>(
-      'ssh/fs-home-dir',
-      args.connectionId
-    )
-    return result.success && result.path
-      ? { path: result.path }
-      : { error: result.error ?? 'Failed to resolve home dir' }
+    const home = await withSftp(args.connectionId, async (sftp) => await sftpRealPath(sftp, '.'))
+    return { path: home }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1458,10 +1662,7 @@ async function handleSshFsConnect(
     currentSshWorkspaceId()
   )
   try {
-    const result = await nativeSshFsRequest<NativeSshFileHomeResult>(
-      'ssh/fs-home-dir',
-      args.connectionId
-    )
+    const result = await handleSshHomeDir(args)
     if (
       currentSshWorkspaceId() !== 'local-personal' &&
       !(await loadOfflineWorkspaceIds()).has(currentSshWorkspaceId())
@@ -1469,10 +1670,9 @@ async function handleSshFsConnect(
       sftpWorkspaceActivity.finishConnect(ticket, false)
       return { error: 'SSH_WORKSPACE_UNAVAILABLE' }
     }
-    sftpWorkspaceActivity.finishConnect(ticket, result.success)
-    return result.success
-      ? { success: true, homeDir: result.path ?? null }
-      : { error: result.error }
+    const success = !('error' in (result as Record<string, unknown>))
+    sftpWorkspaceActivity.finishConnect(ticket, success)
+    return success ? { success: true, homeDir: (result as { path?: string }).path ?? null } : result
   } catch (err) {
     sftpWorkspaceActivity.finishConnect(ticket, false)
     return { error: String(err) }
@@ -1487,7 +1687,7 @@ async function handleSshFsDisconnect(
     const ownerWindow = BrowserWindow.fromWebContents(event.sender)
     if (!ownerWindow || ownerWindow.isDestroyed()) return { error: 'SSH window is unavailable' }
     sftpWorkspaceActivity.disconnect(ownerWindow.id, args.connectionId, currentSshWorkspaceId())
-    logSshDebug('native fs disconnect requested', { connectionId: args.connectionId })
+    logSshDebug('SFTP disconnect requested', { connectionId: args.connectionId })
     return { success: true }
   } catch (err) {
     return { error: String(err) }
@@ -1496,12 +1696,8 @@ async function handleSshFsDisconnect(
 
 async function handleSshMkdir(args: { connectionId: string; path: string }): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-      'ssh/fs-mkdir',
-      args.connectionId,
-      { path: args.path }
-    )
-    return result.success ? { success: true } : { error: result.error ?? 'SSH mkdir failed' }
+    await withSftp(args.connectionId, async (sftp) => await sftpMakeDirectory(sftp, args.path))
+    return { success: true }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1509,12 +1705,8 @@ async function handleSshMkdir(args: { connectionId: string; path: string }): Pro
 
 async function handleSshDelete(args: { connectionId: string; path: string }): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-      'ssh/fs-delete',
-      args.connectionId,
-      { path: args.path }
-    )
-    return result.success ? { success: true } : { error: result.error ?? 'SSH delete failed' }
+    await deleteSshFile(args.connectionId, args.path)
+    return { success: true }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1526,12 +1718,8 @@ async function handleSshMove(args: {
   to: string
 }): Promise<unknown> {
   try {
-    const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-      'ssh/fs-move',
-      args.connectionId,
-      { from: args.from, to: args.to }
-    )
-    return result.success ? { success: true } : { error: result.error ?? 'SSH move failed' }
+    await withSftp(args.connectionId, async (sftp) => await sftpMoveFile(sftp, args.from, args.to))
+    return { success: true }
   } catch (err) {
     return { error: String(err) }
   }
@@ -1539,7 +1727,7 @@ async function handleSshMove(args: {
 
 async function handleSshExec(args: SshExecArgs): Promise<unknown> {
   try {
-    const result = await execNativeSshCommand(args.connectionId, args.command, args.timeout)
+    const result = await execSshCommand(args.connectionId, args.command, args.timeout)
     return {
       exitCode: result.exitCode,
       stdout: result.stdout,
@@ -1552,11 +1740,7 @@ async function handleSshExec(args: SshExecArgs): Promise<unknown> {
 
 async function handleSshGlob(args: SshGlobArgs): Promise<unknown> {
   try {
-    return await nativeSshFsRequest<SshGlobResult>('ssh/fs-glob', args.connectionId, {
-      path: args.path || '.',
-      pattern: args.pattern,
-      limit: args.limit
-    })
+    return await globSshRuntimeFiles(args.connectionId, args.pattern, args.path || '.')
   } catch (err) {
     return { error: String(err) }
   }
@@ -1565,10 +1749,7 @@ async function handleSshGlob(args: SshGlobArgs): Promise<unknown> {
 async function handleSshGrep(args: SshGrepArgs): Promise<unknown> {
   try {
     const { connectionId, ...params } = args
-    return await nativeSshFsRequest<SshGrepResult>('ssh/fs-grep', connectionId, {
-      ...params,
-      path: args.path || '.'
-    })
+    return await grepSshRuntimeFiles(connectionId, { ...params, path: args.path || '.' })
   } catch (err) {
     return { error: String(err) }
   }
@@ -1587,7 +1768,6 @@ export async function registerSshHandlers(): Promise<void> {
   })
   await initializeSshConfigCache()
   ensureSshConfigWatcher()
-  ensureNativeSshEventBridge()
 
   // ── Group CRUD ──
 
@@ -1650,7 +1830,7 @@ export async function registerSshHandlers(): Promise<void> {
     async (args) => {
       try {
         const sshSession: SshClientSession = { connectionId: args.connectionId }
-        const resolvedDir = await resolveNativeSshPath(args.connectionId, args.dirPath)
+        const resolvedDir = await resolveSshPath(args.connectionId, args.dirPath)
         const parent = path.posix.dirname(resolvedDir)
         const base = path.posix.basename(resolvedDir)
         const outName = `${base}-${nowStamp()}-${Math.random().toString(36).slice(2, 6)}.zip`
@@ -1710,12 +1890,6 @@ export async function registerSshHandlers(): Promise<void> {
         cancel: async (): Promise<void> => {
           if (task.canceled) return
           task.canceled = true
-          try {
-            if (task.started) await abortNativeSshTask('ssh/fs-upload-abort', taskId)
-          } catch (error) {
-            task.canceled = false
-            throw error
-          }
           sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
@@ -1739,27 +1913,14 @@ export async function registerSshHandlers(): Promise<void> {
             })
 
             task.started = true
-            const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
-              'ssh/fs-upload-file',
-              args.connectionId,
-              {
-                taskId,
-                connectionId: args.connectionId,
-                localPath: args.localPath,
-                remoteDir: args.remoteDir
-              },
-              30 * 60_000
-            )
+            const bytes = await uploadLocalPath(args.connectionId, args.localPath, args.remoteDir)
             if (task.canceled) return
-            if (!result.success) {
-              throw new Error(result.error ?? 'SSH upload failed')
-            }
             sendUploadEvent({
               taskId,
               connectionId: args.connectionId,
               stage: 'done',
               progress: {
-                current: result.bytes ?? localStat.size,
+                current: bytes,
                 total: localStat.size,
                 percent: 100
               },
@@ -1791,23 +1952,8 @@ export async function registerSshHandlers(): Promise<void> {
           })
 
           task.started = true
-          const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
-            'ssh/fs-upload-directory',
-            args.connectionId,
-            {
-              taskId,
-              connectionId: args.connectionId,
-              localPath: args.localPath,
-              remoteDir: args.remoteDir
-            },
-            2 * 60 * 60_000
-          )
+          const bytes = await uploadLocalPath(args.connectionId, args.localPath, args.remoteDir)
           if (task.canceled) return
-          if (!result.success) {
-            throw new Error(result.error ?? 'SSH directory upload failed')
-          }
-
-          const bytes = result.bytes ?? 0
           sendUploadEvent({
             taskId,
             connectionId: args.connectionId,
@@ -1843,6 +1989,45 @@ export async function registerSshHandlers(): Promise<void> {
     try {
       await task.cancel('Canceled by user')
       return { success: true }
+    } catch (err) {
+      return { error: String(err) }
+    }
+  })
+
+  // Compatibility aliases for the former Worker-specific abort entrypoints. All
+  // transfer cancellation is decided by the shared TS task registry.
+  for (const channel of [
+    'ssh:fs:upload:abort',
+    'ssh:fs:download:abort',
+    'ssh:fs:remote-copy:abort'
+  ]) {
+    registerSshMessagePackHandler<{ taskId: string }>(channel, async (args, event) => {
+      const task = transferTasks.get(args.taskId) ?? uploadTasks.get(args.taskId)
+      if (!task) return { error: 'Task not found' }
+      if (!isSshTaskOwnedBy(event, task.ownerWindowId)) {
+        return { error: 'SSH task is owned by another window' }
+      }
+      try {
+        await task.cancel('Canceled by user')
+        return { success: true }
+      } catch (err) {
+        return { error: String(err) }
+      }
+    })
+  }
+
+  registerSshMessagePackHandler<{
+    connectionId: string
+    remotePaths: string[]
+  }>('ssh:fs:transfer:scan', async (args) => {
+    try {
+      const scans = await withSftp(args.connectionId, async (sftp) =>
+        Promise.all(args.remotePaths.map((remotePath) => scanSftpPath(sftp, remotePath)))
+      )
+      return {
+        entries: scans.flatMap((scan) => scan.entries),
+        bytes: scans.reduce((total, scan) => total + scan.bytes, 0)
+      }
     } catch (err) {
       return { error: String(err) }
     }
@@ -1941,138 +2126,85 @@ export async function registerSshHandlers(): Promise<void> {
               throw new Error('No local paths selected for upload')
             }
 
-            task.cancel = async (): Promise<void> => {
-              if (task.canceled) return
-              task.canceled = true
-              try {
-                if (task.started) await abortNativeSshTask('ssh/fs-upload-abort', task.taskId)
-              } catch (error) {
-                task.canceled = false
-                throw error
-              }
-              sendTransferEvent({
-                taskId,
-                type: task.type,
-                stage: 'canceled',
-                sourceConnectionId: task.sourceConnectionId ?? null,
-                targetConnectionId: task.targetConnectionId ?? null,
-                message: 'Canceled by user',
-                conflictPolicy
-              })
-            }
-
             task.started = true
-            const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
-              'ssh/fs-transfer-upload',
-              args.connectionId,
-              {
-                taskId,
-                connectionId: args.connectionId,
-                localPaths: args.localPaths,
-                remoteDir: args.remoteDir,
-                conflictPolicy,
-                resume: args.resume === true
-              },
-              2 * 60 * 60_000
-            )
+            for (const localPath of args.localPaths) {
+              await uploadLocalPath(
+                args.connectionId,
+                localPath,
+                args.remoteDir,
+                args.resume === true
+              )
+              if (task.canceled) return
+            }
             if (task.canceled) {
               return
             }
-            if (!result.success) {
-              throw new Error(result.error ?? 'SSH transfer upload failed')
-            }
+            sendTransferEvent({
+              taskId,
+              type: task.type,
+              stage: 'done',
+              sourceConnectionId: task.sourceConnectionId ?? null,
+              targetConnectionId: task.targetConnectionId ?? null,
+              message: 'Upload complete',
+              conflictPolicy
+            })
             return
           } else if (args.type === 'download') {
             if (!Array.isArray(args.remotePaths) || args.remotePaths.length === 0) {
               throw new Error('No remote paths selected for download')
             }
 
-            task.cancel = async (): Promise<void> => {
-              if (task.canceled) return
-              task.canceled = true
-              try {
-                if (task.started) await abortNativeSshTask('ssh/fs-download-abort', task.taskId)
-              } catch (error) {
-                task.canceled = false
-                throw error
-              }
-              sendTransferEvent({
-                taskId,
-                type: task.type,
-                stage: 'canceled',
-                sourceConnectionId: task.sourceConnectionId ?? null,
-                targetConnectionId: task.targetConnectionId ?? null,
-                message: 'Canceled by user',
-                conflictPolicy
-              })
-            }
-
             task.started = true
-            const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
-              'ssh/fs-transfer-download',
-              args.connectionId,
-              {
-                taskId,
-                connectionId: args.connectionId,
-                remotePaths: args.remotePaths,
-                localDir: args.localDir,
-                conflictPolicy,
-                resume: args.resume === true
-              },
-              2 * 60 * 60_000
-            )
+            for (const remotePath of args.remotePaths) {
+              await downloadRemotePath(
+                args.connectionId,
+                remotePath,
+                args.localDir,
+                args.resume === true
+              )
+              if (task.canceled) return
+            }
             if (task.canceled) {
               return
             }
-            if (!result.success) {
-              throw new Error(result.error ?? 'SSH transfer download failed')
-            }
+            sendTransferEvent({
+              taskId,
+              type: task.type,
+              stage: 'done',
+              sourceConnectionId: task.sourceConnectionId ?? null,
+              targetConnectionId: task.targetConnectionId ?? null,
+              message: 'Download complete',
+              conflictPolicy
+            })
             return
           } else {
             if (!Array.isArray(args.sourcePaths) || args.sourcePaths.length === 0) {
               throw new Error('No remote paths selected for copy')
             }
 
-            task.cancel = async (): Promise<void> => {
-              if (task.canceled) return
-              task.canceled = true
-              try {
-                if (task.started) await abortNativeSshTask('ssh/fs-remote-copy-abort', task.taskId)
-              } catch (error) {
-                task.canceled = false
-                throw error
-              }
-              sendTransferEvent({
-                taskId,
-                type: task.type,
-                stage: 'canceled',
-                sourceConnectionId: task.sourceConnectionId ?? null,
-                targetConnectionId: task.targetConnectionId ?? null,
-                message: 'Canceled by user',
-                conflictPolicy
-              })
-            }
-
             task.started = true
-            const result = await nativeSshRemoteCopyRequest<NativeSshFileTransferResult>(
-              'ssh/fs-transfer-remote-copy',
-              args.sourceConnectionId,
-              args.targetConnectionId,
-              {
-                taskId,
-                sourcePaths: args.sourcePaths,
-                targetDir: args.targetDir,
-                conflictPolicy,
-                resume: args.resume === true
-              },
-              2 * 60 * 60_000
-            )
+            for (const sourcePath of args.sourcePaths) {
+              await copyRemotePath(
+                args.sourceConnectionId,
+                args.targetConnectionId,
+                sourcePath,
+                args.targetDir,
+                args.resume === true
+              )
+              if (task.canceled) return
+            }
             if (task.canceled) {
               return
             }
-            if (!result.success) {
-              throw new Error(result.error ?? 'SSH remote copy failed')
-            }
+            sendTransferEvent({
+              taskId,
+              type: task.type,
+              stage: 'done',
+              sourceConnectionId: task.sourceConnectionId ?? null,
+              targetConnectionId: task.targetConnectionId ?? null,
+              message: 'Remote copy complete',
+              conflictPolicy
+            })
             return
           }
         } catch (err) {
@@ -2272,15 +2404,12 @@ export async function registerSshHandlers(): Promise<void> {
 
   registerSshMessagePackHandler<{ id: string }>('ssh:connection:test', async (args) => {
     try {
-      const result = await nativeSshFsRequest<NativeSshConnectionTestResult>(
-        'ssh/test-connection',
-        args.id,
-        {},
-        30_000
-      )
-      return result.success
-        ? { success: true }
-        : { success: false, error: result.error ?? 'Connection test failed' }
+      await withSftp(args.id, async (sftp) => {
+        await new Promise<void>((resolve, reject) => {
+          sftp.realpath('.', (error) => (error ? reject(error) : resolve()))
+        })
+      })
+      return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }
     }
@@ -2643,18 +2772,12 @@ export async function registerSshHandlers(): Promise<void> {
     'ssh:fs:download',
     async (args) => {
       try {
-        const result = await nativeSshFsRequest<NativeSshFileTransferResult>(
-          'ssh/fs-download',
+        const data = await withSftp(
           args.connectionId,
-          {
-            remotePath: args.remotePath,
-            localPath: args.localPath
-          },
-          30 * 60_000
+          async (sftp) => await sftpReadFile(sftp, args.remotePath)
         )
-        return result.success
-          ? { success: true, path: result.path ?? args.localPath, bytes: result.bytes ?? 0 }
-          : { error: result.error ?? 'SSH download failed' }
+        await fs.promises.writeFile(args.localPath, data)
+        return { success: true, path: args.localPath, bytes: data.byteLength }
       } catch (err) {
         return { error: String(err) }
       }
@@ -2702,7 +2825,7 @@ function sshExec(
   command: string,
   timeout = 60000
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  return execNativeSshCommand(session.connectionId, command, timeout).then((result) => ({
+  return execSshCommand(session.connectionId, command, timeout).then((result) => ({
     exitCode: result.exitCode,
     stdout: result.stdout,
     stderr: result.stderr || result.error || ''
@@ -2714,16 +2837,19 @@ function shellEscape(str: string): string {
 }
 
 async function readSshTextSnapshot(connectionId: string, filePath: string): Promise<FileSnapshot> {
-  const stat = await nativeSshFsRequest<NativeSshFileStatResult>('ssh/fs-stat-path', connectionId, {
-    path: filePath
+  return await withSftp(connectionId, async (sftp) => {
+    let stats
+    try {
+      stats = await new Promise<Stats>((resolve, reject) => {
+        sftp.stat(filePath, (error, value) => (error ? reject(error) : resolve(value)))
+      })
+    } catch {
+      return buildFileSnapshot(false)
+    }
+    if (stats.isDirectory()) return buildOpaqueExistingSnapshot()
+    const content = await sftpReadFile(sftp, filePath)
+    return buildFileSnapshot(true, content.toString('utf8'))
   })
-  if (!stat.success || !stat.exists) return buildFileSnapshot(false)
-  if (stat.type !== 'file') return buildOpaqueExistingSnapshot()
-  const text = await nativeSshFsRequest<NativeSshFileTextResult>('ssh/fs-read-file', connectionId, {
-    path: filePath
-  })
-  if (!text.success) return buildOpaqueExistingSnapshot()
-  return buildFileSnapshot(true, text.content ?? '')
 }
 
 async function writeSshTextFile(
@@ -2731,21 +2857,175 @@ async function writeSshTextFile(
   filePath: string,
   content: string
 ): Promise<void> {
-  const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-    'ssh/fs-write-file',
-    connectionId,
-    { path: filePath, content }
-  )
-  if (!result.success) throw new Error(result.error ?? 'SSH write-file failed')
+  await withSftp(connectionId, async (sftp) => await sftpWriteFile(sftp, filePath, content))
 }
 
 async function deleteSshFile(connectionId: string, filePath: string): Promise<void> {
-  const result = await nativeSshFsRequest<NativeSshFileMutationResult>(
-    'ssh/fs-delete',
-    connectionId,
-    { path: filePath }
-  )
-  if (!result.success) throw new Error(result.error ?? 'SSH delete failed')
+  await withSftp(connectionId, async (sftp) => await sftpDeleteFile(sftp, filePath))
+}
+
+/** Narrow Main-owned SSH filesystem primitives used by the TS agent runtime. */
+export async function readSshRuntimeFile(
+  connectionId: string,
+  filePath: string,
+  offset = 1,
+  limit = 2000
+): Promise<string> {
+  const content = await withSftp(connectionId, async (sftp) => await sftpReadFile(sftp, filePath))
+  const lines = content.toString('utf8').replace(/\r\n/g, '\n').split('\n')
+  const start = Math.max(0, offset - 1)
+  const end = Math.min(lines.length, start + Math.max(1, Math.min(limit, 2000)))
+  return lines
+    .slice(start, end)
+    .map((line, index) => `${String(start + index + 1).padStart(6)}\t${line}`)
+    .join('\n')
+}
+
+export async function readSshRuntimeText(connectionId: string, filePath: string): Promise<string> {
+  const content = await withSftp(connectionId, async (sftp) => await sftpReadFile(sftp, filePath))
+  return content.toString('utf8')
+}
+
+export async function writeSshRuntimeFile(
+  connectionId: string,
+  filePath: string,
+  content: string
+): Promise<void> {
+  await withSftp(connectionId, async (sftp) => await sftpWriteFile(sftp, filePath, content))
+}
+
+export async function listSshRuntimeDirectory(
+  connectionId: string,
+  filePath: string
+): Promise<unknown[]> {
+  return await withSftp(connectionId, async (sftp) => {
+    const entries = await sftpReadDirectory(sftp, filePath)
+    return entries.slice(0, 1000)
+  })
+}
+
+export async function globSshRuntimeFiles(
+  connectionId: string,
+  pattern: string,
+  filePath = '.'
+): Promise<unknown> {
+  return await withSftp(connectionId, async (sftp) => {
+    const matches = await sftpGlob(sftp, filePath, pattern)
+    return {
+      kind: 'glob',
+      matches,
+      meta: {
+        backend: 'ssh',
+        engine: 'ssh2-sftp',
+        searchRoot: filePath,
+        pathStyle: 'absolute',
+        truncated: matches.length >= 1000,
+        timedOut: false,
+        limitReason: matches.length >= 1000 ? 'max_results' : null,
+        pattern,
+        hiddenIncluded: true,
+        ignoredDefaultsApplied: false
+      }
+    } satisfies SshGlobResult
+  })
+}
+
+export async function grepSshRuntimeFiles(
+  connectionId: string,
+  input: Record<string, unknown>
+): Promise<unknown> {
+  const pattern = typeof input.pattern === 'string' ? input.pattern : ''
+  if (!pattern.trim()) throw new Error('Grep pattern is required')
+  const searchRoot = typeof input.path === 'string' && input.path.trim() ? input.path : '.'
+  const maxResults =
+    typeof input.maxResults === 'number' && Number.isSafeInteger(input.maxResults)
+      ? Math.max(1, Math.min(input.maxResults, 1000))
+      : 1000
+  const flags = input.caseSensitive === false ? 'i' : ''
+  let matcher: RegExp
+  try {
+    matcher = new RegExp(pattern, flags)
+  } catch {
+    matcher = new RegExp(pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), flags)
+  }
+  const outputMode =
+    input.outputMode === 'files_with_matches' ||
+    input.outputMode === 'files_without_matches' ||
+    input.outputMode === 'count'
+      ? input.outputMode
+      : 'matches'
+
+  return await withSftp(connectionId, async (sftp) => {
+    const candidates = (await sftpGlob(sftp, searchRoot, '**/*')).filter(
+      (entry) => entry.type === 'file'
+    )
+    const matches: SshGrepResult['matches'] = []
+    const matchingFiles = new Set<string>()
+    const maxBytes = 256 * 1024
+    for (const candidate of candidates) {
+      if (matches.length >= maxResults) break
+      let text: string
+      try {
+        const bytes = await sftpReadFile(sftp, candidate.path)
+        if (bytes.byteLength > maxBytes) continue
+        text = bytes.toString('utf8')
+      } catch {
+        continue
+      }
+      const lines = text.replace(/\r\n/g, '\n').split('\n')
+      const fileMatches = lines.flatMap((line, index) => {
+        matcher.lastIndex = 0
+        return matcher.test(line)
+          ? [{ path: candidate.path, line: index + 1, text: line, kind: 'match' as const }]
+          : []
+      })
+      if (fileMatches.length > 0) matchingFiles.add(candidate.path)
+      if (outputMode === 'matches')
+        matches.push(...fileMatches.slice(0, maxResults - matches.length))
+    }
+    const resultMatches =
+      outputMode === 'matches'
+        ? matches
+        : [...matchingFiles].slice(0, maxResults).map((path) => ({ path }))
+    if (outputMode === 'files_without_matches') {
+      const matched = new Set(matchingFiles)
+      resultMatches.splice(
+        0,
+        resultMatches.length,
+        ...candidates
+          .filter((candidate) => !matched.has(candidate.path))
+          .slice(0, maxResults)
+          .map((candidate) => ({ path: candidate.path }))
+      )
+    }
+    if (outputMode === 'count') {
+      resultMatches.splice(
+        0,
+        resultMatches.length,
+        ...[...matchingFiles]
+          .slice(0, maxResults)
+          .map((path) => ({ path, count: matches.filter((match) => match.path === path).length }))
+      )
+    }
+    return {
+      kind: 'grep',
+      matches: resultMatches,
+      meta: {
+        backend: 'ssh',
+        engine: 'ssh2-sftp',
+        searchRoot,
+        pathStyle: 'absolute',
+        truncated: candidates.length > maxResults || matches.length >= maxResults,
+        timedOut: false,
+        limitReason:
+          candidates.length > maxResults || matches.length >= maxResults ? 'max_results' : null,
+        pattern,
+        hiddenIncluded: true,
+        ignoredDefaultsApplied: false,
+        outputMode
+      }
+    } satisfies SshGrepResult
+  })
 }
 
 // ── Cleanup ──

@@ -91,7 +91,7 @@ import {
 import { formatDurationMs } from '@renderer/lib/format-duration'
 import { useMemoizedTokens } from '@renderer/hooks/use-estimated-tokens'
 import { getLastDebugInfo, getRequestTraceInfo } from '@renderer/lib/debug-store'
-import { readSidecarDebugBody } from '@renderer/lib/ipc/agent-bridge'
+import { readRuntimeDebugBody } from '@renderer/lib/ipc/agent-bridge'
 import { MONO_FONT } from '@renderer/lib/constants'
 import {
   getLiveOutputComponentClass,
@@ -604,7 +604,7 @@ function DebugToggleButton({
     }
 
     setBodyLoading(true)
-    readSidecarDebugBody(debugInfo.bodyRef)
+    readRuntimeDebugBody(debugInfo.bodyRef)
       .then((body) => {
         if (!cancelled) {
           setBodyText(body)

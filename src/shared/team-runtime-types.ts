@@ -26,6 +26,8 @@ export interface TeamRuntimeMemberRecord {
   agentType?: string
   status: TeamRuntimeMemberStatus
   currentTaskId?: string | null
+  /** Active TS runtime child run; present while a worker is executing. */
+  runId?: string
   sessionId?: string
   isActive: boolean
   startedAt: number
@@ -42,7 +44,8 @@ export interface TeamRuntimeMessageRecord {
   timestamp: number
 }
 
-export type TeamRuntimeTaskStatus = 'pending' | 'in_progress' | 'completed'
+/** Persisted task state; failed/cancelled are terminal and must not be reported as completed. */
+export type TeamRuntimeTaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled'
 
 export interface TeamRuntimeTaskRecord {
   id: string
@@ -79,12 +82,14 @@ export interface TeamRuntimePermissionUpdatePayload {
 
 export interface UpdateTeamRuntimeMemberArgs {
   teamName: string
+  workspaceId?: string
   memberId: string
   patch: Partial<TeamRuntimeMemberRecord>
 }
 
 export interface UpdateTeamRuntimeManifestArgs {
   teamName: string
+  workspaceId?: string
   patch: Partial<
     Pick<TeamRuntimeManifest, 'permissionMode' | 'teamAllowedPaths' | 'tasks' | 'updatedAt'>
   >
@@ -113,6 +118,7 @@ export interface TeamRuntimeSnapshot {
 
 export interface CreateTeamRuntimeArgs {
   teamName: string
+  workspaceId?: string
   description: string
   sessionId?: string
   workingFolder?: string
@@ -131,20 +137,24 @@ export interface TeamRuntimeCreateResult {
 
 export interface DeleteTeamRuntimeArgs {
   teamName: string
+  workspaceId?: string
 }
 
 export interface AppendTeamRuntimeMessageArgs {
   teamName: string
+  workspaceId?: string
   message: TeamRuntimeMessageRecord
 }
 
 export interface GetTeamRuntimeSnapshotArgs {
   teamName: string
+  workspaceId?: string
   limit?: number
 }
 
 export interface ConsumeTeamRuntimeMessagesArgs {
   teamName: string
+  workspaceId?: string
   afterTimestamp?: number
   recipient?: string
   includeBroadcast?: boolean

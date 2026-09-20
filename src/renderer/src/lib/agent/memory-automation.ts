@@ -2,7 +2,7 @@ import { Allow, parse as parsePartialJSON } from 'partial-json'
 import { estimateTokens } from '@renderer/lib/format-tokens'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
-import { runSidecarTextRequest } from '@renderer/lib/ipc/agent-bridge'
+import { runTsTextRequest } from '@renderer/lib/ipc/agent-bridge'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
@@ -571,7 +571,7 @@ async function extractStage1Outputs(args: {
   sessionId: string
 }): Promise<PipelineScopeOutput[]> {
   const { systemPrompt, userPrompt } = buildStage1Prompts(args)
-  const raw = await runSidecarTextRequest({
+  const raw = await runTsTextRequest({
     provider: args.provider,
     messages: [
       { id: 'memory-stage1-system', role: 'system', content: systemPrompt, createdAt: Date.now() },
@@ -898,7 +898,7 @@ async function runConsolidation(args: {
   summaryMarkdown: string
   rawMemoriesMarkdown: string
 }): Promise<ConsolidationOutput | null> {
-  const raw = await runSidecarTextRequest({
+  const raw = await runTsTextRequest({
     provider: args.provider,
     messages: [
       {

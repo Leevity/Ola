@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { ProviderConfig, UnifiedMessage } from '../../src/renderer/src/lib/api/types'
 import { assessTsRuntimeAgentEligibility } from '../../src/renderer/src/lib/ipc/ts-runtime-agent-eligibility'
+import { TS_RUNTIME_CHANNEL_TOOL_NAMES } from '../../src/renderer/src/lib/ipc/ts-runtime-text-eligibility'
 
 const provider: ProviderConfig = {
   type: 'openai-chat',
@@ -35,19 +36,16 @@ describe('TS runtime Execute eligibility', () => {
       eligible: true,
       modelSource: baseline.modelSource,
       prompt: 'Inspect and update this project.',
+      promptImages: [],
       history: [],
       modelOptions: {}
     })
   })
 
   it.each([
-    [{ hasPlan: true }, 'PLAN_NOT_MIGRATED'],
-    [{ hasGoal: true }, 'GOAL_NOT_MIGRATED'],
     [{ hasSsh: true }, 'SSH_NOT_MIGRATED'],
     [{ hasPlugin: true }, 'PLUGIN_NOT_MIGRATED'],
     [{ hasChannels: true }, 'CHANNELS_NOT_MIGRATED'],
-    [{ hasTeam: true }, 'TEAM_NOT_MIGRATED'],
-    [{ hasImages: true }, 'ATTACHMENTS_NOT_MIGRATED'],
     [{ toolNames: ['BrowserNavigate'] }, 'TOOLS_NOT_MIGRATED'],
     [{ workingDirectory: null }, 'TOOLS_NOT_MIGRATED'],
     [{ mode: 'acp' }, 'MODE_NOT_MIGRATED']
@@ -58,11 +56,79 @@ describe('TS runtime Execute eligibility', () => {
     })
   })
 
+  it('keeps Plan Mode on the TS runtime when its tools are Main-owned', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        hasPlan: true,
+        toolNames: [
+          'Read',
+          'Write',
+          'Edit',
+          'EnterPlanMode',
+          'ExitPlanMode',
+          'AskUserQuestion',
+          'TaskCreate',
+          'TaskGet',
+          'TaskUpdate',
+          'TaskList',
+          'Task',
+          'Agent',
+          'get_goal',
+          'create_goal',
+          'update_goal',
+          'visualize_show_widget'
+        ]
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
+  it('allows the Main-owned team runtime when the team tools are explicitly selected', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        hasTeam: true,
+        toolNames: ['Read', 'TeamStatus', 'SendMessage', 'TeamCreate', 'TeamDelete']
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
+  it('allows Main-owned image generation through the TS runtime', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        toolNames: ['Read', 'ImageGenerate']
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
   it('allows an explicitly named Main-owned MCP tool through the TS runtime', () => {
     expect(
       assessTsRuntimeAgentEligibility({
         ...baseline,
         toolNames: ['Read', 'mcp__docs__search']
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
+  it('allows a workspace-bound SSH run when the remote connection is explicit', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        hasSsh: true,
+        sshConnectionId: 'connection-a',
+        toolNames: ['Read', 'Bash']
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
+  it('allows SSH Plan Mode when the remote connection is explicit', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        hasSsh: true,
+        sshConnectionId: 'connection-a',
+        toolNames: ['Read', 'Write', 'EnterPlanMode', 'ExitPlanMode', 'Bash']
       })
     ).toMatchObject({ eligible: true })
   })
@@ -84,6 +150,16 @@ describe('TS runtime Execute eligibility', () => {
     ).toEqual({ eligible: false, reason: 'TOOLS_NOT_MIGRATED' })
   })
 
+  it('allows migrated goal tools when a session already has a goal', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        hasGoal: true,
+        toolNames: ['get_goal', 'update_goal']
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
   it('allows a text-only channel turn when delivery stays outside the model tool set', () => {
     expect(
       assessTsRuntimeAgentEligibility({
@@ -94,6 +170,41 @@ describe('TS runtime Execute eligibility', () => {
         hasChannels: false
       })
     ).toMatchObject({ eligible: true, prompt: 'Inspect and update this project.' })
+  })
+
+  it('allows channel tools only with an explicit bound channel context', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        workingDirectory: undefined,
+        toolNames: ['PluginGetCurrentChatMessages', 'PluginReplyMessage'],
+        hasPlugin: true,
+        hasChannels: true,
+        channelContext: { pluginId: 'feishu', chatId: 'chat-1', messageId: 'message-1' }
+      })
+    ).toMatchObject({ eligible: true })
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        workingDirectory: undefined,
+        toolNames: ['PluginGetCurrentChatMessages'],
+        hasPlugin: true,
+        hasChannels: true
+      })
+    ).toEqual({ eligible: false, reason: 'PLUGIN_NOT_MIGRATED' })
+  })
+
+  it('keeps the complete Main-owned channel tool snapshot on the TS path', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        workingDirectory: undefined,
+        toolNames: [...TS_RUNTIME_CHANNEL_TOOL_NAMES],
+        hasPlugin: true,
+        hasChannels: true,
+        channelContext: { pluginId: 'feishu', chatId: 'chat-1', messageId: 'message-1' }
+      })
+    ).toMatchObject({ eligible: true })
   })
 
   it('keeps malformed or non-MCP external tool names on the sidecar path', () => {

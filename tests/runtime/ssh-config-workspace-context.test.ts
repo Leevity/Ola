@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { withSshConfigMutation } from '../../src/main/ssh/ssh-config-json'
 
-vi.mock('../../src/main/lib/native-worker', () => ({ getNativeWorker: vi.fn() }))
 const mockedHome = vi.hoisted(() => ({ value: '' }))
 vi.mock('os', async (importOriginal) => ({
   ...(await importOriginal<typeof import('os')>()),

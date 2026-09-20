@@ -59,9 +59,7 @@ function isReadOnlyTool(tool: ExtensionToolDefinition): boolean {
 }
 
 function nativeOnlyExtensionResult(toolName: string): string {
-  return encodeToolError(
-    `${toolName} executes in the .NET Native Worker and is unavailable through the renderer boundary.`
-  )
+  return encodeToolError(`${toolName} is not exposed by the Main TypeScript runtime boundary.`)
 }
 
 function createExtensionToolHandler(

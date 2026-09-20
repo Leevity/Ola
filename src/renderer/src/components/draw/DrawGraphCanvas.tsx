@@ -23,7 +23,7 @@ import { Button } from '@renderer/components/ui/button'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { cn } from '@renderer/lib/utils'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
-import { generateNativeOpenAIImages } from '@renderer/lib/api/openai-images-provider'
+import { generateTsOpenAIImages } from '@renderer/lib/api/openai-images-provider'
 import {
   buildMask,
   cropRaster,
@@ -443,7 +443,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
             })
           )
         }
-        const outputs = await generateNativeOpenAIImages({
+        const outputs = await generateTsOpenAIImages({
           config: providerConfig,
           prompt: [
             'Extend this image naturally into the transparent border.',
@@ -579,7 +579,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
         .filter(Boolean)
         .join(' ')
       try {
-        const outputs = await generateNativeOpenAIImages({
+        const outputs = await generateTsOpenAIImages({
           config: providerConfig,
           prompt,
           images: [{ dataUrl: source.dataUrl, mediaType: 'image/png' }],

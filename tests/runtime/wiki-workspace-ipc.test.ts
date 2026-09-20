@@ -10,7 +10,9 @@ const state = vi.hoisted(() => {
     registeredWorkspaceId: 'team-a',
     available: new Set(['team-a']),
     revokeDuringRead: false,
-    reads: [] as Array<{ projectRoot: string; workspaceId: string }>
+    reads: [] as Array<{ projectRoot: string; workspaceId: string }>,
+    saves: [] as Array<{ projectRoot: string; workspaceId: string }>,
+    deletes: [] as Array<{ projectRoot: string; workspaceId: string }>
   }
 })
 
@@ -36,7 +38,12 @@ vi.mock('../../src/main/db/capability-dao', () => ({
     if (state.revokeDuringRead) state.available = new Set()
     return { id: 'wiki-a', projectRoot, generatedAt: 1, fileCount: 0, nodes: [] }
   },
-  saveWikiDocument: async () => undefined
+  saveWikiDocument: async (document: { projectRoot: string }, workspaceId: string) => {
+    state.saves.push({ projectRoot: document.projectRoot, workspaceId })
+  },
+  deleteWikiDocument: async (projectRoot: string, workspaceId: string) => {
+    state.deletes.push({ projectRoot, workspaceId })
+  }
 }))
 vi.mock('../../src/main/wiki/wiki-service', () => ({
   generateProjectWiki: () => ({ id: 'wiki-a', projectRoot: '/project', nodes: [] }),
@@ -46,10 +53,6 @@ vi.mock('../../src/main/wiki/wiki-service', () => ({
   },
   writeProjectWikiMarkdown: () => undefined
 }))
-vi.mock('../../src/main/lib/codegraph-worker', () => ({
-  getCodeGraphWorker: () => ({ request: async () => ({ indexed: false }) })
-}))
-
 import { registerWikiHandlers } from '../../src/main/ipc/wiki-handlers'
 
 const event = { sender: state.sender, senderFrame: state.sender.mainFrame }
@@ -60,6 +63,8 @@ beforeEach(() => {
   state.available = new Set(['team-a'])
   state.revokeDuringRead = false
   state.reads = []
+  state.saves = []
+  state.deletes = []
   registerWikiHandlers()
 })
 
@@ -89,4 +94,23 @@ it('does not return a Wiki after team authorization is revoked during its read',
     'CHANNEL_WORKSPACE_UNAVAILABLE'
   )
   expect(state.reads).toHaveLength(1)
+})
+
+it('persists generated Wiki documents through the workspace-scoped TS DAO', async () => {
+  const generate = state.handlers.get('wiki:generate')!
+  await expect(
+    generate(event, { projectRoot: '/project', workspaceId: 'team-a' })
+  ).resolves.toMatchObject({ id: 'wiki-a' })
+  expect(state.saves).toEqual([{ projectRoot: '/project', workspaceId: 'team-a' }])
+})
+
+it('deletes Wiki documents through the workspace-scoped TS DAO', async () => {
+  const remove = state.handlers.get('wiki:delete')!
+  await expect(remove(event, { projectRoot: '/project', workspaceId: 'team-a' })).resolves.toEqual({
+    success: true
+  })
+  expect(state.deletes).toEqual([{ projectRoot: '/project', workspaceId: 'team-a' }])
+  await expect(
+    remove(event, { projectRoot: '/project', workspaceId: 'local-personal' })
+  ).rejects.toThrow('WIKI_WORKSPACE_UNAVAILABLE')
 })

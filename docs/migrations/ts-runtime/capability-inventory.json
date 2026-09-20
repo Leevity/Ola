@@ -1854,79 +1854,79 @@
       "method": "ssh/fs-delete",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 41,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-download",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 24,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-download-abort",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 25,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-glob",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 47,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-grep",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 48,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-home-dir",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 31,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-list-dir",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 39,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-mkdir",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 40,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-move",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 42,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-read-file",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 34,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-read-file-binary",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 37,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-read-text-file-lines",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 35,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-remote-copy-abort",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 30,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-remote-copy-file",
@@ -1938,25 +1938,25 @@
       "method": "ssh/fs-resolve-path",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 32,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-stat-path",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 33,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-transfer-download",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 45,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-transfer-remote-copy",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 46,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-transfer-scan",
@@ -1968,37 +1968,37 @@
       "method": "ssh/fs-transfer-upload",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 44,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-upload-abort",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 28,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-upload-directory",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 27,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-upload-file",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 26,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-write-file",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 36,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/fs-write-file-binary",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 38,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "ssh/import-apply",
@@ -2016,7 +2016,7 @@
       "method": "ssh/test-connection",
       "source": "sidecars/Ola.Native.Worker/Modules/Ssh/SshModule.cs",
       "line": 8,
-      "status": "staged-ts"
+      "status": "legacy"
     },
     {
       "method": "sync/files-apply",

@@ -8,6 +8,7 @@ import type {
 } from '../../shared/runtime/model'
 import type { ModelCodec } from './codec'
 import { applyBodyOptions, type ModelTarget } from './transport'
+import { runtimeImageSource } from './image-source'
 import {
   count,
   object,
@@ -20,7 +21,8 @@ import {
 
 function messages(
   history: readonly AgentMessage[],
-  options: ModelOptions
+  options: ModelOptions,
+  workspaceId: string
 ): Record<string, unknown>[] {
   const result: Array<{ role: string; content: Record<string, unknown>[] }> = []
   const pending = new Set<string>()
@@ -53,12 +55,19 @@ function messages(
         }
       else
         for (const image of message.images ?? [])
-          blocks.push({
-            type: 'image',
-            source: image.url
-              ? { type: 'url', url: image.url }
-              : { type: 'base64', media_type: image.mimeType, data: image.data }
-          })
+          (() => {
+            const source = runtimeImageSource(image, workspaceId)
+            blocks.push({
+              type: 'image',
+              source: source.startsWith('data:')
+                ? {
+                    type: 'base64',
+                    media_type: image.mimeType,
+                    data: source.slice(source.indexOf(',') + 1)
+                  }
+                : { type: 'url', url: source }
+            })
+          })()
     }
     if (!blocks.length) continue
     if (result.at(-1)?.role === role) result.at(-1)!.content.push(...blocks)
@@ -118,7 +127,7 @@ export const anthropicCodec: ModelCodec = {
                 ]
               }
             : {}),
-          messages: messages(input.messages, options),
+          messages: messages(input.messages, options, input.run.workspaceId),
           ...(input.tools.length
             ? {
                 tools: input.tools.map((tool) => ({

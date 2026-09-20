@@ -90,7 +90,16 @@ async function verifiedHandoverPath() {
   return backupPath
 }
 
-const databasePath = await verifiedHandoverPath()
+async function resolveDatabasePath() {
+  if (workerData.mode === 'direct') {
+    if (typeof workerData.path !== 'string' || !isAbsolute(workerData.path))
+      throw new Error('BUSINESS_DATABASE_PATH_REQUIRED')
+    return resolve(workerData.path)
+  }
+  return await verifiedHandoverPath()
+}
+
+const databasePath = await resolveDatabasePath()
 let lease
 try {
   lease = new DatabaseSync(`${databasePath}.ola-ts-writer.lock`)
@@ -105,7 +114,7 @@ try {
 const db = new DatabaseSync(databasePath)
 chmodSync(databasePath, 0o600)
 db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000')
-migrateBusinessSchema(db)
+migrateBusinessSchema(db, { direct: workerData.mode === 'direct' })
 
 const CRON_JOB_COLUMNS = `id,name,schedule_kind,schedule_at,schedule_every,schedule_expr,schedule_tz,prompt,
   agent_id,model,model_source,working_folder,ssh_connection_id,session_id,
@@ -303,6 +312,199 @@ function syncTableOrder(schemas) {
   }
   for (const schema of schemas) visit(schema.name)
   return ordered
+}
+
+// V2 workspace sync is intentionally allow-listed. Device-global tables (provider
+// health, migrations, SSH connection catalogues, etc.) never enter a workspace bundle.
+const WORKSPACE_SYNC_TABLES = new Set([
+  'sessions',
+  'messages',
+  'projects',
+  'plans',
+  'session_goals',
+  'session_goal_events',
+  'cron_jobs',
+  'cron_runs',
+  'cron_run_messages',
+  'cron_run_logs',
+  'tasks',
+  'memory_roots',
+  'memory_stage1_outputs',
+  'memory_jobs',
+  'memory_automation_entries',
+  'memory_automation_rollups_v2',
+  'memory_citation_usage',
+  'usage_events',
+  'usage_activity_daily_v2',
+  'usage_activity_daily_models_v2',
+  'usage_activity_daily_providers_v2',
+  'draw_runs',
+  'agent_change_sets',
+  'agent_file_changes',
+  'sub_agent_history',
+  'runtime_tool_results',
+  'runtime_jobs',
+  'runtime_job_events',
+  'qq_wakeup_windows_v2',
+  'wiki_documents',
+  'wiki_nodes',
+  'wiki_file_snapshots',
+  'wiki_generation_runs',
+  'desktop_flows',
+  'desktop_flow_steps',
+  'desktop_flow_runs'
+])
+
+function workspaceSyncSchemas() {
+  const schemas = syncTableSchemas().filter((schema) => WORKSPACE_SYNC_TABLES.has(schema.name))
+  if (schemas.length !== WORKSPACE_SYNC_TABLES.size)
+    throw new Error('BUSINESS_SYNC_SCHEMA_INCOMPLETE')
+  return schemas
+}
+
+function workspaceSyncOwner(schemaName, workspaceId) {
+  const direct = new Set([
+    'sessions',
+    'projects',
+    'cron_jobs',
+    'qq_wakeup_windows_v2',
+    'wiki_documents',
+    'wiki_nodes',
+    'wiki_file_snapshots',
+    'wiki_generation_runs',
+    'memory_roots',
+    'memory_jobs',
+    'memory_automation_entries',
+    'memory_automation_rollups_v2',
+    'usage_events',
+    'usage_activity_daily_v2',
+    'usage_activity_daily_models_v2',
+    'usage_activity_daily_providers_v2',
+    'draw_runs',
+    'agent_change_sets',
+    'runtime_jobs',
+    'desktop_flows'
+  ])
+  if (direct.has(schemaName)) return { sql: 'workspace_id=?', params: [workspaceId] }
+  const bySession = new Set([
+    'messages',
+    'plans',
+    'session_goals',
+    'session_goal_events',
+    'tasks',
+    'sub_agent_history',
+    'runtime_tool_results'
+  ])
+  if (bySession.has(schemaName))
+    return {
+      sql: `session_id IN (SELECT id FROM sessions WHERE workspace_id=?)`,
+      params: [workspaceId]
+    }
+  if (schemaName === 'cron_runs')
+    return {
+      sql: 'job_id IN (SELECT id FROM cron_jobs WHERE workspace_id=?)',
+      params: [workspaceId]
+    }
+  if (schemaName === 'cron_run_messages' || schemaName === 'cron_run_logs')
+    return {
+      sql: `run_id IN (SELECT r.id FROM cron_runs r JOIN cron_jobs j ON j.id=r.job_id WHERE j.workspace_id=?)`,
+      params: [workspaceId]
+    }
+  if (schemaName === 'memory_stage1_outputs' || schemaName === 'memory_citation_usage')
+    return {
+      sql: `memory_root_id IN (SELECT id FROM memory_roots WHERE workspace_id=?)`,
+      params: [workspaceId]
+    }
+  if (schemaName === 'agent_file_changes')
+    return {
+      sql: `run_id IN (SELECT run_id FROM agent_change_sets WHERE workspace_id=?)`,
+      params: [workspaceId]
+    }
+  if (schemaName === 'runtime_job_events')
+    return {
+      sql: `job_id IN (SELECT job_id FROM runtime_jobs WHERE workspace_id=?)`,
+      params: [workspaceId]
+    }
+  if (schemaName === 'desktop_flow_steps' || schemaName === 'desktop_flow_runs')
+    return {
+      sql: `flow_id IN (SELECT id FROM desktop_flows WHERE workspace_id=?)`,
+      params: [workspaceId]
+    }
+  throw new Error(`BUSINESS_SYNC_TABLE_UNSUPPORTED:${schemaName}`)
+}
+
+function workspaceSyncRecordId(schema, row) {
+  return syncRecordId(schema.pk.map((column) => row[column]))
+}
+
+function workspaceSyncRevision(rows, baseline, tombstones) {
+  return createHash('sha256')
+    .update(JSON.stringify([rows, baseline, tombstones]))
+    .digest('hex')
+}
+
+function workspaceSyncStableStringify(value) {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) return `[${value.map(workspaceSyncStableStringify).join(',')}]`
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${workspaceSyncStableStringify(value[key])}`)
+    .join(',')}}`
+}
+
+function workspaceSyncHash(value) {
+  return createHash('sha256').update(workspaceSyncStableStringify(value)).digest('hex')
+}
+
+function workspaceSyncKey(domain, recordId) {
+  return `${domain}\u0000${recordId}`
+}
+
+function workspaceSyncState(scopeHash, workspaceId, providerId, schemas) {
+  const rows = []
+  for (const schema of schemas) {
+    const owner = workspaceSyncOwner(schema.name, workspaceId)
+    const selected = db
+      .prepare(
+        `SELECT * FROM ${syncQuoteIdentifier(schema.name)} WHERE ${owner.sql} ORDER BY ${schema.pk.map(syncQuoteIdentifier).join(', ')}`
+      )
+      .all(...owner.params)
+    for (const row of selected) {
+      const normalized = Object.fromEntries(
+        schema.columns.map((column) => [column, syncJsonValue(row[column])])
+      )
+      const updatedAt =
+        typeof normalized.updated_at === 'number'
+          ? normalized.updated_at
+          : typeof normalized.created_at === 'number'
+            ? normalized.created_at
+            : null
+      const record = {
+        domain: `${SYNC_DOMAIN_PREFIX}${schema.name}`,
+        recordId: workspaceSyncRecordId(schema, normalized),
+        value: { table: schema.name, row: normalized },
+        updatedAt
+      }
+      if (!schema.columns.includes('workspace_id')) record.workspaceId = workspaceId
+      rows.push(record)
+    }
+  }
+  const baseline = db
+    .prepare(
+      'SELECT domain,record_id AS recordId,content_hash AS contentHash FROM ola_ts_sync_baselines_v2 WHERE scope_hash=? AND workspace_id=? AND provider_id=?'
+    )
+    .all(scopeHash, workspaceId, providerId)
+  const tombstones = db
+    .prepare(
+      'SELECT domain,record_id AS recordId,deleted_at AS deletedAt,origin_device_id AS originDeviceId,workspace_id AS workspaceId FROM ola_ts_sync_tombstones_v2 WHERE scope_hash=? AND workspace_id=? AND provider_id=?'
+    )
+    .all(scopeHash, workspaceId, providerId)
+  return {
+    rows,
+    baseline,
+    tombstones,
+    revisionToken: workspaceSyncRevision(rows, baseline, tombstones)
+  }
 }
 
 function syncCaptureLocal(providerId) {
@@ -1720,13 +1922,51 @@ function dispatch(method, args = {}) {
     const projectRoot = wikiProjectRoot(args.projectRoot)
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
     const row = db
-      .prepare('SELECT document_json FROM wiki_documents WHERE project_root=?')
-      .get(wikiStorageKey(projectRoot, workspaceId))
+      .prepare(
+        `SELECT document_json FROM wiki_documents
+         WHERE project_root=? AND (workspace_id=? OR workspace_id IS NULL)
+         LIMIT 1`
+      )
+      .get(wikiStorageKey(projectRoot, workspaceId), workspaceId)
     if (!row) return null
     const document = JSON.parse(row.document_json)
     if (!document || document.projectRoot !== projectRoot)
       throw new Error('BUSINESS_WIKI_DOCUMENT_INVALID')
     return document
+  }
+  if (method === 'legacy-wiki-counts') {
+    const workspaceId = args.workspaceId == null ? null : text(args.workspaceId, 'WORKSPACE')
+    const hasTable = (table) =>
+      db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1").get(table) !==
+      undefined
+    if (
+      !hasTable('ola_native_wiki_documents_v1') ||
+      !hasTable('ola_native_wiki_generation_runs_v1')
+    )
+      return { documents: 0, generationRuns: 0 }
+    const workspaceClause = workspaceId ? ' AND COALESCE(p.workspace_id, ?) = ?' : ''
+    const workspaceParams = workspaceId ? [workspaceId, workspaceId] : []
+    const documents = Number(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM ola_native_wiki_documents_v1 d
+           LEFT JOIN projects p ON p.id=d.project_id
+           WHERE 1=1${workspaceClause}`
+        )
+        .get(...workspaceParams).count ?? 0
+    )
+    const generationRuns = Number(
+      db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM ola_native_wiki_generation_runs_v1 r
+           LEFT JOIN projects p ON p.id=r.project_id
+           WHERE 1=1${workspaceClause}`
+        )
+        .get(...workspaceParams).count ?? 0
+    )
+    return { documents, generationRuns }
   }
   if (method === 'wiki-save') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
@@ -1744,26 +1984,26 @@ function dispatch(method, args = {}) {
     db.exec('BEGIN IMMEDIATE')
     try {
       db.prepare(
-        `INSERT INTO wiki_documents(project_root,document_json,generated_at,updated_at)
-         VALUES(?,?,?,?) ON CONFLICT(project_root) DO UPDATE SET
+        `INSERT INTO wiki_documents(project_root,document_json,generated_at,updated_at,workspace_id)
+         VALUES(?,?,?,?,?) ON CONFLICT(project_root) DO UPDATE SET
          document_json=excluded.document_json,generated_at=excluded.generated_at,
-         updated_at=excluded.updated_at`
-      ).run(storageKey, documentJson, generatedAt, updatedAt)
+         updated_at=excluded.updated_at,workspace_id=excluded.workspace_id`
+      ).run(storageKey, documentJson, generatedAt, updatedAt, workspaceId)
       db.prepare('DELETE FROM wiki_nodes WHERE project_root=?').run(storageKey)
       db.prepare('DELETE FROM wiki_file_snapshots WHERE project_root=?').run(storageKey)
       const insertNode = db.prepare(
-        `INSERT OR REPLACE INTO wiki_nodes(project_root,node_path,node_json,updated_at)
-         VALUES(?,?,?,?)`
+        `INSERT OR REPLACE INTO wiki_nodes(project_root,node_path,node_json,updated_at,workspace_id)
+         VALUES(?,?,?,?,?)`
       )
       const insertFile = db.prepare(
         `INSERT OR REPLACE INTO wiki_file_snapshots
-         (project_root,file_path,content_hash,size_bytes,modified_at,updated_at)
-         VALUES(?,?,?,?,?,?)`
+         (project_root,file_path,content_hash,size_bytes,modified_at,updated_at,workspace_id)
+         VALUES(?,?,?,?,?,?,?)`
       )
       for (const node of document.nodes) {
         if (!node || typeof node !== 'object' || Array.isArray(node)) continue
         if (typeof node.path !== 'string' || !node.path || node.path.length > 1024) continue
-        insertNode.run(storageKey, node.path, JSON.stringify(node), updatedAt)
+        insertNode.run(storageKey, node.path, JSON.stringify(node), updatedAt, workspaceId)
         if (node.kind === 'file')
           insertFile.run(
             storageKey,
@@ -1771,13 +2011,14 @@ function dispatch(method, args = {}) {
             typeof node.hash === 'string' ? node.hash : null,
             Number.isSafeInteger(node.size) ? node.size : 0,
             Number.isSafeInteger(node.modifiedAt) ? node.modifiedAt : 0,
-            updatedAt
+            updatedAt,
+            workspaceId
           )
       }
       db.prepare(
-        `INSERT INTO wiki_generation_runs(id,project_root,state,started_at,finished_at)
-         VALUES(?,?,'succeeded',?,?)`
-      ).run(randomUUID(), storageKey, updatedAt, updatedAt)
+        `INSERT INTO wiki_generation_runs(id,project_root,state,started_at,finished_at,workspace_id)
+         VALUES(?,?,'succeeded',?,?,?)`
+      ).run(randomUUID(), storageKey, updatedAt, updatedAt, workspaceId)
       db.exec('COMMIT')
       return true
     } catch (error) {
@@ -1792,7 +2033,11 @@ function dispatch(method, args = {}) {
     db.exec('BEGIN IMMEDIATE')
     try {
       const deleted =
-        db.prepare('DELETE FROM wiki_documents WHERE project_root=?').run(storageKey).changes > 0
+        db
+          .prepare(
+            'DELETE FROM wiki_documents WHERE project_root=? AND (workspace_id=? OR workspace_id IS NULL)'
+          )
+          .run(storageKey, workspaceId).changes > 0
       db.prepare('DELETE FROM wiki_nodes WHERE project_root=?').run(storageKey)
       db.prepare('DELETE FROM wiki_file_snapshots WHERE project_root=?').run(storageKey)
       db.prepare('DELETE FROM wiki_generation_runs WHERE project_root=?').run(storageKey)
@@ -2243,6 +2488,236 @@ function dispatch(method, args = {}) {
   if (method === 'draw-runs-clear') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
     return Number(db.prepare('DELETE FROM draw_runs WHERE workspace_id=?').run(workspaceId).changes)
+  }
+  if (method === 'workspace-sync-capture') {
+    const scopeHash = text(args.scopeHash, 'SYNC_SCOPE')
+    if (!/^[a-f0-9]{64}$/.test(scopeHash)) throw new Error('BUSINESS_SYNC_SCOPE_INVALID')
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const providerId = text(args.providerId, 'SYNC_PROVIDER')
+    const deviceId = text(args.deviceId, 'SYNC_ORIGIN_DEVICE')
+    const createdAt = timestamp(args.createdAt, 'SYNC_DELETED_AT')
+    const schemas = workspaceSyncSchemas()
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const table of ['ola_ts_sync_baselines_v2', 'ola_ts_sync_tombstones_v2']) {
+        const existing = db
+          .prepare(`SELECT workspace_id FROM ${table} WHERE scope_hash=? LIMIT 1`)
+          .get(scopeHash)
+        if (existing && existing.workspace_id !== workspaceId)
+          throw new Error('BUSINESS_SYNC_WORKSPACE_MISMATCH')
+      }
+      const before = workspaceSyncState(scopeHash, workspaceId, providerId, schemas)
+      const active = new Set(before.rows.map((row) => workspaceSyncKey(row.domain, row.recordId)))
+      const insert = db.prepare(
+        `INSERT INTO ola_ts_sync_tombstones_v2
+         (scope_hash,workspace_id,provider_id,domain,record_id,deleted_at,origin_device_id)
+         VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(scope_hash,provider_id,domain,record_id) DO NOTHING`
+      )
+      for (const row of before.baseline) {
+        if (active.has(workspaceSyncKey(row.domain, row.recordId))) continue
+        insert.run(
+          scopeHash,
+          workspaceId,
+          providerId,
+          row.domain,
+          row.recordId,
+          createdAt,
+          deviceId
+        )
+      }
+      const state = workspaceSyncState(scopeHash, workspaceId, providerId, schemas)
+      db.exec('COMMIT')
+      return {
+        scopeHash,
+        records: state.rows,
+        baseline: state.baseline,
+        tombstones: state.tombstones,
+        revisionToken: state.revisionToken
+      }
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+  if (method === 'workspace-sync-commit') {
+    const scopeHash = text(args.scopeHash, 'SYNC_SCOPE')
+    const expectedRevisionToken = text(args.expectedRevisionToken, 'SYNC_REVISION')
+    if (!/^[a-f0-9]{64}$/.test(scopeHash) || !/^[a-f0-9]{64}$/.test(expectedRevisionToken))
+      throw new Error('BUSINESS_SYNC_SCOPE_INVALID')
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const providerId = text(args.providerId, 'SYNC_PROVIDER')
+    const syncedAt = timestamp(args.syncedAt, 'SYNCED_AT')
+    if (
+      !Array.isArray(args.records) ||
+      !Array.isArray(args.deleted) ||
+      !args.expectedBundle ||
+      !Array.isArray(args.expectedBundle.records) ||
+      !Array.isArray(args.expectedBundle.tombstones) ||
+      !Array.isArray(args.baseline) ||
+      !Array.isArray(args.tombstones) ||
+      args.records.length > 100_000 ||
+      args.deleted.length > 100_000 ||
+      args.expectedBundle.records.length + args.expectedBundle.tombstones.length > 200_000
+    )
+      throw new Error('BUSINESS_SYNC_BATCH_INVALID')
+    const schemas = workspaceSyncSchemas()
+    const byName = new Map(schemas.map((schema) => [schema.name, schema]))
+    const tableOrder = syncTableOrder(schemas)
+    const orderIndex = new Map(tableOrder.map((name, index) => [name, index]))
+    const recordsByTable = new Map()
+    for (const record of args.records) {
+      const tableName = syncTableFromDomain(record?.domain)
+      const schema = byName.get(tableName)
+      const row = record?.value?.row
+      if (!schema || record?.value?.table !== tableName || !row || typeof row !== 'object')
+        throw new Error('BUSINESS_SYNC_RECORD_INVALID')
+      if (schema.columns.includes('workspace_id')) {
+        if (row.workspace_id !== workspaceId) throw new Error('BUSINESS_SYNC_WORKSPACE_MISMATCH')
+      } else if (record.workspaceId !== workspaceId) {
+        throw new Error('BUSINESS_SYNC_WORKSPACE_MISMATCH')
+      }
+      if (workspaceSyncRecordId(schema, row) !== record.recordId)
+        throw new Error('BUSINESS_SYNC_RECORD_INVALID')
+      if (!recordsByTable.has(tableName)) recordsByTable.set(tableName, [])
+      recordsByTable.get(tableName).push(row)
+    }
+    const deleted = args.deleted.map((item) => {
+      const tableName = syncTableFromDomain(item?.domain)
+      const schema = byName.get(tableName)
+      if (!schema) throw new Error('BUSINESS_SYNC_RECORD_INVALID')
+      const values = syncParseRecordId(text(item.recordId, 'SYNC_RECORD'))
+      if (values.length !== schema.pk.length) throw new Error('BUSINESS_SYNC_RECORD_INVALID')
+      return { tableName, schema, values }
+    })
+    const expectedRecords = new Map(
+      args.expectedBundle.records.map((record) => [
+        workspaceSyncKey(record.domain, record.recordId),
+        record
+      ])
+    )
+    for (const tombstone of args.expectedBundle.tombstones) {
+      if (tombstone.workspaceId !== workspaceId) throw new Error('BUSINESS_SYNC_WORKSPACE_MISMATCH')
+    }
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      for (const table of ['ola_ts_sync_baselines_v2', 'ola_ts_sync_tombstones_v2']) {
+        const existing = db
+          .prepare(`SELECT workspace_id FROM ${table} WHERE scope_hash=? LIMIT 1`)
+          .get(scopeHash)
+        if (existing && existing.workspace_id !== workspaceId)
+          throw new Error('BUSINESS_SYNC_WORKSPACE_MISMATCH')
+      }
+      const before = workspaceSyncState(scopeHash, workspaceId, providerId, schemas)
+      if (before.revisionToken !== expectedRevisionToken)
+        throw new Error('BUSINESS_SYNC_LOCAL_CHANGED')
+
+      for (const item of [...deleted].sort(
+        (a, b) => (orderIndex.get(b.tableName) ?? 0) - (orderIndex.get(a.tableName) ?? 0)
+      )) {
+        const owner = workspaceSyncOwner(item.tableName, workspaceId)
+        const where = item.schema.pk
+          .map((column) => `${syncQuoteIdentifier(column)} IS ?`)
+          .join(' AND ')
+        db.prepare(
+          `DELETE FROM ${syncQuoteIdentifier(item.tableName)} WHERE ${where} AND ${owner.sql}`
+        ).run(...item.values, ...owner.params)
+      }
+      let saved = 0
+      for (const tableName of [...recordsByTable.keys()].sort(
+        (a, b) => (orderIndex.get(a) ?? 0) - (orderIndex.get(b) ?? 0)
+      )) {
+        const schema = byName.get(tableName)
+        const columns = schema.columns
+        const placeholders = columns.map(() => '?').join(',')
+        const conflict = schema.pk.map(syncQuoteIdentifier).join(',')
+        const updates = columns
+          .filter((column) => !schema.pk.includes(column))
+          .map((column) => `${syncQuoteIdentifier(column)}=excluded.${syncQuoteIdentifier(column)}`)
+        const sql = `INSERT INTO ${syncQuoteIdentifier(tableName)} (${columns.map(syncQuoteIdentifier).join(',')}) VALUES (${placeholders}) ON CONFLICT(${conflict}) DO ${updates.length ? `UPDATE SET ${updates.join(',')}` : 'NOTHING'}`
+        const statement = db.prepare(sql)
+        for (const row of recordsByTable.get(tableName)) {
+          statement.run(...columns.map((column) => syncSqlValue(row[column])))
+          saved++
+        }
+      }
+      const after = workspaceSyncState(scopeHash, workspaceId, providerId, schemas)
+      const actual = new Map(
+        after.rows.map((record) => [workspaceSyncKey(record.domain, record.recordId), record])
+      )
+      if (actual.size !== expectedRecords.size) throw new Error('BUSINESS_SYNC_RESULT_MISMATCH')
+      for (const [itemKey, record] of expectedRecords) {
+        const actualRecord = actual.get(itemKey)
+        if (
+          !actualRecord ||
+          workspaceSyncHash(actualRecord.value) !== workspaceSyncHash(record.value)
+        )
+          throw new Error('BUSINESS_SYNC_RESULT_MISMATCH')
+      }
+      const baseline = args.baseline.map((row) => ({
+        domain: text(row.domain, 'SYNC_DOMAIN'),
+        recordId: text(row.recordId, 'SYNC_RECORD'),
+        contentHash: text(row.contentHash, 'SYNC_HASH')
+      }))
+      const tombstones = args.tombstones.map((row) => {
+        if (row.workspaceId !== workspaceId) throw new Error('BUSINESS_SYNC_WORKSPACE_MISMATCH')
+        return {
+          domain: text(row.domain, 'SYNC_DOMAIN'),
+          recordId: text(row.recordId, 'SYNC_RECORD'),
+          deletedAt: timestamp(row.deletedAt, 'SYNC_DELETED_AT'),
+          originDeviceId: text(row.originDeviceId, 'SYNC_ORIGIN_DEVICE')
+        }
+      })
+      db.prepare('DELETE FROM ola_ts_sync_baselines_v2 WHERE scope_hash=? AND provider_id=?').run(
+        scopeHash,
+        providerId
+      )
+      db.prepare('DELETE FROM ola_ts_sync_tombstones_v2 WHERE scope_hash=? AND provider_id=?').run(
+        scopeHash,
+        providerId
+      )
+      const insertBaseline = db.prepare(
+        `INSERT INTO ola_ts_sync_baselines_v2
+         (scope_hash,workspace_id,provider_id,domain,record_id,content_hash,synced_at)
+         VALUES (?,?,?,?,?,?,?)`
+      )
+      for (const row of baseline)
+        insertBaseline.run(
+          scopeHash,
+          workspaceId,
+          providerId,
+          row.domain,
+          row.recordId,
+          row.contentHash,
+          syncedAt
+        )
+      const insertTombstone = db.prepare(
+        `INSERT INTO ola_ts_sync_tombstones_v2
+         (scope_hash,workspace_id,provider_id,domain,record_id,deleted_at,origin_device_id)
+         VALUES (?,?,?,?,?,?,?)`
+      )
+      for (const row of tombstones)
+        insertTombstone.run(
+          scopeHash,
+          workspaceId,
+          providerId,
+          row.domain,
+          row.recordId,
+          row.deletedAt,
+          row.originDeviceId
+        )
+      const revisionToken = workspaceSyncState(
+        scopeHash,
+        workspaceId,
+        providerId,
+        schemas
+      ).revisionToken
+      db.exec('COMMIT')
+      return { saved, deleted: deleted.length, revisionToken }
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
   }
   if (method === 'workspace-sync-metadata-get') {
     const scopeHash = text(args.scopeHash, 'SYNC_SCOPE')
@@ -5568,6 +6043,148 @@ function dispatch(method, args = {}) {
          AND session_id IN (SELECT id FROM sessions WHERE workspace_id=?)`
       )
       .run(sessionId, workspaceId).changes
+  }
+  if (method === 'ssh-groups-list')
+    return db
+      .prepare(
+        'SELECT id,name,sort_order,created_at,updated_at FROM ssh_groups ORDER BY sort_order ASC'
+      )
+      .all()
+  if (method === 'ssh-groups-create') {
+    db.prepare(
+      'INSERT INTO ssh_groups(id,name,sort_order,created_at,updated_at) VALUES(?,?,?,?,?)'
+    ).run(
+      text(args.id, 'SSH_GROUP'),
+      text(args.name, 'SSH_GROUP_NAME'),
+      timestamp(args.sortOrder ?? 0, 'SSH_SORT_ORDER'),
+      timestamp(args.createdAt, 'SSH_CREATED_AT'),
+      timestamp(args.updatedAt, 'SSH_UPDATED_AT')
+    )
+    return { success: true, changed: 1 }
+  }
+  if (method === 'ssh-groups-update') {
+    const id = text(args.id, 'SSH_GROUP')
+    const patch = args.patch && typeof args.patch === 'object' ? args.patch : {}
+    const changes = []
+    const values = []
+    if (patch.name !== undefined) {
+      changes.push('name=?')
+      values.push(text(patch.name, 'SSH_GROUP_NAME'))
+    }
+    if (patch.sortOrder !== undefined) {
+      changes.push('sort_order=?')
+      values.push(timestamp(patch.sortOrder, 'SSH_SORT_ORDER'))
+    }
+    if (patch.updatedAt !== undefined) {
+      changes.push('updated_at=?')
+      values.push(timestamp(patch.updatedAt, 'SSH_UPDATED_AT'))
+    }
+    if (!changes.length) return { success: true, changed: 0 }
+    const result = db
+      .prepare(`UPDATE ssh_groups SET ${changes.join(',')} WHERE id=?`)
+      .run(...values, id)
+    return { success: true, changed: result.changes }
+  }
+  if (method === 'ssh-groups-delete') {
+    const id = text(args.id, 'SSH_GROUP')
+    db.prepare('UPDATE ssh_connections SET group_id=NULL WHERE group_id=?').run(id)
+    const result = db.prepare('DELETE FROM ssh_groups WHERE id=?').run(id)
+    return { success: true, changed: result.changes }
+  }
+  if (method === 'ssh-connections-list')
+    return db
+      .prepare(
+        `SELECT id,group_id,name,host,port,username,auth_type,encrypted_password,
+         private_key_path,encrypted_passphrase,startup_command,default_directory,proxy_jump,
+         keep_alive_interval,sort_order,last_connected_at,created_at,updated_at
+         FROM ssh_connections ORDER BY sort_order ASC`
+      )
+      .all()
+  if (method === 'ssh-connections-get') {
+    const connection = db
+      .prepare(
+        `SELECT id,group_id,name,host,port,username,auth_type,encrypted_password,
+         private_key_path,encrypted_passphrase,startup_command,default_directory,proxy_jump,
+         keep_alive_interval,sort_order,last_connected_at,created_at,updated_at
+         FROM ssh_connections WHERE id=? LIMIT 1`
+      )
+      .get(text(args.id, 'SSH_CONNECTION'))
+    return { success: true, connection: connection ?? null }
+  }
+  if (method === 'ssh-connections-create') {
+    db.prepare(
+      `INSERT INTO ssh_connections(id,group_id,name,host,port,username,auth_type,encrypted_password,
+       private_key_path,encrypted_passphrase,startup_command,default_directory,proxy_jump,
+       keep_alive_interval,sort_order,created_at,updated_at)
+       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      text(args.id, 'SSH_CONNECTION'),
+      nullableText(args.groupId, 'SSH_GROUP'),
+      text(args.name, 'SSH_NAME'),
+      text(args.host, 'SSH_HOST'),
+      timestamp(args.port ?? 22, 'SSH_PORT'),
+      text(args.username, 'SSH_USERNAME'),
+      text(args.authType ?? 'password', 'SSH_AUTH_TYPE'),
+      nullableText(args.encryptedPassword, 'SSH_PASSWORD'),
+      nullableText(args.privateKeyPath, 'SSH_KEY'),
+      nullableText(args.encryptedPassphrase, 'SSH_PASSPHRASE'),
+      nullableText(args.startupCommand, 'SSH_STARTUP'),
+      nullableText(args.defaultDirectory, 'SSH_DIRECTORY'),
+      nullableText(args.proxyJump, 'SSH_PROXY_JUMP'),
+      timestamp(args.keepAliveInterval ?? 60, 'SSH_KEEP_ALIVE'),
+      timestamp(args.sortOrder ?? 0, 'SSH_SORT_ORDER'),
+      timestamp(args.createdAt, 'SSH_CREATED_AT'),
+      timestamp(args.updatedAt, 'SSH_UPDATED_AT')
+    )
+    return { success: true, changed: 1 }
+  }
+  if (method === 'ssh-connections-update') {
+    const id = text(args.id, 'SSH_CONNECTION')
+    const patch = args.patch && typeof args.patch === 'object' ? args.patch : {}
+    const fields = [
+      ['group_id', 'groupId', (value) => nullableText(value, 'SSH_GROUP')],
+      ['name', 'name', (value) => text(value, 'SSH_NAME')],
+      ['host', 'host', (value) => text(value, 'SSH_HOST')],
+      ['port', 'port', (value) => timestamp(value, 'SSH_PORT')],
+      ['username', 'username', (value) => text(value, 'SSH_USERNAME')],
+      ['auth_type', 'authType', (value) => text(value, 'SSH_AUTH_TYPE')],
+      ['encrypted_password', 'encryptedPassword', (value) => nullableText(value, 'SSH_PASSWORD')],
+      ['private_key_path', 'privateKeyPath', (value) => nullableText(value, 'SSH_KEY')],
+      [
+        'encrypted_passphrase',
+        'encryptedPassphrase',
+        (value) => nullableText(value, 'SSH_PASSPHRASE')
+      ],
+      ['startup_command', 'startupCommand', (value) => nullableText(value, 'SSH_STARTUP')],
+      ['default_directory', 'defaultDirectory', (value) => nullableText(value, 'SSH_DIRECTORY')],
+      ['proxy_jump', 'proxyJump', (value) => nullableText(value, 'SSH_PROXY_JUMP')],
+      ['keep_alive_interval', 'keepAliveInterval', (value) => timestamp(value, 'SSH_KEEP_ALIVE')],
+      ['sort_order', 'sortOrder', (value) => timestamp(value, 'SSH_SORT_ORDER')],
+      [
+        'last_connected_at',
+        'lastConnectedAt',
+        (value) => (value === null ? null : timestamp(value, 'SSH_LAST_CONNECTED'))
+      ],
+      ['updated_at', 'updatedAt', (value) => timestamp(value, 'SSH_UPDATED_AT')]
+    ]
+    const changes = []
+    const values = []
+    for (const [column, key, normalize] of fields) {
+      if (patch[key] === undefined) continue
+      changes.push(`${column}=?`)
+      values.push(normalize(patch[key]))
+    }
+    if (!changes.length) return { success: true, changed: 0 }
+    const result = db
+      .prepare(`UPDATE ssh_connections SET ${changes.join(',')} WHERE id=?`)
+      .run(...values, id)
+    return { success: true, changed: result.changes }
+  }
+  if (method === 'ssh-connections-delete') {
+    const result = db
+      .prepare('DELETE FROM ssh_connections WHERE id=?')
+      .run(text(args.id, 'SSH_CONNECTION'))
+    return { success: true, changed: result.changes }
   }
   if (method === 'normalize-message-sort-orders') {
     db.exec('BEGIN IMMEDIATE')

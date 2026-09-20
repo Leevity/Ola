@@ -30,6 +30,7 @@ import {
 import { useSshStore } from '@renderer/stores/ssh-store'
 import { useTerminalStore } from '@renderer/stores/terminal-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { toast } from 'sonner'
 import type { AiCodingConfig } from '../../../../shared/ai-coding-config'
 
@@ -98,6 +99,8 @@ export function ProjectTerminalDock({
   const createAiCodingTab = useTerminalStore((s) => s.createAiCodingTab)
   const closeLocalTab = useTerminalStore((s) => s.closeTab)
   const setLocalActiveTab = useTerminalStore((s) => s.setActiveTab)
+  const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const setTerminalWorkspace = useTerminalStore((s) => s.setWorkspace)
 
   const sshConnections = useSshStore((s) => s.connections)
   const sshSessions = useSshStore((s) => s.sessions)
@@ -121,8 +124,9 @@ export function ProjectTerminalDock({
   const resizeStartHeightRef = useRef(bottomTerminalDockHeight)
 
   useEffect(() => {
+    setTerminalWorkspace(workspaceId)
     initTerminal()
-  }, [initTerminal])
+  }, [initTerminal, setTerminalWorkspace, workspaceId])
 
   useEffect(() => {
     if (sshConnectionId || !workingFolder) {

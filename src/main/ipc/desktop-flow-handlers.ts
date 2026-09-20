@@ -9,7 +9,6 @@ import { createHash, randomUUID } from 'crypto'
 import type {
   DesktopActionReceipt,
   DesktopFlow,
-  DesktopFlowRun,
   DesktopFlowReplayResult
 } from '../../shared/desktop-flow'
 import {
@@ -27,16 +26,7 @@ import {
   desktopInputScroll,
   desktopInputType
 } from './desktop-control'
-import {
-  deleteDesktopFlow,
-  finishDesktopFlowRun,
-  listDesktopFlowDeletions,
-  listDesktopFlows,
-  listDesktopFlowRuns,
-  redactDesktopFlowCapturedText,
-  saveDesktopFlow,
-  startDesktopFlowRun
-} from '../desktop/desktop-flow-store'
+import { redactDesktopFlowCapturedText } from '../desktop/desktop-flow-store'
 import {
   deletePersistedDesktopFlow,
   finishPersistedDesktopFlowRun,
@@ -48,10 +38,6 @@ import {
 import { getRegisteredWindowWorkspace } from '../window-ipc'
 import { authorizeChannelSessionWorkspace } from '../channels/channel-session-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
-import {
-  reconcileDesktopFlows,
-  type DesktopFlowReconciliationCursor
-} from '../desktop/desktop-flow-reconciliation'
 
 const MAX_REPLAY_STEPS = 1000
 let activeReplayToken: symbol | null = null
@@ -62,8 +48,6 @@ let activeReplayFlowId: string | null = null
 let workspaceSwitchPending = false
 const pendingFlowDeletions = new Set<string>()
 const pendingFlowSaves = new Set<string>()
-const reconciliationCursors = new Map<string, DesktopFlowReconciliationCursor>()
-
 function flowMutationKey(workspaceId: string, flowId: string): string {
   return JSON.stringify([workspaceId, flowId])
 }
@@ -220,7 +204,21 @@ export function registerDesktopFlowHandlers(): void {
     }
   )
   ipcMain.handle('desktop-recorder:status', async (event, args?: { workspaceId?: string }) => {
-    const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
+    let workspaceId: string
+    try {
+      workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE') {
+        return {
+          recording: false,
+          paused: false,
+          captureText: false,
+          flowId: null,
+          stepCount: 0
+        }
+      }
+      throw error
+    }
     assertRecordingOwner(event, workspaceId)
     return getDesktopFlowRecordingStatus()
   })
@@ -230,7 +228,15 @@ export function registerDesktopFlowHandlers(): void {
     return stopDesktopFlowRecording()
   })
   ipcMain.handle('desktop-recorder:current', async (event, args?: { workspaceId?: string }) => {
-    const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
+    let workspaceId: string
+    try {
+      workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
+    } catch (error) {
+      if (error instanceof Error && error.message === 'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE') {
+        return null
+      }
+      throw error
+    }
     assertRecordingOwner(event, workspaceId)
     return getActiveDesktopFlow()
   })
@@ -242,122 +248,56 @@ export function registerDesktopFlowHandlers(): void {
     return updateActiveDesktopFlow(flow)
   })
   ipcMain.handle('desktop-flow:list', async (event, args?: { workspaceId?: string }) => {
-    const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
-    let persisted: DesktopFlow[] = []
+    let workspaceId: string
     try {
-      persisted = (await listPersistedDesktopFlows(workspaceId))
-        .filter(
-          (flow) =>
-            validateFlow(flow, true) === null &&
-            (flow.workspaceId ?? 'local-personal') === workspaceId
-        )
-        .map(redactDesktopFlowCapturedText)
-      await Promise.all(
-        persisted
-          .filter((flow) => flow.requiresReview)
-          .map((flow) =>
-            persistDesktopFlow(flow, workspaceId).catch((error) => {
-              console.warn('[DesktopFlow] Failed to sanitize Native flow', error)
-            })
-          )
-      )
+      workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
     } catch (error) {
-      console.warn('[DesktopFlow] Native persistence unavailable; using local fallback', error)
+      if (error instanceof Error && error.message === 'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE')
+        return []
+      throw error
     }
-    const local = listDesktopFlows(workspaceId)
-    const deleted = new Set(listDesktopFlowDeletions(workspaceId))
-    const merged = new Map(persisted.map((flow) => [flow.id, flow]))
-    for (const flow of local) {
-      const existing = merged.get(flow.id)
-      if (!existing || flow.updatedAt > existing.updatedAt) merged.set(flow.id, flow)
-    }
+    const persisted = (await listPersistedDesktopFlows(workspaceId))
+      .filter(
+        (flow) =>
+          validateFlow(flow, true) === null &&
+          (flow.workspaceId ?? 'local-personal') === workspaceId
+      )
+      .map(redactDesktopFlowCapturedText)
+    await Promise.all(
+      persisted
+        .filter((flow) => flow.requiresReview)
+        .map((flow) => persistDesktopFlow(flow, workspaceId))
+    )
     await authorizeDesktopFlowWorkspace(event, workspaceId)
-    return [...merged.values()]
-      .filter((flow) => !deleted.has(flow.id))
-      .sort((left, right) => right.updatedAt - left.updatedAt)
-      .slice(0, 100)
+    return persisted.sort((left, right) => right.updatedAt - left.updatedAt).slice(0, 100)
   })
   ipcMain.handle('desktop-flow:runs-list', async (event, args?: { workspaceId?: string }) => {
-    const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
-    let runs: DesktopFlowRun[] = []
+    let workspaceId: string
     try {
-      runs = await listPersistedDesktopFlowRuns(workspaceId)
+      workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
     } catch (error) {
-      console.warn('[DesktopFlow] Run history unavailable; keeping local flows visible', error)
+      if (error instanceof Error && error.message === 'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE')
+        return []
+      throw error
     }
-    const localRuns = listDesktopFlowRuns(workspaceId)
-    const deleted = new Set(listDesktopFlowDeletions(workspaceId))
+    const runs = await listPersistedDesktopFlowRuns(workspaceId)
     await authorizeDesktopFlowWorkspace(event, workspaceId)
-    return [...new Map([...runs, ...localRuns].map((run) => [run.id, run])).values()]
-      .filter((run) => !deleted.has(run.flowId))
-      .sort((left, right) => right.startedAt - left.startedAt)
-      .slice(0, 100)
+    return runs.sort((left, right) => right.startedAt - left.startedAt).slice(0, 100)
   })
   ipcMain.handle('desktop-flow:sync', async (event, args?: { workspaceId?: string }) => {
-    const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
+    let workspaceId: string
     try {
-      const cursor = reconciliationCursors.get(workspaceId) ?? { afterKey: null }
-      const result = await reconcileDesktopFlows(
-        {
-          authorize: async () => {
-            await authorizeDesktopFlowWorkspace(event, workspaceId)
-          },
-          listNativeFlows: () => listPersistedDesktopFlows(workspaceId),
-          saveNativeFlow: async (flow) => {
-            const key = flowMutationKey(workspaceId, flow.id)
-            if (
-              pendingFlowSaves.has(key) ||
-              pendingFlowDeletions.has(key) ||
-              (activeReplayWorkspaceId === workspaceId && activeReplayFlowId === flow.id)
-            )
-              throw new Error('DESKTOP_FLOW_MUTATION_ACTIVE')
-            pendingFlowSaves.add(key)
-            try {
-              await persistDesktopFlow(flow, workspaceId)
-            } finally {
-              pendingFlowSaves.delete(key)
-            }
-          },
-          deleteNativeFlow: async (id) => {
-            const key = flowMutationKey(workspaceId, id)
-            if (
-              pendingFlowSaves.has(key) ||
-              pendingFlowDeletions.has(key) ||
-              (activeReplayWorkspaceId === workspaceId && activeReplayFlowId === id)
-            )
-              throw new Error('DESKTOP_FLOW_MUTATION_ACTIVE')
-            pendingFlowDeletions.add(key)
-            try {
-              return await deletePersistedDesktopFlow(id, workspaceId)
-            } finally {
-              pendingFlowDeletions.delete(key)
-            }
-          },
-          listNativeRuns: () => listPersistedDesktopFlowRuns(workspaceId, 10_000),
-          startNativeRun: (run) =>
-            startPersistedDesktopFlowRun(run.id, run.flowId, workspaceId, run.startedAt),
-          finishNativeRun: (run) =>
-            finishPersistedDesktopFlowRun(
-              run.id,
-              workspaceId,
-              run.state as 'succeeded' | 'failed' | 'cancelled',
-              run.errorMessage,
-              run.finishedAt ?? Date.now()
-            ),
-          listLocalFlows: () => listDesktopFlows(workspaceId),
-          listLocalDeletions: () => listDesktopFlowDeletions(workspaceId),
-          listLocalRuns: () => listDesktopFlowRuns(workspaceId, Number.MAX_SAFE_INTEGER)
-        },
-        cursor
-      )
-      await authorizeDesktopFlowWorkspace(event, workspaceId)
-      reconciliationCursors.set(workspaceId, cursor)
-      return { available: true, ...result }
+      workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
     } catch (error) {
-      console.warn('[DesktopFlow] Offline reconciliation unavailable', error)
-      await authorizeDesktopFlowWorkspace(event, workspaceId)
-      return { available: false, savedFlows: 0, deletedFlows: 0, savedRuns: 0, failed: 0 }
+      if (error instanceof Error && error.message === 'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE') {
+        return { available: false, savedFlows: 0, deletedFlows: 0, savedRuns: 0, failed: 0 }
+      }
+      throw error
     }
+    // The TS BusinessRepository is already the offline source of truth. Keep
+    // this IPC response for older renderers, but never merge a second store.
+    await authorizeDesktopFlowWorkspace(event, workspaceId)
+    return { available: true, savedFlows: 0, deletedFlows: 0, savedRuns: 0, failed: 0 }
   })
   ipcMain.handle('desktop-flow:save', async (event, flow: DesktopFlow) => {
     const workspaceId = await authorizeDesktopFlowWorkspace(
@@ -374,20 +314,9 @@ export function registerDesktopFlowHandlers(): void {
     pendingFlowSaves.add(mutationKey)
     const safeFlow = redactDesktopFlowCapturedText(flow)
     try {
-      try {
-        await persistDesktopFlow(safeFlow, workspaceId)
-      } catch (error) {
-        if (
-          error instanceof Error &&
-          /belongs to another workspace|workspace mismatch/i.test(error.message)
-        )
-          throw error
-        console.warn('[DesktopFlow] Native persistence unavailable; local fallback retained', error)
-      }
+      await persistDesktopFlow(safeFlow, workspaceId)
       await authorizeDesktopFlowWorkspace(event, workspaceId)
-      const saved = saveDesktopFlow(safeFlow, workspaceId)
-      await authorizeDesktopFlowWorkspace(event, workspaceId)
-      return saved
+      return safeFlow
     } finally {
       pendingFlowSaves.delete(mutationKey)
     }
@@ -403,15 +332,9 @@ export function registerDesktopFlowHandlers(): void {
         throw new Error('DESKTOP_FLOW_MUTATION_ACTIVE')
       pendingFlowDeletions.add(mutationKey)
       try {
-        const deleted = deleteDesktopFlow(args?.id, workspaceId)
-        let nativeDeleted = false
-        try {
-          nativeDeleted = await deletePersistedDesktopFlow(args?.id, workspaceId)
-        } catch (error) {
-          console.warn('[DesktopFlow] Native deletion unavailable; local fallback retained', error)
-        }
+        const deleted = await deletePersistedDesktopFlow(args?.id, workspaceId)
         await authorizeDesktopFlowWorkspace(event, workspaceId)
-        return { success: deleted || nativeDeleted }
+        return { success: deleted }
       } finally {
         pendingFlowDeletions.delete(mutationKey)
       }
@@ -477,7 +400,7 @@ export function registerDesktopFlowHandlers(): void {
       const receipts: DesktopActionReceipt[] = []
       const runId = randomUUID()
       const runStartedAt = Date.now()
-      let runStore: 'native' | 'file' | null = null
+      let runStarted = false
       const audit: { replayResult: DesktopFlowReplayResult | null; replayError: string | null } = {
         replayResult: null,
         replayError: null
@@ -488,18 +411,8 @@ export function registerDesktopFlowHandlers(): void {
       }
 
       try {
-        try {
-          await startPersistedDesktopFlowRun(runId, flow.id, workspaceId, runStartedAt)
-          runStore = 'native'
-        } catch (error) {
-          console.warn('[DesktopFlow] Run audit start unavailable', error)
-          try {
-            startDesktopFlowRun(runId, flow.id, workspaceId, runStartedAt)
-            runStore = 'file'
-          } catch (fallbackError) {
-            console.warn('[DesktopFlow] Local run audit start unavailable', fallbackError)
-          }
-        }
+        await startPersistedDesktopFlowRun(runId, flow.id, workspaceId, runStartedAt)
+        runStarted = true
         for (const step of flow.steps) {
           await authorizeDesktopFlowWorkspace(event, workspaceId)
           if (activeReplayToken !== replayToken || cancelledReplayToken === replayToken) {
@@ -577,47 +490,35 @@ export function registerDesktopFlowHandlers(): void {
         audit.replayError = error instanceof Error ? error.message : 'Desktop flow replay failed.'
         throw error
       } finally {
-        if (runStore) {
-          const errorMessage = audit.replayError ?? audit.replayResult?.error ?? null
-          const state = audit.replayResult?.success
-            ? 'succeeded'
-            : cancelledReplayToken === replayToken || errorMessage?.includes('cancelled')
-              ? 'cancelled'
-              : 'failed'
-          if (runStore === 'native') {
-            let finished = false
-            try {
-              finished = await finishPersistedDesktopFlowRun(
-                runId,
-                workspaceId,
-                state,
-                errorMessage
-              )
-            } catch (error) {
-              console.warn('[DesktopFlow] Run audit finish unavailable', error)
-            }
+        try {
+          if (runStarted) {
+            const errorMessage = audit.replayError ?? audit.replayResult?.error ?? null
+            const state = audit.replayResult?.success
+              ? 'succeeded'
+              : cancelledReplayToken === replayToken || errorMessage?.includes('cancelled')
+                ? 'cancelled'
+                : 'failed'
+            const finished = await finishPersistedDesktopFlowRun(
+              runId,
+              workspaceId,
+              state,
+              errorMessage
+            )
             if (!finished) {
-              try {
-                startDesktopFlowRun(runId, flow.id, workspaceId, runStartedAt)
-                finishDesktopFlowRun(runId, workspaceId, state, Date.now(), errorMessage)
-              } catch (fallbackError) {
-                console.warn('[DesktopFlow] Local run audit recovery unavailable', fallbackError)
-              }
-            }
-          } else {
-            try {
-              finishDesktopFlowRun(runId, workspaceId, state, Date.now(), errorMessage)
-            } catch (error) {
-              console.warn('[DesktopFlow] Local run audit finish unavailable', error)
+              audit.replayError = 'DESKTOP_FLOW_RUN_AUDIT_MISSING'
+              console.error('[DesktopFlow] TS run audit did not update the persisted run', {
+                runId
+              })
             }
           }
-        }
-        if (activeReplayToken === replayToken) {
-          activeReplayToken = null
-          cancelledReplayToken = null
-          activeReplayOwnerId = null
-          activeReplayWorkspaceId = null
-          activeReplayFlowId = null
+        } finally {
+          if (activeReplayToken === replayToken) {
+            activeReplayToken = null
+            cancelledReplayToken = null
+            activeReplayOwnerId = null
+            activeReplayWorkspaceId = null
+            activeReplayFlowId = null
+          }
         }
       }
     }

@@ -44,16 +44,16 @@ export const TASK_TOOL_NAME = 'Task'
 export const CUSTOM_SUBAGENT_TYPE = 'custom'
 
 export function clearLastTaskInvocation(_sessionId: string | undefined | null): void {
-  // Native AgentRuntime owns Task de-duplication state.
+  // The Main TypeScript runtime owns Task de-duplication state.
 }
 
 export function removeTeamLimiter(_teamName: string): void {
-  // Native AgentRuntime owns teammate scheduling state.
+  // The Main TypeScript runtime owns teammate scheduling state.
 }
 
-function nativeOnlyTaskResult(): string {
+function tsRuntimeTaskResult(): string {
   return encodeStructuredToolResult({
-    error: 'Task execution has migrated to the .NET Native Worker.'
+    error: 'Task execution is owned by the Main TypeScript runtime.'
   })
 }
 
@@ -217,7 +217,7 @@ export function createTaskTool(
                 type: 'string',
                 enum: ['in-process'],
                 description:
-                  'Optional backend override for the teammate runtime. Background teammates execute in the .NET Native Worker.'
+                  'Optional backend override for the teammate runtime. Background teammates execute in the Main TypeScript runtime.'
               }
             },
             required: ['description', 'prompt', 'run_in_background', 'name'],
@@ -226,7 +226,7 @@ export function createTaskTool(
         ]
       }
     },
-    execute: async () => nativeOnlyTaskResult(),
+    execute: async () => tsRuntimeTaskResult(),
     requiresApproval: () => false
   }
 }

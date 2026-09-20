@@ -47,6 +47,8 @@ describe('local service transport', () => {
       await server.listen(endpoint)
       await expect(bad.connect(endpoint, 'wrong')).rejects.toThrow('HANDSHAKE_REJECTED')
       await client.connect(endpoint, token)
+      expect(client.capabilities.size).toBeGreaterThan(0)
+      expect([...client.capabilities]).toContain('runs')
       await expect(client.request('run.list', { workspaceId: 'team-b' })).rejects.toThrow(
         'WORKSPACE_FORBIDDEN'
       )

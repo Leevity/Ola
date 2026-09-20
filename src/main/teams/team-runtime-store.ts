@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { access, mkdir, open, readFile, rename, rm, unlink, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { olaDataRoot } from '../lib/ola-data-root'
@@ -22,7 +22,7 @@ const idAlphabet = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWX
 
 /**
  * Compatibility owner for ~/.ola/teams. The lockfile protocol matches the
- * Native Worker, allowing a staged migration to share existing team state.
+ * legacy runtime, allowing a staged migration to share existing team state.
  */
 export class TeamRuntimeStore {
   constructor(private readonly teamsDirectory = join(olaDataRoot(), 'teams')) {}
@@ -30,7 +30,7 @@ export class TeamRuntimeStore {
   async create(input: CreateTeamRuntimeArgs): Promise<TeamRuntimeCreateResult> {
     const teamName = sanitizeTeamName(input.teamName)
     if (!teamName) throw new Error('Invalid team name')
-    const runtimePath = this.teamPath(teamName)
+    const runtimePath = this.teamPath(teamName, input.workspaceId)
     const manifestPath = join(runtimePath, 'team.json')
     await this.withLock(manifestPath, async () => {
       if (await exists(manifestPath)) throw new Error(`Team "${teamName}" already exists`)
@@ -67,7 +67,7 @@ export class TeamRuntimeStore {
       await writeJson(manifestPath, manifest)
       await writeFile(join(runtimePath, 'messages.jsonl'), '', 'utf8')
     })
-    const manifest = await this.readManifest(teamName)
+    const manifest = await this.readManifest(teamName, input.workspaceId)
     if (!manifest) throw new Error(`Team "${teamName}" does not exist`)
     return {
       teamName,
@@ -81,32 +81,35 @@ export class TeamRuntimeStore {
   }
 
   async delete(input: DeleteTeamRuntimeArgs): Promise<{ success: true }> {
-    await rm(this.teamPath(input.teamName), { recursive: true, force: true })
+    await rm(this.teamPath(input.teamName, input.workspaceId), { recursive: true, force: true })
     return { success: true }
   }
 
   async appendMessage(input: AppendTeamRuntimeMessageArgs): Promise<{ success: true }> {
-    if (!(await this.readManifest(input.teamName))) {
+    if (!(await this.readManifest(input.teamName, input.workspaceId))) {
       throw new Error(`Team "${input.teamName}" does not exist`)
     }
-    const filePath = this.messagesPath(input.teamName)
+    const filePath = this.messagesPath(input.teamName, input.workspaceId)
     await this.withLock(filePath, async () => {
-      await this.migrateLegacyMessages(input.teamName)
+      await this.migrateLegacyMessages(input.teamName, input.workspaceId)
       const message = input.message
       await writeFile(filePath, `${JSON.stringify(message)}\n`, { encoding: 'utf8', flag: 'a' })
     })
-    await this.touchManifest(input.teamName)
+    await this.touchManifest(input.teamName, input.workspaceId)
     return { success: true }
   }
 
   async snapshot(input: GetTeamRuntimeSnapshotArgs): Promise<TeamRuntimeSnapshot | null> {
-    const team = await this.readManifest(input.teamName)
+    const team = await this.readManifest(input.teamName, input.workspaceId)
     if (!team) return null
-    return { team, recentMessages: await this.readRecentMessages(input.teamName, input.limit) }
+    return {
+      team,
+      recentMessages: await this.readRecentMessages(input.teamName, input.workspaceId, input.limit)
+    }
   }
 
   async updateMember(input: UpdateTeamRuntimeMemberArgs): Promise<{ success: true }> {
-    await this.updateManifest(input.teamName, (manifest) => {
+    await this.updateManifest(input.teamName, input.workspaceId, (manifest) => {
       let member = manifest.members.find((item) => item.agentId === input.memberId)
       if (!member) {
         member = {
@@ -128,55 +131,83 @@ export class TeamRuntimeStore {
   }
 
   async updateManifestPatch(input: UpdateTeamRuntimeManifestArgs): Promise<{ success: true }> {
-    await this.updateManifest(input.teamName, (manifest) => Object.assign(manifest, input.patch))
+    await this.updateManifest(input.teamName, input.workspaceId, (manifest) =>
+      Object.assign(manifest, input.patch)
+    )
     return { success: true }
+  }
+
+  async mutateManifest<T>(input: {
+    teamName: string
+    workspaceId?: string
+    mutate: (manifest: TeamRuntimeManifest) => T
+  }): Promise<T> {
+    return this.updateManifest(input.teamName, input.workspaceId, input.mutate)
   }
 
   async consumeMessages(
     input: ConsumeTeamRuntimeMessagesArgs
   ): Promise<TeamRuntimeMessageRecord[]> {
-    if (!(await this.readManifest(input.teamName))) return []
+    if (!(await this.readManifest(input.teamName, input.workspaceId))) return []
     const afterTimestamp = Math.max(0, Math.trunc(input.afterTimestamp ?? 0))
     const recipient = input.recipient?.trim()
     const includeBroadcast = input.includeBroadcast !== false
-    const messages = (await this.readMessages(input.teamName)).filter((message) => {
-      if (message.timestamp <= afterTimestamp) return false
-      return !recipient || message.to === recipient || (includeBroadcast && message.to === 'all')
-    })
+    const messages = (await this.readMessages(input.teamName, input.workspaceId)).filter(
+      (message) => {
+        if (message.timestamp <= afterTimestamp) return false
+        return !recipient || message.to === recipient || (includeBroadcast && message.to === 'all')
+      }
+    )
     return messages.slice(-clampLimit(input.limit, 20))
   }
 
-  private async touchManifest(teamName: string): Promise<void> {
-    await this.updateManifest(teamName, () => undefined)
+  private async touchManifest(teamName: string, workspaceId?: string): Promise<void> {
+    await this.updateManifest(teamName, workspaceId, () => undefined)
   }
 
   private async updateManifest(
     teamName: string,
-    mutate: (manifest: TeamRuntimeManifest) => void
-  ): Promise<void> {
-    const manifestPath = this.manifestPath(teamName)
-    await this.withLock(manifestPath, async () => {
-      const manifest = await this.readManifest(teamName)
+    workspaceId: string | undefined,
+    mutate: (manifest: TeamRuntimeManifest) => void | Promise<void>
+  ): Promise<void>
+  private async updateManifest<T>(
+    teamName: string,
+    workspaceId: string | undefined,
+    mutate: (manifest: TeamRuntimeManifest) => T | Promise<T>
+  ): Promise<T>
+  private async updateManifest<T>(
+    teamName: string,
+    workspaceId: string | undefined,
+    mutate: (manifest: TeamRuntimeManifest) => T | Promise<T>
+  ): Promise<T> {
+    const manifestPath = this.manifestPath(teamName, workspaceId)
+    return this.withLock(manifestPath, async () => {
+      const manifest = await this.readManifest(teamName, workspaceId)
       if (!manifest) throw new Error(`Team "${teamName}" does not exist`)
-      mutate(manifest)
+      const result = await mutate(manifest)
       manifest.updatedAt = Date.now()
       await writeJson(manifestPath, manifest)
+      return result
     })
   }
 
   private async readRecentMessages(
     teamName: string,
+    workspaceId: string | undefined,
     limit?: number
   ): Promise<TeamRuntimeMessageRecord[]> {
-    return (await this.readMessages(teamName)).slice(-clampLimit(limit, 10))
+    return (await this.readMessages(teamName, workspaceId)).slice(-clampLimit(limit, 10))
   }
 
-  private async readMessages(teamName: string): Promise<TeamRuntimeMessageRecord[]> {
-    const jsonlPath = this.messagesPath(teamName)
+  private async readMessages(
+    teamName: string,
+    workspaceId?: string
+  ): Promise<TeamRuntimeMessageRecord[]> {
+    const jsonlPath = this.messagesPath(teamName, workspaceId)
     if (await exists(jsonlPath)) return await readJsonl(jsonlPath)
     try {
       const value: unknown = JSON.parse(
-        await readFile(join(this.teamPath(teamName), 'messages.json'), 'utf8')
+        await readFile(join(this.teamPath(teamName, workspaceId), 'messages.json'), 'utf8')
       )
       return Array.isArray(value) ? value.filter(isMessage) : []
     } catch {
@@ -184,11 +215,11 @@ export class TeamRuntimeStore {
     }
   }
 
-  private async migrateLegacyMessages(teamName: string): Promise<void> {
-    const jsonlPath = this.messagesPath(teamName)
+  private async migrateLegacyMessages(teamName: string, workspaceId?: string): Promise<void> {
+    const jsonlPath = this.messagesPath(teamName, workspaceId)
     if (await exists(jsonlPath)) return
-    const legacyPath = join(this.teamPath(teamName), 'messages.json')
-    const messages = await this.readMessages(teamName)
+    const legacyPath = join(this.teamPath(teamName, workspaceId), 'messages.json')
+    const messages = await this.readMessages(teamName, workspaceId)
     await writeFile(
       jsonlPath,
       messages.map((message) => JSON.stringify(message)).join('\n') + (messages.length ? '\n' : ''),
@@ -197,19 +228,28 @@ export class TeamRuntimeStore {
     if (await exists(legacyPath)) await unlink(legacyPath)
   }
 
-  private async readManifest(teamName: string): Promise<TeamRuntimeManifest | null> {
+  private async readManifest(
+    teamName: string,
+    workspaceId?: string
+  ): Promise<TeamRuntimeManifest | null> {
     try {
-      const parsed: unknown = JSON.parse(await readFile(this.manifestPath(teamName), 'utf8'))
+      const parsed: unknown = JSON.parse(
+        await readFile(this.manifestPath(teamName, workspaceId), 'utf8')
+      )
       return isManifest(parsed) ? parsed : null
     } catch {
       return null
     }
   }
 
-  private teamPath(rawName: string): string {
+  private teamPath(rawName: string, workspaceId?: string): string {
     const safeName = sanitizeTeamName(rawName)
     if (!safeName) throw new Error('Invalid team name')
-    const root = resolve(this.teamsDirectory)
+    const root = resolve(
+      workspaceId?.trim()
+        ? join(this.teamsDirectory, createHash('sha256').update(workspaceId).digest('hex'))
+        : this.teamsDirectory
+    )
     const target = resolve(root, safeName)
     const relativePath = relative(root, target)
     if (
@@ -223,12 +263,12 @@ export class TeamRuntimeStore {
     return target
   }
 
-  private manifestPath(teamName: string): string {
-    return join(this.teamPath(teamName), 'team.json')
+  private manifestPath(teamName: string, workspaceId?: string): string {
+    return join(this.teamPath(teamName, workspaceId), 'team.json')
   }
 
-  private messagesPath(teamName: string): string {
-    return join(this.teamPath(teamName), 'messages.jsonl')
+  private messagesPath(teamName: string, workspaceId?: string): string {
+    return join(this.teamPath(teamName, workspaceId), 'messages.jsonl')
   }
 
   private async withLock<T>(filePath: string, action: () => Promise<T>): Promise<T> {

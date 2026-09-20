@@ -5,6 +5,7 @@ import { EncryptedExtensionSecretStore } from './extension-secret-store'
 import { ExtensionService } from './extension-service'
 import { ExtensionStateStore } from './extension-state-store'
 import { ExtensionStorageStore } from './extension-storage-store'
+import { ExtensionPackageManager } from './extension-package-manager'
 
 const olaDirectory = olaDataRoot()
 const configStore = new ConfigStore(join(olaDirectory, 'config.json'))
@@ -20,12 +21,19 @@ const secrets = new EncryptedExtensionSecretStore(
   }
 )
 
+const extensionState = new ExtensionStateStore(join(olaDirectory, 'extensions.json'))
 const extensionService = new ExtensionService(
   join(olaDirectory, 'extensions'),
-  new ExtensionStateStore(join(olaDirectory, 'extensions.json')),
+  extensionState,
   secrets
 )
 const extensionStorage = new ExtensionStorageStore(join(olaDirectory, 'extensions-storage.json'))
+const extensionPackageManager = new ExtensionPackageManager(
+  join(olaDirectory, 'extensions'),
+  extensionState,
+  extensionStorage,
+  secrets
+)
 
 export function getExtensionService(): ExtensionService {
   return extensionService
@@ -33,4 +41,8 @@ export function getExtensionService(): ExtensionService {
 
 export function getExtensionStorage(): ExtensionStorageStore {
   return extensionStorage
+}
+
+export function getExtensionPackageManager(): ExtensionPackageManager {
+  return extensionPackageManager
 }

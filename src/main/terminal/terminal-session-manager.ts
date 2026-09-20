@@ -9,6 +9,7 @@ const RETENTION_MS = 120_000
 
 export type TerminalSessionRecord = {
   id: string
+  workspaceId: string
   shell: string
   cwd: string
   cols: number
@@ -41,6 +42,7 @@ export class TerminalSessionManager {
   }
 
   create(input: {
+    workspaceId?: string
     cwd?: string
     shell?: string
     cols?: number
@@ -84,6 +86,7 @@ export class TerminalSessionManager {
     })
     const record: Session = {
       id: `term-${randomUUID().replaceAll('-', '')}`,
+      workspaceId: input.workspaceId?.trim() || 'local-personal',
       shell,
       cwd,
       cols,
@@ -150,10 +153,11 @@ export class TerminalSessionManager {
   get(id: string): TerminalSessionRecord | undefined {
     return this.session(id) && this.snapshotRecord(this.sessions.get(id)!, true)
   }
-  list(): TerminalSessionRecord[] {
+  list(workspaceId?: string): TerminalSessionRecord[] {
     this.prune()
     return [...this.sessions.values()]
       .sort((a, b) => a.createdAt - b.createdAt)
+      .filter((session) => !workspaceId || session.workspaceId === workspaceId)
       .map((s) => this.snapshotRecord(s, true))
   }
   killAll(): void {

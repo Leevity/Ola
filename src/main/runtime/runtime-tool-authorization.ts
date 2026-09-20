@@ -45,11 +45,45 @@ export function isAuthorizedDesktopRuntimeTool({
   permissionPolicy
 }: RuntimeToolAuthorizationInput): boolean {
   if (tool.effect === 'read') return true
+  if (tool.name === 'Task' || tool.name === 'Agent') {
+    return !run.unattended && run.toolNames?.includes(tool.name) === true
+  }
+  if (tool.name === 'AskUserQuestion' || tool.name === 'visualize_show_widget') {
+    return !run.unattended && run.toolNames?.includes(tool.name) === true
+  }
+  if (tool.name === 'EnterPlanMode' || tool.name === 'ExitPlanMode') {
+    return !run.unattended && run.toolNames?.includes(tool.name) === true
+  }
+  if (
+    [
+      'TeamCreate',
+      'SendMessage',
+      'TeamStatus',
+      'TeamDelete',
+      'TeamTaskCreate',
+      'TeamTaskUpdate'
+    ].includes(tool.name)
+  ) {
+    const backgroundTeamMember = run.taskId.startsWith('subagent:') && run.teamContext
+    if (tool.name === 'TeamCreate' || tool.name === 'TeamDelete') return !run.unattended
+    return (backgroundTeamMember || !run.unattended) && run.toolNames?.includes(tool.name) === true
+  }
+  if (tool.name === 'ImageGenerate') {
+    return !run.unattended && run.toolNames?.includes('ImageGenerate') === true
+  }
+  if (['Write', 'Edit'].includes(tool.name) && run.translationContext) {
+    return !run.unattended && run.toolNames?.includes(tool.name) === true
+  }
+  if (tool.name === 'WriteOptimizedPrompts') {
+    return !run.unattended && run.toolNames?.includes(tool.name) === true
+  }
   if (
     tool.name === 'PluginSendMessage' ||
     tool.name === 'PluginReplyMessage' ||
     tool.name === 'FeishuSendImage' ||
     tool.name === 'FeishuSendFile' ||
+    tool.name === 'FeishuSendAudio' ||
+    tool.name === 'FeishuSendVideo' ||
     tool.name === 'FeishuAtMember' ||
     tool.name === 'FeishuSendUrgent' ||
     tool.name === 'WeixinSendImage' ||
@@ -77,8 +111,12 @@ export function isAuthorizedDesktopRuntimeTool({
             : messageId === run.channelContext.messageId))
     )
   }
+  if (tool.name === 'create_goal' || tool.name === 'update_goal') {
+    return !run.unattended && run.toolNames?.includes(tool.name) === true
+  }
   const isCron = run.unattended && run.taskId.startsWith('cron:')
-  if (!isCron) return false
+  const isBackgroundSubAgent = run.unattended && run.taskId.startsWith('subagent:')
+  if (!isCron && !isBackgroundSubAgent) return false
   if (tool.name === 'Notify') return true
   const safeInput =
     input && typeof input === 'object' && !Array.isArray(input)

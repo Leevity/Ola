@@ -530,10 +530,8 @@ function errorResult(searchRoot: string, pattern: string, error: string): LocalG
 }
 
 /**
- * The TS engine may only become the desktop default for requests whose semantics
- * it can preserve. Callers must keep the Native implementation for unsupported
- * Git index/textconv, multiline, basic-regexp and pathspec variants during the
- * staged cutover.
+ * Returns whether the TS grep contract can represent the request. Unsupported
+ * advanced modes fail closed with a typed result; no alternate runtime is started.
  */
 export function canUseTsLocalGrep(input: LocalGrepInput): boolean {
   if (input.patternMode === 'basic' || input.multiline === true) return false

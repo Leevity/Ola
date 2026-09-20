@@ -7,8 +7,8 @@ import {
   writeProjectWikiMarkdown,
   type SharedIndexedFile
 } from '../wiki/wiki-service'
-import { loadWikiDocument, saveWikiDocument } from '../db/capability-dao'
-import { getCodeGraphWorker } from '../lib/codegraph-worker'
+import { deleteWikiDocument, loadWikiDocument, saveWikiDocument } from '../db/capability-dao'
+import { requestCodeGraph } from './codegraph-handlers'
 import { getRegisteredWindowWorkspace } from '../window-ipc'
 import { authorizeChannelSessionWorkspace } from '../channels/channel-session-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
@@ -17,16 +17,23 @@ async function getSharedIndexedFiles(
   projectRoot: string
 ): Promise<SharedIndexedFile[] | undefined> {
   try {
-    const worker = getCodeGraphWorker()
-    const status = await worker.request<{
+    const status = (await requestCodeGraph({
+      method: 'codegraph/index-status',
+      params: { workingFolder: projectRoot },
+      timeoutMs: 10_000
+    })) as {
       indexed?: boolean
       fileCount?: number
-    }>('codegraph/index-status', { workingFolder: projectRoot }, 10_000)
+    }
     if (!status?.indexed || !status.fileCount) return undefined
-    const result = await worker.request<{
+    const result = (await requestCodeGraph({
+      method: 'codegraph/files-tree',
+      params: { workingFolder: projectRoot },
+      timeoutMs: 10_000
+    })) as {
       success?: boolean
       files?: SharedIndexedFile[]
-    }>('codegraph/files-tree', { workingFolder: projectRoot }, 10_000)
+    }
     if (!result?.success || !Array.isArray(result.files)) return undefined
     return result.files
   } catch {
@@ -79,6 +86,16 @@ export function registerWikiHandlers(): void {
     await authorizeWikiWorkspace(event, workspaceId)
     return document
   })
+  ipcMain.handle(
+    'wiki:delete',
+    async (event, args: { projectRoot: string; workspaceId: string }) => {
+      const workspaceId = await authorizeWikiWorkspace(event, args?.workspaceId)
+      const projectRoot = validateProjectRoot(args.projectRoot)
+      await deleteWikiDocument(projectRoot, workspaceId)
+      await authorizeWikiWorkspace(event, workspaceId)
+      return { success: true }
+    }
+  )
   ipcMain.handle(
     'wiki:export',
     async (event, args: { projectRoot: string; destination: string; workspaceId: string }) => {

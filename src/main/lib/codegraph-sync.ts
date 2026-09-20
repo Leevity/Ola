@@ -1,6 +1,6 @@
 ﻿import fs, { type FSWatcher } from 'node:fs'
 import path from 'node:path'
-import { getCodeGraphWorker } from './codegraph-worker'
+import { requestCodeGraph } from '../ipc/codegraph-handlers'
 
 const AUTO_SYNC_DEBOUNCE_MS = 1_250
 const MAX_AUTO_SYNC_PROJECTS = 32
@@ -153,11 +153,11 @@ async function runSync(root: string, entry: SyncEntry): Promise<void> {
   entry.dirty = false
   entry.syncing = true
   try {
-    const result = await getCodeGraphWorker().request<CodeGraphOperationResult>(
-      'codegraph/sync',
-      { workingFolder: root },
-      5 * 60_000
-    )
+    const result = (await requestCodeGraph({
+      method: 'codegraph/sync',
+      params: { workingFolder: root },
+      timeoutMs: 5 * 60_000
+    })) as CodeGraphOperationResult
     if (!isSuccess(result)) {
       console.warn('[CodeGraphSync] incremental sync did not complete', { root })
     }
@@ -221,11 +221,11 @@ export async function startCodeGraphSync(): Promise<void> {
   if (started || !isEnabled()) return
   started = true
   try {
-    const result = await getCodeGraphWorker().request<IndexedProjectList>(
-      'codegraph/list-projects',
-      {},
-      10_000
-    )
+    const result = (await requestCodeGraph({
+      method: 'codegraph/list-projects',
+      params: {},
+      timeoutMs: 10_000
+    })) as IndexedProjectList
     if (!result.success) return
     for (const project of result.projects) {
       if (isIndexedProject(project)) watchCodeGraphProject(project.root)

@@ -18,7 +18,6 @@ import * as path from 'path'
 import * as fs from 'fs'
 import * as os from 'os'
 import { app } from 'electron'
-import { getNativeWorker } from '../lib/native-worker'
 import { businessWriteCanary } from '../db/business-write-canary'
 import { readChannelPlugins } from './channel-config-store'
 import {
@@ -26,10 +25,6 @@ import {
   runAuthorizedChannelCommand
 } from './channel-session-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
-import {
-  canaryChannelSessionStatus,
-  canaryChannelSessionUsageStats
-} from '../db/legacy-read-canary'
 import type { ChannelManager } from './channel-manager'
 import type { ChannelIncomingMessageData, ChannelInstance } from './channel-types'
 
@@ -60,46 +55,6 @@ interface CommandResult {
 }
 
 type CommandHandler = (ctx: CommandContext, args: string) => CommandResult | Promise<CommandResult>
-
-interface NativeMessageCompactResult {
-  success: boolean
-  totalMessages: number
-  compacted: number
-  error?: string | null
-}
-
-interface NativeSessionResetResult {
-  success: boolean
-  deletedMessages: number
-  updatedAt: number
-  error?: string | null
-}
-
-interface NativeSessionStatusResult {
-  success: boolean
-  found: boolean
-  title?: string | null
-  createdAt?: number | null
-  updatedAt?: number | null
-  messageCount: number
-  error?: string | null
-}
-
-interface NativeMessageUsageStatsResult {
-  success: boolean
-  hasUsage: boolean
-  totalInput: number
-  totalOutput: number
-  totalCacheCreation: number
-  totalCacheRead: number
-  totalReasoning: number
-  totalDurationMs: number
-  requestCount: number
-  assistantReplies: number
-  firstCreatedAt?: number | null
-  lastCreatedAt?: number | null
-  error?: string | null
-}
 
 function tokenizeSlashCommandArguments(text: string): string[] {
   const normalized = text.trim()
@@ -312,30 +267,13 @@ async function handleNew(ctx: CommandContext, args: string): Promise<CommandResu
 
   try {
     const writer = businessWriteCanary()
-    if (writer) {
-      const deletedMessages = await writer.clearChannelSession({
-        sessionId: ctx.sessionId,
-        workspaceId: ctx.workspaceId
-      })
-      console.log(
-        `[PluginCommand] Cleared session ${ctx.sessionId}, removed ${deletedMessages} messages`
-      )
-      return {
-        handled: true,
-        reply: '✅ Session cleared. Starting fresh.'
-      }
-    }
-    const result = await getNativeWorker().request<NativeSessionResetResult>(
-      'db/session-reset-conversation',
-      { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
-      120_000
-    )
-    if (!result.success) {
-      throw new Error(result.error || 'Native session reset failed')
-    }
-
+    if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+    const deletedMessages = await writer.clearChannelSession({
+      sessionId: ctx.sessionId,
+      workspaceId: ctx.workspaceId
+    })
     console.log(
-      `[PluginCommand] Cleared session ${ctx.sessionId}, removed ${result.deletedMessages} messages`
+      `[PluginCommand] Cleared session ${ctx.sessionId}, removed ${deletedMessages} messages`
     )
     return {
       handled: true,
@@ -453,15 +391,14 @@ async function handleStatus(ctx: CommandContext, args: string): Promise<CommandR
   lines.push('')
   if (ctx.sessionId) {
     try {
-      const session: NativeSessionStatusResult =
-        (await canaryChannelSessionStatus(ctx.sessionId, ctx.workspaceId)) ??
-        (await getNativeWorker().request<NativeSessionStatusResult>(
-          'db/session-status',
-          { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
-          120_000
-        ))
+      const writer = businessWriteCanary()
+      if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+      const session = await writer.sessionStatus({
+        sessionId: ctx.sessionId,
+        workspaceId: ctx.workspaceId
+      })
       if (!session.success) {
-        throw new Error(session.error || 'Native session status failed')
+        throw new Error('TS session status failed')
       }
 
       lines.push(`💬 Session: ${session.found ? session.title || 'Untitled' : 'Untitled'}`)
@@ -505,30 +442,13 @@ async function handleCompress(ctx: CommandContext, args: string): Promise<Comman
 
   try {
     const writer = businessWriteCanary()
-    if (writer) {
-      const result = await writer.compactSessionMessages({
-        sessionId: ctx.sessionId,
-        workspaceId: ctx.workspaceId
-      })
-      if (!result.success) throw new Error('TS message compaction failed')
-      if (result.totalMessages < 6) {
-        return { handled: true, reply: 'Too few messages to compress.' }
-      }
-      if (result.compacted === 0) {
-        return { handled: true, reply: 'Context is already compact.' }
-      }
-      return {
-        handled: true,
-        reply: `✅ Context compressed, cleaned ${result.compacted} messages (stale tool results and thinking blocks cleared). Compressed ${result.compacted} messages.`
-      }
-    }
-    const result = await getNativeWorker().request<NativeMessageCompactResult>(
-      'db/messages-compact-session',
-      { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
-      120_000
-    )
+    if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+    const result = await writer.compactSessionMessages({
+      sessionId: ctx.sessionId,
+      workspaceId: ctx.workspaceId
+    })
     if (!result.success) {
-      throw new Error(result.error || 'Native message compaction failed')
+      throw new Error('TS message compaction failed')
     }
 
     if (result.totalMessages < 6) {
@@ -610,15 +530,14 @@ async function handleStats(ctx: CommandContext, args: string): Promise<CommandRe
   }
 
   try {
-    const stats: NativeMessageUsageStatsResult =
-      (await canaryChannelSessionUsageStats(ctx.sessionId, ctx.workspaceId)) ??
-      (await getNativeWorker().request<NativeMessageUsageStatsResult>(
-        'db/messages-usage-stats',
-        { sessionId: ctx.sessionId, workspaceId: ctx.workspaceId },
-        120_000
-      ))
+    const writer = businessWriteCanary()
+    if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+    const stats = await writer.sessionUsageStats({
+      sessionId: ctx.sessionId,
+      workspaceId: ctx.workspaceId
+    })
     if (!stats.success) {
-      throw new Error(stats.error || 'Native message usage stats failed')
+      throw new Error('TS message usage stats failed')
     }
 
     if (!stats.hasUsage) {

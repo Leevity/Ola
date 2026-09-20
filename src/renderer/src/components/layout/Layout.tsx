@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Loader2 } from 'lucide-react'
+import { Loader2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
@@ -21,6 +21,7 @@ import { PetStudioPage } from '@renderer/components/settings/PetStudioPage'
 import { AccountAuthPage } from '@renderer/components/account/AccountAuthPage'
 import { CommandPalette } from './CommandPalette'
 import { initializeWorkbenchRegistry } from '@renderer/lib/workbench'
+import { workspaceLayoutStorageKey } from '@renderer/lib/workbench/workspace-layout'
 import { SessionConversationPane } from './SessionConversationPane'
 import { SessionTabStrip } from './SessionTabStrip'
 import { WorkingFolderSheet } from './WorkingFolderSheet'
@@ -29,6 +30,7 @@ import { useUIStore, type AppMode } from '@renderer/stores/ui-store'
 import { useChatStore, type SessionMode } from '@renderer/stores/chat-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useChatActions } from '@renderer/hooks/use-chat-actions'
 import { toast } from 'sonner'
 import {
@@ -112,6 +114,11 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const rightPanelWidth = useUIStore((s) => s.rightPanelWidth)
   const workingFolderSheetOpen = useUIStore((s) => s.workingFolderSheetOpen)
   const workingFolderPanelWidth = useUIStore((s) => s.workingFolderPanelWidth)
+  const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
+  const splitSessionKey = workspaceLayoutStorageKey(activeWorkspaceId)
+  const splitSessionId = useUIStore((s) => s.splitSessionByWorkspace[splitSessionKey] ?? null)
+  const openWorkspaceSplit = useUIStore((s) => s.openWorkspaceSplit)
+  const closeWorkspaceSplit = useUIStore((s) => s.closeWorkspaceSplit)
   const subAgentExecutionDetailOpen = useUIStore((s) => s.subAgentExecutionDetailOpen)
   const subAgentExecutionDetailToolUseId = useUIStore((s) => s.subAgentExecutionDetailToolUseId)
   const subAgentExecutionDetailInlineText = useUIStore((s) => s.subAgentExecutionDetailInlineText)
@@ -316,6 +323,26 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const translatePageOpen = activeSurface === 'translate'
   const tasksPageOpen = activeSurface === 'tasks'
   const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar)
+  const splitSession = useChatStore((s) =>
+    splitSessionId ? s.sessions.find((session) => session.id === splitSessionId) : null
+  )
+  const activeWorkspaceSessionIds = useChatStore(
+    useShallow((s) =>
+      s.sessions
+        .filter((session) => (session.workspaceId ?? 'local-personal') === activeWorkspaceId)
+        .map((session) => session.id)
+    )
+  )
+  const activeWorkspaceSessions = useMemo(
+    () => new Set(activeWorkspaceSessionIds),
+    [activeWorkspaceSessionIds]
+  )
+
+  useEffect(() => {
+    if (!splitSessionId || !splitSession || splitSessionId === activeSessionId) {
+      if (splitSessionId) closeWorkspaceSplit(activeWorkspaceId)
+    }
+  }, [activeSessionId, activeWorkspaceId, closeWorkspaceSplit, splitSession, splitSessionId])
   const contentHeader = useMemo(() => {
     if (tasksPageOpen) {
       return { title: t('navRail.tasks', { defaultValue: 'Tasks' }), subtitle: null }
@@ -878,7 +905,56 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
                   )}
                 >
                   <div className="flex flex-1 overflow-hidden">
-                    <SessionConversationPane windowHeaderOwnsTitle />
+                    <div
+                      className="flex min-w-0 flex-1 overflow-hidden"
+                      onDragOver={(event) => {
+                        if (event.dataTransfer.types.includes('text/session-tab')) {
+                          event.preventDefault()
+                          event.dataTransfer.dropEffect = 'copy'
+                        }
+                      }}
+                      onDrop={(event) => {
+                        const sessionId = event.dataTransfer.getData('text/session-tab')
+                        if (!sessionId) return
+                        event.preventDefault()
+                        if (activeWorkspaceSessions.has(sessionId)) {
+                          openWorkspaceSplit(activeWorkspaceId, sessionId, activeSessionId)
+                        }
+                      }}
+                    >
+                      <SessionConversationPane windowHeaderOwnsTitle />
+                      {splitSession && splitSession.id !== activeSessionId ? (
+                        <>
+                          <div
+                            role="separator"
+                            aria-label={t('layout.splitConversation', {
+                              defaultValue: 'Split conversation'
+                            })}
+                            className="w-px shrink-0 bg-border/70"
+                          />
+                          <div className="relative flex min-w-0 flex-1 overflow-hidden">
+                            <SessionConversationPane
+                              sessionId={splitSession.id}
+                              allowOpenInNewWindow
+                              windowHeaderOwnsTitle
+                            />
+                            <button
+                              type="button"
+                              aria-label={t('layout.closeSplitConversation', {
+                                defaultValue: 'Close split conversation'
+                              })}
+                              title={t('layout.closeSplitConversation', {
+                                defaultValue: 'Close split conversation'
+                              })}
+                              onClick={() => closeWorkspaceSplit(activeWorkspaceId)}
+                              className="absolute right-2 top-2 z-10 rounded-md border border-border/60 bg-background/90 p-1 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+                            >
+                              <X className="size-3.5" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
                     <WorkingFolderSheet />
                     <RightPanel />
                   </div>

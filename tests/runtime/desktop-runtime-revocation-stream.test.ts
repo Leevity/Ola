@@ -18,12 +18,14 @@ vi.mock('../../src/main/providers/provider-main-store', () => ({
     provider: {
       id: 'provider',
       type: 'openai-chat',
+      apiKey: 'test-key',
       baseUrl: state.baseUrl,
       enabled: true,
       models: [{ id: 'model', enabled: true }]
     },
     model: { id: 'model', enabled: true }
-  })
+  }),
+  resolveMainProviderSecret: async (_providerId: string, fallback?: string) => fallback ?? ''
 }))
 
 import { DesktopRuntime } from '../../src/main/runtime/desktop-runtime'

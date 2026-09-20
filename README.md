@@ -42,7 +42,7 @@ Most AI chat interfaces are isolated from your actual work environment. You spen
 
 ### ⚙️ Runtime
 
-- **4-layer Electron architecture** — Main process, Preload bridge, Renderer UI (React 19), and provider-agnostic agent runtime backed by a .NET native sidecar.
+- **4-layer Electron architecture** — Main process, Preload bridge, Renderer UI (React 19), and provider-agnostic TypeScript agent runtime.
 - **Typed cross-runtime contracts** — TypeScript DTOs and audited C# protocol mirrors from SQLite
   routes through IPC to the UI.
 - **SSH remote support** — Agents operate on remote hosts transparently via SSH with xterm.js terminal integration.
@@ -102,7 +102,7 @@ Renderer (React 19)  ←→  Preload (contextBridge)  ←→  Main Process
      │                                                      │
   Agent Loop ─ Tool Registry ─ IPC ──────────→  IPC Handlers
      │                                              │
-     ├─ File I/O, Grep/Glob, Bash              SQLite (via .NET sidecar)
+     ├─ File I/O, Grep/Glob, Bash              SQLite (via TypeScript runtime)
      ├─ Browser (webview)                       Shell / SSH (node-pty, ssh2)
      ├─ Sub-Agents & Teams                      Messaging Plugins
      ├─ Plan, Goal, Memory                      MCP Client
@@ -113,35 +113,33 @@ Renderer (React 19)  ←→  Preload (contextBridge)  ←→  Main Process
 - **Renderer** — React 19 + Tailwind CSS + Zustand stores. Owns the message surface, approvals, and session UX.
 - **Preload** — Narrow `contextBridge` API for secure main↔renderer communication.
 - **Main Process** — Window and process orchestration, IPC, messaging plugins, cron, and MCP client.
-- **Agent Runtime** — Provider-agnostic and hosted by the .NET 10 `Ola.Native.Worker`. Electron main
-  supervises it and bridges MessagePack streams, approvals, and renderer-owned tools. The same
-  worker owns SQLite, file I/O, and other native capabilities.
+- **Agent Runtime** — Provider-agnostic TypeScript runtime hosted by Electron Main. It owns
+  MessagePack streams, approvals, workspace-scoped SQLite, file I/O, and offline execution.
 
 ## 🛠️ Quick Start
 
-**Prerequisites:** Node.js ≥ 22, .NET 10 SDK, native build toolchain (Xcode CLT on macOS, build-essential on Linux, MSVC on Windows).
+**Prerequisites:** Node.js ≥ 22 and npm ≥ 10. CodeGraph development additionally uses the platform native build toolchain.
 
 ```bash
 git clone https://github.com/Leevity/Ola.git
 cd Ola
 npm install
-npm run native:publish   # build the .NET sidecar
 npm run dev
 ```
 
 ### Key Commands
 
-| Command                  | Description                                     |
-| ------------------------ | ----------------------------------------------- |
-| `npm run dev`            | Start Electron + Vite with hot reload           |
-| `npm run build`          | Typecheck then build for production             |
-| `npm run build:win`      | Build Windows installer                         |
-| `npm run build:mac`      | Build macOS .dmg/zip                            |
-| `npm run build:linux`    | Build Linux .AppImage/.deb                      |
-| `npm run lint`           | ESLint with cache                               |
-| `npm run typecheck`      | TypeScript check (main + renderer)              |
-| `npm run format`         | Prettier auto-format                            |
-| `npm run native:publish` | Build the .NET sidecar for the current platform |
+| Command                       | Description                                  |
+| ----------------------------- | -------------------------------------------- |
+| `npm run dev`                 | Start Electron + Vite with hot reload        |
+| `npm run build`               | Typecheck then build for production          |
+| `npm run build:win`           | Build Windows installer                      |
+| `npm run build:mac`           | Build macOS .dmg/zip                         |
+| `npm run build:linux`         | Build Linux .AppImage/.deb                   |
+| `npm run lint`                | ESLint with cache                            |
+| `npm run typecheck`           | TypeScript check (main + renderer)           |
+| `npm run format`              | Prettier auto-format                         |
+| `npm run verify:ts-codegraph` | Verify the TypeScript/WASM CodeGraph runtime |
 
 > **Data directory:** `~/.ola/` — SQLite database, config, agents, skills, commands, and prompts.
 

@@ -4,6 +4,7 @@ import {
   parseRunSpec,
   type RunSnapshot,
   type RunSummary,
+  type RuntimeImage,
   type RuntimeTextMessage
 } from '../../../../shared/runtime/contracts'
 import type { ModelOptions } from '../../../../shared/runtime/model'
@@ -22,6 +23,33 @@ type RuntimeResult<T> = T & { error?: string }
 
 function runtimeChannel(name: string): string {
   return `ts-runtime:${name}:msgpack`
+}
+
+const RUNTIME_INLINE_IMAGE_BYTES = 512 * 1024
+
+async function stageRuntimeImages(
+  workspaceId: string,
+  images: readonly RuntimeImage[] | undefined
+): Promise<RuntimeImage[] | undefined> {
+  if (!images?.length) return images ? [] : undefined
+  return await Promise.all(
+    images.map(async (image) => {
+      if (
+        !image.data ||
+        new TextEncoder().encode(image.data).byteLength <= RUNTIME_INLINE_IMAGE_BYTES
+      )
+        return image
+      const result = await invokeMessagePackBinary<
+        RuntimeResult<{ staged: boolean; assetId?: string }>
+      >(runtimeChannel('asset-stage'), {
+        workspaceId,
+        mimeType: image.mimeType,
+        base64: image.data
+      })
+      if (!result.staged || !result.assetId) throw new Error(result.error ?? 'RUNTIME_ASSET_FAILED')
+      return { mimeType: image.mimeType, assetId: result.assetId }
+    })
+  )
 }
 
 async function pause(signal?: AbortSignal): Promise<void> {
@@ -47,17 +75,26 @@ export interface TsRuntimeTextTurn {
   /** Stable chat message target retained in the runtime journal for reattach. */
   assistantMessageId?: string
   channelContext?: { pluginId: string; chatId: string; messageId?: string }
+  teamContext?: { teamName: string; memberName?: string }
   modelSource: ModelSource
   modelOptions?: ModelOptions
   prompt: string
+  promptImages?: RuntimeImage[]
   history?: RuntimeTextMessage[]
   environmentId?: string
   workingDirectory?: string
+  sshConnectionId?: string
   extensionIds?: string[]
+  translationContext?: {
+    sourceLanguage: string
+    targetLanguage: string
+    fileRoot?: string
+  }
   /** Explicit model-visible capability snapshot; omitted means no tools. */
   toolNames?: string[]
   maxTurns?: number
   maxToolCalls?: number
+  imageModelSource?: ModelSource
   unattended?: boolean
   onRunIdAssigned?: (runId: string) => void
   signal?: AbortSignal
@@ -123,15 +160,41 @@ export async function respondTsRuntimeInteraction(input: {
   if (!result.accepted) throw new Error(result.error ?? 'TS_RUNTIME_INTERACTION_REJECTED')
 }
 
+/** Cancels one authorized TS runtime run, including nested team workers. */
+export async function cancelTsRuntimeRun(input: {
+  workspaceId: string
+  runId: string
+}): Promise<boolean> {
+  const result = await invokeMessagePackBinary<RuntimeResult<{ cancelled: boolean }>>(
+    runtimeChannel('run-cancel'),
+    input
+  )
+  if (result.error) throw new Error(result.error)
+  return result.cancelled === true
+}
+
 /**
- * This bridge carries text turns plus an explicit, compatibility-proven tool
- * snapshot. Callers must prove equivalence first; unsupported attachments,
- * plans, SSH and plugin turns stay on their legacy path.
+ * This bridge carries text turns, bounded image content and an explicit,
+ * compatibility-proven tool snapshot. Oversized or richer attachments remain
+ * on the legacy path. SSH turns carry only a connection id and are still
+ * subject to Main-side workspace authorization; channel turns require an
+ * explicit channel context and unattended authorization.
  */
 export async function* streamTsRuntimeTextTurn(
   input: TsRuntimeTextTurn
 ): AsyncGenerator<TsRuntimeProjectedEvent> {
   const source = parseModelSource(input.modelSource)
+  const promptImages = await stageRuntimeImages(input.workspaceId, input.promptImages)
+  const history = input.history
+    ? await Promise.all(
+        input.history.map(async (message) => ({
+          ...message,
+          ...(message.images
+            ? { images: await stageRuntimeImages(input.workspaceId, message.images) }
+            : {})
+        }))
+      )
+    : undefined
   const run = parseRunSpec({
     runId: crypto.randomUUID(),
     taskId: crypto.randomUUID(),
@@ -140,17 +203,24 @@ export async function* streamTsRuntimeTextTurn(
     sessionId: input.sessionId,
     ...(input.assistantMessageId ? { assistantMessageId: input.assistantMessageId } : {}),
     ...(input.channelContext ? { channelContext: input.channelContext } : {}),
+    ...(input.teamContext ? { teamContext: input.teamContext } : {}),
     workspaceId: input.workspaceId,
     environmentId: input.environmentId ?? 'local',
     ...(input.workingDirectory ? { workingDirectory: input.workingDirectory } : {}),
+    ...(input.sshConnectionId ? { sshConnectionId: input.sshConnectionId } : {}),
     ...(input.extensionIds?.length ? { extensionIds: input.extensionIds } : {}),
+    ...(input.translationContext ? { translationContext: input.translationContext } : {}),
     ...(input.toolNames?.length ? { toolNames: input.toolNames } : {}),
     ...(input.maxTurns !== undefined ? { maxTurns: input.maxTurns } : {}),
     ...(input.maxToolCalls !== undefined ? { maxToolCalls: input.maxToolCalls } : {}),
     modelSource: source,
+    ...(input.imageModelSource
+      ? { imageModelSource: parseModelSource(input.imageModelSource) }
+      : {}),
     ...(input.modelOptions ? { modelOptions: input.modelOptions } : {}),
     prompt: input.prompt,
-    ...(input.history?.length ? { history: input.history } : {}),
+    ...(promptImages?.length ? { promptImages } : {}),
+    ...(history?.length ? { history } : {}),
     unattended: input.unattended ?? false
   })
   let submitted = false

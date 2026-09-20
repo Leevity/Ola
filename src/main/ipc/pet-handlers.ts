@@ -66,6 +66,15 @@ type PetTtsStreamArgs = {
   chatStyle?: string
 }
 
+type PetTtsClipArgs = Omit<PetTtsStreamArgs, 'requestId'> & {
+  input: string
+}
+
+type PetTranscriptionArgs = {
+  provider?: PetTtsStreamArgs['provider']
+  file: { base64: string; mediaType: string; fileName?: string }
+}
+
 type PetImageProviderArgs = {
   baseUrl?: string
   apiKey?: string
@@ -85,7 +94,7 @@ async function streamChatTts(
   const input = args.input!.trim()
   const instruction = args.instruction?.trim()
 
-  // Same two message shapes as the native worker's non-streaming path:
+  // Keep the provider response shape aligned with the runtime's non-streaming path:
   // MiMo speaks the assistant message verbatim; OpenAI audio models get a
   // read-aloud instruction in a user message.
   const messages: Array<{ role: string; content: string }> = []
@@ -148,6 +157,69 @@ async function streamChatTts(
       }
     }
   }
+}
+
+export async function synthesizeSpeechClip(args: PetTtsClipArgs): Promise<{
+  base64: string
+  mediaType: string
+}> {
+  const provider = args.provider
+  if (!provider?.baseUrl || !provider.apiKey || !provider.model) {
+    throw new Error('TTS provider configuration is incomplete')
+  }
+  const baseUrl = provider.baseUrl.trim().replace(/\/+$/, '')
+  const response = await fetch(`${baseUrl}/audio/speech`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${provider.apiKey}`,
+      ...(provider.requestOverrides?.headers ?? {})
+    },
+    body: JSON.stringify({
+      model: provider.model,
+      input: args.input.trim(),
+      voice: args.voice?.trim() || 'alloy',
+      ...(args.instruction?.trim() ? { instructions: args.instruction.trim() } : {}),
+      ...(provider.requestOverrides?.body ?? {})
+    })
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`TTS request failed HTTP ${response.status}: ${text.slice(0, 300)}`)
+  }
+  return {
+    base64: Buffer.from(await response.arrayBuffer()).toString('base64'),
+    mediaType: response.headers.get('content-type') || 'audio/mpeg'
+  }
+}
+
+export async function transcribeAudio(args: PetTranscriptionArgs): Promise<{ text: string }> {
+  const provider = args.provider
+  if (!provider?.baseUrl || !provider.apiKey || !provider.model) {
+    throw new Error('transcription provider configuration is incomplete')
+  }
+  const baseUrl = provider.baseUrl.trim().replace(/\/+$/, '')
+  const form = new FormData()
+  form.append(
+    'file',
+    new Blob([Buffer.from(args.file.base64, 'base64')], { type: args.file.mediaType }),
+    args.file.fileName || 'audio.webm'
+  )
+  form.append('model', provider.model)
+  const response = await fetch(`${baseUrl}/audio/transcriptions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${provider.apiKey}`,
+      ...(provider.requestOverrides?.headers ?? {})
+    },
+    body: form
+  })
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`transcription request failed HTTP ${response.status}: ${text.slice(0, 300)}`)
+  }
+  const payload = (await response.json()) as { text?: unknown }
+  return { text: typeof payload.text === 'string' ? payload.text : '' }
 }
 
 let petWindow: BrowserWindow | null = null
@@ -511,6 +583,16 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
     }
   })
 
+  registerMessagePackHandler<PetTtsClipArgs>('pet:tts', async (args) => {
+    if (!args?.input?.trim()) throw new Error('invalid tts request')
+    return await synthesizeSpeechClip(args)
+  })
+
+  registerMessagePackHandler<PetTranscriptionArgs>('pet:transcribe', async (args) => {
+    if (!args?.file?.base64) throw new Error('invalid transcription request')
+    return await transcribeAudio(args)
+  })
+
   registerMessagePackHandler<{ requestId?: string }>('pet:tts-cancel', (args) => {
     if (args?.requestId) petTtsStreams.get(args.requestId)?.abort()
   })
@@ -748,7 +830,7 @@ export function registerPetHandlers(petDeps: PetWindowDeps): void {
     const { baseUrl, apiKey, model, requestOverrides } = providerInfo
 
     // Build a transparent-background-friendly prompt and call the images API
-    // directly. Two reasons for bypassing the sidecar stream:
+    // directly. Two reasons for using the direct TS runtime stream:
     //   1) we only need one PNG, not a streamed conversation;
     //   2) the renderer doesn't have direct API access in this context.
     const fullPrompt =

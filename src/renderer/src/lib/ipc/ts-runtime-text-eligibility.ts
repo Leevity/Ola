@@ -1,10 +1,16 @@
 import type { ProviderConfig, UnifiedMessage } from '@renderer/lib/api/types'
 import { parseModelSource, type ModelSource } from '../../../../shared/runtime/model-source'
 import type { ModelOptions } from '../../../../shared/runtime/model'
-import type { RuntimeTextMessage } from '../../../../shared/runtime/contracts'
+import type { RuntimeImage, RuntimeTextMessage } from '../../../../shared/runtime/contracts'
 
 export type TsRuntimeTextEligibility =
-  | { eligible: true; prompt: string; history: RuntimeTextMessage[]; modelOptions: ModelOptions }
+  | {
+      eligible: true
+      prompt: string
+      promptImages: RuntimeImage[]
+      history: RuntimeTextMessage[]
+      modelOptions: ModelOptions
+    }
   | { eligible: false; reason: string }
 
 const TS_RUNTIME_READ_ONLY_TOOL_NAMES = new Set([
@@ -16,13 +22,7 @@ const TS_RUNTIME_READ_ONLY_TOOL_NAMES = new Set([
   'WebFetch'
 ])
 const TS_RUNTIME_LOCAL_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep'])
-const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
-  ...TS_RUNTIME_READ_ONLY_TOOL_NAMES,
-  'Write',
-  'Edit',
-  'Bash',
-  'Notify',
-  // Channel tools are Main-owned and workspace-authorized.
+export const TS_RUNTIME_CHANNEL_TOOL_NAMES = new Set([
   'PluginGetGroupMessages',
   'PluginGetCurrentChatMessages',
   'PluginSummarizeGroup',
@@ -32,6 +32,8 @@ const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
   'FeishuListChatMembers',
   'FeishuSendImage',
   'FeishuSendFile',
+  'FeishuSendAudio',
+  'FeishuSendVideo',
   'FeishuAtMember',
   'FeishuSendUrgent',
   'WeixinSendImage',
@@ -43,6 +45,36 @@ const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
   'FeishuBitableCreateRecords',
   'FeishuBitableUpdateRecords',
   'FeishuBitableDeleteRecords'
+])
+const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
+  ...TS_RUNTIME_READ_ONLY_TOOL_NAMES,
+  'Write',
+  'Edit',
+  'Bash',
+  'Notify',
+  'TaskList',
+  'TaskGet',
+  'TaskCreate',
+  'TaskUpdate',
+  'TaskDelete',
+  'Task',
+  'Agent',
+  'AskUserQuestion',
+  'visualize_show_widget',
+  'EnterPlanMode',
+  'ExitPlanMode',
+  'ImageGenerate',
+  'get_goal',
+  'create_goal',
+  'update_goal',
+  'TeamCreate',
+  'SendMessage',
+  'TeamStatus',
+  'TeamDelete',
+  'TeamTaskCreate',
+  'TeamTaskUpdate',
+  // Channel tools are Main-owned and workspace-authorized.
+  ...TS_RUNTIME_CHANNEL_TOOL_NAMES
 ])
 const TS_RUNTIME_LOCAL_AGENT_TOOL_NAMES = new Set([
   ...TS_RUNTIME_LOCAL_READ_TOOL_NAMES,
@@ -58,8 +90,8 @@ function isTsRuntimeAgentToolName(name: string): boolean {
 
 /**
  * The staged agent path only accepts tools whose Main-owned TS definitions
- * are protocol-compatible with the Chat mode catalog. Callers use this before
- * opting in; every other tool stays on the existing sidecar path.
+ * are protocol-compatible with the Chat mode catalog. Unsupported tool sets
+ * fail closed until their Main-owned TS contract is available.
  */
 export function supportsTsRuntimeReadOnlyTools(input: {
   toolNames: readonly string[]
@@ -93,9 +125,9 @@ export function supportsTsRuntimeAgentTools(input: {
 }
 
 /**
- * The staged bridge must preserve the full provider request. It is deliberately
- * stricter than the TS runtime itself while legacy request construction still
- * owns rich content, image, unsupported tool, and provider-specific features.
+ * The TS bridge preserves plain text plus bounded image content. Rich blocks,
+ * tool transcripts, oversized images and provider-specific features fail closed
+ * until they have an equivalent runtime contract.
  */
 export function assessTsRuntimeTextEligibility(input: {
   messages: readonly UnifiedMessage[]
@@ -108,13 +140,15 @@ export function assessTsRuntimeTextEligibility(input: {
     return { eligible: false, reason: 'MODEL_SOURCE_NOT_MIGRATED' }
   }
   if (!input.messages.length) return { eligible: false, reason: 'EMPTY_MESSAGES' }
+  const requestOverrideOptions = projectRequestOverrides(input.provider.requestOverrides)
+  const responsesSessionScope = projectResponsesSessionScope(input.provider.responsesSessionScope)
   if (
-    input.provider.requestOverrides ||
+    requestOverrideOptions === null ||
+    responsesSessionScope === null ||
     input.provider.responsesImageGeneration ||
     input.provider.computerUseEnabled ||
     input.provider.instructionsPrompt ||
-    input.provider.accountId ||
-    input.provider.responsesSessionScope
+    input.provider.accountId
   )
     return { eligible: false, reason: 'PROVIDER_OPTIONS_NOT_MIGRATED' }
   if (input.provider.thinkingEnabled && !input.provider.thinkingConfig)
@@ -143,26 +177,31 @@ export function assessTsRuntimeTextEligibility(input: {
       }
     : {}
   const current = input.messages.at(-1)
-  if (
-    !current ||
-    current.role !== 'user' ||
-    typeof current.content !== 'string' ||
-    !current.content.trim()
-  )
+  if (!current || current.role !== 'user')
+    return { eligible: false, reason: 'CURRENT_PROMPT_NOT_MIGRATED' }
+  const currentContent = extractRuntimeContent(current.content)
+  if (!currentContent || (!currentContent.text && currentContent.images.length === 0))
     return { eligible: false, reason: 'CURRENT_PROMPT_NOT_MIGRATED' }
   const history: RuntimeTextMessage[] = []
   for (const message of input.messages.slice(0, -1)) {
     if (
       (message.role !== 'system' && message.role !== 'user' && message.role !== 'assistant') ||
-      typeof message.content !== 'string' ||
-      !message.content.trim()
+      !extractRuntimeContent(message.content)
     )
       return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
-    history.push({ role: message.role, text: message.content })
+    const content = extractRuntimeContent(message.content)
+    if (!content || (!content.text && content.images.length === 0))
+      return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
+    history.push({
+      role: message.role,
+      text: content.text,
+      ...(content.images.length ? { images: content.images } : {})
+    })
   }
   return {
     eligible: true,
-    prompt: current.content,
+    prompt: currentContent.text || '[User attached images without additional text.]',
+    promptImages: currentContent.images,
     history,
     modelOptions: {
       ...(input.provider.systemPrompt ? { systemPrompt: input.provider.systemPrompt } : {}),
@@ -179,12 +218,126 @@ export function assessTsRuntimeTextEligibility(input: {
       ...(input.provider.cacheTtl ? { cacheTtl: input.provider.cacheTtl } : {}),
       ...(input.provider.serviceTier ? { serviceTier: input.provider.serviceTier } : {}),
       ...(input.provider.promptCacheKey ? { promptCacheKey: input.provider.promptCacheKey } : {}),
+      ...(responsesSessionScope ? { responsesSessionScope } : {}),
       ...(input.provider.thinkingConfig?.forceTemperature !== undefined &&
       input.provider.thinkingEnabled
         ? { temperature: input.provider.thinkingConfig.forceTemperature }
         : {}),
-      ...thinkingOptions
+      ...thinkingOptions,
+      ...(requestOverrideOptions?.bodyOverrides
+        ? { bodyOverrides: requestOverrideOptions.bodyOverrides }
+        : {}),
+      ...(requestOverrideOptions?.omitBodyKeys
+        ? { omitBodyKeys: requestOverrideOptions.omitBodyKeys }
+        : {})
     }
+  }
+}
+
+const MAX_TS_RUNTIME_IMAGE_COUNT = 4
+const MAX_TS_RUNTIME_IMAGE_BYTES = 20 * 1024 * 1024
+
+function extractRuntimeContent(
+  content: UnifiedMessage['content']
+): { text: string; images: RuntimeImage[] } | null {
+  if (typeof content === 'string') return { text: content.trim(), images: [] }
+  if (!Array.isArray(content)) return null
+  const text: string[] = []
+  const images: RuntimeImage[] = []
+  let bytes = 0
+  for (const block of content) {
+    if (block.type === 'text') {
+      if (block.text.trim()) text.push(block.text)
+      continue
+    }
+    if (block.type !== 'image') return null
+    if (images.length >= MAX_TS_RUNTIME_IMAGE_COUNT) return null
+    const source = block.source
+    if (source.type === 'base64' && source.data && typeof source.mediaType === 'string') {
+      if (!isRuntimeImageType(source.mediaType)) return null
+      bytes += new TextEncoder().encode(source.data).byteLength
+      if (bytes > MAX_TS_RUNTIME_IMAGE_COUNT * MAX_TS_RUNTIME_IMAGE_BYTES) return null
+      images.push({
+        mimeType: source.mediaType,
+        data: source.data
+      })
+      continue
+    }
+    if (
+      source.type === 'url' &&
+      typeof source.mediaType === 'string' &&
+      typeof source.url === 'string' &&
+      /^https:\/\//i.test(source.url)
+    ) {
+      if (!isRuntimeImageType(source.mediaType)) return null
+      bytes += new TextEncoder().encode(source.url).byteLength
+      if (bytes > MAX_TS_RUNTIME_COUNTED_URL_BYTES) return null
+      images.push({ mimeType: source.mediaType, url: source.url })
+      continue
+    }
+    return null
+  }
+  return { text: text.join('\n').trim(), images }
+}
+
+const MAX_TS_RUNTIME_COUNTED_URL_BYTES = 768 * 1024
+
+function projectResponsesSessionScope(value: unknown): string | null | undefined {
+  if (value === undefined) return undefined
+  if (
+    typeof value !== 'string' ||
+    value.length === 0 ||
+    value.length > 256 ||
+    [...value].some((character) => {
+      const code = character.codePointAt(0) ?? 0
+      return code < 32 || code === 127
+    })
+  )
+    return null
+  return value
+}
+
+function isRuntimeImageType(value: string): value is RuntimeImage['mimeType'] {
+  return ['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(value)
+}
+
+function projectRequestOverrides(
+  overrides: ProviderConfig['requestOverrides']
+): { bodyOverrides?: Record<string, unknown>; omitBodyKeys?: string[] } | null {
+  if (!overrides) return {}
+  if (overrides.headers && Object.keys(overrides.headers).length) return null
+  if (overrides.body !== undefined) {
+    if (!overrides.body || typeof overrides.body !== 'object' || Array.isArray(overrides.body))
+      return null
+    let nodes = 0
+    const inspect = (value: unknown, depth: number): boolean => {
+      if (++nodes > 512 || depth > 8) return false
+      if (value === null || typeof value === 'string' || typeof value === 'boolean') return true
+      if (typeof value === 'number') return Number.isFinite(value)
+      if (Array.isArray(value)) return value.every((item) => inspect(item, depth + 1))
+      if (!value || typeof value !== 'object') return false
+      return Object.entries(value).every(([key, item]) => {
+        if (
+          !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(key) ||
+          /(api[-_]?key|authorization|cookie|credential|password|secret|token)/i.test(key)
+        )
+          return false
+        return inspect(item, depth + 1)
+      })
+    }
+    if (!inspect(overrides.body, 0)) return null
+    if (new TextEncoder().encode(JSON.stringify(overrides.body)).byteLength > 64 * 1024) return null
+  }
+  if (overrides.omitBodyKeys) {
+    if (
+      overrides.omitBodyKeys.length > 64 ||
+      overrides.omitBodyKeys.some((key) => !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(key))
+    )
+      return null
+  }
+  return {
+    ...(overrides.body ? { bodyOverrides: overrides.body } : {}),
+    ...(overrides.omitBodyKeys?.length ? { omitBodyKeys: overrides.omitBodyKeys } : {})
   }
 }
 
@@ -192,6 +345,7 @@ export function explicitTsRuntimeModelSource(input: {
   sessionModelSource?: ModelSource
   providerId?: string
   modelId: string
+  managedWorkspaceKind?: 'ola-personal' | 'ola-team'
 }): ModelSource | null {
   if (input.sessionModelSource) {
     try {
@@ -200,7 +354,19 @@ export function explicitTsRuntimeModelSource(input: {
       return null
     }
   }
-  if (!input.providerId || input.providerId.startsWith('ola-managed:')) return null
+  if (!input.providerId) return null
+  if (input.providerId.startsWith('ola-managed:')) {
+    if (!input.managedWorkspaceKind) return null
+    try {
+      return parseModelSource({
+        kind: input.managedWorkspaceKind,
+        workspaceId: input.providerId.slice('ola-managed:'.length),
+        resourceId: input.modelId
+      })
+    } catch {
+      return null
+    }
+  }
   try {
     return parseModelSource({
       kind: 'local',

@@ -19,7 +19,6 @@ import { WorkingFolderSheet } from './WorkingFolderSheet'
 import { WindowControls } from './WindowControls'
 import { RightPanel } from './RightPanel'
 import { setSessionForegroundVisibility } from '@renderer/lib/agent/session-runtime-router'
-import { agentStream } from '@renderer/lib/ipc/agent-stream-receiver'
 import { selectSessionPendingApproval } from '@renderer/lib/agent/session-scoped-agent-state'
 
 interface DetachedSessionPageProps {
@@ -56,10 +55,8 @@ export function DetachedSessionPage({ sessionId }: DetachedSessionPageProps): Re
 
   useEffect(() => {
     setSessionForegroundVisibility(sessionId, true)
-    agentStream.notifySessionVisibility(sessionId, true)
     return () => {
       setSessionForegroundVisibility(sessionId, false)
-      agentStream.notifySessionVisibility(sessionId, false)
     }
   }, [sessionId])
 

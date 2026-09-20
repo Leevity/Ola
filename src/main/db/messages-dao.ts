@@ -1,4 +1,4 @@
-﻿import { getNativeWorker } from '../lib/native-worker'
+﻿import { getTsDatabaseRouteGuard } from './business-write-canary'
 import {
   canaryListMessageLocatorRows,
   canaryListMessageMarkers,
@@ -96,7 +96,11 @@ interface MessageDeleteLastResult {
 }
 
 async function requestMutation(method: string, params: object): Promise<MessageMutationResult> {
-  const result = await getNativeWorker().request<MessageMutationResult>(method, params, 120_000)
+  const result = await getTsDatabaseRouteGuard().request<MessageMutationResult>(
+    method,
+    params,
+    120_000
+  )
   if (!result.success) {
     throw new Error(result.error || `Native message mutation failed: ${method}`)
   }
@@ -104,36 +108,64 @@ async function requestMutation(method: string, params: object): Promise<MessageM
 }
 
 export async function getMessages(sessionId: string, workspaceId?: string): Promise<MessageRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messages<MessageRow>(sessionId, workspaceId)
+  }
   const migrated = await canaryListMessages(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<MessageRow[]>('db/messages-list', { sessionId }, 120_000)
+  return getTsDatabaseRouteGuard().request<MessageRow[]>('db/messages-list', { sessionId }, 120_000)
 }
 
 export async function getUserMessages(
   sessionId: string,
   workspaceId?: string
 ): Promise<MessageRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.userMessages<MessageRow>(sessionId, workspaceId)
+  }
   const migrated = await canaryListUserMessages(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<MessageRow[]>('db/messages-list-user', { sessionId }, 120_000)
+  return getTsDatabaseRouteGuard().request<MessageRow[]>(
+    'db/messages-list-user',
+    { sessionId },
+    120_000
+  )
 }
 
 export async function getMessageMarkers(
   sessionId: string,
   workspaceId?: string
 ): Promise<MessageRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messageMarkers<MessageRow>(sessionId, workspaceId)
+  }
   const migrated = await canaryListMessageMarkers(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<MessageRow[]>('db/messages-list-markers', { sessionId }, 120_000)
+  return getTsDatabaseRouteGuard().request<MessageRow[]>(
+    'db/messages-list-markers',
+    { sessionId },
+    120_000
+  )
 }
 
 export async function getMessageLocatorRows(
   sessionId: string,
   workspaceId?: string
 ): Promise<MessageLocatorRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messageLocatorRows<MessageLocatorRow>(sessionId, workspaceId)
+  }
   const migrated = await canaryListMessageLocatorRows(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<MessageLocatorRow[]>(
+  return getTsDatabaseRouteGuard().request<MessageLocatorRow[]>(
     'db/messages-list-locator',
     { sessionId },
     120_000
@@ -146,9 +178,14 @@ export async function getMessagesPage(
   offset: number,
   workspaceId?: string
 ): Promise<MessageRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messagesPage<MessageRow>(sessionId, workspaceId, limit, offset)
+  }
   const migrated = await canaryListMessagesPage(sessionId, workspaceId, limit, offset)
   if (migrated !== undefined) return migrated
-  return getNativeWorker().request<MessageRow[]>(
+  return getTsDatabaseRouteGuard().request<MessageRow[]>(
     'db/messages-list-page',
     { sessionId, limit, offset },
     120_000
@@ -161,9 +198,23 @@ export async function getMessagesRequestContext(args: {
   maxMessages: number
   headLimit?: number
 }): Promise<MessageRow[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!args.workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messageRequestContext<MessageRow>(
+      args.sessionId,
+      args.workspaceId,
+      args.maxMessages,
+      args.headLimit
+    )
+  }
   const migrated = await canaryGetMessagesRequestContext(args)
   if (migrated !== undefined) return migrated
-  return await getNativeWorker().request<MessageRow[]>('db/messages-request-context', args, 120_000)
+  return await getTsDatabaseRouteGuard().request<MessageRow[]>(
+    'db/messages-request-context',
+    args,
+    120_000
+  )
 }
 
 export async function getMessagesWindowAround(args: {
@@ -173,9 +224,18 @@ export async function getMessagesWindowAround(args: {
   sortOrder?: number | null
   limit: number
 }): Promise<MessageWindowResult> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!args.workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messageWindowAround<MessageRow>(args.sessionId, args.workspaceId, {
+      messageId: args.messageId,
+      sortOrder: args.sortOrder,
+      limit: args.limit
+    })
+  }
   const migrated = await canaryGetMessagesWindowAround(args)
   if (migrated !== undefined) return migrated
-  return await getNativeWorker().request<MessageWindowResult>(
+  return await getTsDatabaseRouteGuard().request<MessageWindowResult>(
     'db/messages-window-around',
     args,
     120_000
@@ -208,7 +268,7 @@ export async function insertMessageArtifacts(args: {
       messages: args.messages
     })
   }
-  const result = await getNativeWorker().request<MessageInsertArtifactsResult>(
+  const result = await getTsDatabaseRouteGuard().request<MessageInsertArtifactsResult>(
     'db/messages-insert-artifacts',
     args,
     120_000
@@ -285,7 +345,7 @@ export async function deleteMessage(
     if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
     return writer.deleteMessage({ id: messageId, sessionId, workspaceId, updatedAt: Date.now() })
   }
-  const result = await getNativeWorker().request<MessageDeleteResult>(
+  const result = await getTsDatabaseRouteGuard().request<MessageDeleteResult>(
     'db/messages-delete',
     { sessionId, messageId },
     120_000
@@ -342,7 +402,7 @@ export async function deleteLastMessage(
     if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
     return writer.deleteLastMessage<MessageRow>({ sessionId, workspaceId, role })
   }
-  const result = await getNativeWorker().request<MessageDeleteLastResult>(
+  const result = await getTsDatabaseRouteGuard().request<MessageDeleteLastResult>(
     'db/messages-delete-last',
     { sessionId, role },
     120_000
@@ -354,9 +414,14 @@ export async function deleteLastMessage(
 }
 
 export async function getMessageCount(sessionId: string, workspaceId?: string): Promise<number> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.messageCount(sessionId, workspaceId)
+  }
   const migrated = await canaryGetMessageCount(sessionId, workspaceId)
   if (migrated !== undefined) return migrated
-  const result = await getNativeWorker().request<MessageCountResult>(
+  const result = await getTsDatabaseRouteGuard().request<MessageCountResult>(
     'db/messages-count',
     { sessionId },
     120_000
@@ -372,9 +437,14 @@ export async function searchMessageContent(
   limit = 50,
   workspaceId?: string
 ): Promise<MessageContentMatch[]> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
+    return await writer.searchMessageContent<MessageContentMatch>(query, workspaceId, limit)
+  }
   const migrated = await canarySearchMessageContent(query, workspaceId, limit)
   if (migrated !== undefined) return migrated
-  return await getNativeWorker().request<MessageContentMatch[]>(
+  return await getTsDatabaseRouteGuard().request<MessageContentMatch[]>(
     'db/messages-search-content',
     { query, limit, workspaceId },
     120_000

@@ -136,4 +136,44 @@ describe('desktop runtime tool authorization', () => {
       })
     ).toBe(true)
   })
+
+  it('authorizes translation buffer writes only for an interactive translation run', () => {
+    const translationRun = {
+      ...run('translation-task', false),
+      toolNames: ['Write', 'Edit', 'Read', 'FileRead'],
+      translationContext: { sourceLanguage: 'auto', targetLanguage: 'en' }
+    }
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: translationRun,
+        tool: { name: 'Write', effect: 'write' },
+        input: { content: 'hello' }
+      })
+    ).toBe(true)
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: { ...translationRun, unattended: true },
+        tool: { name: 'Write', effect: 'write' },
+        input: { content: 'hello' }
+      })
+    ).toBe(false)
+  })
+
+  it('requires an explicit interactive tool snapshot for prompt optimization writes', () => {
+    const optimizerRun = { ...run('optimizer-task', false), toolNames: ['WriteOptimizedPrompts'] }
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: optimizerRun,
+        tool: { name: 'WriteOptimizedPrompts', effect: 'write' },
+        input: { options: [] }
+      })
+    ).toBe(true)
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: { ...optimizerRun, unattended: true },
+        tool: { name: 'WriteOptimizedPrompts', effect: 'write' },
+        input: { options: [] }
+      })
+    ).toBe(false)
+  })
 })

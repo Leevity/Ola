@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"ola-remote-server/internal/auth"
 	"ola-remote-server/internal/config"
 	"ola-remote-server/internal/store"
 )
@@ -84,6 +85,78 @@ func TestSignalingTokenRequiresDeviceOwnership(t *testing.T) {
 	foreign := requestJSON(t, handler, http.MethodPost, "/api/devices/"+deviceA+"/signaling-token", map[string]any{}, tokenB)
 	if foreign["_status"] != float64(http.StatusNotFound) {
 		t.Fatalf("foreign account should be rejected: %#v", foreign)
+	}
+}
+
+func TestAccountWorkspaceDirectoryAndModelAccessTicket(t *testing.T) {
+	handler := NewRouter(testConfig(), store.NewMemoryStore(), nil)
+	token, deviceID := registerAccountAndDevice(t, handler, "models@example.com")
+	me := requestJSON(t, handler, http.MethodGet, "/api/auth/me", nil, token)
+	account, _ := me["account"].(map[string]any)
+	accountID, _ := account["id"].(string)
+	if accountID == "" {
+		t.Fatalf("account id missing: %#v", me)
+	}
+
+	directory := requestJSON(t, handler, http.MethodGet, "/api/account/workspaces", nil, token)
+	if directory["_status"] != float64(http.StatusOK) {
+		t.Fatalf("workspace directory failed: %#v", directory)
+	}
+	workspaces, _ := directory["workspaces"].([]any)
+	if len(workspaces) != 1 {
+		t.Fatalf("expected one personal workspace, got %#v", directory)
+	}
+	workspace := workspaces[0].(map[string]any)
+	workspaceID, _ := workspace["id"].(string)
+	if workspace["kind"] != "personal" || workspaceID == "" {
+		t.Fatalf("invalid personal workspace: %#v", workspace)
+	}
+
+	resources := requestJSON(t, handler, http.MethodGet, "/api/account/workspaces/"+workspaceID+"/model-resources", nil, token)
+	if resources["_status"] != float64(http.StatusOK) {
+		t.Fatalf("model directory failed: %#v", resources)
+	}
+	resourceRows, _ := resources["resources"].([]any)
+	if len(resourceRows) != 1 || resourceRows[0].(map[string]any)["id"] != "personal-default" {
+		t.Fatalf("invalid model directory: %#v", resources)
+	}
+
+	ticketResponse := requestJSON(t, handler, http.MethodPost, "/api/account/model-access-ticket", map[string]any{
+		"workspaceId": workspaceID, "resourceId": "personal-default", "sessionId": "session-1", "deviceId": deviceID,
+	}, token)
+	ticket, _ := ticketResponse["ticket"].(string)
+	if ticketResponse["_status"] != float64(http.StatusOK) || ticket == "" {
+		t.Fatalf("ticket issuance failed: %#v", ticketResponse)
+	}
+	claims, err := auth.ParseModelAccessTicket([]byte(testConfig().JWTSecret), ticket)
+	if err != nil || claims.AccountID != accountID || claims.DeviceID != deviceID || claims.WorkspaceID != workspaceID || claims.ResourceID != "personal-default" {
+		t.Fatalf("ticket claims are not bound to request: %#v, %v", claims, err)
+	}
+
+	modelRequest := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[]}`))
+	modelRequest.Header.Set("Authorization", "Bearer "+ticket)
+	modelRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(modelRecorder, modelRequest)
+	if modelRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ticket should reach the configured gateway and fail closed without provider key, got %d", modelRecorder.Code)
+	}
+	responsesRequest := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{"input":[]}`))
+	responsesRequest.Header.Set("Authorization", "Bearer "+ticket)
+	responsesRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(responsesRecorder, responsesRequest)
+	if responsesRecorder.Code != http.StatusServiceUnavailable {
+		t.Fatalf("Responses ticket should reach the configured gateway and fail closed without provider key, got %d", responsesRecorder.Code)
+	}
+	logout := requestJSON(t, handler, http.MethodPost, "/api/auth/logout", map[string]any{}, token)
+	if logout["_status"] != float64(http.StatusOK) {
+		t.Fatalf("logout failed: %#v", logout)
+	}
+	revokedRequest := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"messages":[]}`))
+	revokedRequest.Header.Set("Authorization", "Bearer "+ticket)
+	revokedRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(revokedRecorder, revokedRequest)
+	if revokedRecorder.Code != http.StatusUnauthorized {
+		t.Fatalf("ticket must be revoked with its parent account token, got %d", revokedRecorder.Code)
 	}
 }
 

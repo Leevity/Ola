@@ -100,8 +100,8 @@ function resolveTaskProvider(task: PersistedVideoTask) {
   return { provider: resolved.provider, request: task.request! }
 }
 
-function capabilities(): VideoProviderCapability[] {
-  return listMainProviderModels('seedance-video').map((entry) => ({
+async function capabilities(): Promise<VideoProviderCapability[]> {
+  return (await listMainProviderModels('seedance-video')).map((entry) => ({
     provider: 'seedance',
     providerId: entry.providerId,
     providerName: entry.providerName,
@@ -318,7 +318,7 @@ export function registerMediaRuntimeHandlers(): void {
     await loadTasks()
     return {
       settings,
-      capabilities: capabilities(),
+      capabilities: await capabilities(),
       ...(await cleanupCache()),
       maxBytes: MEDIA_CACHE_MAX_BYTES
     }

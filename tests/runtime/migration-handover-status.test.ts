@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const handlers = new Map<string, (event: unknown, bytes: Uint8Array) => Promise<Uint8Array>>()
+const mockState = vi.hoisted(() => ({ decodedArgs: {} as unknown }))
 
 vi.mock('electron', () => ({
   BrowserWindow: { fromWebContents: vi.fn() },
@@ -13,7 +14,7 @@ vi.mock('electron', () => ({
   }
 }))
 vi.mock('../../src/shared/messagepack/binary-ipc', () => ({
-  decodeMessagePackPayload: () => ({}),
+  decodeMessagePackPayload: () => mockState.decodedArgs,
   encodeMessagePackPayload: (value: unknown) => value,
   toMessagePackChannel: (channel: string) => channel
 }))
@@ -29,7 +30,7 @@ vi.mock('../../src/main/db/business-handover-state', () => ({
   writeBusinessHandoverMarker: vi.fn()
 }))
 vi.mock('../../src/main/db/business-write-canary', () => ({
-  businessWritePromotionStatus: () => ({ promoted: false }),
+  businessWritePromotionStatus: vi.fn(() => ({ promoted: false })),
   promoteBusinessWriteRepository: vi.fn()
 }))
 vi.mock('../../src/main/runtime/business-handover-quiesce', () => ({
@@ -43,10 +44,19 @@ import { BrowserWindow } from 'electron'
 import { registerMigrationHandlers } from '../../src/main/ipc/migration-handlers'
 import { desktopRuntime } from '../../src/main/runtime/desktop-runtime'
 import { quiesceDesktopLegacyBusinessWriter } from '../../src/main/runtime/business-handover-quiesce'
+import { handoverBusinessDatabase } from '../../src/runtime/storage/business-handover-coordinator'
+import {
+  businessWritePromotionStatus,
+  promoteBusinessWriteRepository
+} from '../../src/main/db/business-write-canary'
+import { writeBusinessHandoverMarker } from '../../src/main/db/business-handover-state'
 
 describe('business handover status IPC authorization', () => {
   beforeEach(() => {
     handlers.clear()
+    mockState.decodedArgs = {}
+    vi.clearAllMocks()
+    vi.mocked(businessWritePromotionStatus).mockReturnValue({ promoted: false })
     vi.mocked(BrowserWindow.fromWebContents).mockReset()
     registerMigrationHandlers()
   })
@@ -61,7 +71,7 @@ describe('business handover status IPC authorization', () => {
       promoted: false,
       inFlight: false,
       runtimeAvailable: true,
-      enabled: false,
+      enabled: true,
       handoverReady: true
     })
   })
@@ -80,8 +90,6 @@ describe('business handover status IPC authorization', () => {
   })
 
   it('does not quiesce Native when the TS runtime is unavailable', async () => {
-    const previousFlag = process.env.OLA_ENABLE_BUSINESS_HANDOVER
-    process.env.OLA_ENABLE_BUSINESS_HANDOVER = '1'
     vi.spyOn(desktopRuntime, 'isAvailable', 'get').mockReturnValue(false)
     const sender = { mainFrame: {} }
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
@@ -90,7 +98,64 @@ describe('business handover status IPC authorization', () => {
       handler({ sender, senderFrame: sender.mainFrame }, new Uint8Array())
     ).rejects.toThrow('TS_RUNTIME_NOT_READY')
     expect(vi.mocked(quiesceDesktopLegacyBusinessWriter)).not.toHaveBeenCalled()
-    if (previousFlag === undefined) delete process.env.OLA_ENABLE_BUSINESS_HANDOVER
-    else process.env.OLA_ENABLE_BUSINESS_HANDOVER = previousFlag
+  })
+
+  it('requires an explicit confirmation before quiescing Native', async () => {
+    const sender = { mainFrame: {} }
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const handler = handlers.get('migration:business-handover')!
+    await expect(
+      handler({ sender, senderFrame: sender.mainFrame }, new Uint8Array())
+    ).rejects.toThrow('BUSINESS_HANDOVER_CONFIRMATION_REQUIRED')
+    expect(vi.mocked(quiesceDesktopLegacyBusinessWriter)).not.toHaveBeenCalled()
+  })
+
+  it('does not report success until the promoted repository is confirmed', async () => {
+    const sender = { mainFrame: {} }
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    vi.mocked(handoverBusinessDatabase).mockResolvedValue({
+      snapshot: {
+        manifestPath: '/tmp/handover.manifest.json',
+        backupPath: '/tmp/handover.db'
+      } as never,
+      rollbackDrill: { restoredPath: '/tmp/rollback.db', drillDirectory: '/tmp/drill' },
+      repository: {} as never
+    })
+    const handler = handlers.get('migration:business-handover')!
+    mockState.decodedArgs = { confirm: true }
+    await expect(
+      handler({ sender, senderFrame: sender.mainFrame }, new Uint8Array())
+    ).rejects.toThrow('BUSINESS_HANDOVER_PROMOTION_NOT_CONFIRMED')
+    expect(vi.mocked(writeBusinessHandoverMarker)).toHaveBeenCalledOnce()
+    expect(vi.mocked(promoteBusinessWriteRepository)).toHaveBeenCalledOnce()
+  })
+
+  it('returns the handover artifacts only after promotion is confirmed', async () => {
+    const sender = { mainFrame: {} }
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const snapshot = { manifestPath: '/tmp/handover.manifest.json', backupPath: '/tmp/handover.db' }
+    vi.mocked(handoverBusinessDatabase).mockResolvedValue({
+      snapshot: snapshot as never,
+      rollbackDrill: { restoredPath: '/tmp/rollback.db', drillDirectory: '/tmp/drill' },
+      repository: {} as never
+    })
+    vi.mocked(businessWritePromotionStatus)
+      .mockReturnValueOnce({ promoted: false })
+      .mockReturnValueOnce({
+        promoted: true,
+        handoverManifestPath: snapshot.manifestPath
+      })
+    const handler = handlers.get('migration:business-handover')!
+    mockState.decodedArgs = { confirm: true }
+    await expect(
+      handler({ sender, senderFrame: sender.mainFrame }, new Uint8Array())
+    ).resolves.toEqual({
+      promoted: true,
+      handoverManifestPath: snapshot.manifestPath,
+      backupPath: snapshot.backupPath,
+      rollbackDrillPath: '/tmp/rollback.db',
+      channelsResumed: false,
+      inFlight: false
+    })
   })
 })

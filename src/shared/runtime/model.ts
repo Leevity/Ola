@@ -10,6 +10,7 @@ export interface ModelImage {
   mimeType: string
   data?: string
   url?: string
+  assetId?: string
 }
 export interface ModelToolCall {
   id: string
@@ -76,6 +77,7 @@ export interface ModelOptions {
   cacheTtl?: '5m' | '1h'
   serviceTier?: string
   promptCacheKey?: string
+  responsesSessionScope?: string
   bodyOverrides?: Record<string, unknown>
   omitBodyKeys?: string[]
 }

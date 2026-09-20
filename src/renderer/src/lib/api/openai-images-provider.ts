@@ -8,10 +8,7 @@ import type {
 } from './types'
 import { ipcClient } from '../ipc/ipc-client'
 import { IPC } from '../ipc/channels'
-import { agentBridge } from '../ipc/agent-bridge'
 import { useWorkspaceStore } from '../../stores/workspace-store'
-
-const OPENAI_IMAGES_NATIVE_TIMEOUT_MS = 10 * 60 * 1000
 
 interface Base64ImageInput {
   dataUrl: string
@@ -24,28 +21,20 @@ export interface GeneratedImage {
   mediaType: string
 }
 
-export async function generateNativeOpenAIImages(args: {
+export async function generateTsOpenAIImages(args: {
   config: ProviderConfig
   prompt: string
   images?: Base64ImageInput[]
   signal?: AbortSignal
 }): Promise<GeneratedImage[]> {
   if (args.signal?.aborted) throw new Error('Image request was cancelled')
-  const result = await requestNativeImages({
+  const result = await requestTsImages({
     config: args.config,
     prompt: args.prompt,
     images: args.images ?? []
   })
   if (args.signal?.aborted) throw new Error('Image request was cancelled')
   return result
-}
-
-interface NativeOpenAIImagesResult {
-  images?: Array<{
-    sourceType?: string
-    data?: string
-    mediaType?: string
-  }>
 }
 
 function normalizeImageProviderError(error: unknown): { code: ImageErrorCode; message: string } {
@@ -55,47 +44,16 @@ function normalizeImageProviderError(error: unknown): { code: ImageErrorCode; me
   }
 }
 
-function normalizeNativeImagesResult(result: unknown): GeneratedImage[] {
-  const payload = result as NativeOpenAIImagesResult | null
-  const images = Array.isArray(payload?.images) ? payload.images : []
-  return images
-    .map((image): GeneratedImage | null => {
-      if (!image || typeof image.data !== 'string' || !image.data.trim()) return null
-      const sourceType = image.sourceType === 'url' ? 'url' : 'base64'
-      return {
-        sourceType,
-        data: image.data,
-        mediaType:
-          typeof image.mediaType === 'string' && image.mediaType ? image.mediaType : 'image/png'
-      }
-    })
-    .filter((image): image is GeneratedImage => Boolean(image))
-}
-
-async function requestNativeImages(args: {
+async function requestTsImages(args: {
   config: ProviderConfig
   prompt: string
   images: Base64ImageInput[]
 }): Promise<GeneratedImage[]> {
-  const initialized = await agentBridge.initialize()
-  if (!initialized) {
-    throw new Error('Native worker unavailable for image generation.')
-  }
-
-  const result = await agentBridge.request(
-    'openai-images/generate',
-    {
-      provider: args.config,
-      prompt: args.prompt,
-      images: args.images
-    },
-    OPENAI_IMAGES_NATIVE_TIMEOUT_MS
-  )
-  const images = normalizeNativeImagesResult(result)
-  if (images.length === 0) {
-    throw new Error('Native image generation returned no image output.')
-  }
-  return images
+  return (await ipcClient.invoke('image:generate', {
+    provider: args.config,
+    prompt: args.prompt,
+    count: 1
+  })) as GeneratedImage[]
 }
 
 async function persistGeneratedImage(
@@ -145,7 +103,7 @@ async function persistGeneratedImage(
   }
 }
 
-export async function* streamNativeOpenAIImages(args: {
+export async function* streamTsOpenAIImages(args: {
   messages: UnifiedMessage[]
   config: ProviderConfig
   signal?: AbortSignal
@@ -154,7 +112,7 @@ export async function* streamNativeOpenAIImages(args: {
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   let firstImageAt: number | null = null
 
-  console.log('[OpenAI Images Provider] native image request start:', {
+  console.log('[OpenAI Images Provider] TypeScript Main image request start:', {
     type: args.config.type,
     model: args.config.model,
     baseUrl: args.config.baseUrl
@@ -198,7 +156,7 @@ export async function* streamNativeOpenAIImages(args: {
       throw new Error('Image request was cancelled')
     }
 
-    const results = await requestNativeImages({
+    const results = await requestTsImages({
       config: args.config,
       prompt: textPrompt,
       images: imageInputs

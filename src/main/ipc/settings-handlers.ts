@@ -171,8 +171,29 @@ export async function setSettingsValue(key: string, value: unknown): Promise<voi
   await pendingWrite
 }
 
+export async function writeSettingsValue(root: Record<string, unknown>): Promise<void> {
+  const result = await settingsStore.write(root)
+  if (!result.success) throw new Error(result.error)
+  settingsCache = root
+  settingsHydrated = true
+}
+
 export function registerSettingsHandlers(): void {
   void initializeSettingsCache()
+
+  registerMessagePackHandler('settings:read', async () => await initializeSettingsCache())
+
+  registerMessagePackHandler<Record<string, unknown>, { success: boolean; error?: string }>(
+    'settings:write',
+    async (root) => {
+      try {
+        await writeSettingsValue(root)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    }
+  )
 
   registerMessagePackHandler<string | undefined>('settings:get', async (key) => {
     const settings = await initializeSettingsCache()
@@ -190,4 +211,16 @@ export function registerSettingsHandlers(): void {
 
     return { success: true }
   })
+
+  registerMessagePackHandler<{ key: string }, { success: boolean; error?: string }>(
+    'settings:delete',
+    async ({ key }) => {
+      try {
+        await setSettingsValue(key, null)
+        return { success: true }
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
+    }
+  )
 }

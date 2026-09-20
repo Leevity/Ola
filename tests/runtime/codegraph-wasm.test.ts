@@ -16,31 +16,21 @@ describe('TS CodeGraph WASM parser foundation', () => {
     'c',
     'cpp',
     'php',
+    'ruby',
     'scala',
     'bash',
     'kotlin',
     'swift',
     'objectivec',
     'lua',
-    'solidity'
+    'solidity',
+    'dart',
+    'haskell',
+    'julia',
+    'razor'
   ] as const)('has a pinned WASM grammar for %s', (language) => {
     expect(getWasmGrammarStatus(language)).toBe('available')
   })
-  it.each(['haskell', 'julia', 'razor', 'ruby', 'dart'] as const)(
-    'reports the unavailable %s grammar explicitly',
-    (language) => {
-      expect(getWasmGrammarStatus(language)).toBe('unavailable')
-    }
-  )
-  it.each(['haskell', 'julia', 'razor', 'ruby', 'dart'] as const)(
-    'rejects parsing when the %s grammar is unavailable',
-    async (language) => {
-      await expect(parseWithWasm(language, 'placeholder')).rejects.toThrow(
-        `CODEGRAPH_GRAMMAR_UNAVAILABLE:${language}`
-      )
-    }
-  )
-
   it('parses TypeScript in-process and releases its parser tree', async () => {
     await expect(
       parseWithWasm('typescript', 'export function add(a: number, b: number) { return a + b }')
@@ -59,6 +49,11 @@ describe('TS CodeGraph WASM parser foundation', () => {
     ['c', 'int main() { return 0; }'],
     ['cpp', 'int main() { return 0; }'],
     ['php', '<?php echo 1;'],
+    ['ruby', 'class App; def run; end; end'],
+    ['dart', 'class App {}'],
+    ['haskell', 'module App where\nrun = pure ()'],
+    ['julia', 'module App\nrun() = nothing\nend'],
+    ['razor', '@page "/"\n<h1>@title</h1>'],
     ['scala', 'object App {}'],
     ['bash', 'echo hello'],
     ['kotlin', 'fun main() { println("hello") }'],

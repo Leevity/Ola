@@ -2,6 +2,7 @@ import { RuntimeError } from '../../shared/runtime/contracts'
 import type { ModelDelta } from '../../shared/runtime/model'
 import type { ModelCodec } from './codec'
 import { applyBodyOptions } from './transport'
+import { runtimeImageSource } from './image-source'
 import { array, count, object, optionalObject, parseEvent, readServerEvents, text } from './stream'
 
 export const geminiCodec: ModelCodec = {
@@ -44,7 +45,14 @@ export const geminiCodec: ModelCodec = {
           ...(message.images ?? []).map((image) =>
             image.data
               ? { inlineData: { mimeType: image.mimeType, data: image.data } }
-              : { fileData: { mimeType: image.mimeType, fileUri: image.url } }
+              : image.assetId
+                ? {
+                    inlineData: {
+                      mimeType: image.mimeType,
+                      data: runtimeImageSource(image, input.run.workspaceId).split(',', 2)[1]
+                    }
+                  }
+                : { fileData: { mimeType: image.mimeType, fileUri: image.url } }
           )
         ]
       if (contents.at(-1)?.role === role) contents.at(-1)!.parts.push(...parts)

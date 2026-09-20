@@ -6,7 +6,8 @@ import {
   type RunEvent,
   type RunRecord,
   type RunSpec,
-  type PendingRuntimeInteraction
+  type PendingRuntimeInteraction,
+  type RunSnapshot
 } from '../../shared/runtime/contracts'
 import { RunJournal } from '../storage/run-journal'
 
@@ -16,6 +17,13 @@ export interface ExecutionContext {
   requestInteraction: (
     interaction: Omit<PendingRuntimeInteraction, 'runId' | 'workspaceId' | 'createdAt'>
   ) => Promise<unknown>
+  /** Submit and await a nested run without exposing the scheduler to tools. */
+  runNested?: (input: unknown) => Promise<RunSnapshot>
+  /** Submit a nested run for background execution and observe its terminal snapshot. */
+  submitNested?: (
+    input: unknown,
+    onTerminal?: (snapshot: RunSnapshot) => Promise<void>
+  ) => Promise<RunRecord>
 }
 export type RunExecutor = (run: RunSpec, context: ExecutionContext) => Promise<void>
 
@@ -250,7 +258,9 @@ export class RunScheduler {
           this.publish(await this.journal.append(run.runId, run.workspaceId, type, data))
         },
         requestInteraction: (interaction) =>
-          this.requestInteraction(run, controller.signal, interaction)
+          this.requestInteraction(run, controller.signal, interaction),
+        runNested: (input) => this.runNested(input, controller.signal),
+        submitNested: (input, onTerminal) => this.submitNested(input, onTerminal)
       })
       // Serialize the final transition with cancellation so only one terminal outcome wins.
       await this.serialize(async () => {
@@ -293,6 +303,64 @@ export class RunScheduler {
         this.stopped = true
         for (const active of this.running.values()) active.controller.abort()
       })
+    }
+  }
+
+  private async runNested(input: unknown, parentSignal: AbortSignal): Promise<RunSnapshot> {
+    const child = await this.submit(input)
+    while (true) {
+      parentSignal.throwIfAborted()
+      const snapshot = await this.journal.snapshot(child.runId, child.workspaceId)
+      if (!snapshot) throw new RuntimeError('RUN_NOT_FOUND')
+      if (TERMINAL_STATUSES.has(snapshot.run.status)) return snapshot
+      await new Promise<void>((resolve, reject) => {
+        const abort = (): void => reject(parentSignal.reason ?? new RuntimeError('RUN_CANCELLED'))
+        const timer = setTimeout(() => {
+          parentSignal.removeEventListener('abort', abort)
+          resolve()
+        }, 40)
+        parentSignal.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(timer)
+            abort()
+          },
+          { once: true }
+        )
+      }).catch(async (error) => {
+        await this.cancel(child.runId, child.workspaceId).catch(() => undefined)
+        throw error
+      })
+    }
+  }
+
+  private async submitNested(
+    input: unknown,
+    onTerminal?: (snapshot: RunSnapshot) => Promise<void>
+  ): Promise<RunRecord> {
+    const child = await this.submit(input)
+    if (onTerminal) void this.watchNestedTerminal(child, onTerminal)
+    return child
+  }
+
+  private async watchNestedTerminal(
+    child: RunRecord,
+    onTerminal: (snapshot: RunSnapshot) => Promise<void>
+  ): Promise<void> {
+    try {
+      while (true) {
+        const snapshot = await this.journal.snapshot(child.runId, child.workspaceId)
+        if (!snapshot) return
+        if (TERMINAL_STATUSES.has(snapshot.run.status)) {
+          await onTerminal(snapshot)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 40))
+      }
+    } catch (error) {
+      // Completion projection is best effort and must never become an
+      // unhandled rejection that destabilizes the scheduler.
+      console.warn('[TS Runtime] Nested terminal projection failed:', error)
     }
   }
   async stop(): Promise<void> {

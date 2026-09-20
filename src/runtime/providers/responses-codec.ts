@@ -2,6 +2,7 @@ import { RuntimeError } from '../../shared/runtime/contracts'
 import type { ModelDelta } from '../../shared/runtime/model'
 import type { ModelCodec } from './codec'
 import { applyBodyOptions } from './transport'
+import { runtimeImageSource } from './image-source'
 import {
   array,
   count,
@@ -47,7 +48,7 @@ export const responsesCodec: ModelCodec = {
             { type: 'input_text', text: message.text },
             ...(message.images ?? []).map((image) => ({
               type: 'input_image',
-              image_url: image.url ?? `data:${image.mimeType};base64,${image.data}`
+              image_url: runtimeImageSource(image, input.run.workspaceId)
             }))
           ]
         }

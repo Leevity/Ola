@@ -150,7 +150,8 @@ export const useTranslateStore = create<TranslateStore>((set, get) => ({
       targetLanguage,
       overrideProviderId,
       overrideModelId,
-      agentMode
+      agentMode,
+      selectedFilePath
     } = get()
 
     const text = sourceText.trim()
@@ -207,6 +208,9 @@ export const useTranslateStore = create<TranslateStore>((set, get) => ({
           targetLanguage,
           providerConfig: requestConfig,
           signal: abortController.signal,
+          fileRoot: selectedFilePath
+            ? selectedFilePath.replace(/[\\/][^\\/]*$/, '') || undefined
+            : undefined,
           onEvent: (event) => {
             if (abortController.signal.aborted) return
             switch (event.type) {

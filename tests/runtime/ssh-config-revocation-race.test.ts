@@ -1,7 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
 
-vi.mock('../../src/main/lib/native-worker', () => ({ getNativeWorker: vi.fn() }))
-
 const readState = vi.hoisted(() => ({
   calls: 0,
   releaseFirst: null as (() => void) | null,

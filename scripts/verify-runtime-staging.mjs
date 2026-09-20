@@ -1,5 +1,5 @@
-import { access, stat } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { access, lstat, readdir, realpath, stat } from 'node:fs/promises'
+import { join, relative, resolve } from 'node:path'
 
 const args = process.argv.slice(2)
 const platform = args.find((arg) => arg.startsWith('--platform='))?.slice('--platform='.length)
@@ -19,12 +19,38 @@ const appUnpacked = join(resourceRoot, 'app.asar.unpacked')
 const required = [
   executable,
   join(appUnpacked, 'out', 'main', 'business-worker.mjs'),
-  join(appUnpacked, 'out', 'main', 'legacy-read-worker.mjs'),
-  join(appUnpacked, 'resources', 'native-worker', 'Ola.Native.Worker')
+  join(appUnpacked, 'out', 'main', 'graph-store-worker.mjs')
 ]
 for (const path of required) {
   await access(path)
   const info = await stat(path)
   if (!info.isFile() && !info.isDirectory()) throw new Error(`Invalid staging artifact: ${path}`)
 }
+
+const forbiddenLegacyWorkerPaths = [join(appUnpacked, 'resources', 'native-worker')]
+for (const path of forbiddenLegacyWorkerPaths) {
+  try {
+    await access(path)
+  } catch {
+    continue
+  }
+  throw new Error(`Production staging must not contain legacy native-worker assets: ${path}`)
+}
+
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
+async function verifyLinks(path) {
+  const info = await lstat(path)
+  if (info.isSymbolicLink()) {
+    const target = await realpath(path)
+    const outside = relative(root, target)
+    if (outside === '..' || outside.startsWith(`..${pathSeparator}`))
+      throw new Error(`Staging symlink escapes artifact root: ${path} -> ${target}`)
+    return
+  }
+  if (!info.isDirectory()) return
+  for (const entry of await readdir(path)) await verifyLinks(join(path, entry))
+}
+
+const pathSeparator = process.platform === 'win32' ? '\\' : '/'
+await verifyLinks(root)
 console.log(`runtime staging integrity passed: ${platform} ${root}`)

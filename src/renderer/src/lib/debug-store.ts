@@ -6,7 +6,7 @@ export interface RequestTraceInfo {
   providerId?: string
   providerBuiltinId?: string
   model?: string
-  executionPath?: 'sidecar' | 'ts-runtime'
+  executionPath?: 'ts-runtime' | 'unavailable'
 }
 
 const MAX_DEBUG_STORE_ENTRIES = 80

@@ -42,7 +42,7 @@
 
 ### ⚙️ 运行时
 
-- **4 层 Electron 架构** — 主进程、Preload 安全桥接、渲染进程 UI（React 19）、提供商无关的 Agent 运行时，由 .NET 原生 sidecar 提供算力。
+- **4 层 Electron 架构** — 主进程、Preload 安全桥接、渲染进程 UI（React 19）、提供商无关的 TypeScript Agent 运行时。
 - **跨运行时类型契约** — 通过 TypeScript DTO 和经过审计的 C# 协议镜像连接 SQLite 路由、
   IPC 与 UI。
 - **SSH 远程支持** — 智能体通过 SSH 透明操作远程主机，集成 xterm.js 终端。
@@ -102,7 +102,7 @@ Ola 默认集成多个主流通讯平台，让智能体在你能看到的地方�
      │                                                      │
   Agent 循环 ─ 工具注册表 ─ IPC ──────────→  IPC 处理器
      │                                              │
-     ├─ 文件 I/O, Grep/Glob, Bash              SQLite (经 .NET sidecar)
+     ├─ 文件 I/O, Grep/Glob, Bash              SQLite (经 TypeScript runtime)
      ├─ 浏览器 (webview)                        Shell / SSH (node-pty, ssh2)
      ├─ 子智能体 & 团队                          通讯插件
      ├─ Plan, Goal, Memory                      MCP 客户端
@@ -113,35 +113,33 @@ Ola 默认集成多个主流通讯平台，让智能体在你能看到的地方�
 - **渲染进程** — React 19 + Tailwind CSS + Zustand 状态管理。负责消息展示、审批与会话交互。
 - **Preload** — 精简的 `contextBridge` API，安全的主↔渲染通信。
 - **主进程** — 窗口与进程编排、IPC、通讯插件、Cron 和 MCP 客户端。
-- **Agent 运行时** — 提供商无关，运行在 .NET 10 `Ola.Native.Worker` 中。Electron 主进程负责
-  进程监管，并通过 MessagePack 转发流事件、审批和渲染进程工具；同一 Worker 负责 SQLite、
-  文件 I/O 与其他原生能力。
+- **Agent 运行时** — 提供商无关的 TypeScript 运行时，由 Electron 主进程托管，负责
+  MessagePack 流、审批、工作空间隔离的 SQLite、文件 I/O 与离线执行。
 
 ## 🛠️ 快速开始
 
-**环境要求：** Node.js ≥ 22、.NET 10 SDK、原生构建工具链（macOS 需 Xcode CLT，Linux 需 build-essential，Windows 需 MSVC）。
+**环境要求：** Node.js ≥ 22、npm ≥ 10；平台原生构建工具链仅用于 Electron 原生模块的 postinstall rebuild，CodeGraph 使用 TypeScript/WASM，不需要 .NET SDK 或 Worker 发布环境。
 
 ```bash
 git clone https://github.com/Leevity/Ola.git
 cd Ola
 npm install
-npm run native:publish   # 构建 .NET sidecar
 npm run dev
 ```
 
 ### 常用命令
 
-| 命令                     | 说明                                 |
-| ------------------------ | ------------------------------------ |
-| `npm run dev`            | 启动 Electron + Vite 热重载开发      |
-| `npm run build`          | 类型检查并构建生产版本               |
-| `npm run build:win`      | 构建 Windows 安装包                  |
-| `npm run build:mac`      | 构建 macOS .dmg/zip                  |
-| `npm run build:linux`    | 构建 Linux .AppImage/.deb            |
-| `npm run lint`           | ESLint 检查（带缓存）                |
-| `npm run typecheck`      | TypeScript 类型检查（主 + 渲染进程） |
-| `npm run format`         | Prettier 自动格式化                  |
-| `npm run native:publish` | 为当前平台构建 .NET sidecar          |
+| 命令                          | 说明                                  |
+| ----------------------------- | ------------------------------------- |
+| `npm run dev`                 | 启动 Electron + Vite 热重载开发       |
+| `npm run build`               | 类型检查并构建生产版本                |
+| `npm run build:win`           | 构建 Windows 安装包                   |
+| `npm run build:mac`           | 构建 macOS .dmg/zip                   |
+| `npm run build:linux`         | 构建 Linux .AppImage/.deb             |
+| `npm run lint`                | ESLint 检查（带缓存）                 |
+| `npm run typecheck`           | TypeScript 类型检查（主 + 渲染进程）  |
+| `npm run format`              | Prettier 自动格式化                   |
+| `npm run verify:ts-codegraph` | 验证 TypeScript/WASM CodeGraph 运行时 |
 
 > **数据目录：** `~/.ola/` — 包含 SQLite 数据库、配置、智能体、技能、命令和提示词。
 

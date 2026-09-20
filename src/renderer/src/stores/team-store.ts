@@ -108,11 +108,11 @@ export const useTeamStore = create<TeamStore>()(
               if (!state.activeTeam) break
               const task = state.activeTeam.tasks.find((t) => t.id === eventWithSession.taskId)
               if (task) {
-                // Guard: never roll back a completed task to a non-completed status
+                // Guard: never roll back a terminal task after a late poll/update.
                 if (
-                  task.status === 'completed' &&
+                  ['completed', 'failed', 'cancelled'].includes(task.status) &&
                   eventWithSession.patch.status &&
-                  eventWithSession.patch.status !== 'completed'
+                  !['completed', 'failed', 'cancelled'].includes(eventWithSession.patch.status)
                 ) {
                   break
                 }
@@ -168,6 +168,7 @@ export const useTeamStore = create<TeamStore>()(
                 role: member.role,
                 status: member.status,
                 currentTaskId: member.currentTaskId ?? null,
+                ...(member.runId ? { runId: member.runId } : {}),
                 iteration: previousMember?.iteration ?? 0,
                 toolCalls: previousMember?.toolCalls ?? [],
                 streamingText: previousMember?.streamingText ?? '',

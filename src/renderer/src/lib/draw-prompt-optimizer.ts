@@ -2,7 +2,7 @@ import { nanoid } from 'nanoid'
 import type { ProviderConfig, UnifiedMessage, ContentBlock } from './api/types'
 import type { ImageAttachment } from './image-attachments'
 import { imageAttachmentToContentBlock } from './image-attachments'
-import { runSidecarTextRequest } from './ipc/agent-bridge'
+import { runTsTextRequest } from './ipc/agent-bridge'
 
 const DRAW_OPTIMIZER_SYSTEM_PROMPT = `You are an elite image-generation prompt director specializing in GPT Image models, including gpt-image-2.
 
@@ -122,7 +122,7 @@ export async function optimizeDrawPrompt(
     }
   ]
 
-  const output = await runSidecarTextRequest({
+  const output = await runTsTextRequest({
     messages,
     provider: {
       ...providerConfig,

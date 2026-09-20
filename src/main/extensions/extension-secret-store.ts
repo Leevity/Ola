@@ -67,8 +67,8 @@ function getSafeStorageCryptography(): ExtensionSecretCryptography {
 /**
  * Secret-only encrypted store for extensions. If the platform keychain is unavailable,
  * values stay in memory and legacy plaintext is deliberately retained for the next safe migration.
- * While the Native Worker remains an extension executor, a compatible legacy value is
- * copied but never deleted: a mixed TS/Worker process must not lose its shared secret.
+ * The host-owned config store remains the compatibility location for encrypted
+ * extension secrets; extension lifecycle execution itself is Main-owned TypeScript.
  */
 export class EncryptedExtensionSecretStore implements ExtensionSecretStore {
   private tail: Promise<void> = Promise.resolve()

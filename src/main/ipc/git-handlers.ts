@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { getNativeSshConnectionPayload } from './ssh-handlers'
+import { execSshCommand } from './ssh-handlers'
 import {
   currentSshWorkspaceId,
   initializeSshConfigCache,
@@ -7,7 +7,6 @@ import {
 } from '../ssh/ssh-config'
 import { authorizeSshWorkspace } from '../ssh/ssh-workspace-authorization'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
-import { getNativeWorker } from '../lib/native-worker'
 import { scanLocalGitRepositories } from '../../runtime/host/git-scan'
 import { getLocalGitStatusDetailed } from '../../runtime/host/git-status'
 import {
@@ -58,10 +57,6 @@ interface GitTarget {
   cwd: string
   sshConnectionId?: string | null
   workspaceId?: string
-}
-
-interface NativeGitTarget extends GitTarget {
-  connection?: Record<string, unknown>
 }
 
 interface ScanRepositoriesArgs extends GitTarget {
@@ -120,7 +115,7 @@ interface GitRepoSummary {
   behind: number
 }
 
-type NativeGitStatusDetailedResult =
+type RemoteGitStatusDetailedResult =
   | ({ success: true } & { status: GitStatusDetailed })
   | {
       success: false
@@ -131,7 +126,7 @@ type NativeGitStatusDetailedResult =
       stderr?: string
     }
 
-type NativeGitQueryResult =
+type RemoteGitQueryResult =
   | ({
       success: true
       commitId?: string
@@ -161,8 +156,8 @@ type NativeGitQueryResult =
       stderr?: string
     }
 
-const gitQueryInflight = new Map<string, Promise<NativeGitQueryResult>>()
-const gitQueryCache = new Map<string, { expiresAt: number; result: NativeGitQueryResult }>()
+const gitQueryInflight = new Map<string, Promise<RemoteGitQueryResult>>()
+const gitQueryCache = new Map<string, { expiresAt: number; result: RemoteGitQueryResult }>()
 const gitQueryRevisionByTarget = new Map<string, number>()
 
 class GitRouteError extends Error {
@@ -254,18 +249,6 @@ function invalidateGitQueryCache(target?: GitTarget): void {
   }
 }
 
-function toNativeGitTarget<T extends GitTarget>(target: T): T & NativeGitTarget {
-  const sshConnectionId = target.sshConnectionId?.trim()
-  if (!sshConnectionId) return { ...target, sshConnectionId: target.sshConnectionId ?? undefined }
-
-  const connection = getNativeSshConnectionPayload(sshConnectionId)
-  if (!connection) {
-    throw new GitRouteError('SSH connection not found', 'SSH_DISCONNECTED')
-  }
-
-  return { ...target, sshConnectionId, connection }
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
@@ -319,23 +302,194 @@ function okMutation(
   return ok({ stdout: result.stdout, stderr: result.stderr })
 }
 
-async function nativeGitRequest<T>(
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`
+}
+
+export function remoteGitCommand(cwd: string, args: string[]): string {
+  return ['git', '-C', cwd, ...args].map(shellQuote).join(' ')
+}
+
+export function remoteGitOperation(
+  operation: string,
+  params: Record<string, unknown>
+): { args: string[]; parse: (stdout: string) => unknown } {
+  const file = typeof params.filePath === 'string' ? params.filePath : ''
+  const ref = typeof params.ref === 'string' ? params.ref : ''
+  const commitHash = typeof params.commitHash === 'string' ? params.commitHash : ''
+  const parseSuccess = (stdout: string): unknown => ({ success: true, stdout })
+  switch (operation) {
+    case 'get-head':
+      return {
+        args: ['rev-parse', 'HEAD'],
+        parse: (stdout) => ({ success: true, commitId: stdout.trim() })
+      }
+    case 'get-status':
+      return { args: ['status', '--porcelain=v1', '-b'], parse: parseRemoteStatus }
+    case 'get-line-summary':
+      return { args: ['diff', '--numstat'], parse: (stdout) => ({ success: true, stat: stdout }) }
+    case 'get-range-commits':
+      return {
+        args: [
+          'log',
+          '--format=%H',
+          `${String(params.base ?? '')}..${String(params.head ?? 'HEAD')}`
+        ],
+        parse: (stdout) => ({ success: true, commits: stdout.split('\n').filter(Boolean) })
+      }
+    case 'get-changed-files':
+      return {
+        args: [
+          'diff',
+          '--name-only',
+          `${String(params.base ?? '')}..${String(params.head ?? 'HEAD')}`
+        ],
+        parse: (stdout) => ({ success: true, files: stdout.split('\n').filter(Boolean) })
+      }
+    case 'get-file-diff':
+      return {
+        args: [params.staged ? 'diff' : 'diff', ...(params.staged ? ['--cached'] : []), '--', file],
+        parse: (stdout) => ({ success: true, diff: stdout, empty: !stdout })
+      }
+    case 'get-staged-diff-bundle':
+      return {
+        args: ['diff', '--cached'],
+        parse: (stdout) => ({ success: true, patch: stdout, empty: !stdout })
+      }
+    case 'get-file-content-at-ref':
+      return {
+        args: ['show', `${ref}:${file}`],
+        parse: (stdout) => ({ success: true, content: stdout, exists: true })
+      }
+    case 'get-file-diff-at-commit':
+      return {
+        args: ['show', commitHash, '--', file],
+        parse: (stdout) => ({ success: true, diff: stdout })
+      }
+    case 'get-commit-history':
+    case 'get-file-history': {
+      const limit = Math.max(1, Math.min(Number(params.limit) || 50, 500))
+      const args = ['log', `-${limit}`, '--format=%H%x01%h%x01%an%x01%ae%x01%aI%x01%s']
+      if (operation === 'get-file-history') args.push('--', file)
+      return {
+        args,
+        parse: (stdout) => ({
+          success: true,
+          history: stdout
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => {
+              const [hash, shortHash, author, email, date, ...subject] = line.split('\x01')
+              return { hash, shortHash, author, email, date, subject: subject.join('\x01') }
+            })
+        })
+      }
+    }
+    case 'list-branches':
+      return {
+        args: [
+          'for-each-ref',
+          '--format=%(refname:short)%x01%(HEAD)%x01%(objectname)',
+          'refs/heads',
+          'refs/remotes'
+        ],
+        parse: (stdout) => ({
+          success: true,
+          branches: stdout
+            .split('\n')
+            .filter(Boolean)
+            .map((line) => {
+              const [name, head] = line.split('\x01')
+              return {
+                name,
+                fullName: name,
+                type: name.startsWith('origin/') ? 'remote' : 'local',
+                isCurrent: head === '*'
+              }
+            })
+        })
+      }
+    default:
+      return { args: [], parse: parseSuccess }
+  }
+}
+
+export function parseRemoteStatus(stdout: string): unknown {
+  const lines = stdout.split('\n').filter(Boolean)
+  const branchLine = lines.find((line) => line.startsWith('## '))?.slice(3) ?? ''
+  const files = lines.filter((line) => !line.startsWith('## '))
+  const staged = files
+    .filter((line) => line[0] && line[0] !== ' ' && !line.startsWith('??'))
+    .map((line) => ({ path: line.slice(3) }))
+  const unstaged = files
+    .filter((line) => line[1] && line[1] !== ' ' && !line.startsWith('??'))
+    .map((line) => ({ path: line.slice(3) }))
+  return {
+    success: true,
+    status: {
+      branch: branchLine.split('...')[0],
+      upstream: branchLine.includes('...') ? branchLine.split('...')[1]?.split(' ')[0] : undefined,
+      ahead: 0,
+      behind: 0,
+      staged,
+      unstaged,
+      untracked: files
+        .filter((line) => line.startsWith('??'))
+        .map((line) => ({ path: line.slice(3) })),
+      conflicted: []
+    }
+  }
+}
+
+async function remoteGitRequest<T>(
   method: string,
   target: GitTarget,
   params: Record<string, unknown> = {},
   timeoutMs?: number
 ): Promise<T> {
-  return await getNativeWorker().request<T>(
-    method,
-    {
-      ...toNativeGitTarget(target),
-      ...params
-    },
-    timeoutMs
-  )
+  const connectionId = target.sshConnectionId?.trim()
+  if (!connectionId) throw new GitRouteError('SSH connection not found', 'SSH_DISCONNECTED')
+  let args: string[] = []
+  let parse: (stdout: string) => unknown = (stdout) => ({ success: true, stdout })
+  if (method === 'git/exec') {
+    args = Array.isArray(params.args) ? params.args.map(String) : []
+  } else if (method === 'git/query') {
+    const operation = typeof params.operation === 'string' ? params.operation : ''
+    const mapped = remoteGitOperation(operation, params)
+    args = mapped.args
+    parse = mapped.parse
+  } else if (method === 'git/status-detailed') {
+    args = ['status', '--porcelain=v1', '-b']
+    parse = parseRemoteStatus
+  } else if (method === 'git/scan-repositories') {
+    const rootPath = typeof params.rootPath === 'string' ? params.rootPath : target.cwd
+    args = ['-C', rootPath, 'rev-parse', '--show-toplevel']
+    parse = (stdout) => ({
+      success: true,
+      repositories: [
+        {
+          name: rootPath.split('/').filter(Boolean).at(-1) ?? rootPath,
+          fullPath: stdout.trim(),
+          relativePath: '.',
+          branch: '',
+          isRootRepo: true,
+          sshConnectionId: connectionId
+        }
+      ]
+    })
+  }
+  if (!args.length && method !== 'git/exec')
+    throw new GitRouteError('Unsupported remote Git operation', 'VALIDATION')
+  const result = await execSshCommand(connectionId, remoteGitCommand(target.cwd, args), timeoutMs)
+  if (!result.success) return result as unknown as T
+  return {
+    ...(parse(result.stdout) as Record<string, unknown>),
+    stdout: result.stdout,
+    stderr: result.stderr
+  } as T
 }
 
-function queryGit<T extends NativeGitQueryResult = NativeGitQueryResult>(
+function queryGit<T extends RemoteGitQueryResult = RemoteGitQueryResult>(
   target: GitTarget,
   params: Record<string, unknown>
 ): Promise<T> {
@@ -374,7 +528,7 @@ function queryGit<T extends NativeGitQueryResult = NativeGitQueryResult>(
       ? queryLocalGit(target.cwd, params.operation, params as LocalGitQueryOptions).then(
           (result) => result as T
         )
-      : nativeGitRequest<T>('git/query', target, params)
+      : remoteGitRequest<T>('git/query', target, params)
   )
     .then((result) => {
       const ttl = gitQueryTtl(params)
@@ -394,7 +548,7 @@ function queryGit<T extends NativeGitQueryResult = NativeGitQueryResult>(
       }
     })
 
-  gitQueryInflight.set(cacheKey, request as Promise<NativeGitQueryResult>)
+  gitQueryInflight.set(cacheKey, request as Promise<RemoteGitQueryResult>)
   return request
 }
 
@@ -419,13 +573,13 @@ function isLocalGitQuery(operation: unknown): operation is LocalGitQuery {
 }
 
 async function execGit(args: string[], target: GitTarget): Promise<GitExecResult> {
-  // Local Git is a Main-owned TS path. Remote targets retain the Native SSH
+  // Local Git is a Main-owned TS path. Remote targets use the Main-owned SSH
   // transport until the SSH execution host moves, so the two environments do
   // not accidentally share credentials or command semantics.
   if (!target.sshConnectionId) {
     return await executeLocalGitMutation(target.cwd, args)
   }
-  return await nativeGitRequest<GitExecResult>(
+  return await remoteGitRequest<GitExecResult>(
     'git/exec',
     target,
     {
@@ -505,7 +659,7 @@ export function registerGitHandlers(): void {
         })
       })
     }
-    const repositories = await nativeGitRequest<GitRepositorySummary[]>(
+    const repositories = await remoteGitRequest<GitRepositorySummary[]>(
       'git/scan-repositories',
       args,
       {
@@ -520,7 +674,7 @@ export function registerGitHandlers(): void {
 
   registerGitMessagePackHandler<GitTarget>('git:get-repo-summary', async (args) => {
     const result = args.sshConnectionId
-      ? await nativeGitRequest<NativeGitStatusDetailedResult>('git/status-detailed', args)
+      ? await remoteGitRequest<RemoteGitStatusDetailedResult>('git/status-detailed', args)
       : await getLocalGitStatusDetailed(args.cwd)
     if (!result.success) return result
     const summary: GitRepoSummary = {
@@ -534,7 +688,7 @@ export function registerGitHandlers(): void {
 
   registerGitMessagePackHandler<GitTarget>('git:get-status-detailed', async (args) => {
     return args.sshConnectionId
-      ? await nativeGitRequest<NativeGitStatusDetailedResult>('git/status-detailed', args)
+      ? await remoteGitRequest<RemoteGitStatusDetailedResult>('git/status-detailed', args)
       : await getLocalGitStatusDetailed(args.cwd)
   })
 

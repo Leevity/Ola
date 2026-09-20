@@ -25,10 +25,19 @@ export function createAgentExecutor(
     const messages: AgentMessage[] = [
       ...(run.history ?? []).map((message) =>
         message.role === 'assistant'
-          ? { role: 'assistant' as const, text: message.text, toolCalls: [] }
-          : { role: message.role, text: message.text }
+          ? {
+              role: 'assistant' as const,
+              text: message.text,
+              toolCalls: [],
+              ...(message.images ? { images: message.images } : {})
+            }
+          : {
+              role: message.role,
+              text: message.text,
+              ...(message.images ? { images: message.images } : {})
+            }
       ),
-      { role: 'user', text: run.prompt }
+      { role: 'user', text: run.prompt, ...(run.promptImages ? { images: run.promptImages } : {}) }
     ]
     for (let turn = 0; turn < maxTurns; turn++) {
       context.signal.throwIfAborted()
@@ -92,7 +101,13 @@ export function createAgentExecutor(
       }
       const results = await toolExecutor.executeAll(
         toolCalls,
-        { run, signal: context.signal, requestInteraction: context.requestInteraction },
+        {
+          run,
+          signal: context.signal,
+          requestInteraction: context.requestInteraction,
+          ...(context.runNested ? { runNested: context.runNested } : {}),
+          ...(context.submitNested ? { submitNested: context.submitNested } : {})
+        },
         context.emit
       )
       messages.push({ role: 'tool', results })

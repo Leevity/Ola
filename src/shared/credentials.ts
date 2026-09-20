@@ -1,7 +1,7 @@
 // Cross-process contracts for the Credential Agent subsystem.
 // Password plaintext NEVER crosses the main/renderer boundary in normal flow.
 // All credential operations flow through IPC, and BrowserType injection happens
-// inside the main process (Native Worker side or main process vault).
+// inside the main process vault.
 
 export type CredentialKind = 'password'
 

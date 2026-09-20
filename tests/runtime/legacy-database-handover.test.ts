@@ -36,6 +36,9 @@ import {
 } from '../../src/runtime/storage/workspace-draw-sync'
 import { mergeWorkspaceDrawBundles } from '../../src/runtime/storage/workspace-draw-merge'
 import { runWorkspaceDrawSync } from '../../src/runtime/storage/workspace-draw-sync-run'
+import { captureWorkspaceSyncState } from '../../src/runtime/storage/workspace-sync'
+import { runWorkspaceSync } from '../../src/runtime/storage/workspace-sync-run'
+import type { ProjectWikiDocument } from '../../src/shared/project-wiki'
 import { WebDavProvider } from '../../src/main/sync/webdav-provider'
 import type { WorkspaceSyncBundle } from '../../src/shared/sync-types'
 import {
@@ -388,6 +391,133 @@ describe('legacy database handover snapshot', () => {
     await expect(stat(join(fixture.backupDirectory, 'data.db'))).rejects.toMatchObject({
       code: 'ENOENT'
     })
+  })
+
+  it('accepts the current Native Project Wiki schema and normalizes only the handover copy', async () => {
+    const fixture = await createFixture()
+    const source = new DatabaseSync(fixture.sourcePath)
+    source.exec(`
+      DROP TABLE wiki_generation_runs;
+      DROP TABLE wiki_documents;
+      CREATE TABLE wiki_documents (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL,
+        slug TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'draft', content_markdown TEXT NOT NULL DEFAULT '',
+        generation_mode TEXT NOT NULL DEFAULT 'full', last_generated_commit_id TEXT,
+        parent_id TEXT, sort_order INTEGER NOT NULL DEFAULT 0, level INTEGER NOT NULL DEFAULT 0,
+        is_leaf INTEGER NOT NULL DEFAULT 1, source_files_json TEXT NOT NULL DEFAULT '[]',
+        created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE wiki_generation_runs (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, mode TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'running', base_commit_id TEXT, head_commit_id TEXT,
+        changed_files_json TEXT NOT NULL DEFAULT '[]', affected_documents_json TEXT NOT NULL DEFAULT '[]',
+        output_summary TEXT, error TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      INSERT INTO wiki_documents
+        (id, project_id, name, slug, description, status, content_markdown,
+         generation_mode, created_at, updated_at)
+      VALUES
+        ('native-doc-1', 'project-1', 'Native document', 'native-document',
+         'preserved during handover', 'published', '# Native Wiki', 'full', 10, 20);
+      INSERT INTO wiki_generation_runs
+        (id, project_id, mode, status, output_summary, created_at, updated_at)
+      VALUES
+        ('native-run-1', 'project-1', 'full', 'succeeded', 'done', 10, 20);
+    `)
+    source.close()
+    await expect(businessHandoverReadiness({ sourcePath: fixture.sourcePath })).resolves.toEqual({
+      ready: true,
+      warning: 'LEGACY_NATIVE_WIKI_DATA_WILL_BE_PRESERVED_IN_TS_ARCHIVE'
+    })
+    const snapshot = await createLegacyDatabaseHandoverSnapshot({
+      sourcePath: fixture.sourcePath,
+      backupDirectory: fixture.backupDirectory
+    })
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    directories.push(snapshot.backupPath, snapshot.rollbackPath, snapshot.manifestPath)
+    try {
+      const document: ProjectWikiDocument = {
+        id: 'ts-wiki',
+        projectRoot: '/projects/native-schema',
+        generatedAt: 10,
+        fileCount: 1,
+        nodes: [{ path: 'index.ts', kind: 'file', size: 1, modifiedAt: 10 }]
+      }
+      await expect(repository.saveWikiDocument(document, 'local-personal', 11)).resolves.toBe(true)
+      await expect(
+        repository.wikiDocument(document.projectRoot, 'local-personal')
+      ).resolves.toEqual(document)
+      await expect(repository.legacyProjectWikiCounts()).resolves.toEqual({
+        documents: 1,
+        generationRuns: 1
+      })
+      const promoted = new DatabaseSync(snapshot.backupPath)
+      expect(
+        promoted
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'ola_native_wiki_%'"
+          )
+          .all()
+      ).toHaveLength(2)
+      expect(
+        promoted
+          .prepare('SELECT id, project_id, content_markdown FROM ola_native_wiki_documents_v1')
+          .all()
+      ).toEqual([
+        { id: 'native-doc-1', project_id: 'project-1', content_markdown: '# Native Wiki' }
+      ])
+      expect(
+        promoted
+          .prepare('SELECT id, project_id, status FROM ola_native_wiki_generation_runs_v1')
+          .all()
+      ).toEqual([{ id: 'native-run-1', project_id: 'project-1', status: 'succeeded' }])
+      promoted.close()
+    } finally {
+      await repository.close()
+    }
+  })
+
+  it('preserves legacy Project Wiki data in the TS-owned archive during handover', async () => {
+    const fixture = await createFixture()
+    const source = new DatabaseSync(fixture.sourcePath)
+    source.exec(`
+      DROP TABLE wiki_generation_runs;
+      DROP TABLE wiki_documents;
+      CREATE TABLE wiki_documents (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, name TEXT NOT NULL,
+        slug TEXT NOT NULL, content_markdown TEXT NOT NULL, created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE TABLE wiki_generation_runs (
+        id TEXT PRIMARY KEY, project_id TEXT NOT NULL, mode TEXT NOT NULL,
+        status TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+      );
+      INSERT INTO wiki_documents VALUES ('native-doc', 'project-1', 'Doc', 'doc', '# Doc', 1, 1);
+    `)
+    source.close()
+    let quiesced = false
+
+    const result = await handoverBusinessDatabase({
+      ...fixture,
+      quiesceLegacyWriter: async () => {
+        quiesced = true
+      }
+    })
+    expect(quiesced).toBe(true)
+    await expect(result.repository.legacyProjectWikiCounts()).resolves.toEqual({
+      documents: 1,
+      generationRuns: 0
+    })
+    await result.repository.close()
+    directories.push(
+      result.snapshot.backupPath,
+      result.snapshot.rollbackPath,
+      result.snapshot.manifestPath
+    )
   })
 
   it('rejects a symlinked backup directory during read-only preflight', async () => {
@@ -1021,6 +1151,114 @@ describe('legacy database handover snapshot', () => {
       await expect(repository.drawRuns('local-personal')).resolves.toEqual([
         expect.objectContaining({ id: 'draw-personal' })
       ])
+    } finally {
+      await repository.close()
+    }
+  })
+
+  it('captures and commits the full workspace-owned business sync slice', async () => {
+    const fixture = await createFixture()
+    const snapshot = await createLegacyDatabaseHandoverSnapshot(fixture)
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    const scope = {
+      accountId: 'account-a',
+      apiBaseUrl: 'https://ola.example.invalid',
+      workspaceId: 'team-a'
+    }
+    const transport = {
+      downloadWorkspace: async () => ({
+        bundle: null,
+        etag: null,
+        lastModified: null,
+        updatedAt: null
+      }),
+      uploadWorkspace: async (_config: unknown, _scope: unknown, bundle: WorkspaceSyncBundle) => ({
+        bundle,
+        etag: 'strong-etag',
+        lastModified: null,
+        updatedAt: Date.now()
+      })
+    }
+    try {
+      const result = await runWorkspaceSync({
+        repository,
+        transport,
+        config: {
+          displayName: 'test',
+          serverUrl: 'https://dav.example.invalid',
+          username: 'u',
+          password: 'p',
+          remoteDir: 'ola',
+          autoSyncEnabled: false,
+          syncIntervalMinutes: 30,
+          backupRetention: 1
+        },
+        scope,
+        providerId: 'webdav',
+        deviceId: 'device-a',
+        appVersion: '1.0.5',
+        createdAt: 10,
+        authorize: async () => undefined
+      })
+      expect(result.status).toBe('success')
+      await repository.saveWikiDocument(
+        {
+          id: 'wiki-team',
+          projectRoot: '/team-project',
+          generatedAt: 11,
+          fileCount: 1,
+          nodes: [
+            {
+              path: 'src/index.ts',
+              kind: 'file',
+              size: 10,
+              modifiedAt: 11,
+              hash: 'team-wiki-hash',
+              language: 'typescript'
+            }
+          ]
+        },
+        'team-a',
+        11
+      )
+      await repository.recordQqWakeupSource({
+        workspaceId: 'team-a',
+        pluginId: 'qq',
+        openId: 'user-a',
+        sourceMessageId: 'message-a',
+        sourceTimestamp: 11,
+        now: 11
+      })
+      const captured = await captureWorkspaceSyncState({
+        repository,
+        scope,
+        providerId: 'webdav',
+        deviceId: 'device-a',
+        appVersion: '1.0.5',
+        createdAt: 11,
+        authorize: async () => undefined
+      })
+      expect(captured.bundle.records.length).toBeGreaterThan(10)
+      expect(
+        captured.bundle.records.every(
+          (record) =>
+            record.workspaceId === 'team-a' ||
+            (record.value as { row: { workspace_id?: string } }).row.workspace_id === 'team-a'
+        )
+      ).toBe(true)
+      expect(captured.bundle.records.some((record) => record.domain === 'db:draw_runs')).toBe(true)
+      expect(captured.bundle.records.some((record) => record.domain === 'db:usage_events')).toBe(
+        true
+      )
+      expect(captured.bundle.records.some((record) => record.domain === 'db:wiki_documents')).toBe(
+        true
+      )
+      expect(
+        captured.bundle.records.some((record) => record.domain === 'db:qq_wakeup_windows_v2')
+      ).toBe(true)
     } finally {
       await repository.close()
     }
@@ -3233,6 +3471,10 @@ describe('legacy database handover snapshot', () => {
         expect.objectContaining({
           version: 2,
           description: 'workspace-scoped sync baseline and tombstones'
+        }),
+        expect.objectContaining({
+          version: 3,
+          description: 'workspace ownership for project wiki tables'
         })
       ])
       const competingRepository = new BusinessRepository({

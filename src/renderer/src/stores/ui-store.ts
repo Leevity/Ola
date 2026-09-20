@@ -24,6 +24,7 @@ import {
   pruneSessionTabs,
   reorderSessionTab
 } from '@renderer/lib/workbench/session-tabs'
+import { resolveSplitSessionId } from '@renderer/lib/workbench/conversation-split'
 import { parseChatRoute, replaceChatRoute } from '@renderer/lib/chat-route'
 import { useChatStore } from '@renderer/stores/chat-store'
 import {
@@ -97,6 +98,7 @@ export type AgentFilesChangeSource = 'all' | 'agent' | 'git'
 export type RightPanelTabKind =
   | 'context'
   | 'review'
+  | 'execution'
   | 'preview'
   | 'browser'
   | 'subagent'
@@ -273,6 +275,16 @@ function createReviewTab(): RightPanelTabInstance {
   }
 }
 
+function createExecutionTab(): RightPanelTabInstance {
+  return {
+    id: 'execution',
+    kind: 'execution',
+    title: 'Execution',
+    closable: true,
+    createdAt: 0
+  }
+}
+
 // Sanitize the tab list. Tabs can be closed freely; this never re-injects the
 // built-in Review tab. It only normalizes a present Review tab to be closable.
 function ensureRightPanelTabs(
@@ -302,7 +314,9 @@ function keepGlobalRightPanelTabs(
   tabs: RightPanelTabInstance[] | null | undefined
 ): RightPanelTabInstance[] {
   return ensureReviewTab(
-    (tabs ?? []).filter((tab) => tab.kind === 'review' || tab.kind === 'browser')
+    (tabs ?? []).filter(
+      (tab) => tab.kind === 'review' || tab.kind === 'browser' || tab.kind === 'execution'
+    )
   )
 }
 
@@ -337,6 +351,7 @@ function rightPanelPreviewTabId(previewTabId: string): string {
 interface UIStore {
   workspaceLayouts: Record<string, WorkspaceLayoutSnapshot>
   sessionTabsByWorkspace: Record<string, string[]>
+  splitSessionByWorkspace: Record<string, string | null>
   openWorkspaceSessionTab: (workspaceId: string, sessionId: string) => void
   reorderWorkspaceSessionTab: (
     workspaceId: string,
@@ -349,6 +364,12 @@ interface UIStore {
     activeSessionId: string | null
   ) => string | null
   pruneWorkspaceSessionTabs: (workspaceId: string, validSessionIds: ReadonlySet<string>) => void
+  openWorkspaceSplit: (
+    workspaceId: string,
+    sessionId: string,
+    activeSessionId: string | null
+  ) => void
+  closeWorkspaceSplit: (workspaceId: string) => void
   saveWorkspaceLayout: (workspaceId: string) => void
   restoreWorkspaceLayout: (workspaceId: string) => void
   mode: AppMode
@@ -387,6 +408,7 @@ interface UIStore {
   rightPanelActiveTabId: string
   setRightPanelActiveTab: (tabId: string) => void
   openReviewTab: (initialChangeId?: string | null) => void
+  ensureExecutionTab: () => void
   ensureBrowserTab: (url?: string, sessionId?: string | null, projectId?: string | null) => void
   ensureSubAgentTab: (
     toolUseId?: string | null,
@@ -996,6 +1018,7 @@ export const useUIStore = create<UIStore>()(
     (set, get) => ({
       workspaceLayouts: {},
       sessionTabsByWorkspace: {},
+      splitSessionByWorkspace: {},
       openWorkspaceSessionTab: (workspaceId, sessionId) =>
         set((state) => {
           const key = workspaceLayoutStorageKey(workspaceId)
@@ -1036,6 +1059,31 @@ export const useUIStore = create<UIStore>()(
           const next = pruneSessionTabs(current, validSessionIds)
           if (JSON.stringify(current ?? []) === JSON.stringify(next)) return state
           return { sessionTabsByWorkspace: { ...state.sessionTabsByWorkspace, [key]: next } }
+        }),
+      openWorkspaceSplit: (workspaceId, sessionId, activeSessionId) =>
+        set((state) => {
+          const key = workspaceLayoutStorageKey(workspaceId)
+          const validSessionIds = new Set(
+            useChatStore
+              .getState()
+              .sessions.filter(
+                (session) => (session.workspaceId ?? 'local-personal') === workspaceId
+              )
+              .map((session) => session.id)
+          )
+          const next = resolveSplitSessionId(activeSessionId, sessionId, validSessionIds)
+          if (state.splitSessionByWorkspace[key] === next) return state
+          return {
+            splitSessionByWorkspace: { ...state.splitSessionByWorkspace, [key]: next }
+          }
+        }),
+      closeWorkspaceSplit: (workspaceId) =>
+        set((state) => {
+          const key = workspaceLayoutStorageKey(workspaceId)
+          if (!state.splitSessionByWorkspace[key]) return state
+          return {
+            splitSessionByWorkspace: { ...state.splitSessionByWorkspace, [key]: null }
+          }
         }),
       saveWorkspaceLayout: (workspaceId) =>
         set((state) => ({
@@ -1220,6 +1268,20 @@ export const useUIStore = create<UIStore>()(
           agentFilesSelectedChangeKey:
             normalizeAgentChangeKey(initialChangeId) ?? state.agentFilesSelectedChangeKey
         })),
+      ensureExecutionTab: () =>
+        set((state) => {
+          const existing = state.rightPanelTabs.find((tab) => tab.kind === 'execution')
+          const tab = existing ?? createExecutionTab()
+          const rightPanelTabs = existing
+            ? ensureRightPanelTabs(state.rightPanelTabs)
+            : ensureRightPanelTabs([...state.rightPanelTabs, tab])
+          return {
+            rightPanelTabs,
+            rightPanelActiveTabId: tab.id,
+            rightPanelTab: 'context',
+            rightPanelOpen: true
+          }
+        }),
       ensureBrowserTab: (url, sessionId, projectId) =>
         set((state) => {
           const existing = state.rightPanelTabs.find((tab) => tab.kind === 'browser')
@@ -2178,6 +2240,7 @@ export const useUIStore = create<UIStore>()(
       partialize: (state) => ({
         workspaceLayouts: state.workspaceLayouts,
         sessionTabsByWorkspace: state.sessionTabsByWorkspace,
+        splitSessionByWorkspace: state.splitSessionByWorkspace,
         leftSidebarOpen: state.leftSidebarOpen,
         leftSidebarWidth: clampLeftSidebarWidth(state.leftSidebarWidth),
         conversationPanelFullWidth: state.conversationPanelFullWidth,
@@ -2202,6 +2265,10 @@ export const useUIStore = create<UIStore>()(
               ? state.workspaceLayouts
               : current.workspaceLayouts,
           sessionTabsByWorkspace: normalizeSessionTabScopes(state.sessionTabsByWorkspace),
+          splitSessionByWorkspace:
+            state.splitSessionByWorkspace && typeof state.splitSessionByWorkspace === 'object'
+              ? state.splitSessionByWorkspace
+              : current.splitSessionByWorkspace,
           toolbarCollapsedByDefault: undefined,
           leftSidebarOpen:
             typeof state.leftSidebarOpen === 'boolean'

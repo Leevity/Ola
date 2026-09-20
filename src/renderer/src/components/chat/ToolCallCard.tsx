@@ -797,7 +797,7 @@ interface ShellOutputSummary {
   spawnMs?: number
   firstChunkMs?: number
   shell?: string
-  executionEngine?: 'main' | 'sidecar'
+  executionEngine?: 'main' | 'ts-runtime' | 'unavailable'
   timedOut?: boolean
   aborted?: boolean
 }
@@ -1207,7 +1207,6 @@ function formatSearchEngineLabel(engine: string | undefined): string | null {
   if (!engine) return null
   if (engine === 'git_grep') return 'git grep'
   if (engine === 'ripgrep') return 'ripgrep'
-  if (engine === 'native_aot') return '.NET native'
   if (engine === 'node' || engine.startsWith('node_')) return 'legacy local search'
   if (engine === 'remote_rg') return 'remote rg'
   if (engine === 'remote_grep') return 'remote grep'

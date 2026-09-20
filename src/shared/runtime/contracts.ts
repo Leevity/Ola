@@ -37,12 +37,22 @@ export interface RunSpec {
   assistantMessageId?: string
   /** Main-validated channel target for the narrowly scoped plugin tools. */
   channelContext?: { pluginId: string; chatId: string; messageId?: string }
+  /** Explicit team collaboration scope for the Team* tools. */
+  teamContext?: { teamName: string; memberName?: string }
   workspaceId: string
   environmentId: string
   /** Explicit local execution root for this run; it is not a workspace identity. */
   workingDirectory?: string
+  /** Main-owned SSH connection selected for remote tools; contains no credentials. */
+  sshConnectionId?: string
   /** Explicit project-scoped extension activation snapshot for this run. */
   extensionIds?: string[]
+  /** Main-owned ephemeral translation buffer capabilities for translation Agent runs. */
+  translationContext?: {
+    sourceLanguage: string
+    targetLanguage: string
+    fileRoot?: string
+  }
   /**
    * Model-visible capability snapshot. An omitted list deliberately means no
    * tools; hosts must never grant ambient tools based on current UI state.
@@ -53,9 +63,13 @@ export interface RunSpec {
   /** Per-run cap across every model response; checked before any call executes. */
   maxToolCalls?: number
   modelSource: ModelSource
+  /** Optional independent model binding for ImageGenerate; never falls back silently across resources. */
+  imageModelSource?: ModelSource
   /** Public, per-run model behavior. Credentials and request headers are never accepted here. */
   modelOptions?: ModelOptions
   prompt: string
+  /** Current-turn images that fit the bounded runtime frame contract. */
+  promptImages?: RuntimeImage[]
   /** Prior textual turns, oldest first. The current user prompt is stored separately. */
   history?: RuntimeTextMessage[]
   unattended: boolean
@@ -63,6 +77,14 @@ export interface RunSpec {
 export interface RuntimeTextMessage {
   role: 'system' | 'user' | 'assistant'
   text: string
+  images?: RuntimeImage[]
+}
+export interface RuntimeImage {
+  mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+  data?: string
+  url?: string
+  /** Main-owned staged image; never a filesystem path supplied by the renderer. */
+  assetId?: string
 }
 export interface RunRecord extends RunSpec {
   status: RunStatus
@@ -71,7 +93,7 @@ export interface RunRecord extends RunSpec {
   updatedAt: number
 }
 /** Run lists are operational metadata; request context stays available only via an authorized snapshot. */
-export type RunSummary = Omit<RunRecord, 'prompt' | 'history' | 'modelOptions'>
+export type RunSummary = Omit<RunRecord, 'prompt' | 'promptImages' | 'history' | 'modelOptions'>
 
 export interface RunEvent {
   runId: string
@@ -124,6 +146,103 @@ function boundedNumber(value: unknown, minimum: number, maximum: number): number
   return value
 }
 
+function isSensitiveOverrideKey(key: string): boolean {
+  return /(api[-_]?key|authorization|cookie|credential|password|secret|token)/i.test(key)
+}
+
+function parsePublicJsonValue(value: unknown, depth = 0, state = { nodes: 0 }): unknown {
+  if (++state.nodes > 512 || depth > 8) throw new RuntimeError('INVALID_RUN')
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return value
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (Array.isArray(value)) return value.map((item) => parsePublicJsonValue(item, depth + 1, state))
+  if (!value || typeof value !== 'object') throw new RuntimeError('INVALID_RUN')
+  const result: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(key) ||
+      isSensitiveOverrideKey(key) ||
+      key === '__proto__' ||
+      key === 'constructor' ||
+      key === 'prototype'
+    )
+      throw new RuntimeError('INVALID_RUN')
+    result[key] = parsePublicJsonValue(item, depth + 1, state)
+  }
+  return result
+}
+
+function parsePublicBodyOverrides(value: unknown): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value))
+    throw new RuntimeError('INVALID_RUN')
+  const result = parsePublicJsonValue(value)
+  if (!result || typeof result !== 'object' || Array.isArray(result))
+    throw new RuntimeError('INVALID_RUN')
+  if (new TextEncoder().encode(JSON.stringify(result)).byteLength > 64 * 1024)
+    throw new RuntimeError('INVALID_RUN')
+  return result as Record<string, unknown>
+}
+
+function parseOmitBodyKeys(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length > 64) throw new RuntimeError('INVALID_RUN')
+  const seen = new Set<string>()
+  return value.map((item) => {
+    if (typeof item !== 'string' || !/^[A-Za-z][A-Za-z0-9_.-]{0,127}$/.test(item) || seen.has(item))
+      throw new RuntimeError('INVALID_RUN')
+    seen.add(item)
+    return item
+  })
+}
+
+const MAX_RUNTIME_IMAGES = 4
+const MAX_RUNTIME_IMAGE_BYTES = 768 * 1024
+const RUNTIME_IMAGE_TYPES = new Set<RuntimeImage['mimeType']>([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp'
+])
+
+function parseRuntimeImages(
+  value: unknown,
+  totalBytes: { value: number }
+): RuntimeImage[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value) || value.length > MAX_RUNTIME_IMAGES)
+    throw new RuntimeError('INVALID_RUN')
+  const images = value.map((candidate) => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate))
+      throw new RuntimeError('INVALID_RUN')
+    const item = candidate as Record<string, unknown>
+    if (
+      Object.keys(item).some((key) => !['mimeType', 'data', 'url', 'assetId'].includes(key)) ||
+      !RUNTIME_IMAGE_TYPES.has(item.mimeType as RuntimeImage['mimeType']) ||
+      [item.data, item.url, item.assetId].filter((value) => value !== undefined).length !== 1
+    )
+      throw new RuntimeError('INVALID_RUN')
+    const mimeType = item.mimeType as RuntimeImage['mimeType']
+    if (item.data !== undefined) {
+      if (typeof item.data !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(item.data))
+        throw new RuntimeError('INVALID_RUN')
+      totalBytes.value += new TextEncoder().encode(item.data).byteLength
+      if (totalBytes.value > MAX_RUNTIME_IMAGE_BYTES) throw new RuntimeError('INVALID_RUN')
+      return { mimeType, data: item.data }
+    }
+    if (item.url !== undefined) {
+      if (typeof item.url !== 'string' || item.url.length > 8192 || !/^https:\/\//i.test(item.url))
+        throw new RuntimeError('INVALID_RUN')
+      totalBytes.value += new TextEncoder().encode(item.url).byteLength
+      if (totalBytes.value > MAX_RUNTIME_IMAGE_BYTES) throw new RuntimeError('INVALID_RUN')
+      return { mimeType, url: item.url }
+    }
+    if (typeof item.assetId !== 'string' || !/^[a-f0-9-]{36}$/.test(item.assetId))
+      throw new RuntimeError('INVALID_RUN')
+    return { mimeType, assetId: item.assetId }
+  })
+  return images.length ? images : undefined
+}
+
 function parseRunModelOptions(input: unknown): ModelOptions | undefined {
   if (input === undefined) return undefined
   if (!input || typeof input !== 'object' || Array.isArray(input))
@@ -140,7 +259,10 @@ function parseRunModelOptions(input: unknown): ModelOptions | undefined {
     'enablePromptCache',
     'cacheTtl',
     'serviceTier',
-    'promptCacheKey'
+    'promptCacheKey',
+    'responsesSessionScope',
+    'bodyOverrides',
+    'omitBodyKeys'
   ]
   if (Object.keys(value).some((key) => !allowed.includes(key)))
     throw new RuntimeError('INVALID_RUN')
@@ -163,6 +285,8 @@ function parseRunModelOptions(input: unknown): ModelOptions | undefined {
     throw new RuntimeError('INVALID_RUN')
   if (value.cacheTtl !== undefined && value.cacheTtl !== '5m' && value.cacheTtl !== '1h')
     throw new RuntimeError('INVALID_RUN')
+  const bodyOverrides = parsePublicBodyOverrides(value.bodyOverrides)
+  const omitBodyKeys = parseOmitBodyKeys(value.omitBodyKeys)
   const result: ModelOptions = {
     ...(optionalText(value.systemPrompt, 128 * 1024)
       ? { systemPrompt: value.systemPrompt as string }
@@ -188,7 +312,12 @@ function parseRunModelOptions(input: unknown): ModelOptions | undefined {
     ...(optionalText(value.serviceTier, 64) ? { serviceTier: value.serviceTier as string } : {}),
     ...(optionalText(value.promptCacheKey, 256)
       ? { promptCacheKey: value.promptCacheKey as string }
-      : {})
+      : {}),
+    ...(optionalText(value.responsesSessionScope, 256)
+      ? { responsesSessionScope: value.responsesSessionScope as string }
+      : {}),
+    ...(bodyOverrides ? { bodyOverrides } : {}),
+    ...(omitBodyKeys ? { omitBodyKeys } : {})
   }
   return Object.keys(result).length ? result : undefined
 }
@@ -205,16 +334,21 @@ export function parseRunSpec(input: unknown): RunSpec {
     'sessionId',
     'assistantMessageId',
     'channelContext',
+    'teamContext',
     'workspaceId',
     'environmentId',
     'workingDirectory',
+    'sshConnectionId',
     'extensionIds',
+    'translationContext',
     'toolNames',
     'maxTurns',
     'maxToolCalls',
     'modelSource',
+    'imageModelSource',
     'modelOptions',
     'prompt',
+    'promptImages',
     'history',
     'unattended'
   ]
@@ -265,8 +399,32 @@ export function parseRunSpec(input: unknown): RunSpec {
       ...(messageId ? { messageId } : {})
     }
   }
+  let teamContext: RunSpec['teamContext']
+  if (value.teamContext !== undefined) {
+    if (
+      !value.teamContext ||
+      typeof value.teamContext !== 'object' ||
+      Array.isArray(value.teamContext)
+    )
+      throw new RuntimeError('INVALID_RUN')
+    const team = value.teamContext as Record<string, unknown>
+    if (
+      Object.keys(team).some((key) => !['teamName', 'memberName'].includes(key)) ||
+      typeof team.teamName !== 'string' ||
+      !team.teamName.trim() ||
+      team.teamName.length > 128
+    )
+      throw new RuntimeError('INVALID_RUN')
+    const memberName = optionalText(team.memberName, 128)
+    teamContext = {
+      teamName: team.teamName.trim(),
+      ...(memberName ? { memberName: memberName.trim() } : {})
+    }
+  }
   const workingDirectory = optionalText(value.workingDirectory, 4096)
   if (workingDirectory && value.environmentId !== 'local') throw new RuntimeError('INVALID_RUN')
+  const sshConnectionId = optionalText(value.sshConnectionId, 256)
+  if (sshConnectionId && value.environmentId !== 'local') throw new RuntimeError('INVALID_RUN')
   let extensionIds: string[] | undefined
   if (value.extensionIds !== undefined) {
     if (!Array.isArray(value.extensionIds) || value.extensionIds.length > 64)
@@ -279,6 +437,32 @@ export function parseRunSpec(input: unknown): RunSpec {
       seen.add(id)
       return id
     })
+  }
+  let translationContext: RunSpec['translationContext']
+  if (value.translationContext !== undefined) {
+    if (
+      !value.translationContext ||
+      typeof value.translationContext !== 'object' ||
+      Array.isArray(value.translationContext)
+    )
+      throw new RuntimeError('INVALID_RUN')
+    const translation = value.translationContext as Record<string, unknown>
+    if (
+      Object.keys(translation).some(
+        (key) => !['sourceLanguage', 'targetLanguage', 'fileRoot'].includes(key)
+      ) ||
+      typeof translation.sourceLanguage !== 'string' ||
+      typeof translation.targetLanguage !== 'string' ||
+      !translation.sourceLanguage.trim() ||
+      !translation.targetLanguage.trim()
+    )
+      throw new RuntimeError('INVALID_RUN')
+    const fileRoot = optionalText(translation.fileRoot, 4096)
+    translationContext = {
+      sourceLanguage: translation.sourceLanguage.trim().slice(0, 128),
+      targetLanguage: translation.targetLanguage.trim().slice(0, 128),
+      ...(fileRoot ? { fileRoot } : {})
+    }
   }
   let toolNames: string[] | undefined
   if (value.toolNames !== undefined) {
@@ -302,11 +486,13 @@ export function parseRunSpec(input: unknown): RunSpec {
     throw new RuntimeError('INVALID_RUN')
   if (
     typeof value.prompt !== 'string' ||
-    !value.prompt.trim() ||
+    (!value.prompt.trim() && value.promptImages === undefined) ||
     new TextEncoder().encode(JSON.stringify(value.prompt)).byteLength > 128 * 1024 ||
     typeof value.unattended !== 'boolean'
   )
     throw new RuntimeError('INVALID_RUN')
+  const imageBytes = { value: 0 }
+  const promptImages = parseRuntimeImages(value.promptImages, imageBytes)
   let history: RuntimeTextMessage[] | undefined
   if (value.history !== undefined) {
     if (!Array.isArray(value.history) || value.history.length > 128)
@@ -317,20 +503,33 @@ export function parseRunSpec(input: unknown): RunSpec {
         throw new RuntimeError('INVALID_RUN')
       const item = message as Record<string, unknown>
       if (
-        Object.keys(item).length !== 2 ||
+        (Object.keys(item).length !== 2 && Object.keys(item).length !== 3) ||
         !['system', 'user', 'assistant'].includes(item.role as string) ||
         typeof item.text !== 'string' ||
-        !item.text.trim()
+        (!item.text.trim() && item.images === undefined)
       )
         throw new RuntimeError('INVALID_RUN')
       bytes += new TextEncoder().encode(item.text).byteLength
       if (bytes > 512 * 1024) throw new RuntimeError('INVALID_RUN')
-      return { role: item.role as RuntimeTextMessage['role'], text: item.text }
+      const images = parseRuntimeImages(item.images, imageBytes)
+      return {
+        role: item.role as RuntimeTextMessage['role'],
+        text: item.text,
+        ...(images ? { images } : {})
+      }
     })
   }
   const modelSource = parseModelSource(value.modelSource)
+  const imageModelSource =
+    value.imageModelSource === undefined ? undefined : parseModelSource(value.imageModelSource)
   const modelOptions = parseRunModelOptions(value.modelOptions)
   if (modelSource.kind !== 'local' && modelSource.workspaceId !== value.workspaceId)
+    throw new RuntimeError('WORKSPACE_MISMATCH')
+  if (
+    imageModelSource &&
+    imageModelSource.kind !== 'local' &&
+    imageModelSource.workspaceId !== value.workspaceId
+  )
     throw new RuntimeError('WORKSPACE_MISMATCH')
   return {
     runId: value.runId as string,
@@ -340,16 +539,21 @@ export function parseRunSpec(input: unknown): RunSpec {
     sessionId: value.sessionId as string,
     ...(assistantMessageId ? { assistantMessageId } : {}),
     ...(channelContext ? { channelContext } : {}),
+    ...(teamContext ? { teamContext } : {}),
     workspaceId: value.workspaceId as string,
     environmentId: value.environmentId as string,
     ...(workingDirectory ? { workingDirectory } : {}),
+    ...(sshConnectionId ? { sshConnectionId } : {}),
     ...(extensionIds?.length ? { extensionIds } : {}),
+    ...(translationContext ? { translationContext } : {}),
     ...(toolNames?.length ? { toolNames } : {}),
     ...(maxTurns !== undefined ? { maxTurns } : {}),
     ...(maxToolCalls !== undefined ? { maxToolCalls } : {}),
     modelSource,
+    ...(imageModelSource ? { imageModelSource } : {}),
     ...(modelOptions ? { modelOptions } : {}),
     prompt: value.prompt,
+    ...(promptImages ? { promptImages } : {}),
     ...(history?.length ? { history } : {}),
     unattended: value.unattended
   }

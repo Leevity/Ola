@@ -14,6 +14,7 @@ import {
   type NewSessionProjectOption
 } from './NewSessionProjectSelector'
 import { ChatHomeInsights } from './ChatHomeInsights'
+import { FirstSuccessPanel } from './FirstSuccessPanel'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { TaskProfileConfig } from '@renderer/lib/task-profile'
@@ -74,31 +75,23 @@ export function ChatHomePage(): React.JSX.Element {
   const taskProfile = defaultTaskProfile
   const profileConfig = taskProfile === 'code' ? codeProfileConfig : workProfileConfig
   const activeWorkspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
-  const {
-    activeProjectId,
-    projects,
-    activeProjectHomeId,
-    activeProjectName,
-    workingFolder,
-    sshConnectionId
-  } = useChatStore(
-    useShallow((s) => {
-      const workspaceProjects = s.projects.filter(
-        (item) => (item.workspaceId ?? 'local-personal') === activeWorkspaceId
-      )
-      const project = s.activeProjectId
-        ? (workspaceProjects.find((item) => item.id === s.activeProjectId) ?? null)
-        : null
-      return {
-        activeProjectId: s.activeProjectId,
-        projects: workspaceProjects,
-        activeProjectHomeId: project?.id ?? null,
-        activeProjectName: project?.name ?? null,
-        workingFolder: project?.workingFolder,
-        sshConnectionId: project?.sshConnectionId ?? null
-      }
-    })
+  const { activeProjectId, allProjects } = useChatStore(
+    useShallow((s) => ({ activeProjectId: s.activeProjectId, allProjects: s.projects }))
   )
+  const projects = React.useMemo(
+    () =>
+      allProjects.filter((item) => (item.workspaceId ?? 'local-personal') === activeWorkspaceId),
+    [activeWorkspaceId, allProjects]
+  )
+  const activeProjectRecord = React.useMemo(
+    () =>
+      activeProjectId ? (projects.find((project) => project.id === activeProjectId) ?? null) : null,
+    [activeProjectId, projects]
+  )
+  const activeProjectHomeId = activeProjectRecord?.id ?? null
+  const activeProjectName = activeProjectRecord?.name ?? null
+  const workingFolder = activeProjectRecord?.workingFolder
+  const sshConnectionId = activeProjectRecord?.sshConnectionId ?? null
   const selectableProjects = React.useMemo(
     () =>
       projects
@@ -264,6 +257,8 @@ export function ChatHomePage(): React.JSX.Element {
         ? t('messageList.startCodingDesc')
         : t('input.noWorkingFolder', { mode: 'code' })
 
+  const openTasksPage = useUIStore((s) => s.openTasksPage)
+
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <div className="flex flex-1 flex-col overflow-auto px-6 pb-14 pt-8 sm:pt-10">
@@ -324,6 +319,13 @@ export function ChatHomePage(): React.JSX.Element {
                 </button>
               ))}
             </div>
+
+            <FirstSuccessPanel
+              hasLocalProject={Boolean(homeWorkingFolder)}
+              hasRemoteProject={Boolean(homeSshConnectionId && homeWorkingFolder)}
+              onUsePrompt={applySuggestedPrompt}
+              onOpenTasks={openTasksPage}
+            />
 
             <ChatHomeInsights />
           </div>

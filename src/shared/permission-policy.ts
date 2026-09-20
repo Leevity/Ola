@@ -1,6 +1,5 @@
 /**
- * Permission whitelist policy shared between renderer, main and (mirrored in) the
- * .NET native worker — `AgentRuntimePermissionPolicy.cs` must keep the same semantics.
+ * Permission whitelist policy shared between renderer, Main and the TypeScript runtime.
  *
  * Precedence: bash deny rules > tool whitelist / bash allow rules > normal approval flow.
  * Command-rule matching is case-insensitive; tool-name matching is case-sensitive.
@@ -230,7 +229,7 @@ export function evaluateToolPermission(
   return { decision: 'ask' }
 }
 
-/** Wire shape sent to the native worker in the agent run request (`permissionPolicy` key). */
+/** Wire shape sent to the TypeScript runtime in the agent run request (`permissionPolicy` key). */
 export interface PermissionPolicySnapshot {
   enabled: boolean
   whitelistedTools: string[]

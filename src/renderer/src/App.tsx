@@ -57,8 +57,7 @@ import { isCronWorkspaceEventFor } from './lib/cron-workspace-event'
 import { ipcClient } from './lib/ipc/ipc-client'
 import { IPC } from './lib/ipc/channels'
 import { attachRendererToolBridge } from './lib/ipc/renderer-tool-bridge'
-import { agentStream } from './lib/ipc/agent-stream-receiver'
-import { reattachActiveAgentRuns, reattachActiveTsRuntimeRuns } from './lib/agent/runtime-reattach'
+import { reattachActiveTsRuntimeRuns } from './lib/agent/runtime-reattach'
 import {
   ensureWindowWorkspaceRegistered,
   invalidateWindowWorkspaceRegistration
@@ -86,7 +85,6 @@ registerAllViewers()
 initProviderStore()
 initAppPluginStore()
 attachRendererToolBridge()
-agentStream.attach()
 
 // Register tools (async because SubAgents are loaded from .md files via IPC)
 initExtensionStore()
@@ -220,6 +218,7 @@ function App(): React.JSX.Element {
   const [settingsHydrated, setSettingsHydrated] = useState(() =>
     useSettingsStore.persist.hasHydrated()
   )
+  const [settingsHydrationError, setSettingsHydrationError] = useState<string | null>(null)
 
   useEffect(() => {
     void useRemoteAccountStore.getState().hydrate()
@@ -274,12 +273,6 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    void reattachActiveAgentRuns().catch((error) => {
-      console.warn(
-        '[App] Failed to recover active agent runs',
-        error instanceof Error ? error.message : String(error)
-      )
-    })
     void reattachActiveTsRuntimeRuns(useWorkspaceStore.getState().activeWorkspaceId).catch(
       (error) => {
         console.warn(
@@ -310,10 +303,27 @@ function App(): React.JSX.Element {
       return
     }
 
-    return useSettingsStore.persist.onFinishHydration(() => {
+    let settled = false
+    const timeout = window.setTimeout(() => {
+      if (settled) return
+      setSettingsHydrationError(
+        t('app.errors.settingsHydrationTimeout', {
+          defaultValue: 'Settings could not be loaded from the desktop process.'
+        })
+      )
+    }, 12_000)
+    const unsubscribe = useSettingsStore.persist.onFinishHydration(() => {
+      settled = true
+      window.clearTimeout(timeout)
+      setSettingsHydrationError(null)
       setSettingsHydrated(true)
     })
-  }, [])
+    return () => {
+      settled = true
+      window.clearTimeout(timeout)
+      unsubscribe()
+    }
+  }, [t])
 
   // Load sessions and plans from SQLite on startup
   useEffect(() => {
@@ -1008,8 +1018,43 @@ function App(): React.JSX.Element {
       <ErrorBoundary>
         <ThemeProvider defaultTheme={theme}>
           <ThemeRuntimeSync />
-          <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-            <Loader2 className="size-5 animate-spin text-muted-foreground" />
+          <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+            <div className="flex max-w-md flex-col items-center gap-4 text-center">
+              {settingsHydrationError ? (
+                <>
+                  <div>
+                    <h1 className="text-sm font-medium">
+                      {t('app.errors.settingsHydrationTitle', {
+                        defaultValue: 'Ola is taking too long to start'
+                      })}
+                    </h1>
+                    <p className="mt-2 text-sm text-muted-foreground">{settingsHydrationError}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSettingsHydrationError(null)
+                        void Promise.resolve(useSettingsStore.persist.rehydrate()).catch(
+                          (error) => {
+                            setSettingsHydrationError(
+                              error instanceof Error ? error.message : String(error)
+                            )
+                          }
+                        )
+                      }}
+                    >
+                      {t('app.errors.settingsHydrationRetry', { defaultValue: 'Retry' })}
+                    </Button>
+                    <Button onClick={() => window.location.reload()}>
+                      {t('app.errors.settingsHydrationReload', { defaultValue: 'Reload window' })}
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              )}
+            </div>
           </div>
         </ThemeProvider>
       </ErrorBoundary>

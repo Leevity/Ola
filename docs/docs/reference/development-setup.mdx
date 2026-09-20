@@ -11,7 +11,6 @@ description: 搭建 Ola 本地开发环境。
 | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Node.js    | 22+      | 推荐使用 LTS 版本，仓库 `engines` 强制 `>=22`、`npm >=10`，过低的版本会在 `preinstall` 被拒                                                             |
 | npm        | 10+      | 随 Node.js LTS 安装                                                                                                                                     |
-| .NET SDK   | 10       | 必需，用于编译 Native Worker 和 CodeGraph Worker；详见 `sidecars/Ola.Native.Worker`                                                                     |
 | Git        | 任意     | 版本控制                                                                                                                                                |
 | 原生工具链 | 平台相关 | Windows 需要 MSVC；macOS 需要 Xcode CLT；Linux 需要 `build-essential`；用于 `better-sqlite3`、`@jitsi/robotjs`、`ssh2` 等原生模块的 postinstall rebuild |
 
@@ -26,7 +25,7 @@ npm install
 ## 启动开发模式 / Start Dev Mode
 
 ```bash
-# predev 会在缺失时自动发布 Native Worker 和 CodeGraph Worker（需要 .NET 10）
+# predev 启动 TypeScript Agent/CodeGraph runtime
 npm run dev
 ```
 
@@ -35,7 +34,7 @@ npm run dev
 - Electron 主进程
 - Vite 开发服务器（渲染进程，支持 HMR）
 
-如果 Windows 报 Worker 文件被拒绝访问（`EPERM`），先完全退出 Ola，再重新运行 `npm run native:publish`。
+CodeGraph 使用随 npm 安装的 tree-sitter WASM grammar，不需要额外的 .NET SDK 或 Worker 发布步骤。
 
 ## 项目结构 / Project Structure
 

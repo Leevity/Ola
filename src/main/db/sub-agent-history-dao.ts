@@ -1,4 +1,4 @@
-﻿import { getNativeWorker } from '../lib/native-worker'
+﻿import { getTsDatabaseRouteGuard } from './business-write-canary'
 
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { getSession } from './sessions-dao'
@@ -54,7 +54,9 @@ export async function indexSubAgentHistory(
   const scopedLimit = clampLimit(limit, 100, 500)
   const canary = await canaryIndexSubAgentHistory(sessionId, workspaceId, scopedLimit)
   if (canary !== undefined) return canary
-  return getNativeWorker().request<SubAgentHistoryRow[]>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.subAgentHistoryIndex(sessionId, workspaceId, scopedLimit)
+  return getTsDatabaseRouteGuard().request<SubAgentHistoryRow[]>(
     'db/sub-agent-history-index',
     { sessionId, workspaceId, limit: scopedLimit },
     DEFAULT_TIMEOUT_MS
@@ -75,7 +77,9 @@ export async function listSubAgentHistory(args: {
   }
   const canary = await canaryListSubAgentHistory(scopedArgs)
   if (canary !== undefined) return canary
-  return getNativeWorker().request<SubAgentHistoryPage>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.subAgentHistoryPage(scopedArgs)
+  return getTsDatabaseRouteGuard().request<SubAgentHistoryPage>(
     'db/sub-agent-history-list',
     scopedArgs,
     DEFAULT_TIMEOUT_MS
@@ -92,7 +96,7 @@ export async function applySubAgentHistory(
     await writer.applySubAgentHistory(item, workspaceId)
     return
   }
-  const result = await getNativeWorker().request<SubAgentHistoryMutation>(
+  const result = await getTsDatabaseRouteGuard().request<SubAgentHistoryMutation>(
     'db/sub-agent-history-apply',
     { ...item, workspaceId },
     DEFAULT_TIMEOUT_MS
@@ -111,7 +115,7 @@ export async function replaceSubAgentHistory(args: {
     await writer.replaceSubAgentHistory({ ...args, workspaceId })
     return
   }
-  const result = await getNativeWorker().request<SubAgentHistoryMutation>(
+  const result = await getTsDatabaseRouteGuard().request<SubAgentHistoryMutation>(
     'db/sub-agent-history-replace',
     { ...args, workspaceId },
     REPLACE_TIMEOUT_MS
@@ -122,7 +126,9 @@ export async function replaceSubAgentHistory(args: {
 export function getSubAgentHistoryMigrationStatus(
   key: string
 ): Promise<SubAgentHistoryMigrationStatus> {
-  return getNativeWorker().request<SubAgentHistoryMigrationStatus>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.subAgentHistoryMigrationStatus(key)
+  return getTsDatabaseRouteGuard().request<SubAgentHistoryMigrationStatus>(
     'db/sub-agent-history-migration-status',
     { key },
     DEFAULT_TIMEOUT_MS
@@ -138,7 +144,7 @@ export async function markSubAgentHistoryMigration(args: {
     await writer.markSubAgentHistoryMigration(args.key, args.appliedAt ?? Date.now())
     return
   }
-  const result = await getNativeWorker().request<SubAgentHistoryMutation>(
+  const result = await getTsDatabaseRouteGuard().request<SubAgentHistoryMutation>(
     'db/sub-agent-history-migration-mark',
     { ...args, appliedAt: args.appliedAt ?? Date.now() },
     DEFAULT_TIMEOUT_MS

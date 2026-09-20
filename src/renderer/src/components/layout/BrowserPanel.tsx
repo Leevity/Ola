@@ -66,6 +66,9 @@ export function BrowserPanel({
     browserUserDataReuseEnabled ? stripElectronFromUserAgent(navigator.userAgent) : undefined
   )
   const webviewRef = useRef<Electron.WebviewTag | null>(null)
+  const viewHostRef = useRef<HTMLDivElement | null>(null)
+  const viewCreatedRef = useRef(false)
+  const [useWebContentsView, setUseWebContentsView] = useState(false)
   // A tab registration is scoped to its workspace. Reusing its ID across a
   // workspace change makes Main reject the new provenance and can leave the
   // old guest/profile alive, so rotate both the guest and tab identity here.
@@ -111,6 +114,21 @@ export function BrowserPanel({
     }
 
     void loadRuntimeBrowserMode()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void ipcClient
+      .invoke(IPC.BROWSER_VIEW_STATUS)
+      .then((result) => {
+        if (!cancelled && result && typeof result === 'object') {
+          setUseWebContentsView((result as { enabled?: unknown }).enabled === true)
+        }
+      })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
@@ -201,11 +219,14 @@ export function BrowserPanel({
       url?: string
     ): Promise<boolean> => {
       try {
-        const result = (await ipcClient.invoke(IPC.BROWSER_NAVIGATE, {
-          tabId: browserTabIdRef.current.tabId,
-          action,
-          ...(url === undefined ? {} : { url })
-        })) as
+        const result = (await ipcClient.invoke(
+          useWebContentsView ? IPC.BROWSER_VIEW_NAVIGATE : IPC.BROWSER_NAVIGATE,
+          {
+            tabId: browserTabIdRef.current.tabId,
+            action,
+            ...(url === undefined ? {} : { url })
+          }
+        )) as
           | {
               success: true
               state: { url: string; title: string; canGoBack: boolean; canGoForward: boolean }
@@ -229,7 +250,8 @@ export function BrowserPanel({
       setBrowserCanGoBack,
       setBrowserCanGoForward,
       setBrowserPageTitle,
-      setBrowserUrl
+      setBrowserUrl,
+      useWebContentsView
     ]
   )
 
@@ -368,6 +390,7 @@ export function BrowserPanel({
   }, [refs, storedUrl])
 
   useEffect(() => {
+    if (useWebContentsView) return
     const wv = webviewRef.current
     if (!isWebviewConnected(wv)) return
 
@@ -456,7 +479,179 @@ export function BrowserPanel({
     setBrowserUrl,
     setBrowserPageTitle,
     updateWebContentsId,
-    updateNavState
+    updateNavState,
+    useWebContentsView
+  ])
+
+  useEffect(() => {
+    if (!useWebContentsView || !viewHostRef.current || !committedUrl) return
+    const host = viewHostRef.current
+    const tabId = browserTabIdRef.current.tabId
+    const updateBounds = (): void => {
+      const rect = host.getBoundingClientRect()
+      void ipcClient.invoke(IPC.BROWSER_VIEW_SET_BOUNDS, {
+        tabId,
+        bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+      })
+    }
+    let disposed = false
+    const create = async (): Promise<void> => {
+      const rect = host.getBoundingClientRect()
+      const result = (await ipcClient.invoke(IPC.BROWSER_VIEW_CREATE, {
+        tabId,
+        workspaceId,
+        profileId: runtimeBrowserUserDataReuseEnabled
+          ? 'external-user-data'
+          : browserPartitionForWorkspace(workspaceId),
+        bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+        ...(runtimeBrowserUserDataReuseEnabled
+          ? { userAgent: runtimeBrowserUserAgent }
+          : { partition: browserPartitionForWorkspace(workspaceId) }),
+        url: committedUrl
+      })) as {
+        success?: boolean
+        state?: {
+          webContentsId: number
+          url: string
+          title: string
+          canGoBack: boolean
+          canGoForward: boolean
+        }
+        error?: string
+      }
+      if (disposed) {
+        void ipcClient.invoke(IPC.BROWSER_VIEW_DESTROY, { tabId }).catch(() => undefined)
+        return
+      }
+      if (!result.success) throw new Error(result.error ?? 'WebContentsView creation failed')
+      viewCreatedRef.current = true
+      if (result.state) {
+        setBrowserWebContentsId(result.state.webContentsId, sessionId, projectId)
+        void ipcClient
+          .invoke(IPC.BROWSER_REGISTER_TAB, {
+            tabId,
+            workspaceId,
+            profileId: runtimeBrowserUserDataReuseEnabled
+              ? 'external-user-data'
+              : browserPartitionForWorkspace(workspaceId),
+            guestWebContentsId: result.state.webContentsId,
+            sessionId,
+            projectId
+          })
+          .catch(() => undefined)
+        setBrowserUrl(result.state.url, sessionId, projectId)
+        setBrowserPageTitle(result.state.title, sessionId, projectId)
+        setBrowserCanGoBack(result.state.canGoBack, sessionId, projectId)
+        setBrowserCanGoForward(result.state.canGoForward, sessionId, projectId)
+      }
+      setBrowserLoading(false, sessionId, projectId)
+      updateBounds()
+    }
+    void create().catch((error) => {
+      if (!disposed) {
+        setUseWebContentsView(false)
+        setBrowserErrorInfo(
+          {
+            code: -12,
+            desc: error instanceof Error ? error.message : String(error),
+            url: committedUrl
+          },
+          sessionId,
+          projectId
+        )
+      }
+    })
+    const observer = new ResizeObserver(updateBounds)
+    observer.observe(host)
+    return () => {
+      disposed = true
+      observer.disconnect()
+      if (viewCreatedRef.current) {
+        void ipcClient.invoke(IPC.BROWSER_VIEW_DESTROY, { tabId }).catch(() => undefined)
+        viewCreatedRef.current = false
+      }
+    }
+  }, [
+    committedUrl,
+    projectId,
+    runtimeBrowserUserAgent,
+    runtimeBrowserUserDataReuseEnabled,
+    sessionId,
+    setBrowserCanGoBack,
+    setBrowserCanGoForward,
+    setBrowserErrorInfo,
+    setBrowserLoading,
+    setBrowserPageTitle,
+    setBrowserWebContentsId,
+    setBrowserUrl,
+    useWebContentsView,
+    workspaceId
+  ])
+
+  useEffect(() => {
+    if (!useWebContentsView) return
+    const tabId = browserTabIdRef.current.tabId
+    return ipcClient.on(IPC.BROWSER_VIEW_EVENT, (payload: unknown) => {
+      if (!payload || typeof payload !== 'object') return
+      const event = payload as {
+        tabId?: unknown
+        type?: unknown
+        state?: {
+          url?: unknown
+          title?: unknown
+          canGoBack?: unknown
+          canGoForward?: unknown
+        }
+        error?: { code?: unknown; description?: unknown; url?: unknown }
+      }
+      if (event.tabId !== tabId || !event.state) return
+      const state = event.state
+      if (typeof state.url === 'string') {
+        internalBrowserUrlUpdateRef.current = true
+        setInputUrl(state.url)
+        setBrowserUrl(state.url, sessionId, projectId)
+      }
+      if (typeof state.title === 'string') setBrowserPageTitle(state.title, sessionId, projectId)
+      if (typeof state.canGoBack === 'boolean')
+        setBrowserCanGoBack(state.canGoBack, sessionId, projectId)
+      if (typeof state.canGoForward === 'boolean')
+        setBrowserCanGoForward(state.canGoForward, sessionId, projectId)
+      if (event.type === 'did-start-loading') {
+        setBrowserLoading(true, sessionId, projectId)
+        setBrowserErrorInfo(null, sessionId, projectId)
+      } else if (event.type === 'did-stop-loading') {
+        setBrowserLoading(false, sessionId, projectId)
+      } else if (event.type === 'did-fail-load' && event.error) {
+        setBrowserErrorInfo(
+          {
+            code: typeof event.error.code === 'number' ? event.error.code : -2,
+            desc:
+              typeof event.error.description === 'string'
+                ? event.error.description
+                : 'Browser navigation failed',
+            url:
+              typeof event.error.url === 'string'
+                ? event.error.url
+                : typeof state.url === 'string'
+                  ? state.url
+                  : ''
+          },
+          sessionId,
+          projectId
+        )
+        setBrowserLoading(false, sessionId, projectId)
+      }
+    })
+  }, [
+    projectId,
+    sessionId,
+    setBrowserCanGoBack,
+    setBrowserCanGoForward,
+    setBrowserErrorInfo,
+    setBrowserLoading,
+    setBrowserPageTitle,
+    setBrowserUrl,
+    useWebContentsView
   ])
 
   return (
@@ -555,7 +750,7 @@ export function BrowserPanel({
             }
           })()}
         />
-        {committedUrl && (
+        {committedUrl && !useWebContentsView && (
           <webview
             key={`${runtimeBrowserUserDataReuseEnabled ? 'user-browser-profile' : 'ola-profile'}:${workspaceId}`}
             ref={webviewRef as React.Ref<Electron.WebviewTag>}
@@ -564,6 +759,7 @@ export function BrowserPanel({
             {...webviewSessionProps}
           />
         )}
+        {committedUrl && useWebContentsView && <div ref={viewHostRef} className="size-full" />}
         {errorInfo ? (
           <>
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-background text-sm text-muted-foreground">

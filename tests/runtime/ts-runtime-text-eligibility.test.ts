@@ -31,8 +31,72 @@ describe('TS runtime text eligibility', () => {
     ).toEqual({
       eligible: true,
       prompt: 'Current question',
+      promptImages: [],
       history: [{ role: 'assistant', text: 'Earlier answer' }],
       modelOptions: { systemPrompt: 'Be concise', temperature: 0 }
+    })
+  })
+
+  it('projects a bounded Responses session scope for local WebSocket reuse', () => {
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages,
+        provider: { ...provider, responsesSessionScope: 'main' },
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({ eligible: true, modelOptions: { responsesSessionScope: 'main' } })
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages,
+        provider: { ...provider, responsesSessionScope: 'x'.repeat(257) },
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toEqual({ eligible: false, reason: 'PROVIDER_OPTIONS_NOT_MIGRATED' })
+  })
+
+  it('projects bounded base64 and HTTPS image blocks into the TS model request', () => {
+    const imageMessages: UnifiedMessage[] = [
+      {
+        id: 'old',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Earlier image' },
+          {
+            type: 'image',
+            source: { type: 'base64', mediaType: 'image/png', data: 'aGVsbG8=' }
+          }
+        ],
+        createdAt: 1
+      },
+      {
+        id: 'current',
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Describe these' },
+          {
+            type: 'image',
+            source: { type: 'url', mediaType: 'image/jpeg', url: 'https://example.test/a.jpg' }
+          }
+        ],
+        createdAt: 2
+      }
+    ] as UnifiedMessage[]
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: imageMessages,
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      prompt: 'Describe these',
+      promptImages: [{ mimeType: 'image/jpeg', url: 'https://example.test/a.jpg' }],
+      history: [
+        {
+          text: 'Earlier image',
+          images: [{ mimeType: 'image/png', data: 'aGVsbG8=' }]
+        }
+      ]
     })
   })
 
@@ -60,6 +124,35 @@ describe('TS runtime text eligibility', () => {
     })
   })
 
+  it('projects non-secret body overrides but keeps custom headers on the legacy path', () => {
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages,
+        provider: {
+          ...provider,
+          requestOverrides: {
+            body: { response_format: { type: 'json_object' } },
+            omitBodyKeys: ['top_p']
+          }
+        },
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      modelOptions: {
+        bodyOverrides: { response_format: { type: 'json_object' } },
+        omitBodyKeys: ['top_p']
+      }
+    })
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages,
+        provider: { ...provider, requestOverrides: { headers: { 'x-provider-mode': 'fast' } } },
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toEqual({ eligible: false, reason: 'PROVIDER_OPTIONS_NOT_MIGRATED' })
+  })
+
   it('rejects thinking when the provider has no typed thinking configuration', () => {
     expect(
       assessTsRuntimeTextEligibility({
@@ -73,7 +166,15 @@ describe('TS runtime text eligibility', () => {
   it('rejects tool and rich-content transcript entries', () => {
     const toolMessages: UnifiedMessage[] = [{ ...messages[0], role: 'tool' }, messages[1]]
     const richMessages = [
-      { ...messages[0], content: [{ type: 'text', text: 'rich' }] },
+      {
+        ...messages[0],
+        content: [
+          {
+            type: 'image',
+            source: { type: 'url', mediaType: 'image/png', url: 'file:///tmp/local.png' }
+          }
+        ]
+      },
       messages[1]
     ] as unknown as UnifiedMessage[]
     for (const input of [toolMessages, richMessages]) {

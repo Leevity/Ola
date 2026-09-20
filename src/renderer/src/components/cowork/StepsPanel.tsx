@@ -4,6 +4,7 @@
   CheckCircle2,
   ChevronDown,
   Circle,
+  CircleX,
   ClipboardList,
   Link2,
   Loader2,
@@ -172,6 +173,10 @@ function TaskStatusIcon({ status }: { status: TaskItem['status'] }): React.JSX.E
       return <CheckCircle2 className="size-4 text-green-500" />
     case 'in_progress':
       return <Loader2 className="size-4 animate-spin text-blue-500" />
+    case 'failed':
+      return <CircleX className="size-4 text-red-500" />
+    case 'cancelled':
+      return <CircleX className="size-4 text-amber-500" />
     case 'pending':
     default:
       return <Circle className="size-4 text-muted-foreground" />
@@ -671,6 +676,10 @@ function TeamTaskStatusIcon({ status }: { status: TeamTask['status'] }): React.J
       return <CheckCircle2 className="size-4 text-green-500" />
     case 'in_progress':
       return <Loader2 className="size-4 animate-spin text-cyan-500" />
+    case 'failed':
+      return <CircleX className="size-4 text-red-500" />
+    case 'cancelled':
+      return <CircleX className="size-4 text-amber-500" />
     case 'pending':
     default:
       return <Circle className="size-4 text-muted-foreground" />

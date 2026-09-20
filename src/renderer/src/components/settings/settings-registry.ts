@@ -52,6 +52,7 @@ export type SettingsPageId =
   | 'projectIntelligence'
   | 'profile'
   | 'memory'
+  | 'migration'
   | 'advanced'
 
 export type LegacySettingsPageId = 'hooks' | 'aiCoding' | 'analytics' | 'pet' | 'wiki'
@@ -264,6 +265,15 @@ export const SETTINGS_REGISTRY: readonly SettingsPageDefinition[] = [
     icon: 'book',
     layout: 'standard',
     component: 'memory'
+  },
+  {
+    id: 'migration',
+    section: 'advanced',
+    titleKey: 'migration.title',
+    descriptionKey: 'migration.subtitle',
+    icon: 'flask',
+    layout: 'full',
+    component: 'migration'
   },
   {
     id: 'advanced',

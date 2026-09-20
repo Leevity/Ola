@@ -1,4 +1,4 @@
-import { getNativeWorker } from '../lib/native-worker'
+import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { businessWriteCanary } from './business-write-canary'
 import {
   canaryGetMemoryRoot,
@@ -75,7 +75,7 @@ export async function ensureMemoryRoot(input: MemoryRootInput): Promise<MemoryRo
       sshConnectionId: input.sshConnectionId ?? null
     })
   }
-  const result = await getNativeWorker().request<MemoryRootDescriptor>(
+  const result = await getTsDatabaseRouteGuard().request<MemoryRootDescriptor>(
     'db/memory-roots-ensure',
     input,
     120_000
@@ -89,7 +89,9 @@ export async function getMemoryRoot(
 ): Promise<MemoryRootDescriptor | null> {
   const canary = await canaryGetMemoryRoot(id, workspaceId)
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<NativeFindRootResult>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.memoryRoot<MemoryRootDescriptor>(id, workspaceId)
+  const result = await getTsDatabaseRouteGuard().request<NativeFindRootResult>(
     'db/memory-roots-get',
     { id, workspaceId },
     120_000
@@ -107,7 +109,15 @@ export async function listMemoryRoots(
     const canary = await canaryListMemoryRoots({ ...query, workspaceId: query.workspaceId })
     if (canary !== undefined) return canary
   }
-  return getNativeWorker().request<MemoryRootDescriptor[]>('db/memory-roots-list', query, 120_000)
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.memoryRoots<MemoryRootDescriptor>(query.workspaceId ?? 'local-personal')
+  }
+  return getTsDatabaseRouteGuard().request<MemoryRootDescriptor[]>(
+    'db/memory-roots-list',
+    query,
+    120_000
+  )
 }
 
 export async function createMemoryJob(input: {
@@ -129,7 +139,7 @@ export async function createMemoryJob(input: {
       leaseOwner: input.leaseOwner ?? null
     })
   }
-  const result = await getNativeWorker().request<MemoryPipelineJob>(
+  const result = await getTsDatabaseRouteGuard().request<MemoryPipelineJob>(
     'db/memory-jobs-create',
     input,
     120_000
@@ -143,7 +153,9 @@ export async function getMemoryJob(
 ): Promise<MemoryPipelineJob | null> {
   const canary = await canaryGetMemoryJob(id, workspaceId)
   if (canary !== undefined) return canary
-  const result = await getNativeWorker().request<NativeFindJobResult>(
+  const writer = businessWriteCanary()
+  if (writer) return writer.memoryJob<MemoryPipelineJob>(id, workspaceId)
+  const result = await getTsDatabaseRouteGuard().request<NativeFindJobResult>(
     'db/memory-jobs-get',
     { id, workspaceId },
     120_000
@@ -169,7 +181,7 @@ export async function finishMemoryJob(args: {
       error: args.error ?? null
     })
   }
-  const result = await getNativeWorker().request<NativeFindJobResult>(
+  const result = await getTsDatabaseRouteGuard().request<NativeFindJobResult>(
     'db/memory-jobs-finish',
     args,
     120_000
@@ -187,7 +199,15 @@ export async function listMemoryJobs(
     const canary = await canaryListMemoryJobs({ ...query, workspaceId: query.workspaceId })
     if (canary !== undefined) return canary
   }
-  return getNativeWorker().request<MemoryPipelineJob[]>('db/memory-jobs-list', query, 120_000)
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.memoryJobs<MemoryPipelineJob>(query.workspaceId ?? 'local-personal', query.limit)
+  }
+  return getTsDatabaseRouteGuard().request<MemoryPipelineJob[]>(
+    'db/memory-jobs-list',
+    query,
+    120_000
+  )
 }
 
 export async function addStage1Output(input: MemoryStage1OutputInput): Promise<MemoryStage1Output> {
@@ -200,7 +220,7 @@ export async function addStage1Output(input: MemoryStage1OutputInput): Promise<M
       status: input.status ?? 'active'
     })
   }
-  const result = await getNativeWorker().request<MemoryStage1Output>(
+  const result = await getTsDatabaseRouteGuard().request<MemoryStage1Output>(
     'db/memory-stage1-add',
     input,
     120_000
@@ -220,7 +240,19 @@ export async function listStage1Outputs(args: {
     })
     if (canary !== undefined) return canary
   }
-  return getNativeWorker().request<MemoryStage1Output[]>('db/memory-stage1-list', args, 120_000)
+  const writer = businessWriteCanary()
+  if (writer) {
+    return writer.memoryStage1Outputs<MemoryStage1Output>(
+      args.memoryRootId,
+      args.workspaceId ?? 'local-personal',
+      args.limit
+    )
+  }
+  return getTsDatabaseRouteGuard().request<MemoryStage1Output[]>(
+    'db/memory-stage1-list',
+    args,
+    120_000
+  )
 }
 
 export async function recordCitationUsage(entry: MemoryCitationEntry): Promise<void> {
@@ -237,7 +269,7 @@ export async function recordCitationUsage(entry: MemoryCitationEntry): Promise<v
     })
     return
   }
-  const result = await getNativeWorker().request<NativeMutationResult>(
+  const result = await getTsDatabaseRouteGuard().request<NativeMutationResult>(
     'db/memory-citation-record',
     entry,
     120_000
@@ -258,7 +290,7 @@ export async function clearMemoryRoot(args: {
       includeJobs: args.includeJobs ?? false
     })
   }
-  const result = await getNativeWorker().request<NativeClearRootResult>(
+  const result = await getTsDatabaseRouteGuard().request<NativeClearRootResult>(
     'db/memory-root-clear',
     args,
     120_000

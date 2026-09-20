@@ -1,6 +1,6 @@
 import * as path from 'path'
+import { readFile } from 'node:fs/promises'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { getNativeWorker } from '../lib/native-worker'
 import { olaDataRoot, olaExternalDataHome } from '../lib/ola-data-root'
 import { sshWorkspaceConfigPath } from './ssh-workspace-path'
 import {
@@ -100,14 +100,6 @@ function setCache(workspaceId: string, next: SshConfigData, notify: boolean): vo
   }
 }
 
-async function nativeRequest<T>(
-  method: string,
-  params: unknown = {},
-  timeoutMs = 60_000
-): Promise<T> {
-  return await getNativeWorker().request<T>(method, params, timeoutMs)
-}
-
 async function refreshFromDisk(notify: boolean): Promise<void> {
   const workspaceId = currentSshWorkspaceId()
   const generation = cacheGenerations.get(workspaceId) ?? 0
@@ -197,10 +189,49 @@ export async function getOpenSshHostConfig(
 ): Promise<OpenSshHostConfig | null> {
   const normalizedAlias = alias.trim()
   if (!normalizedAlias) return null
-  return await nativeRequest<OpenSshHostConfig | null>('ssh/config-openssh-host', {
-    alias: normalizedAlias,
-    configPath
-  })
+  let content: string
+  try {
+    content = await readFile(configPath, 'utf8')
+  } catch {
+    return null
+  }
+  let current: OpenSshHostConfig | null = null
+  let matched = false
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*$/, '').trim()
+    if (!line) continue
+    const match = line.match(/^(\S+)\s+(.*)$/)
+    if (!match) continue
+    const [, key, rawValue] = match
+    if (key.toLowerCase() === 'host') {
+      const aliases = rawValue.split(/\s+/)
+      matched = aliases.includes(normalizedAlias) && !aliases.some((value) => /[*?!]/.test(value))
+      current = matched ? { host: normalizedAlias } : null
+      continue
+    }
+    if (!current) continue
+    const value = rawValue.trim()
+    switch (key.toLowerCase()) {
+      case 'hostname':
+        current.hostName ??= value
+        break
+      case 'user':
+        current.user ??= value
+        break
+      case 'port': {
+        const port = Number.parseInt(value, 10)
+        if (Number.isFinite(port)) current.port ??= port
+        break
+      }
+      case 'identityfile':
+        current.identityFile ??= value.replace(/^~\//, `${process.env.HOME ?? '~'}/`)
+        break
+      case 'proxyjump':
+        current.proxyJump ??= value
+        break
+    }
+  }
+  return current
 }
 
 export function getSshConfigSnapshot(): SshConfigData {
