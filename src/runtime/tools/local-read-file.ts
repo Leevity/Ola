@@ -1,6 +1,6 @@
-import { readFile, realpath } from 'node:fs/promises'
-import { relative, resolve, sep } from 'node:path'
+import { readFile } from 'node:fs/promises'
 import { RuntimeError } from '../../shared/runtime/contracts'
+import { resolveWorkspacePath } from '../../shared/security/path-policy'
 import type { ToolDefinition } from './tool-executor'
 
 type ReadInput = { path: string }
@@ -22,21 +22,15 @@ function input(value: unknown): ReadInput {
   return { path }
 }
 
+/**
+ * Confine a tool-provided path to the workspace root. Delegates to the shared
+ * path-policy so the runtime tools and the renderer capability layer share one
+ * implementation. Denied paths throw the same TOOL_PATH_FORBIDDEN used before.
+ */
 export async function confinedWorkspacePath(root: string, path: string): Promise<string> {
-  const rootPath = await realpath(root)
-  const requested = resolve(rootPath, path)
-  const lexical = relative(rootPath, requested)
-  if (
-    lexical === '..' ||
-    lexical.startsWith(`..${sep}`) ||
-    resolve(rootPath, lexical) !== requested
-  )
-    throw new RuntimeError('TOOL_PATH_FORBIDDEN')
-  const target = await realpath(requested)
-  const outside = relative(rootPath, target)
-  if (outside === '..' || outside.startsWith(`..${sep}`) || resolve(rootPath, outside) !== target)
-    throw new RuntimeError('TOOL_PATH_FORBIDDEN')
-  return target
+  const result = resolveWorkspacePath(root, path, true)
+  if (!result.allowed) throw new RuntimeError('TOOL_PATH_FORBIDDEN')
+  return result.resolvedPath
 }
 
 export type WorkspaceRootResolver = (
