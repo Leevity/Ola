@@ -31,6 +31,48 @@ function policyFromSnapshot(
 }
 
 /**
+ * Interactive (foreground) write/execute tools are gated by an explicit tool
+ * snapshot rather than the Cron whitelist, but they must still clear the shared
+ * Capability policy — command syntax, workspace-path containment and resource
+ * binding. A `deny` decision here always wins; `allow`/`ask` keep the existing
+ * snapshot-based behavior so no previously-allowed call regresses.
+ */
+function capabilityDenies(
+  tool: { name: string; effect: 'read' | 'write' },
+  safeInput: Record<string, unknown> | undefined,
+  run: RunSpec,
+  permissionPolicy: PermissionPolicySnapshot | undefined
+): boolean {
+  return (
+    evaluateToolCapability(
+      {
+        kind: capabilityForTool(tool.name, tool.effect),
+        toolName: tool.name,
+        input: safeInput,
+        effect: tool.effect,
+        workspaceRoot: run.workingDirectory
+      },
+      policyFromSnapshot(permissionPolicy)
+    ).decision === 'deny'
+  )
+}
+
+/**
+ * Foreground write/execute authorization: the tool must be in the run's explicit
+ * snapshot AND must not be denied by the shared Capability policy.
+ */
+function interactiveMutationAuthorized(
+  tool: { name: string; effect: 'read' | 'write' },
+  safeInput: Record<string, unknown> | undefined,
+  run: RunSpec,
+  permissionPolicy: PermissionPolicySnapshot | undefined
+): boolean {
+  if (run.unattended) return false
+  if (run.toolNames?.includes(tool.name) !== true) return false
+  return !capabilityDenies(tool, safeInput, run, permissionPolicy)
+}
+
+/**
  * Background Cron work receives only persisted, explicit permission grants.
  * Other unattended runs do not inherit Cron authority merely by setting a
  * tool name, and interactive runs continue through the interaction protocol.
@@ -41,9 +83,17 @@ export function isAuthorizedDesktopRuntimeTool({
   input,
   permissionPolicy
 }: RuntimeToolAuthorizationInput): boolean {
+  // Read-only boundary: reads never mutate state, so they stay allowed for every
+  // run type. This is the single audited place where a read bypasses the
+  // Capability policy; any new read-effect tool inherits this bounded allowance
+  // and must not widen it toward mutating effects.
   if (tool.effect === 'read') return true
+  const safeInput =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? (input as Record<string, unknown>)
+      : undefined
   if (tool.name === 'Task' || tool.name === 'Agent') {
-    return !run.unattended && run.toolNames?.includes(tool.name) === true
+    return interactiveMutationAuthorized(tool, safeInput, run, permissionPolicy)
   }
   if (tool.name === 'AskUserQuestion' || tool.name === 'visualize_show_widget') {
     return !run.unattended && run.toolNames?.includes(tool.name) === true
@@ -66,13 +116,13 @@ export function isAuthorizedDesktopRuntimeTool({
     return (backgroundTeamMember || !run.unattended) && run.toolNames?.includes(tool.name) === true
   }
   if (tool.name === 'ImageGenerate') {
-    return !run.unattended && run.toolNames?.includes('ImageGenerate') === true
+    return interactiveMutationAuthorized(tool, safeInput, run, permissionPolicy)
   }
   if (['Write', 'Edit'].includes(tool.name) && run.translationContext) {
-    return !run.unattended && run.toolNames?.includes(tool.name) === true
+    return interactiveMutationAuthorized(tool, safeInput, run, permissionPolicy)
   }
   if (tool.name === 'WriteOptimizedPrompts') {
-    return !run.unattended && run.toolNames?.includes(tool.name) === true
+    return interactiveMutationAuthorized(tool, safeInput, run, permissionPolicy)
   }
   if (
     tool.name === 'PluginSendMessage' ||
@@ -115,10 +165,6 @@ export function isAuthorizedDesktopRuntimeTool({
   const isBackgroundSubAgent = run.unattended && run.taskId.startsWith('subagent:')
   if (!isCron && !isBackgroundSubAgent) return false
   if (tool.name === 'Notify') return true
-  const safeInput =
-    input && typeof input === 'object' && !Array.isArray(input)
-      ? (input as Record<string, unknown>)
-      : undefined
   return (
     evaluateToolCapability(
       {

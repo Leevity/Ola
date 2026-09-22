@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { isAuthorizedDesktopRuntimeTool } from '../../src/main/runtime/runtime-tool-authorization'
 import type { RunSpec } from '../../src/shared/runtime/contracts'
 
@@ -173,6 +176,41 @@ describe('desktop runtime tool authorization', () => {
         run: { ...optimizerRun, unattended: true },
         tool: { name: 'WriteOptimizedPrompts', effect: 'write' },
         input: { options: [] }
+      })
+    ).toBe(false)
+  })
+  it('applies capability policy as a deny gate on interactive write tools', () => {
+    // A translation run grants Write in its snapshot, but the shared Capability
+    // policy still vetoes path escapes — foreground runs no longer bypass it.
+    const root = mkdtempSync(join(tmpdir(), 'ola-auth-'))
+    const translationRun = {
+      ...run('translation-task', false),
+      toolNames: ['Write'],
+      workingDirectory: root,
+      translationContext: { sourceLanguage: 'auto', targetLanguage: 'en' }
+    }
+    const policy = {
+      enabled: true,
+      whitelistedTools: [],
+      bashAllowRules: [],
+      bashDenyRules: []
+    }
+    // A contained path keeps the snapshot-based allowance.
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: translationRun,
+        tool: { name: 'Write', effect: 'write' },
+        input: { path: join(root, 'notes', 'todo.md') },
+        permissionPolicy: policy
+      })
+    ).toBe(true)
+    // A path escaping the working directory is denied by the capability policy.
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: translationRun,
+        tool: { name: 'Write', effect: 'write' },
+        input: { path: '../outside/leak.txt' },
+        permissionPolicy: policy
       })
     ).toBe(false)
   })

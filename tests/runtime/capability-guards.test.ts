@@ -11,7 +11,7 @@ describe('capability resource guards', () => {
     expect(resolveWorkspacePath('C:/workspace', 'src/index.ts').allowed).toBe(true)
   })
 
-  it('rejects real-path symlink escape on non-Windows', (context) => {
+  it('rejects real-path symlink escape on non-Windows', () => {
     const root = mkdtempSync(join(tmpdir(), 'ola-ws-'))
     writeFileSync(join(root, 'inside.txt'), 'ok')
     expect(resolveWorkspacePath(root, 'inside.txt').allowed).toBe(true)
