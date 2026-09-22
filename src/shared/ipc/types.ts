@@ -1,20 +1,5 @@
 import type { IPCChannel } from './contract'
 
-export type IpcTransport = 'json' | 'msgpack'
-export type IpcWorkspaceScope = 'none' | 'required' | 'optional'
-export type IpcSenderScope = 'primary-window' | 'trusted-window' | 'any-trusted'
-
-export interface IpcChannelMetadata {
-  transport: IpcTransport
-  workspace: IpcWorkspaceScope
-  sender: IpcSenderScope
-  permission?: string
-}
-
-export type IpcResult<T> =
-  | { ok: true; value: T }
-  | { ok: false; code: string; message: string }
-
 export type TypedIpcInvoke = <T = unknown>(
   channel: IPCChannel,
   ...args: unknown[]
@@ -36,26 +21,20 @@ export interface IpcChannelSchema {
 
 export const ipcChannelSchema: Record<string, IpcChannelSchema> = {
   'settings:get': { request: { key: 'string' }, response: { value: 'unknown' } },
-  'settings:update': { request: { key: 'string', value: 'unknown' }, response: { ok: 'boolean' } },
-  'sessions:list': { request: { workspaceId: 'string' }, response: { sessions: 'Session[]' } },
-  'sessions:get': { request: { sessionId: 'string' }, response: { session: 'Session | null' } },
-  'sessions:create': { request: { workspaceId: 'string', mode: 'string' }, response: { session: 'Session' } },
-  'sessions:update': { request: { sessionId: 'string', patch: 'unknown' }, response: { ok: 'boolean' } },
-  'sessions:delete': { request: { sessionId: 'string' }, response: { ok: 'boolean' } },
+  'settings:set': { request: { key: 'string', value: 'unknown' }, response: { ok: 'boolean' } },
   'db:messages:list': { request: { sessionId: 'string', cursor: 'string | undefined' }, response: { messages: 'UnifiedMessage[]' } },
   'db:messages:update': { request: { messageId: 'string', patch: 'unknown' }, response: { ok: 'boolean' } },
-  'fs:read': { request: { path: 'string' }, response: { content: 'string' } },
-  'fs:write': { request: { path: 'string', content: 'string' }, response: { ok: 'boolean' } },
-  'shell:execute': { request: { command: 'string', cwd: 'string | undefined' }, response: { output: 'string' } },
-  'runtime:submit': { request: { workspaceId: 'string', sessionId: 'string', text: 'string' }, response: { runId: 'string' } },
-  'runtime:cancel': { request: { runId: 'string' }, response: { ok: 'boolean' } },
-  'ts-runtime:run-submit': { request: { workspaceId: 'string', sessionId: 'string', text: 'string' }, response: { runId: 'string' } },
+  'remote:session:list': { request: { workspaceId: 'string' }, response: { sessions: 'Session[]' } },
+  'fs:read-file': { request: { path: 'string' }, response: { content: 'string' } },
+  'fs:write-file': { request: { path: 'string', content: 'string' }, response: { ok: 'boolean' } },
+  'shell:exec': { request: { command: 'string', cwd: 'string | undefined' }, response: { output: 'string' } },
+  'shell:abort': { request: { runId: 'string' }, response: { ok: 'boolean' } },
   'browser:execute-script': { request: { target: 'unknown', script: 'string' }, response: { result: 'unknown' } },
-  'credential:read-plaintext': { request: { credentialId: 'string' }, response: { secret: 'string' } },
-  'credential:inject': { request: { credentialId: 'string', target: 'string' }, response: { ok: 'boolean' } },
-  'git:status': { request: { workspaceId: 'string' }, response: { status: 'unknown' } },
+  'credentials:store': { request: { credentialId: 'string', secret: 'string' }, response: { ok: 'boolean' } },
+  'credentials:fill-password': { request: { credentialId: 'string', target: 'string' }, response: { ok: 'boolean' } },
+  'git:get-status': { request: { workspaceId: 'string' }, response: { status: 'unknown' } },
   'image:download': { request: { url: 'string' }, response: { data: 'unknown' } },
-  'notify:show': { request: { title: 'string', body: 'string' }, response: { ok: 'boolean' } },
+  'notify:session': { request: { title: 'string', body: 'string' }, response: { ok: 'boolean' } },
   'mcp:list-tools': { request: {}, response: { tools: 'unknown[]' } }
 }
 

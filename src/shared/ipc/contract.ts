@@ -465,12 +465,96 @@ export const IPC = {
   SSH_IMPORT_APPLY: 'ssh:import:apply',
 
   // SSH Remote Exec
-  SSH_EXEC: 'ssh:exec'
+  SSH_EXEC: 'ssh:exec',
+
+  // Contract-normalized legacy channels (auto-registered)
+  AGENTS_LIST: 'agents:list',
+  API_REQUEST: 'api:request',
+  APP_SYSTEM_INFO: 'app:system-info',
+  CONFIG_GET: 'config:get',
+  CONFIG_SET: 'config:set',
+  DESKTOP_FLOW_ACTIVITY: 'desktop-flow:activity',
+  DESKTOP_FLOW_CANCEL: 'desktop-flow:cancel',
+  DESKTOP_FLOW_DELETE: 'desktop-flow:delete',
+  DESKTOP_FLOW_LIST: 'desktop-flow:list',
+  DESKTOP_FLOW_REPLAY: 'desktop-flow:replay',
+  DESKTOP_FLOW_RUNS_LIST: 'desktop-flow:runs-list',
+  DESKTOP_FLOW_SAVE: 'desktop-flow:save',
+  DESKTOP_FLOW_SYNC: 'desktop-flow:sync',
+  DESKTOP_RECORDER_CURRENT: 'desktop-recorder:current',
+  DESKTOP_RECORDER_START: 'desktop-recorder:start',
+  DESKTOP_RECORDER_STATUS: 'desktop-recorder:status',
+  DESKTOP_RECORDER_STOP: 'desktop-recorder:stop',
+  DRAW_GRAPH_ASSET_SAVE: 'draw-graph:asset-save',
+  DRAW_GRAPH_ASSETS_LIST: 'draw-graph:assets-list',
+  DRAW_GRAPH_LOAD: 'draw-graph:load',
+  DRAW_GRAPH_SAVE: 'draw-graph:save',
+  FS_LIST_DESKTOP_DIRECTORIES: 'fs:list-desktop-directories',
+  GOAL_CLEARED: 'goal:cleared',
+  GOAL_CONTINUE_REQUESTED: 'goal:continue-requested',
+  GOAL_EVENT_ADDED: 'goal:event-added',
+  GOAL_RUN_STATE: 'goal:run-state',
+  GOAL_UPDATED: 'goal:updated',
+  HOOKS_EMIT: 'hooks:emit',
+  HOOKS_HISTORY: 'hooks:history',
+  HOOKS_LIST: 'hooks:list',
+  HOOKS_REVOKE: 'hooks:revoke',
+  HOOKS_TRUST: 'hooks:trust',
+  IMAGE_GENERATE: 'image:generate',
+  INPUT_DRAFT_DELETE: 'input-draft:delete',
+  INPUT_DRAFT_FLUSH: 'input-draft:flush',
+  INPUT_DRAFT_READ: 'input-draft:read',
+  INPUT_DRAFT_WRITE: 'input-draft:write',
+  MEDIA_STATUS: 'media:status',
+  MEDIA_TASK_CANCEL: 'media:task-cancel',
+  MEDIA_TASK_CREATE: 'media:task-create',
+  MEDIA_TASK_DELETE: 'media:task-delete',
+  MEDIA_TASKS_LIST: 'media:tasks-list',
+  NOTIFY_SESSION_MESSAGE: 'notify:session-message',
+  PET_WINDOW_CLOSE: 'pet-window:close',
+  PET_WINDOW_IDLE_SECONDS: 'pet-window:idle-seconds',
+  PET_WINDOW_OPEN: 'pet-window:open',
+  PET_WINDOW_SET_FOCUSABLE: 'pet-window:set-focusable',
+  PET_WINDOW_SET_IGNORE_MOUSE: 'pet-window:set-ignore-mouse',
+  PET_CREATE: 'pet:create',
+  PET_DATA_DIR: 'pet:data-dir',
+  PET_EXP_ADD: 'pet:exp-add',
+  PET_EXPORT_ANIYA_TEMPLATE: 'pet:export-aniya-template',
+  PET_IMPORT_COMPANION_FOLDER: 'pet:import-companion-folder',
+  PET_OPEN_STUDIO: 'pet:open-studio',
+  PET_SAVE_GENERATED_SPRITE: 'pet:save-generated-sprite',
+  PET_SYNC: 'pet:sync',
+  PET_SYNC_EVENT: 'pet:sync-event',
+  PET_TRANSCRIBE: 'pet:transcribe',
+  PET_TTS: 'pet:tts',
+  PET_TTS_CANCEL: 'pet:tts-cancel',
+  PET_TTS_STREAM: 'pet:tts-stream',
+  PET_TTS_STREAM_EVENT: 'pet:tts-stream-event',
+  PET_UPDATE: 'pet:update',
+  PROVIDER_FALLBACK_RESOLVE: 'provider:fallback:resolve',
+  PROVIDER_HEALTH: 'provider:health',
+  PROVIDER_HEALTH_RESET: 'provider:health:reset',
+  SSH_CONFIG_CHANGED: 'ssh:config:changed',
+  TS_RUNTIME_WORKSPACE_ACTIVITY: 'ts-runtime:workspace-activity',
+  WIKI_EXPORT: 'wiki:export',
+  WIKI_GENERATE: 'wiki:generate',
+  WIKI_GET: 'wiki:get',
+  WINDOW_CLOSE: 'window:close',
+  WINDOW_IS_MAXIMIZED: 'window:isMaximized',
+  WINDOW_MAXIMIZE: 'window:maximize',
+  WINDOW_MAXIMIZED: 'window:maximized',
+  WINDOW_MINIMIZE: 'window:minimize',
+
+  // Renderer-verified channels (strict typing)
+  MEDIA_SETTINGS_UPDATE: 'media:settings-update',
+  FS_SEARCH_FILES: 'fs:search-files',
+  DRAW_GRAPH_LIST: 'draw-graph:list',
+  RUNTIME_APPROVAL_REQUEST_MSGPACK: 'runtime:approval-request:msgpack',
+  HOOKS_CANCEL: 'hooks:cancel',
+  WINDOW_WORKSPACE_SET: 'window:workspace:set',
 } as const
 
 export type IPCChannel = (typeof IPC)[keyof typeof IPC]
-
-const legacyRendererChannels = ["agents:list","api:request","app:homedir","app:system-info","config:get","config:set","cron:fired","cron:job-removed","cron:run-finished","cron:run-log-appended","cron:run-progress","cron:run-started","desktop-flow:activity","desktop-flow:cancel","desktop-flow:delete","desktop-flow:list","desktop-flow:replay","desktop-flow:runs-list","desktop-flow:save","desktop-flow:sync","desktop-recorder:current","desktop-recorder:start","desktop-recorder:status","desktop-recorder:stop","draw-graph:asset-save","draw-graph:assets-list","draw-graph:load","draw-graph:save","fs:default-chat-working-folder","fs:list-desktop-directories","fs:list-dir","fs:mkdir","fs:read-document","fs:read-file","fs:read-file-binary","fs:select-file","fs:select-folder","fs:select-save-file","fs:write-file","goal:cleared","goal:continue-requested","goal:event-added","goal:run-state","goal:updated","hooks:emit","hooks:history","hooks:list","hooks:revoke","hooks:trust","image:generate","input-draft:delete","input-draft:flush","input-draft:read","input-draft:write","media:status","media:task-cancel","media:task-create","media:task-delete","media:tasks-list","notify:desktop","notify:session-message","pet-window:close","pet-window:idle-seconds","pet-window:open","pet-window:set-focusable","pet-window:set-ignore-mouse","pet:create","pet:data-dir","pet:exp-add","pet:export-aniya-template","pet:import-companion-folder","pet:open-studio","pet:save-generated-sprite","pet:sync","pet:sync-event","pet:transcribe","pet:tts","pet:tts-cancel","pet:tts-stream","pet:tts-stream-event","pet:update","plugin:stream:finish","plugin:stream:start","provider:fallback:resolve","provider:health","provider:health:reset","shell:openExternal","shell:openPath","skills:add-from-folder","skills:cleanup-temp","skills:delete","skills:download-remote","skills:list","skills:list-files","skills:load","skills:market-list","skills:open-folder","skills:read","skills:save","skills:scan","ssh:config:changed","ts-runtime:workspace-activity","update:available","update:download","update:download-progress","update:downloaded","update:error","wiki:export","wiki:generate","wiki:get","window:close","window:isMaximized","window:maximize","window:maximized","window:minimize"]
 
 const ipcChannelSet = new Set<string>([
   ...Object.values(IPC),
@@ -493,7 +577,5 @@ const ipcChannelSet = new Set<string>([
  * registration is maintained in the binary IPC contract.
  */
 export function isKnownIpcChannel(channel: string): channel is IPCChannel {
-  return (
-    ipcChannelSet.has(channel) || legacyRendererChannels.includes(channel)
-  )
+  return ipcChannelSet.has(channel)
 }
