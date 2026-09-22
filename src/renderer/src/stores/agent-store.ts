@@ -11,13 +11,6 @@ export type {
   SubAgentReportStatus,
   SubAgentState
 } from './agent-types'
-export {
-  selectRunChangeSet,
-  selectSessionExecutionStatus,
-  selectSessionRetryState,
-  selectSessionSubAgents,
-  selectSessionToolCalls
-} from './agent-store-selectors'
 import type { SubAgentEvent } from '../lib/agent/sub-agents/types'
 import type {
   ToolResultContent,

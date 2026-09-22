@@ -78,13 +78,6 @@ import {
 
 export type SessionMode = 'chat' | 'clarify' | 'execute' | 'acp'
 export type LegacySessionMode = 'cowork' | 'code'
-export {
-  selectActiveProject,
-  selectActiveSession,
-  selectSessionById,
-  selectSessionMessages,
-  selectStreamingMessage
-} from './chat-store-selectors'
 
 export function normalizeSessionMode(mode: unknown): SessionMode {
   if (mode === 'cowork' || mode === 'code' || mode === 'execute') return 'execute'
