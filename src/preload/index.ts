@@ -14,8 +14,21 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../shared/messagepack/binary-ipc'
+import { isKnownIpcChannel } from '../shared/ipc/contract'
+
+const strictIpcAllowlist =
+  process.env.NODE_ENV === 'production' || process.env.OLA_STRICT_IPC_ALLOWLIST === '1'
+
+function validateIpcChannel(channel: string): void {
+  if (isKnownIpcChannel(channel)) return
+  if (strictIpcAllowlist) {
+    throw new Error(`IPC channel is not registered: ${channel}`)
+  }
+}
 
 async function invokeMessagePackBinary<T>(channel: string, payload: unknown): Promise<T> {
+  validateIpcChannel(channel)
+
   const response = await ipcRenderer.invoke(
     toMessagePackChannel(channel),
     encodeMessagePackPayload(payload)
@@ -24,14 +37,26 @@ async function invokeMessagePackBinary<T>(channel: string, payload: unknown): Pr
 }
 
 const olaIpc = {
-  invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
-  send: (channel: string, ...args: unknown[]) => ipcRenderer.send(channel, ...args),
+  invokeMessagePack: <T>(channel: string, payload: unknown): Promise<T> =>
+    invokeMessagePackBinary<T>(channel, payload),
+  invoke: (channel: string, ...args: unknown[]) => {
+    validateIpcChannel(channel)
+    return ipcRenderer.invoke(channel, ...args)
+  },
+  send: (channel: string, ...args: unknown[]) => {
+    validateIpcChannel(channel)
+    return ipcRenderer.send(channel, ...args)
+  },
   on: (channel: string, listener: (...args: unknown[]) => void) => {
+    validateIpcChannel(channel)
     const handler = (_event: unknown, ...args: unknown[]): void => listener(...args)
     ipcRenderer.on(channel, handler)
     return () => ipcRenderer.removeListener(channel, handler)
   },
-  removeAllListeners: (channel: string) => ipcRenderer.removeAllListeners(channel)
+  removeAllListeners: (channel: string) => {
+    validateIpcChannel(channel)
+    return ipcRenderer.removeAllListeners(channel)
+  }
 }
 
 // Legacy custom APIs for renderer. New callers should use window.ola by domain.

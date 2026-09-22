@@ -6,6 +6,7 @@ import {
   toMessagePackChannel
 } from '../../../../shared/messagepack/binary-ipc'
 import { invokeMessagePackBinary } from './messagepack-ipc-client'
+import { createTypedIpcClient } from './typed-ipc-client'
 import {
   shouldUseMessagePackEvent,
   shouldUseMessagePackInvoke,
@@ -19,6 +20,14 @@ import {
 class ElectronIPCClient implements IPCClient {
   private get ipcRenderer(): typeof window.ola.ipc | null {
     return window.ola?.ipc ?? null
+  }
+
+  async invokeMessagePack<T = unknown>(channel: string, payload: unknown): Promise<T> {
+    const ipcRenderer = this.ipcRenderer
+    if (!ipcRenderer) {
+      throw new Error(`IPC channel "${channel}" is unavailable: Electron preload bridge is missing`)
+    }
+    return ipcRenderer.invokeMessagePack<T>(channel, payload)
   }
 
   async invoke(channel: string, ...args: unknown[]): Promise<unknown> {
@@ -96,4 +105,7 @@ class ElectronIPCClient implements IPCClient {
   }
 }
 
-export const ipcClient: IPCClient = new ElectronIPCClient()
+const legacyIpcClient: IPCClient = new ElectronIPCClient()
+export const typedIpcClient = createTypedIpcClient(legacyIpcClient)
+/** Compatibility name: all existing callers now use the typed IPC facade. */
+export const ipcClient = typedIpcClient

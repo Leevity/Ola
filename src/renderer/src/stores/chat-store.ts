@@ -51,6 +51,7 @@ import { useUIStore } from './ui-store'
 import { useBackgroundSessionStore } from './background-session-store'
 import { useSettingsStore } from './settings-store'
 import { useInputDraftStore } from './input-draft-store'
+import { SessionPersistenceQueue } from './chat-persistence-domain'
 import {
   inferTaskProfile,
   normalizeTaskProfile,
@@ -77,6 +78,13 @@ import {
 
 export type SessionMode = 'chat' | 'clarify' | 'execute' | 'acp'
 export type LegacySessionMode = 'cowork' | 'code'
+export {
+  selectActiveProject,
+  selectActiveSession,
+  selectSessionById,
+  selectSessionMessages,
+  selectStreamingMessage
+} from './chat-store-selectors'
 
 export function normalizeSessionMode(mode: unknown): SessionMode {
   if (mode === 'cowork' || mode === 'code' || mode === 'execute') return 'execute'
@@ -211,7 +219,7 @@ export interface CreateSessionOptions {
 // --- DB persistence helpers (queued fire-and-forget) ---
 
 const _pendingSessionCreates = new Map<string, Promise<unknown>>()
-const _sessionMessageWriteQueues = new Map<string, Promise<void>>()
+const _sessionMessageWriteQueue = new SessionPersistenceQueue()
 const _messageWriteGenerations = new Map<string, number>()
 const _pendingMessageWriteCounts = new Map<string, number>()
 const _pendingMessageUpserts = new Map<string, PendingMessageUpsert>()
@@ -383,37 +391,16 @@ function enqueueSessionMessageWrite(
   write: () => Promise<unknown>,
   expectedGeneration?: number
 ): Promise<void> {
-  const previous = _sessionMessageWriteQueues.get(sessionId) ?? Promise.resolve()
-  const next = previous
-    .catch(() => {})
-    .then(async () => {
-      if (
-        expectedGeneration !== undefined &&
-        getMessageWriteGeneration(sessionId) !== expectedGeneration
-      ) {
-        return
-      }
-
+  return _sessionMessageWriteQueue.enqueue(
+    sessionId,
+    async () => {
       await (_pendingSessionCreates.get(sessionId) ?? Promise.resolve()).catch(() => {})
-
-      if (
-        expectedGeneration !== undefined &&
-        getMessageWriteGeneration(sessionId) !== expectedGeneration
-      ) {
-        return
-      }
-
       await write()
-    })
-    .catch(() => {})
-
-  _sessionMessageWriteQueues.set(sessionId, next)
-  void next.finally(() => {
-    if (_sessionMessageWriteQueues.get(sessionId) === next) {
-      _sessionMessageWriteQueues.delete(sessionId)
-    }
-  })
-  return next
+    },
+    () =>
+      expectedGeneration === undefined ||
+      getMessageWriteGeneration(sessionId) === expectedGeneration
+  )
 }
 
 function dbCreateSession(s: Session): void {
@@ -464,7 +451,7 @@ function dbUpdateSession(id: string, patch: Record<string, unknown>): void {
 
 function dbDeleteSession(id: string): void {
   bumpMessageWriteGeneration(id)
-  _sessionMessageWriteQueues.delete(id)
+  _sessionMessageWriteQueue.clear(id)
   void (_pendingSessionCreates.get(id) ?? Promise.resolve())
     .catch(() => {})
     .then(() => {
@@ -480,7 +467,7 @@ function dbDeleteSession(id: string): void {
 function dbClearAllSessions(workspaceId: string, sessionIds: string[] = []): void {
   const pendingWrites = sessionIds.map((sessionId) => {
     bumpMessageWriteGeneration(sessionId)
-    return _sessionMessageWriteQueues.get(sessionId)?.catch(() => {}) ?? Promise.resolve()
+    return _sessionMessageWriteQueue.pending(sessionId)
   })
   void Promise.all(pendingWrites)
     .then(() => invokeMessagePack(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, { workspaceId }))

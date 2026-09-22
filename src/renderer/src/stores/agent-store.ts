@@ -1,15 +1,31 @@
-﻿import { create } from 'zustand'
+import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { RequestRetryState, ToolCallState } from '../lib/agent/types'
+import type { AgentRunChangeSet, SessionExecutionStatus, SubAgentState } from './agent-types'
+export type {
+  AgentFileSnapshot,
+  AgentRunChangeSet,
+  AgentRunFileChange,
+  SessionExecutionStatus,
+  SubAgentReportStatus,
+  SubAgentState
+} from './agent-types'
+export {
+  selectRunChangeSet,
+  selectSessionExecutionStatus,
+  selectSessionRetryState,
+  selectSessionSubAgents,
+  selectSessionToolCalls
+} from './agent-store-selectors'
 import type { SubAgentEvent } from '../lib/agent/sub-agents/types'
 import type {
   ToolResultContent,
   UnifiedMessage,
   ContentBlock,
-  TokenUsage,
+
   MessageRequestModelMeta,
-  RunLifecycleStatus
+
 } from '../lib/api/types'
 import { ipcStorage } from '../lib/ipc/ipc-storage'
 import { ipcClient } from '../lib/ipc/ipc-client'
@@ -254,35 +270,6 @@ function toolCallPatchHasChanges(existing: ToolCallState, patch: Partial<ToolCal
 function trimToolCallArray(toolCalls: ToolCallState[]): void {
   if (toolCalls.length <= MAX_TRACKED_TOOL_CALLS) return
   toolCalls.splice(0, toolCalls.length - MAX_TRACKED_TOOL_CALLS)
-}
-
-type SubAgentReportStatus = 'pending' | 'queued' | 'submitted' | 'retrying' | 'fallback' | 'missing'
-
-export interface SubAgentState {
-  name: string
-  displayName?: string
-  toolUseId: string
-  sessionId?: string
-  description: string
-  prompt: string
-  isRunning: boolean
-  /** True while waiting on the sub-agent concurrency limiter, before the inner loop starts. */
-  isQueued?: boolean
-  success: boolean | null
-  cancelled?: boolean
-  errorMessage: string | null
-  iteration: number
-  toolCalls: ToolCallState[]
-  streamingText: string
-  transcript: UnifiedMessage[]
-  currentAssistantMessageId: string | null
-  /** Final result text resolved from the sub-agent's actual output. */
-  report: string
-  reportStatus: SubAgentReportStatus
-  usage?: TokenUsage
-  requestModel?: MessageRequestModelMeta
-  startedAt: number
-  completedAt: number | null
 }
 
 function sumOptionalUsageValue(current?: number, incoming?: number): number | undefined {
@@ -1089,46 +1076,6 @@ function applyProcessOutputEvent(
 
   return next
 }
-
-export interface AgentFileSnapshot {
-  exists: boolean
-  text?: string
-  previewText?: string
-  tailPreviewText?: string
-  textOmitted?: boolean
-  hash: string | null
-  size: number
-  lineCount?: number
-}
-
-export interface AgentRunFileChange {
-  id: string
-  runId: string
-  sessionId?: string
-  toolUseId?: string
-  toolName?: string
-  filePath: string
-  transport: 'local' | 'ssh'
-  connectionId?: string
-  op: 'create' | 'modify'
-  status: 'open' | 'reverted'
-  before: AgentFileSnapshot
-  after: AgentFileSnapshot
-  createdAt: number
-  revertedAt?: number
-}
-
-export interface AgentRunChangeSet {
-  runId: string
-  sessionId?: string
-  assistantMessageId: string
-  status: 'open' | 'reverted'
-  changes: AgentRunFileChange[]
-  createdAt: number
-  updatedAt: number
-}
-
-export type SessionExecutionStatus = RunLifecycleStatus | 'running' | 'retrying'
 
 function isAgentChangeError(value: unknown): value is { error: string } {
   if (!value || typeof value !== 'object') return false

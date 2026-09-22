@@ -1,4 +1,4 @@
-import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { typedIpcClient } from '@renderer/lib/ipc/ipc-client'
 import type { ChatView } from '@renderer/stores/ui-store'
 
 export interface ChatRouteState {
@@ -127,7 +127,7 @@ export function buildChatRoute(state: ChatRouteState): string {
 
 export async function readPersistedChatRoute(): Promise<ChatRouteState | null> {
   try {
-    const value = await ipcClient.invoke('settings:get', LAST_CHAT_ROUTE_SETTINGS_KEY)
+    const value = await typedIpcClient.invoke('settings:get', LAST_CHAT_ROUTE_SETTINGS_KEY)
     const state = sanitizeChatRouteState(value)
     lastPersistedChatRoute = state ? serializeChatRouteState(state) : null
     return state
@@ -142,7 +142,7 @@ export function persistChatRoute(state: ChatRouteState): void {
   if (lastPersistedChatRoute === serialized) return
 
   lastPersistedChatRoute = serialized
-  void ipcClient
+  void typedIpcClient
     .invoke('settings:set', {
       key: LAST_CHAT_ROUTE_SETTINGS_KEY,
       value

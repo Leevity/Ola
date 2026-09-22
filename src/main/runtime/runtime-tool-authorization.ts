@@ -1,8 +1,5 @@
-import {
-  evaluateToolPermission,
-  type PermissionPolicy,
-  type PermissionPolicySnapshot
-} from '../../shared/permission-policy'
+import { capabilityForTool, evaluateToolCapability } from '../../shared/capabilities'
+import type { PermissionPolicy, PermissionPolicySnapshot } from '../../shared/permission-policy'
 import type { RunSpec } from '../../shared/runtime/contracts'
 
 export interface RuntimeToolAuthorizationInput {
@@ -123,7 +120,14 @@ export function isAuthorizedDesktopRuntimeTool({
       ? (input as Record<string, unknown>)
       : undefined
   return (
-    evaluateToolPermission(tool.name, safeInput, policyFromSnapshot(permissionPolicy)).decision ===
-    'allow'
+    evaluateToolCapability(
+      {
+        kind: capabilityForTool(tool.name, tool.effect),
+        toolName: tool.name,
+        input: safeInput,
+        effect: tool.effect
+      },
+      policyFromSnapshot(permissionPolicy)
+    ).decision === 'allow'
   )
 }

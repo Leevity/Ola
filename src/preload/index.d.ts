@@ -13,6 +13,7 @@ import type {
 } from '../shared/team-runtime-types'
 
 interface OlaIpcBridge {
+  invokeMessagePack: <T = unknown>(channel: string, payload: unknown) => Promise<T>
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   send: (channel: string, ...args: unknown[]) => void
   on: (channel: string, listener: (...args: unknown[]) => void) => () => void
