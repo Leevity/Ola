@@ -1,9 +1,10 @@
 import type { StateStorage } from 'zustand/middleware'
+import type { IPCChannel } from '../../../../shared/ipc/contract'
 import { ipcClient } from './ipc-client'
 
 type IpcStateStorageOptions = {
-  getChannel: string
-  setChannel: string
+  getChannel: IPCChannel
+  setChannel: IPCChannel
 }
 
 function serializeStorageValue(value: unknown): string | null {

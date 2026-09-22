@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import i18n from '@renderer/locales'
 import { ipcClient } from '../lib/ipc/ipc-client'
 import { useWorkspaceStore } from './workspace-store'
+import type { IPCChannel } from '../../../shared/ipc/contract'
 import { IPC } from '../lib/ipc/channels'
 import type {
   SftpConflictPolicy,
@@ -93,7 +94,7 @@ function rowToConnection(row: SshConnectionRow): SshConnection {
   }
 }
 
-async function invokeSshMutation(channel: string, args: Record<string, unknown>): Promise<void> {
+async function invokeSshMutation(channel: IPCChannel, args: Record<string, unknown>): Promise<void> {
   const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
   const result = await ipcClient.invoke(channel, args)
   if (result && typeof result === 'object' && 'error' in result)

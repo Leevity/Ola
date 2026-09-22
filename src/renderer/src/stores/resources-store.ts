@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import type { IPCChannel } from '../../../shared/ipc/contract'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { refreshDynamicToolCatalog } from '@renderer/lib/tools/dynamic-tool-catalog'
 import {
@@ -52,15 +53,15 @@ interface ResourcesStore {
   saveSelected: () => Promise<{ success: boolean; error?: string }>
 }
 
-function getListChannel(kind: ResourceKind): string {
+function getListChannel(kind: ResourceKind): IPCChannel {
   return kind === 'agents' ? IPC.AGENTS_MANAGE_LIST : IPC.COMMANDS_MANAGE_LIST
 }
 
-function getReadChannel(kind: ResourceKind): string {
+function getReadChannel(kind: ResourceKind): IPCChannel {
   return kind === 'agents' ? IPC.AGENTS_MANAGE_READ : IPC.COMMANDS_MANAGE_READ
 }
 
-function getSaveChannel(kind: ResourceKind): string {
+function getSaveChannel(kind: ResourceKind): IPCChannel {
   return kind === 'agents' ? IPC.AGENTS_MANAGE_SAVE : IPC.COMMANDS_MANAGE_SAVE
 }
 

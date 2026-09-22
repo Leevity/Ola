@@ -17,18 +17,18 @@ export class TypedIpcClient {
     return this.client.invoke(channel, payload) as Promise<T>
   }
 
-  invoke<C extends IPCChannel | string = IPCChannel | string>(
+  invoke<C extends IPCChannel>(
     channel: C,
     ...args: unknown[]
   ): Promise<IpcResponseOf<C>> {
     return this.client.invoke(channel, ...args) as Promise<IpcResponseOf<C>>
   }
 
-  send(channel: IPCChannel | string, ...args: unknown[]): void {
+  send<C extends IPCChannel>(channel: C, ...args: unknown[]): void {
     this.client.send(channel, ...args)
   }
 
-  on(channel: IPCChannel | string, listener: (...args: unknown[]) => void): () => void {
+  on<C extends IPCChannel>(channel: C, listener: (...args: unknown[]) => void): () => void {
     return this.client.on(channel, listener)
   }
 }

@@ -1,11 +1,12 @@
 import { toolRegistry } from '../agent/tool-registry'
 import { encodeStructuredToolResult } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
+import type { IPCChannel } from '../../../../shared/ipc/contract'
 import { ipcClient } from '../ipc/ipc-client'
 import { IPC } from '../ipc/channels'
 
 async function invokeSearch(
-  channel: string,
+  channel: IPCChannel,
   input: Record<string, unknown>,
   ctx: Parameters<ToolHandler['execute']>[1]
 ): Promise<string> {
