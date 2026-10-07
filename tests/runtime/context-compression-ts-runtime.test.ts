@@ -2,22 +2,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProviderConfig, UnifiedMessage } from '../../src/renderer/src/lib/api/types'
 
 const {
-  runTsContextCompression,
   isTsRuntimeAvailable,
   streamTsRuntimeTextTurn,
   resolveTsRuntimeModelBinding,
   assessTsRuntimeTextEligibility
 } = vi.hoisted(() => ({
-  runTsContextCompression: vi.fn(),
   isTsRuntimeAvailable: vi.fn(),
   streamTsRuntimeTextTurn: vi.fn(),
   resolveTsRuntimeModelBinding: vi.fn(),
   assessTsRuntimeTextEligibility: vi.fn()
 }))
 
-vi.mock('../../src/renderer/src/lib/ipc/agent-bridge', () => ({
-  runTsContextCompression
-}))
 vi.mock('../../src/renderer/src/lib/ipc/ts-runtime-bridge', () => ({
   isTsRuntimeAvailable,
   streamTsRuntimeTextTurn
@@ -35,7 +30,8 @@ const provider: ProviderConfig = {
   type: 'openai-chat',
   apiKey: 'secret',
   providerId: 'provider',
-  model: 'model'
+  model: 'model',
+  sessionId: 'compression-session'
 }
 
 function stream(
@@ -85,10 +81,10 @@ describe('TS-first context compression', () => {
       1234
     )
 
-    expect(runTsContextCompression).not.toHaveBeenCalled()
     expect(streamTsRuntimeTextTurn).toHaveBeenCalledWith(
       expect.objectContaining({
         workspaceId: 'local-personal',
+        sessionId: 'compression-session',
         maxTurns: 1,
         prompt: expect.stringContaining('Fix the workspace sync bug.'),
         modelOptions: expect.objectContaining({
@@ -177,7 +173,6 @@ describe('TS-first context compression', () => {
 
   it('fails closed when TS Runtime is unavailable', async () => {
     isTsRuntimeAvailable.mockResolvedValue(false)
-    runTsContextCompression.mockRejectedValue(new Error('TS_RUNTIME_UNAVAILABLE'))
 
     await expect(
       compressMessages(
@@ -190,9 +185,22 @@ describe('TS-first context compression', () => {
         undefined,
         1
       )
-    ).rejects.toThrow('TS_RUNTIME_UNAVAILABLE')
+    ).rejects.toThrow('TS_RUNTIME_COMPRESSION_UNAVAILABLE')
 
-    expect(runTsContextCompression).toHaveBeenCalledOnce()
     expect(streamTsRuntimeTextTurn).not.toHaveBeenCalled()
+  })
+
+  it('reports a model error without calling an unavailable IPC fallback', async () => {
+    isTsRuntimeAvailable.mockResolvedValue(true)
+    resolveTsRuntimeModelBinding.mockReturnValue({
+      workspaceId: 'local-personal',
+      modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+    })
+    assessTsRuntimeTextEligibility.mockReturnValue({ eligible: true, modelOptions: {} })
+    streamTsRuntimeTextTurn.mockReturnValue(stream([{ type: 'error', error: 'model failed' }]))
+
+    await expect(compressMessages([message('m1', 'user', 'Task')], provider)).rejects.toBe(
+      'model failed'
+    )
   })
 })

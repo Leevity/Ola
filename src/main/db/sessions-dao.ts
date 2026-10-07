@@ -23,6 +23,7 @@ export interface SessionRow {
   model_source?: string | null
   task_profile?: string | null
   task_profile_locked?: number
+  scenario_policy?: 'project-read-only' | 'ssh-read-only' | 'materials-no-tools' | null
   workspace_id: string
   message_count?: number
 }
@@ -117,6 +118,9 @@ export async function createSession(session: {
   modelId?: string
   modelSelectionMode?: string
   modelSource?: string
+  taskProfile?: string | null
+  taskProfileLocked?: boolean
+  scenarioPolicy?: 'project-read-only' | 'ssh-read-only' | 'materials-no-tools' | null
   workspaceId?: string
 }): Promise<void> {
   const writer = businessWriteCanary()
@@ -139,7 +143,10 @@ export async function createSession(session: {
       providerId: session.providerId ?? null,
       modelId: session.modelId ?? null,
       modelSelectionMode: session.modelSelectionMode ?? null,
-      modelSource: session.modelSource ?? null
+      modelSource: session.modelSource ?? null,
+      taskProfile: session.taskProfile ?? null,
+      taskProfileLocked: session.taskProfileLocked ?? false,
+      scenarioPolicy: session.scenarioPolicy ?? null
     })
     return
   }
@@ -164,9 +171,13 @@ export async function updateSession(
     modelId: string | null
     modelSelectionMode: string | null
     modelSource: string | null
+    taskProfile: string | null
+    taskProfileLocked: boolean
     workspaceId: string | null
   }>
 ): Promise<void> {
+  if (!Object.entries(patch).some(([key, value]) => key !== 'updatedAt' && value !== undefined))
+    return
   const writer = businessWriteCanary()
   if (writer) {
     if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')

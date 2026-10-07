@@ -1,5 +1,6 @@
 import { RuntimeError } from '../../shared/runtime/contracts'
 import type { ToolDefinition } from '../../runtime/tools/tool-executor'
+import { trackCronDelivery } from '../cron/cron-delivery-tracking'
 
 const MAX_MESSAGES = 100
 
@@ -169,7 +170,16 @@ export function createChannelWriteRuntimeTools(): ToolDefinition[] {
     validate: (value) => readWriteInput(value, false),
     resources: async (value) => [channelResource((value as ChannelWriteInput).pluginId)],
     execute: async (value, context) =>
-      executeWriteAction('sendMessage', value as ChannelWriteInput, context.run.workspaceId)
+      trackCronDelivery(
+        context,
+        'channel',
+        () =>
+          executeWriteAction('sendMessage', value as ChannelWriteInput, context.run.workspaceId),
+        {
+          pluginId: (value as ChannelWriteInput).pluginId,
+          chatId: (value as ChannelWriteInput).chatId
+        }
+      )
   }
   const replyMessage: ToolDefinition = {
     ...sendMessage,

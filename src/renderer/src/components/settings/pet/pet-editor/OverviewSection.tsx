@@ -203,7 +203,7 @@ function ActionButton({
       {icon}
       <span>{label}</span>
       {cost > 0 ? (
-        <span className={`text-[10px] ${coins >= cost ? 'text-emerald-500' : 'text-rose-400'}`}>
+        <span className={`text-xs ${coins >= cost ? 'text-emerald-500' : 'text-rose-400'}`}>
           {cost} 🪙
         </span>
       ) : null}

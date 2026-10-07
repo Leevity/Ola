@@ -188,6 +188,7 @@ export function TitleBar({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={t('commandPalette.toggleSidebar')}
                 className="workspace-titlebar-action titlebar-no-drag size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
                 onClick={toggleLeftSidebar}
               >
@@ -303,6 +304,13 @@ export function TitleBar({
                 <TooltipTrigger asChild>
                   <button
                     type="button"
+                    id="runtime-status-trigger"
+                    aria-controls="runtime-status-panel"
+                    aria-label={
+                      runtimeStatusPanelOpen
+                        ? t('topbar.closeRuntimeStatus')
+                        : t('topbar.openRuntimeStatus')
+                    }
                     aria-pressed={runtimeStatusPanelOpen}
                     data-active={runtimeStatusPanelOpen ? 'true' : 'false'}
                     className={projectToolButtonClass}
@@ -326,6 +334,13 @@ export function TitleBar({
                     type="button"
                     aria-pressed={terminalDockOpen}
                     data-active={terminalDockOpen ? 'true' : 'false'}
+                    aria-label={
+                      canOpenProjectTerminal
+                        ? terminalDockOpen
+                          ? t('topbar.closeProjectTerminal')
+                          : t('topbar.openProjectTerminal')
+                        : t('topbar.projectTerminalUnavailable')
+                    }
                     aria-disabled={!canOpenProjectTerminal}
                     className={cn(
                       projectToolButtonClass,

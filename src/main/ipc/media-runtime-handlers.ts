@@ -2,6 +2,12 @@ import { app, BrowserWindow, protocol, type IpcMainInvokeEvent } from 'electron'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { getRegisteredWindowWorkspace } from '../window-ipc'
+import { authorizeDbWorkspace } from './db-workspace-authorization'
+import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { getProject } from '../db/projects-dao'
+import { getSession } from '../db/sessions-dao'
+import { desktopRuntime } from '../runtime/desktop-runtime'
 import {
   MEDIA_CACHE_MAX_BYTES,
   MEDIA_FILE_MAX_BYTES,
@@ -22,6 +28,7 @@ import { registerMessagePackHandler as registerRawMessagePackHandler } from './m
 interface PersistedVideoTask extends VideoTask {
   remoteTaskId?: string
   pollFailures?: number
+  artifactRegistered?: boolean
 }
 
 const POLL_BASE_MS = 4_000
@@ -29,9 +36,23 @@ const POLL_MAX_MS = 30_000
 const MAX_POLL_FAILURES = 6
 const tasks = new Map<string, PersistedVideoTask>()
 const controllers = new Map<string, AbortController>()
-const settings: MediaPluginSettings = { videoGenerationEnabled: false }
+const workspaceSettings = new Map<string, MediaPluginSettings>()
+const settingsFor = (workspaceId: string): MediaPluginSettings => {
+  if (!workspaceSettings.has(workspaceId))
+    workspaceSettings.set(workspaceId, { videoGenerationEnabled: false })
+  return workspaceSettings.get(workspaceId)!
+}
+const previews = new Map<string, { window: BrowserWindow; workspaceId: string; taskId: string }>()
+async function workspace(event: IpcMainInvokeEvent): Promise<string> {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  const id = win ? getRegisteredWindowWorkspace(win) : null
+  if (!id) throw new Error('Media workspace is not registered')
+  await authorizeDbWorkspace(id, loadOfflineWorkspaceIds, id)
+  if (!win || getRegisteredWindowWorkspace(win) !== id) throw new Error('Media workspace changed')
+  return id
+}
 let protocolRegistered = false
-let tasksLoaded = false
+let taskLoading: Promise<void> | undefined
 let persistQueue = Promise.resolve()
 const cacheDir = (): string => path.join(app.getPath('userData'), 'media-cache')
 const tasksPath = (): string => path.join(app.getPath('userData'), 'media-tasks.json')
@@ -50,26 +71,46 @@ function registerMessagePackHandler<TArgs, TResult = unknown>(
     ) {
       throw new Error('Unauthorized media IPC sender')
     }
-    return await handler(args, event)
+    const id = await workspace(event)
+    const result = await handler(args, event)
+    if (getRegisteredWindowWorkspace(ownerWindow) !== id) throw new Error('Media workspace changed')
+    return result
   })
 }
 
-function publicTask(task: PersistedVideoTask): VideoTask {
+function publicTask(task: PersistedVideoTask, event: IpcMainInvokeEvent): VideoTask {
   const { remoteTaskId: _remoteTaskId, pollFailures: _pollFailures, ...value } = task
+  if (task.outputUrl) {
+    const win = BrowserWindow.fromWebContents(event.sender)!
+    let token = [...previews].find(
+      ([, grant]) => grant.window === win && grant.taskId === task.id
+    )?.[0]
+    if (!token) {
+      token = randomUUID()
+      if (previews.size >= 1024) previews.delete(previews.keys().next().value!)
+      previews.set(token, { window: win, workspaceId: task.workspaceId!, taskId: task.id })
+    }
+    value.previewUrl = `ola-media://${token}`
+  }
   return value
 }
 
-async function loadTasks(): Promise<void> {
-  if (tasksLoaded) return
-  tasksLoaded = true
+function loadTasks(): Promise<void> {
+  return (taskLoading ??= readTasks())
+}
+async function readTasks(): Promise<void> {
   try {
-    const parsed = JSON.parse(await fs.readFile(tasksPath(), 'utf8')) as PersistedVideoTask[]
-    for (const task of parsed) {
+    const parsed = JSON.parse(await fs.readFile(tasksPath(), 'utf8'))
+    const saved: PersistedVideoTask[] = Array.isArray(parsed) ? parsed : (parsed.tasks ?? [])
+    for (const [id, setting] of Object.entries(parsed.settings ?? {}))
+      workspaceSettings.set(id, setting as MediaPluginSettings)
+    for (const task of saved) {
       if (!task?.id) continue
       if (task.state === 'running' && !task.remoteTaskId) {
         task.state = 'failed'
         task.error = 'The application stopped before the provider accepted this task. Retry it.'
       }
+      task.workspaceId ??= 'local-personal'
       tasks.set(task.id, task)
     }
   } catch {
@@ -84,7 +125,15 @@ async function persistTasks(): Promise<void> {
       const filePath = tasksPath()
       const tempPath = `${filePath}.tmp`
       await fs.mkdir(path.dirname(filePath), { recursive: true })
-      await fs.writeFile(tempPath, JSON.stringify(Array.from(tasks.values())), { mode: 0o600 })
+      await fs.writeFile(
+        tempPath,
+        JSON.stringify({
+          version: 1,
+          tasks: Array.from(tasks.values()),
+          settings: Object.fromEntries(workspaceSettings)
+        }),
+        { mode: 0o600 }
+      )
       await fs.rename(tempPath, filePath)
     })
   return persistQueue
@@ -154,9 +203,15 @@ async function cacheEntries(): Promise<Array<{ path: string; size: number; mtime
   }
 }
 
-async function cleanupCache(): Promise<{ bytes: number; removed: number }> {
+async function cleanupCache(workspaceId: string): Promise<{ bytes: number; removed: number }> {
   const entries = (await cacheEntries())
-    .filter((entry) => entry.size > 0)
+    .filter(
+      (entry) =>
+        entry.size > 0 &&
+        [...tasks.values()].some(
+          (task) => task.workspaceId === workspaceId && task.outputUrl === path.basename(entry.path)
+        )
+    )
     .sort((a, b) => a.mtimeMs - b.mtimeMs)
   let bytes = entries.reduce((sum, entry) => sum + entry.size, 0)
   let removed = 0
@@ -186,7 +241,7 @@ function updateTask(task: PersistedVideoTask, patch: Partial<PersistedVideoTask>
 
 function schedulePoll(task: PersistedVideoTask, delayMs: number): void {
   if (
-    !settings.videoGenerationEnabled ||
+    !settingsFor(task.workspaceId!).videoGenerationEnabled ||
     controllers.has(task.id) ||
     ['completed', 'failed', 'cancelled'].includes(task.state)
   )
@@ -199,6 +254,7 @@ function schedulePoll(task: PersistedVideoTask, delayMs: number): void {
 
 async function pollTask(task: PersistedVideoTask, controller: AbortController): Promise<void> {
   try {
+    await authorizeDbWorkspace(task.workspaceId, loadOfflineWorkspaceIds)
     if (!task.remoteTaskId) throw new Error('Video provider task identifier is missing')
     const status = await getSeedanceTaskStatus(
       resolveTaskProvider(task),
@@ -213,6 +269,8 @@ async function pollTask(task: PersistedVideoTask, controller: AbortController): 
         task.id,
         controller.signal
       )
+      controller.signal.throwIfAborted()
+      if (task.state === 'cancelled') return
       updateTask(task, {
         state: 'completed',
         progress: 100,
@@ -221,7 +279,8 @@ async function pollTask(task: PersistedVideoTask, controller: AbortController): 
         error: undefined,
         pollFailures: 0
       })
-      await cleanupCache()
+      await registerResult(task)
+      await cleanupCache(task.workspaceId!)
       return
     }
     if (status.state === 'failed' || status.state === 'cancelled') {
@@ -264,9 +323,17 @@ async function startTask(task: PersistedVideoTask): Promise<void> {
   try {
     updateTask(task, { state: 'running', error: undefined })
     const remoteTaskId = await createSeedanceTask(resolveTaskProvider(task), controller.signal)
+    controller.signal.throwIfAborted()
     updateTask(task, { remoteTaskId, state: 'queued', progress: 0 })
   } catch (error) {
-    if (controller.signal.aborted) return
+    if (controller.signal.aborted) {
+      if (task.state !== 'cancelled')
+        updateTask(task, {
+          state: 'failed',
+          error: 'Video submission was interrupted before confirmation. Retry it.'
+        })
+      return
+    }
     updateTask(task, {
       state: 'failed',
       error: error instanceof Error ? error.message : String(error)
@@ -279,7 +346,6 @@ async function startTask(task: PersistedVideoTask): Promise<void> {
 }
 
 async function resumeTasks(): Promise<void> {
-  if (!settings.videoGenerationEnabled) return
   await loadTasks()
   for (const task of tasks.values()) {
     if (task.remoteTaskId && (task.state === 'queued' || task.state === 'running')) {
@@ -288,22 +354,117 @@ async function resumeTasks(): Promise<void> {
   }
 }
 
+async function registerResult(task: PersistedVideoTask): Promise<void> {
+  if (task.state !== 'completed' || !task.outputUrl || task.artifactRegistered) return
+  try {
+    const file = path.join(cacheDir(), path.basename(task.outputUrl))
+    const stat = await fs.lstat(file)
+    if (!stat.isFile() || stat.isSymbolicLink()) return
+    const id = `media-result-${task.id}`
+    await desktopRuntime.recordExternalArtifact(
+      {
+        runId: id,
+        taskId: id,
+        requestId: id,
+        traceId: id,
+        sessionId: task.sessionId ?? id,
+        projectId: task.projectId,
+        workspaceId: task.workspaceId!,
+        environmentId: 'local',
+        modelSource: { kind: 'local', providerId: task.providerId, modelId: task.model },
+        prompt: task.prompt,
+        businessTaskTitle: (task.prompt ?? 'Video result').slice(0, 120),
+        unattended: false
+      },
+      { path: file, mediaType: path.extname(file) === '.webm' ? 'video/webm' : 'video/mp4' }
+    )
+    task.artifactRegistered = true
+    await persistTasks()
+  } catch (error) {
+    console.warn('[Media] Result indexing will retry', error)
+  }
+}
+
+export async function getVideoCapabilitiesForWorkspace(
+  workspaceId: string
+): Promise<VideoProviderCapability[]> {
+  await authorizeDbWorkspace(workspaceId, loadOfflineWorkspaceIds)
+  await loadTasks()
+  if (!settingsFor(workspaceId).videoGenerationEnabled)
+    throw new Error('Video generation is disabled')
+  return capabilities()
+}
+
+export async function createVideoTaskForWorkspace(
+  rawInput: VideoGenerationRequest,
+  workspaceId: string,
+  assertCurrent?: () => Promise<void>
+): Promise<VideoTask> {
+  await authorizeDbWorkspace(workspaceId, loadOfflineWorkspaceIds)
+  await loadTasks()
+  if (!settingsFor(workspaceId).videoGenerationEnabled)
+    throw new Error('Video generation is disabled')
+  const input = validateVideoRequest(rawInput)
+  const session = input.sessionId ? await getSession(input.sessionId, workspaceId) : undefined
+  const project = input.projectId ? await getProject(input.projectId, workspaceId) : undefined
+  if (input.projectId && !project) throw new Error('Video project is unavailable')
+  if (project && session?.project_id && project.id !== session.project_id)
+    throw new Error('Video project mismatch')
+  if (input.sessionId && !session) throw new Error('Video source session is unavailable')
+  await assertCurrent?.()
+  const now = Date.now()
+  const task: PersistedVideoTask = {
+    workspaceId,
+    sessionId: session?.id,
+    projectId: session?.project_id ?? project?.id,
+    id: randomUUID(),
+    provider: input.provider,
+    providerId: input.providerId,
+    model: input.model,
+    prompt: input.prompt,
+    request: input,
+    state: 'queued',
+    estimatedCostUsd: null,
+    progress: 0,
+    createdAt: now,
+    updatedAt: now
+  }
+  resolveTaskProvider(task)
+  tasks.set(task.id, task)
+  await persistTasks()
+  void startTask(task)
+  return { ...task, remoteTaskId: undefined } as VideoTask
+}
+
 function registerLocalMediaProtocol(): void {
   if (protocolRegistered) return
   protocolRegistered = true
   protocol.handle('ola-media', async (request) => {
-    const task = tasks.get(new URL(request.url).hostname)
-    if (!task?.outputUrl) return new Response('Not found', { status: 404 })
+    const grant = previews.get(new URL(request.url).hostname)
+    if (!grant || getRegisteredWindowWorkspace(grant.window) !== grant.workspaceId)
+      return new Response('Not found', { status: 404 })
+    try {
+      await authorizeDbWorkspace(grant.workspaceId, loadOfflineWorkspaceIds, grant.workspaceId)
+    } catch {
+      return new Response('Not found', { status: 404 })
+    }
+    const task = tasks.get(grant.taskId)
+    if (task?.workspaceId !== grant.workspaceId || !task?.outputUrl)
+      return new Response('Not found', { status: 404 })
     const root = path.resolve(cacheDir())
     const filePath = path.resolve(root, path.basename(task.outputUrl))
     if (!filePath.startsWith(`${root}${path.sep}`))
       return new Response('Forbidden', { status: 403 })
     try {
-      const stat = await fs.stat(filePath)
+      const stat = await fs.lstat(filePath)
+      if (!stat.isFile() || stat.isSymbolicLink()) return new Response('Not found', { status: 404 })
       if (stat.size > MEDIA_FILE_MAX_BYTES)
         return new Response('Media file exceeds limit', { status: 413 })
       const mediaType = path.extname(filePath) === '.webm' ? 'video/webm' : 'video/mp4'
-      return new Response(await fs.readFile(filePath), {
+      const data = await fs.readFile(filePath)
+      if (getRegisteredWindowWorkspace(grant.window) !== grant.workspaceId)
+        return new Response('Not found', { status: 404 })
+      return new Response(data, {
         headers: { 'content-type': mediaType, 'cache-control': 'no-store' }
       })
     } catch {
@@ -314,75 +475,88 @@ function registerLocalMediaProtocol(): void {
 
 export function registerMediaRuntimeHandlers(): void {
   registerLocalMediaProtocol()
-  registerMessagePackHandler('media:status', async () => {
+  registerMessagePackHandler('media:status', async (_args, event) => {
+    const workspaceId = await workspace(event)
     await loadTasks()
     return {
-      settings,
+      settings: settingsFor(workspaceId),
       capabilities: await capabilities(),
-      ...(await cleanupCache()),
+      totalBytes: (await cleanupCache(workspaceId)).bytes,
+      removedFiles: 0,
       maxBytes: MEDIA_CACHE_MAX_BYTES
     }
   })
   registerMessagePackHandler<Partial<MediaPluginSettings>>(
     'media:settings-update',
-    async (input) => {
+    async (input, event) => {
+      await loadTasks()
+      const workspaceId = await workspace(event)
+      const settings = settingsFor(workspaceId)
       if (typeof input.videoGenerationEnabled === 'boolean') {
         settings.videoGenerationEnabled = input.videoGenerationEnabled
         if (!input.videoGenerationEnabled) {
-          for (const controller of controllers.values()) controller.abort()
-          controllers.clear()
+          for (const [id, controller] of controllers) {
+            if (tasks.get(id)?.workspaceId === workspaceId) {
+              controller.abort()
+              controllers.delete(id)
+            }
+          }
         } else {
           void resumeTasks()
         }
       }
+      await persistTasks()
       return { ...settings }
     }
   )
-  registerMessagePackHandler('media:tasks-list', async () => {
+  registerMessagePackHandler('media:tasks-list', async (_args, event) => {
+    const workspaceId = await workspace(event)
     await loadTasks()
-    return Array.from(tasks.values(), publicTask)
+    const visible = [...tasks.values()].filter((task) => task.workspaceId === workspaceId)
+    for (const task of visible)
+      if (task.state === 'completed' && !task.artifactRegistered) await registerResult(task)
+    void resumeTasks()
+    return visible.map((task) => publicTask(task, event))
   })
-  registerMessagePackHandler<VideoGenerationRequest>('media:task-create', async (rawInput) => {
-    await loadTasks()
-    if (!settings.videoGenerationEnabled) throw new Error('Video generation is disabled')
-    const input = validateVideoRequest(rawInput)
-    const now = Date.now()
-    const task: PersistedVideoTask = {
-      id: randomUUID(),
-      provider: input.provider,
-      providerId: input.providerId,
-      model: input.model,
-      prompt: input.prompt,
-      request: input,
-      state: 'queued',
-      estimatedCostUsd: null,
-      progress: 0,
-      createdAt: now,
-      updatedAt: now
+  registerMessagePackHandler<VideoGenerationRequest>(
+    'media:task-create',
+    async (rawInput, event) => {
+      const workspaceId = await workspace(event)
+      const task = await createVideoTaskForWorkspace(rawInput, workspaceId, async () => {
+        if ((await workspace(event)) !== workspaceId) throw new Error('Media workspace changed')
+      })
+      return publicTask(task, event)
     }
-    resolveTaskProvider(task)
-    tasks.set(task.id, task)
-    await persistTasks()
-    void startTask(task)
-    return publicTask(task)
-  })
-  registerMessagePackHandler<{ id: string }>('media:task-cancel', async ({ id }) => {
+  )
+  registerMessagePackHandler<{ id: string }>('media:task-cancel', async ({ id }, event) => {
     await loadTasks()
+    const workspaceId = await workspace(event)
     const task = tasks.get(id)
+    if (task && task.workspaceId !== workspaceId) return { success: false }
     if (!task) return { success: false }
+    if (['completed', 'failed', 'cancelled'].includes(task.state)) return { success: false }
     controllers.get(id)?.abort()
     controllers.delete(id)
     if (task.remoteTaskId && !['completed', 'failed', 'cancelled'].includes(task.state)) {
       const controller = new AbortController()
-      await cancelSeedanceTask(resolveTaskProvider(task), task.remoteTaskId, controller.signal)
+      try {
+        await cancelSeedanceTask(resolveTaskProvider(task), task.remoteTaskId, controller.signal)
+      } catch (error) {
+        updateTask(task, { error: 'Provider cancellation failed; task status will refresh.' })
+        schedulePoll(task, 0)
+        throw error
+      }
     }
+    if ((await workspace(event)) !== workspaceId) throw new Error('Media workspace changed')
     updateTask(task, { state: 'cancelled' })
     await persistTasks()
     return { success: true }
   })
-  registerMessagePackHandler<{ id: string }>('media:task-delete', async ({ id }) => {
+  registerMessagePackHandler<{ id: string }>('media:task-delete', async ({ id }, event) => {
     await loadTasks()
+    const workspaceId = await workspace(event)
     const task = tasks.get(id)
+    if (task && task.workspaceId !== workspaceId) return { success: false }
     if (task && !['completed', 'failed', 'cancelled'].includes(task.state)) {
       throw new Error('Cancel an active video task before deleting it')
     }
@@ -392,5 +566,7 @@ export function registerMediaRuntimeHandlers(): void {
     await persistTasks()
     return { success }
   })
-  registerMessagePackHandler('media:cache-cleanup', cleanupCache)
+  registerMessagePackHandler('media:cache-cleanup', async (_args, event) =>
+    cleanupCache(await workspace(event))
+  )
 }

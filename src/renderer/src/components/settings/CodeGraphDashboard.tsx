@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { RefreshCw, Search, Trash2 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { agentBridge } from '@renderer/lib/ipc/agent-bridge'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useUIStore } from '@renderer/stores/ui-store'
@@ -370,7 +371,7 @@ export function CodeGraphDashboard(): React.JSX.Element {
             {projects.map((project) => (
               <div key={project.hash} className="rounded-md bg-muted/30 p-2.5">
                 <p className="truncate text-xs font-medium">{project.root || project.hash}</p>
-                <div className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                   <p>{t('plugin.codegraph.projectState', { state: project.state })}</p>
                   <p>
                     {project.files} · {project.nodes} · {project.edges}
@@ -430,7 +431,7 @@ export function CodeGraphDashboard(): React.JSX.Element {
                 onClick={() => openSourcePath(file.path)}
               >
                 <span className="block truncate font-medium">{file.path}</span>
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {t('plugin.codegraph.fileDetails', {
                     language: file.language,
                     symbols: file.nodeCount,
@@ -455,7 +456,7 @@ export function CodeGraphDashboard(): React.JSX.Element {
           {analytics.circularDependencies.slice(0, 3).map((cycle, index) => (
             <p
               key={`${index}-${cycle.files.join('/')}`}
-              className="truncate text-[11px] text-muted-foreground"
+              className="truncate text-xs text-muted-foreground"
             >
               {cycle.files.join(' → ')}
             </p>
@@ -464,7 +465,7 @@ export function CodeGraphDashboard(): React.JSX.Element {
             <button
               key={symbol.id}
               type="button"
-              className="block text-left text-[11px] text-muted-foreground hover:underline"
+              className="block text-left text-xs text-muted-foreground hover:underline"
               onClick={() => openSourcePath(symbol.filePath)}
             >
               {symbol.name} · {symbol.kind} · {symbol.filePath}:{symbol.startLine}
@@ -477,7 +478,9 @@ export function CodeGraphDashboard(): React.JSX.Element {
         <Input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => event.key === 'Enter' && void searchSymbols()}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && !isImeCommitKey(event)) void searchSymbols()
+          }}
           placeholder={t('plugin.codegraph.searchPlaceholder')}
         />
         <Button variant="outline" onClick={() => void searchSymbols()}>

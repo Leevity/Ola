@@ -29,7 +29,8 @@ import {
 import { LoginStepPanel } from '@renderer/components/credentials/LoginStepPanel'
 import {
   browserPartitionForWorkspace,
-  stripElectronFromUserAgent
+  stripElectronFromUserAgent,
+  usesDefaultBrowserSession
 } from '../../../../shared/browser-plugin'
 
 export function BrowserPanel({
@@ -62,6 +63,10 @@ export function BrowserPanel({
   const [runtimeBrowserUserDataReuseEnabled, setRuntimeBrowserUserDataReuseEnabled] = useState(
     browserUserDataReuseEnabled
   )
+  const useDefaultBrowserSession = usesDefaultBrowserSession(
+    workspaceId,
+    runtimeBrowserUserDataReuseEnabled
+  )
   const [runtimeBrowserUserAgent, setRuntimeBrowserUserAgent] = useState<string | undefined>(
     browserUserDataReuseEnabled ? stripElectronFromUserAgent(navigator.userAgent) : undefined
   )
@@ -83,13 +88,11 @@ export function BrowserPanel({
   const initialBrowserUserDataReuseEnabledRef = useRef(browserUserDataReuseEnabled)
   const [loginOverlayStep] = useState<LoginProgressStep | null>(null)
   const refs = useCredentialsStore((s) => s.refs)
-  const webviewUserAgent = runtimeBrowserUserDataReuseEnabled ? runtimeBrowserUserAgent : undefined
+  const webviewUserAgent = useDefaultBrowserSession ? runtimeBrowserUserAgent : undefined
   const webviewSessionProps: Record<string, string> = {
-    ...(runtimeBrowserUserDataReuseEnabled
-      ? {}
-      : { partition: browserPartitionForWorkspace(workspaceId) }),
+    ...(useDefaultBrowserSession ? {} : { partition: browserPartitionForWorkspace(workspaceId) }),
     allowpopups: 'true',
-    ...(runtimeBrowserUserDataReuseEnabled ? { plugins: 'true' } : {}),
+    ...(useDefaultBrowserSession ? { plugins: 'true' } : {}),
     ...(webviewUserAgent ? { useragent: webviewUserAgent } : {})
   }
 
@@ -309,7 +312,7 @@ export function BrowserPanel({
         .invoke(IPC.BROWSER_REGISTER_TAB, {
           tabId: browserTabIdRef.current.tabId,
           workspaceId,
-          profileId: runtimeBrowserUserDataReuseEnabled
+          profileId: useDefaultBrowserSession
             ? 'external-user-data'
             : browserPartitionForWorkspace(workspaceId),
           guestWebContentsId,
@@ -349,7 +352,7 @@ export function BrowserPanel({
     }
   }, [
     projectId,
-    runtimeBrowserUserDataReuseEnabled,
+    useDefaultBrowserSession,
     sessionId,
     setBrowserErrorInfo,
     setBrowserWebContentsId,
@@ -500,11 +503,11 @@ export function BrowserPanel({
       const result = (await ipcClient.invoke(IPC.BROWSER_VIEW_CREATE, {
         tabId,
         workspaceId,
-        profileId: runtimeBrowserUserDataReuseEnabled
+        profileId: useDefaultBrowserSession
           ? 'external-user-data'
           : browserPartitionForWorkspace(workspaceId),
         bounds: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-        ...(runtimeBrowserUserDataReuseEnabled
+        ...(useDefaultBrowserSession
           ? { userAgent: runtimeBrowserUserAgent }
           : { partition: browserPartitionForWorkspace(workspaceId) }),
         url: committedUrl
@@ -531,7 +534,7 @@ export function BrowserPanel({
           .invoke(IPC.BROWSER_REGISTER_TAB, {
             tabId,
             workspaceId,
-            profileId: runtimeBrowserUserDataReuseEnabled
+            profileId: useDefaultBrowserSession
               ? 'external-user-data'
               : browserPartitionForWorkspace(workspaceId),
             guestWebContentsId: result.state.webContentsId,
@@ -575,7 +578,7 @@ export function BrowserPanel({
     committedUrl,
     projectId,
     runtimeBrowserUserAgent,
-    runtimeBrowserUserDataReuseEnabled,
+    useDefaultBrowserSession,
     sessionId,
     setBrowserCanGoBack,
     setBrowserCanGoForward,
@@ -752,7 +755,7 @@ export function BrowserPanel({
         />
         {committedUrl && !useWebContentsView && (
           <webview
-            key={`${runtimeBrowserUserDataReuseEnabled ? 'user-browser-profile' : 'ola-profile'}:${workspaceId}`}
+            key={`${useDefaultBrowserSession ? 'user-browser-profile' : 'ola-profile'}:${workspaceId}`}
             ref={webviewRef as React.Ref<Electron.WebviewTag>}
             src={committedUrl}
             className="size-full"

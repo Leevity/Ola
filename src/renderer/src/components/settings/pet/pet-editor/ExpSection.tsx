@@ -32,9 +32,7 @@ export function ExpSection({ pet }: ExpSectionProps): React.JSX.Element {
       <section className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-4">
         <div className="flex items-center justify-between">
           <p className="text-sm font-medium">{t('exp.recentLog')}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {t('exp.logCap', { count: log.length })}
-          </p>
+          <p className="text-xs text-muted-foreground">{t('exp.logCap', { count: log.length })}</p>
         </div>
         {log.length === 0 ? (
           <p className="rounded-md border border-dashed border-border/70 px-3 py-3 text-xs text-muted-foreground">
@@ -49,7 +47,7 @@ export function ExpSection({ pet }: ExpSectionProps): React.JSX.Element {
                 </div>
                 <div className="text-right">
                   <p className="font-medium">+{entry.exp.toFixed(2)} XP</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {entry.tokens.toLocaleString()} tokens
                   </p>
                 </div>
@@ -77,11 +75,11 @@ function Tile({
     <div className="rounded-md bg-background/60 p-3">
       <div className="flex items-center gap-1.5">
         {icon}
-        <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       </div>
       <p className="mt-1 flex items-baseline gap-1">
         <span className="text-base font-semibold tabular-nums">{value}</span>
-        <span className="text-[10px] text-muted-foreground">{unit}</span>
+        <span className="text-xs text-muted-foreground">{unit}</span>
       </p>
     </div>
   )

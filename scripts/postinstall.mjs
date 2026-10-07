@@ -20,15 +20,16 @@ async function readInstalledElectronVersion(projectDir) {
 async function main() {
   const projectDir = process.cwd()
   const electronVersion = await readInstalledElectronVersion(projectDir)
+  const targetPlatform = process.env.OLA_TARGET_PLATFORM ?? process.platform
+  const targetArch = process.env.OLA_TARGET_ARCH ?? process.arch
   // These packages ship prebuilt binaries; forcing node-gyp rebuilds makes CI require compilers.
   const prebuiltNativeModules = ['@jitsi/robotjs']
-  const windowsPrebuiltNativeModules = ['node-pty']
-  const ignoreModules = [
-    ...prebuiltNativeModules,
-    ...(process.platform === 'win32' ? windowsPrebuiltNativeModules : [])
-  ]
+  const windowsPrebuiltNativeModules = targetPlatform === 'win32' ? ['node-pty'] : []
+  const ignoreModules = [...prebuiltNativeModules, ...windowsPrebuiltNativeModules]
 
-  console.log(`> Rebuilding native dependencies for Electron ${electronVersion}`)
+  console.log(
+    `> Rebuilding native dependencies for Electron ${electronVersion} (${targetPlatform}-${targetArch})`
+  )
 
   if (ignoreModules.length > 0) {
     console.log(`> Skipping rebuild for: ${ignoreModules.join(', ')}`)
@@ -37,8 +38,8 @@ async function main() {
   const rebuildResult = rebuild({
     buildPath: projectDir,
     electronVersion,
-    arch: process.arch,
-    platform: process.platform,
+    arch: targetArch,
+    platform: targetPlatform,
     projectRootPath: projectDir,
     mode: 'sequential',
     disablePreGypCopy: true,

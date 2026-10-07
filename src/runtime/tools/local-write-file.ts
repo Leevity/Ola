@@ -67,7 +67,7 @@ export function createLocalWriteFileTool(
         await rename(temporary, target)
         temporary = undefined
         return {
-          path: relative(workspace, target),
+          path: relative(workspace, target).replaceAll('\\', '/'),
           bytes: Buffer.byteLength(request.content),
           replaced: true
         }

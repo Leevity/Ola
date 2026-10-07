@@ -1,6 +1,7 @@
 import { BrowserWindow, webContents, type IpcMainInvokeEvent } from 'electron'
 import {
   getBrowserEmulationStatus,
+  getBuiltInBrowserSession,
   getBuiltInBrowserStorageSessions
 } from '../browser/browser-emulation'
 import { registerMessagePackHandler } from './messagepack-handler'
@@ -12,6 +13,7 @@ import {
 import {
   captureRegisteredBrowserGuest,
   executeRegisteredBrowserGuestScript,
+  getRegisteredBrowserGuest,
   navigateBrowserUserTab,
   navigateRegisteredBrowserGuest,
   registerBrowserUserTab,
@@ -24,6 +26,12 @@ import { WebContentsViewBrowserService } from '../browser/web-contents-view-serv
 import { getSession } from '../db/sessions-dao'
 import { getProject } from '../db/projects-dao'
 import { loadManagedWorkspaceIds } from '../remote/account-client'
+import { getRegisteredWindowWorkspace } from '../window-ipc'
+import {
+  browserPartitionForWorkspace,
+  usesDefaultBrowserSession
+} from '../../shared/browser-plugin'
+import { checkBrowserUrlAccess } from '../browser/browser-access-policy'
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
@@ -48,6 +56,20 @@ function isTrustedBrowserIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow.webContents === event.sender &&
     event.senderFrame === event.sender.mainFrame
   )
+}
+
+async function browserGuestAccessError(input: {
+  hostWebContentsId: number
+  guestWebContentsId: number
+  url?: string
+}): Promise<string | null> {
+  const tab = getRegisteredBrowserGuest(input)
+  if (!tab) return 'Browser tab is not registered to this window.'
+  const guest = webContents.fromId(input.guestWebContentsId)
+  if (!guest || guest.isDestroyed()) return 'Browser page is unavailable.'
+  const url = input.url ?? guest.getURL()
+  const decision = await checkBrowserUrlAccess(url, tab.projectId)
+  return decision.allowed ? null : (decision.reason ?? 'Browser access denied.')
 }
 
 function registerTrustedBrowserMessagePackHandler<TArgs>(
@@ -101,8 +123,24 @@ export function registerBrowserHandlers(): void {
       ) {
         return { success: false, error: 'Invalid WebContentsView tab request' }
       }
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      const senderWorkspaceId = ownerWindow ? getRegisteredWindowWorkspace(ownerWindow) : null
+      if (!senderWorkspaceId || senderWorkspaceId !== input.workspaceId) {
+        return { success: false, error: 'Browser workspace does not match its owner window' }
+      }
       if (!(await isAuthorizedBrowserWorkspace(input.workspaceId))) {
         return { success: false, error: 'Unauthorized workspace' }
+      }
+      const browserMode = getBrowserEmulationStatus()
+      const expectedPartition = usesDefaultBrowserSession(
+        input.workspaceId,
+        browserMode.reuseEnabled
+      )
+        ? undefined
+        : browserPartitionForWorkspace(input.workspaceId)
+      const expectedProfileId = expectedPartition ?? 'external-user-data'
+      if (input.partition !== expectedPartition || input.profileId !== expectedProfileId) {
+        return { success: false, error: 'Browser session does not match its workspace' }
       }
       const tab = webContentsViewBrowserService.createTab({
         tabId: input.tabId,
@@ -197,16 +235,31 @@ export function registerBrowserHandlers(): void {
         !Number.isInteger(input.guestWebContentsId) ||
         (input.sessionId !== undefined &&
           input.sessionId !== null &&
-          typeof input.sessionId !== 'string') ||
+          (typeof input.sessionId !== 'string' || !input.sessionId.trim())) ||
         (input.projectId !== undefined &&
           input.projectId !== null &&
-          typeof input.projectId !== 'string')
+          (typeof input.projectId !== 'string' || !input.projectId.trim()))
       ) {
         return { success: false, error: 'Invalid browser tab registration' }
+      }
+      const ownerWindow = BrowserWindow.fromWebContents(event.sender)
+      const senderWorkspaceId = ownerWindow ? getRegisteredWindowWorkspace(ownerWindow) : null
+      if (!senderWorkspaceId || senderWorkspaceId !== input.workspaceId) {
+        return { success: false, error: 'Browser workspace does not match its owner window' }
+      }
+      if (!(await isAuthorizedBrowserWorkspace(input.workspaceId))) {
+        return { success: false, error: 'Unauthorized workspace' }
+      }
+      const guest = webContents.fromId(input.guestWebContentsId)
+      if (!guest || guest.session !== getBuiltInBrowserSession(input.workspaceId)) {
+        return { success: false, error: 'Browser session does not match its workspace' }
       }
       if (input.sessionId) {
         const session = await getSession(input.sessionId, input.workspaceId)
         if (!session) return { success: false, error: 'Browser session workspace mismatch' }
+        if (input.projectId && session.project_id !== input.projectId) {
+          return { success: false, error: 'Browser project does not own the selected session' }
+        }
       }
       if (input.projectId) {
         const project = await getProject(input.projectId, input.workspaceId)
@@ -217,7 +270,9 @@ export function registerBrowserHandlers(): void {
         workspaceId: input.workspaceId,
         profileId: input.profileId,
         hostWebContentsId: event.sender.id,
-        guestWebContentsId: input.guestWebContentsId
+        guestWebContentsId: input.guestWebContentsId,
+        sessionId: input.sessionId,
+        projectId: input.projectId
       })
       return { success: true }
     } catch (error) {
@@ -232,6 +287,11 @@ export function registerBrowserHandlers(): void {
       if (!input || !Number.isInteger(input.guestWebContentsId))
         return { success: false, error: 'Invalid browser capture request' }
       try {
+        const accessError = await browserGuestAccessError({
+          hostWebContentsId: event.sender.id,
+          guestWebContentsId: input.guestWebContentsId
+        })
+        if (accessError) return { success: false, error: accessError }
         return {
           success: true,
           screenshot: await captureRegisteredBrowserGuest({
@@ -254,6 +314,11 @@ export function registerBrowserHandlers(): void {
     if (!input || !Number.isInteger(input.guestWebContentsId) || typeof input.script !== 'string')
       return { success: false, error: 'Invalid browser script request' }
     try {
+      const accessError = await browserGuestAccessError({
+        hostWebContentsId: event.sender.id,
+        guestWebContentsId: input.guestWebContentsId
+      })
+      if (accessError) return { success: false, error: accessError }
       return {
         success: true,
         result: await executeRegisteredBrowserGuestScript({
@@ -283,6 +348,12 @@ export function registerBrowserHandlers(): void {
     )
       return { success: false, error: 'Invalid browser navigation request' }
     try {
+      const accessError = await browserGuestAccessError({
+        hostWebContentsId: event.sender.id,
+        guestWebContentsId: input.guestWebContentsId,
+        ...(input.action === 'goto' ? { url: input.url } : {})
+      })
+      if (accessError) return { success: false, error: accessError }
       return {
         success: true,
         state: await navigateRegisteredBrowserGuest({

@@ -112,8 +112,29 @@ function interactionPayload(value) {
     throw new Error('INTERACTION_TOO_LARGE')
   return payload
 }
+// File registration and terminal status commit together, so recovery cannot strand a partial media run.
+function finishExternalArtifact(spec, artifact) {
+  if (
+    !spec.runId.startsWith('media-result-') ||
+    typeof artifact?.path !== 'string' ||
+    typeof artifact?.mediaType !== 'string'
+  )
+    throw new Error('INVALID_EXTERNAL_ARTIFACT')
+  const existing = db
+    .prepare("SELECT 1 FROM events WHERE run_id=? AND type='artifact.registered' LIMIT 1")
+    .get(spec.runId)
+  if (!existing)
+    append(spec.runId, 'artifact.registered', {
+      kind: 'file',
+      transport: 'local',
+      operation: 'create',
+      ...artifact
+    })
+  if (get(spec.runId).status !== 'completed')
+    append(spec.runId, 'run.status', { status: 'completed' }, 'completed')
+}
 function dispatch(method, args) {
-  if (method === 'create')
+  if (method === 'create' || method === 'external-artifact')
     return transaction(() => {
       const existing = run(
         db
@@ -124,7 +145,8 @@ function dispatch(method, args) {
         const spec = { ...existing }
         for (const field of ['status', 'seq', 'createdAt', 'updatedAt']) delete spec[field]
         if (JSON.stringify(spec) !== JSON.stringify(args.spec)) throw new Error('REQUEST_CONFLICT')
-        return { run: existing, created: false }
+        if (method === 'external-artifact') finishExternalArtifact(args.spec, args.artifact)
+        return { run: get(args.spec.runId), created: false }
       }
       const now = Date.now(),
         spec = args.spec
@@ -144,6 +166,7 @@ function dispatch(method, args) {
         now
       )
       append(spec.runId, 'run.status', { status: 'queued' }, 'queued')
+      if (method === 'external-artifact') finishExternalArtifact(spec, args.artifact)
       return { run: get(spec.runId), created: true }
     })
   if (method === 'append')
@@ -191,12 +214,23 @@ function dispatch(method, args) {
     }
     return { run: current, events: page, pendingInteractions: pendingInteractions(args.runId) }
   }
-  if (method === 'list')
+  if (method === 'list') {
+    const values = [args.workspaceId]
+    const boundary = (key, inclusive) => {
+      if (!key) return ''
+      values.push(key.at, key.at, key.id)
+      return `AND (created_at < ? OR (created_at=? AND id ${inclusive ? '<=' : '<'} ?))`
+    }
+    const anchor = boundary(args.anchor, true)
+    const after = boundary(args.after, false)
     return db
       .prepare(
-        'SELECT * FROM runs WHERE workspace_id=? ORDER BY created_at DESC, rowid DESC LIMIT ?'
+        `SELECT * FROM runs WHERE workspace_id=?
+         ${args.attentionOnly ? "AND (status IN ('failed','interrupted','waiting_interaction','waiting_capability') OR (status NOT IN ('completed','failed','cancelled','interrupted') AND EXISTS (SELECT 1 FROM interactions i WHERE i.run_id=runs.id AND i.status='pending')))" : ''}
+         ${anchor} ${after}
+         ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
       )
-      .all(args.workspaceId, args.limit)
+      .all(...values, args.limit, args.offset ?? 0)
       .map((row) => {
         const summary = run(row)
         delete summary.prompt
@@ -205,6 +239,53 @@ function dispatch(method, args) {
         delete summary.modelOptions
         return summary
       })
+  }
+  if (method === 'artifacts-list')
+    return db
+      .prepare(
+        `SELECT e.run_id AS runId,e.seq,e.data,e.timestamp,
+                r.session_id AS sessionId,r.status,r.spec
+         FROM events e JOIN runs r ON r.id=e.run_id
+         LEFT JOIN hidden_artifacts h ON h.run_id=e.run_id AND h.artifact_seq=e.seq
+         WHERE r.workspace_id=? AND e.type='artifact.registered'
+           AND h.run_id IS NULL
+           ${args.runId ? 'AND e.run_id=?' : ''}
+         ORDER BY e.timestamp DESC,e.run_id DESC,e.seq DESC
+         LIMIT ? OFFSET ?`
+      )
+      .all(
+        ...(args.runId ? [args.workspaceId, args.runId] : [args.workspaceId]),
+        args.limit,
+        args.offset
+      )
+      .map((row) => {
+        const spec = JSON.parse(row.spec)
+        return {
+          runId: row.runId,
+          seq: row.seq,
+          data: JSON.parse(row.data),
+          timestamp: row.timestamp,
+          sessionId: row.sessionId,
+          status: row.status,
+          projectId: spec.projectId ?? null,
+          workingDirectory: spec.workingDirectory ?? null
+        }
+      })
+  if (method === 'artifact-hide')
+    return transaction(() => {
+      const artifact = db
+        .prepare(
+          `SELECT 1 FROM events e JOIN runs r ON r.id=e.run_id
+           WHERE e.run_id=? AND e.seq=? AND e.type='artifact.registered'
+             AND r.workspace_id=?`
+        )
+        .get(args.runId, args.seq, args.workspaceId)
+      if (!artifact) throw new Error('ARTIFACT_NOT_FOUND')
+      db.prepare(
+        'INSERT OR IGNORE INTO hidden_artifacts(run_id,artifact_seq,hidden_at) VALUES(?,?,?)'
+      ).run(args.runId, args.seq, Date.now())
+      return { hidden: true }
+    })
   if (method === 'active')
     return db
       .prepare(
@@ -238,7 +319,9 @@ function dispatch(method, args) {
       if (current.status !== 'running') throw new Error('RUN_NOT_INTERACTIVE')
       const interaction = args.interaction ?? {}
       const id = interactionId(interaction.interactionId)
-      if (!['question', 'tool-approval', 'plan-approval'].includes(interaction.kind))
+      if (
+        !['question', 'tool-approval', 'plan-approval', 'browser-tool'].includes(interaction.kind)
+      )
         throw new Error('INVALID_INTERACTION')
       if (
         interaction.version !== undefined &&

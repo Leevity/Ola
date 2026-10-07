@@ -5,7 +5,8 @@ import {
   type ModelSource
 } from '../../../shared/runtime/model-source'
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { ipcStorage } from '@renderer/lib/ipc/ipc-storage'
 import {
   LOCAL_PERSONAL_WORKSPACE,
   LOCAL_PERSONAL_WORKSPACE_ID,
@@ -134,6 +135,26 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
     }),
     {
       name: 'ola.workspace-context.v1',
+      storage: createJSONStorage(() => ({
+        getItem: async (name) => {
+          if (typeof localStorage === 'undefined') return null
+          const saved = await ipcStorage.getItem(name)
+          if (saved !== null) return saved
+          const legacy = localStorage.getItem(name)
+          if (legacy !== null) await ipcStorage.setItem(name, legacy)
+          return legacy
+        },
+        setItem: async (name, value) => {
+          if (typeof localStorage === 'undefined') return
+          localStorage.setItem(name, value)
+          await ipcStorage.setItem(name, value)
+        },
+        removeItem: async (name) => {
+          if (typeof localStorage === 'undefined') return
+          localStorage.removeItem(name)
+          await ipcStorage.removeItem(name)
+        }
+      })),
       partialize: (state) => ({
         modelSelections: state.modelSelections,
         modelSources: state.modelSources,

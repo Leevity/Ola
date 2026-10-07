@@ -86,7 +86,7 @@ type controlPlane struct {
 // mutate authorization state without the lock.  JSON does not serialize private
 // fields, therefore an explicit snapshot prevents a restart from silently
 // dropping teams, memberships, and model selections.
-func (p controlPlane) MarshalJSON() ([]byte, error) {
+func (p *controlPlane) MarshalJSON() ([]byte, error) {
 	if p.repository != nil {
 		// Organizations, members, applications, and model configuration live in
 		// relational tables. The legacy snapshot remains only for mesh metadata.

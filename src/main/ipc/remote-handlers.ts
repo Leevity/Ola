@@ -121,7 +121,7 @@ async function createConnectionWithCredential(
     const host = typeof input.host === 'string' ? input.host.trim() : ''
     if (!host) throw new Error('Host is required before storing a remote credential')
     const port = input.port ?? (input.kind === 'rdp' ? 3389 : 5900)
-    const ref = storeCredential({
+    const ref = await storeCredential({
       domain: `remote://${input.kind}/${host}:${port}`,
       username: typeof input.username === 'string' ? input.username.trim() : '',
       password,
@@ -136,7 +136,7 @@ async function createConnectionWithCredential(
   try {
     return await createRemoteConnection(input)
   } catch (error) {
-    if (createdCredentialId) deleteCredential(createdCredentialId)
+    if (createdCredentialId) await deleteCredential(createdCredentialId)
     throw error
   }
 }
@@ -188,7 +188,7 @@ export function registerRemoteHandlers(): void {
         const host = typeof patch.host === 'string' ? patch.host.trim() : existing.host
         const port = patch.port ?? existing.port ?? (existing.kind === 'rdp' ? 3389 : 5900)
         if (!host) throw new Error('Host is required before storing a remote credential')
-        const ref = storeCredential({
+        const ref = await storeCredential({
           domain: `remote://${existing.kind}/${host}:${port}`,
           username:
             typeof patch.username === 'string' ? patch.username.trim() : (existing.username ?? ''),
@@ -202,11 +202,11 @@ export function registerRemoteHandlers(): void {
             patch: { ...patch, credentialRef: ref.id }
           })
           if (existing.credentialRef && existing.credentialRef !== ref.id) {
-            deleteCredential(existing.credentialRef)
+            await deleteCredential(existing.credentialRef)
           }
           return updated
         } catch (error) {
-          deleteCredential(ref.id)
+          await deleteCredential(ref.id)
           throw error
         }
       })()
@@ -241,7 +241,7 @@ export function registerRemoteHandlers(): void {
       }
       const connection = await getRemoteConnection(value.id)
       const result = await deleteRemoteConnection(value.id)
-      if (connection?.credentialRef) deleteCredential(connection.credentialRef)
+      if (connection?.credentialRef) await deleteCredential(connection.credentialRef)
       return result
     }
   )

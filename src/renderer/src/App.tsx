@@ -30,6 +30,7 @@ import { usePlanStore } from './stores/plan-store'
 import { installGoalSyncListener, useGoalStore } from './stores/goal-store'
 import { useSshStore } from './stores/ssh-store'
 import { useTaskStore } from './stores/task-store'
+import { useTaskBoardStore } from './stores/task-board-store'
 import { useTeamStore } from './stores/team-store'
 import { useUIStore } from './stores/ui-store'
 import { useWorkspaceStore } from './stores/workspace-store'
@@ -41,6 +42,7 @@ import {
 } from './lib/tools'
 import { updateAppPluginToolRegistration } from './lib/app-plugin'
 import { refreshExtensionTools } from './lib/extensions/extension-tools'
+import { refreshExtensionWorkbenchContributions } from './lib/extensions/extension-workbench'
 import { registerAllViewers } from './lib/preview/register-viewers'
 import {
   createMarkdownComponents,
@@ -55,6 +57,7 @@ import { cronEvents } from './lib/tools/cron-events'
 import { useCronStore, type CronAgentLogEntry } from './stores/cron-store'
 import { isCronWorkspaceEventFor } from './lib/cron-workspace-event'
 import { ipcClient } from './lib/ipc/ipc-client'
+import { waitForSettingsWriteIdle } from './lib/ipc/ipc-storage'
 import { IPC } from './lib/ipc/channels'
 import { attachRendererToolBridge } from './lib/ipc/renderer-tool-bridge'
 import { reattachActiveTsRuntimeRuns } from './lib/agent/runtime-reattach'
@@ -232,6 +235,10 @@ function App(): React.JSX.Element {
           if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
           if (reloadSessions) await useChatStore.getState().loadFromDb()
           if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
+          await ipcClient.invoke('media:settings-update', {
+            videoGenerationEnabled: useSettingsStore.getState().videoGenerationEnabled
+          })
+          if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
           void useCronStore.getState().loadJobs()
           void useCronStore.getState().loadRuns()
         })
@@ -284,8 +291,12 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
-    void ipcClient
-      .invoke('media:settings-update', { videoGenerationEnabled })
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    void ensureWindowWorkspaceRegistered(workspaceId)
+      .then(() => {
+        if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
+        return ipcClient.invoke('media:settings-update', { videoGenerationEnabled })
+      })
       .catch((error) =>
         console.warn(
           '[App] Failed to update media capability state',
@@ -428,15 +439,19 @@ function App(): React.JSX.Element {
               return
             case 'task_add':
               useTaskStore.getState().applySyncedTaskAdd(event.task)
+              useTaskBoardStore.getState().requestRefresh()
               return
             case 'task_update':
               useTaskStore.getState().applySyncedTaskUpdate(event.id, event.patch)
+              useTaskBoardStore.getState().requestRefresh()
               return
             case 'task_delete':
               useTaskStore.getState().applySyncedTaskDelete(event.id)
+              useTaskBoardStore.getState().requestRefresh()
               return
             case 'task_delete_session':
               useTaskStore.getState().applySyncedDeleteSessionTasks(event.sessionId)
+              useTaskBoardStore.getState().requestRefresh()
               return
             case 'team_event':
               useTeamStore.getState().handleTeamEvent(event.event, event.sessionId ?? undefined)
@@ -478,6 +493,48 @@ function App(): React.JSX.Element {
   }, [sessionWindowView, sshWindowView])
 
   useEffect(() => {
+    let active = true
+    let refresh = Promise.resolve()
+    const unsubscribe = ipcClient.on(IPC.SETTINGS_CHANGED, (payload) => {
+      const key = (payload as { key?: string | null } | null)?.key
+      if (key !== null && key !== 'ola-settings') return
+      refresh = refresh
+        .catch(() => undefined)
+        .then(async () => {
+          await waitForSettingsWriteIdle()
+          if (active) await useSettingsStore.persist.rehydrate()
+        })
+    })
+    return () => {
+      active = false
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    const offProjectUpdated = ipcClient.on(IPC.CHAT_PROJECT_UPDATED, (data: unknown) => {
+      const payload = data as {
+        workspaceId?: string
+        project?: Parameters<ReturnType<typeof useChatStore.getState>['upsertProjectFromSync']>[0]
+      }
+      if (
+        !payload?.project?.id ||
+        payload.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId
+      )
+        return
+      useChatStore.getState().upsertProjectFromSync(payload.project)
+    })
+
+    const offProjectDeleted = ipcClient.on(IPC.CHAT_PROJECT_DELETED, (data: unknown) => {
+      const payload = data as { workspaceId?: string; projectId?: string }
+      if (
+        !payload?.projectId ||
+        payload.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId
+      )
+        return
+      useChatStore.getState().removeProjectFromSync(payload.projectId)
+    })
+
     const offSessionUpdated = ipcClient.on(IPC.CHAT_SESSION_UPDATED, (data: unknown) => {
       const payload = data as {
         reason?: string
@@ -550,6 +607,8 @@ function App(): React.JSX.Element {
     })
 
     return () => {
+      offProjectUpdated()
+      offProjectDeleted()
       offSessionUpdated()
       offSessionDeleted()
     }
@@ -724,50 +783,14 @@ function App(): React.JSX.Element {
           useChatStore.getState().addMessage(d.sessionId, msg)
         })
 
-    // Subscribe to cron run_finished events for session delivery
-    const offRunFinished = sessionWindowView
-      ? () => {}
-      : cronEvents.on((event) => {
-          if (event.type !== 'run_finished') return
-          if (event.deliveryMode !== 'session') return
-
-          const targetSessionId =
-            event.deliveryTarget || event.sessionId || useChatStore.getState().activeSessionId
-          if (!targetSessionId) return
-          const sessions = useChatStore.getState().sessions
-          if (!sessions.some((s) => s.id === targetSessionId)) return
-
-          const statusLabel =
-            event.status === 'success'
-              ? t('app.cron.status.success')
-              : event.status === 'error'
-                ? t('app.cron.status.error')
-                : event.status === 'skipped'
-                  ? t('app.cron.status.skipped', { defaultValue: 'Skipped' })
-                  : t('app.cron.status.stopped')
-          const toolCallLabel = t('app.cron.toolCallCount', { count: event.toolCallCount ?? 0 })
-          const content = [
-            `<system-reminder>`,
-            t('app.cron.runFinished', {
-              jobName: event.jobName || event.jobId,
-              statusLabel,
-              toolCallLabel
-            }),
-            `</system-reminder>`,
-            '',
-            event.error
-              ? t('app.cron.errorDetail', { message: event.error })
-              : event.outputSummary || t('app.cron.noOutput')
-          ].join('\n')
-
-          const msg: UnifiedMessage = {
-            id: nanoid(),
-            role: 'user',
-            content,
-            createdAt: Date.now()
-          }
-          useChatStore.getState().addMessage(targetSessionId, msg)
-        })
+    // Main persists the delivery once; every visible window may refresh its read model.
+    const offSessionDelivered = ipcClient.on(IPC.CRON_SESSION_DELIVERED, (data: unknown) => {
+      if (!isCronWorkspaceEventFor(data, useWorkspaceStore.getState().activeWorkspaceId)) return
+      const sessionId = (data as { sessionId?: string }).sessionId
+      if (!sessionId) return
+      if (!useChatStore.getState().sessions.some((session) => session.id === sessionId)) return
+      void useChatStore.getState().loadSessionMessages(sessionId, true)
+    })
 
     return () => {
       offFired()
@@ -777,7 +800,7 @@ function App(): React.JSX.Element {
       offRunLog()
       offRunFinishedIpc()
       offNotify()
-      offRunFinished()
+      offSessionDelivered()
       flushCronLogBuffer()
     }
   }, [sessionWindowView, t])
@@ -962,9 +985,14 @@ function App(): React.JSX.Element {
   }, [])
 
   useEffect(() => {
+    void refreshExtensionTools()
+  }, [])
+
+  useEffect(() => {
     const unsubscribeChat = useChatStore.subscribe((state, previousState) => {
       if (state.activeProjectId !== previousState.activeProjectId) {
         void refreshExtensionTools()
+        void refreshExtensionWorkbenchContributions()
       }
     })
 

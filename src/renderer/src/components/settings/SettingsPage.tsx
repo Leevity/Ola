@@ -18,6 +18,7 @@ import {
   Save,
   RefreshCw,
   Puzzle,
+  Blocks,
   Terminal,
   MessagesSquare,
   MessageSquareQuote,
@@ -80,6 +81,7 @@ import { ModelIcon, ProviderIcon } from './provider-icons'
 import { AutoMemoryPanel } from '@renderer/components/memory/AutoMemoryPanel'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { getSettingsWriteStatus, subscribeSettingsWriteStatus } from '@renderer/lib/ipc/ipc-storage'
 import {
   joinFsPath,
   readTextFile,
@@ -398,6 +400,8 @@ const settingsIcons: Record<SettingsIcon, React.ComponentType<{ className?: stri
   mouse: MousePointer2,
   key: KeyRound,
   puzzle: Puzzle,
+  blocks: Blocks,
+  refresh: RefreshCw,
   wand: Wand2,
   cable: Cable,
   messages: MessagesSquare,
@@ -664,7 +668,7 @@ function GeneralPanel(): React.JSX.Element {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold">{t('general.title')}</h2>
+        <h2 className="text-xl font-semibold">{t('general.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('general.subtitle')}</p>
       </div>
 
@@ -680,10 +684,19 @@ function GeneralPanel(): React.JSX.Element {
         </div>
         <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/70 px-3 py-2">
           <div>
-            <label className="text-sm font-medium">{t('general.autoUpdate')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.autoUpdateDesc')}</p>
+            <label htmlFor="settings-auto-update" className="text-sm font-medium">
+              {t('general.autoUpdate')}
+            </label>
+            <p
+              id="settings-auto-update-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('general.autoUpdateDesc')}
+            </p>
           </div>
           <Switch
+            id="settings-auto-update"
+            aria-describedby="settings-auto-update-description"
             checked={settings.autoUpdateEnabled}
             onCheckedChange={(checked) => settings.updateSettings({ autoUpdateEnabled: checked })}
           />
@@ -692,7 +705,7 @@ function GeneralPanel(): React.JSX.Element {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 text-xs"
+            className="h-8 text-sm"
             onClick={() => void checkForUpdates()}
             disabled={checkingUpdate}
           >
@@ -702,7 +715,7 @@ function GeneralPanel(): React.JSX.Element {
           {updateAvailable && !downloadedVersion && (
             <Button
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 text-sm"
               onClick={() => void handleUpdateNow()}
               disabled={downloadingUpdate}
             >
@@ -713,7 +726,7 @@ function GeneralPanel(): React.JSX.Element {
           {downloadedVersion && (
             <Button
               size="sm"
-              className="h-7 text-xs"
+              className="h-8 text-sm"
               onClick={() => void handleInstallDownloadedUpdate()}
               disabled={installingUpdate}
             >
@@ -723,22 +736,22 @@ function GeneralPanel(): React.JSX.Element {
           )}
         </div>
         {updateError && (
-          <p className="text-xs text-destructive">
+          <p className="text-[0.8125rem] text-destructive">
             {t('general.update.failedToCheck', { error: updateError })}
           </p>
         )}
         {!updateError && !updateAvailable && latestVersion && !checkingUpdate && (
-          <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500">
+          <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-[0.8125rem] text-emerald-500">
             {t('general.update.upToDate')}
           </p>
         )}
         {updateAvailable && !downloadingUpdate && !downloadedVersion && (
-          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-[0.8125rem] text-amber-500">
             {t('general.update.newVersionAvailable', { version: latestVersion })}
           </p>
         )}
         {downloadingUpdate && (
-          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-500">
+          <p className="rounded-md bg-amber-500/10 px-3 py-2 text-[0.8125rem] text-amber-500">
             {typeof downloadProgress === 'number'
               ? t('general.update.downloadingWithProgress', {
                   progress: Math.round(downloadProgress)
@@ -747,7 +760,7 @@ function GeneralPanel(): React.JSX.Element {
           </p>
         )}
         {downloadedVersion && (
-          <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-xs text-emerald-500">
+          <p className="rounded-md bg-emerald-500/10 px-3 py-2 text-[0.8125rem] text-emerald-500">
             {t('general.update.downloadedReady', { version: downloadedVersion })}
           </p>
         )}
@@ -757,23 +770,28 @@ function GeneralPanel(): React.JSX.Element {
 
       <section className="space-y-3">
         <div>
-          <label className="text-sm font-medium">
+          <label htmlFor="settings-project-directory" className="text-sm font-medium">
             {t('general.projectDefaultDirectory.title')}
           </label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[0.8125rem] text-muted-foreground">
             {t('general.projectDefaultDirectory.desc')}
           </p>
         </div>
         <div className="flex items-center justify-between max-w-lg">
           <div>
-            <label className="text-sm font-medium">
+            <label htmlFor="settings-project-directory-custom" className="text-sm font-medium">
               {t('general.projectDefaultDirectory.useCustom')}
             </label>
-            <p className="text-xs text-muted-foreground">
+            <p
+              id="settings-project-directory-custom-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
               {t('general.projectDefaultDirectory.useCustomDesc')}
             </p>
           </div>
           <Switch
+            id="settings-project-directory-custom"
+            aria-describedby="settings-project-directory-custom-description"
             checked={settings.projectDefaultDirectoryMode === 'custom'}
             onCheckedChange={(checked) =>
               settings.updateSettings({
@@ -784,6 +802,7 @@ function GeneralPanel(): React.JSX.Element {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            id="settings-project-directory"
             type="text"
             value={settings.projectDefaultDirectory}
             onChange={(e) => settings.updateSettings({ projectDefaultDirectory: e.target.value })}
@@ -795,21 +814,21 @@ function GeneralPanel(): React.JSX.Element {
               })
             }}
             placeholder="D:\\code"
-            className="max-w-lg text-xs"
+            className="max-w-lg text-sm"
             disabled={settings.projectDefaultDirectoryMode !== 'custom'}
           />
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 text-xs"
+            className="h-8 text-sm"
             onClick={() => void handlePickProjectDefaultDirectory()}
             disabled={settings.projectDefaultDirectoryMode !== 'custom'}
           >
             {t('general.projectDefaultDirectory.pickDirectory')}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-[0.8125rem] text-muted-foreground break-all">
           {t('general.projectDefaultDirectory.effective', {
             path:
               effectiveProjectDirectory || t('general.projectDefaultDirectory.effectiveFallback')
@@ -820,36 +839,47 @@ function GeneralPanel(): React.JSX.Element {
       {/* Appearance */}
       <section className="space-y-4">
         <div>
-          <label className="text-sm font-medium">{t('general.appearance.title')}</label>
-          <p className="text-xs text-muted-foreground">{t('general.appearance.subtitle')}</p>
+          <h3 className="text-sm font-medium">{t('general.appearance.title')}</h3>
+          <p className="text-[0.8125rem] text-muted-foreground">
+            {t('general.appearance.subtitle')}
+          </p>
         </div>
 
         <div className="space-y-2">
           <div>
-            <label className="text-xs font-medium">{t('general.appearance.background')}</label>
-            <p className="text-xs text-muted-foreground">
+            <span id="settings-background-label" className="text-sm font-medium">
+              {t('general.appearance.background')}
+            </span>
+            <p
+              id="settings-background-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
               {t('general.appearance.backgroundDesc')}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Input
               type="color"
+              aria-labelledby="settings-background-label"
+              aria-describedby="settings-background-description"
               value={settings.backgroundColor || '#111111'}
               onChange={(e) => settings.updateSettings({ backgroundColor: e.target.value })}
               className="h-8 w-12 cursor-pointer p-1"
             />
             <Input
               type="text"
+              aria-labelledby="settings-background-label"
+              aria-describedby="settings-background-description"
               value={settings.backgroundColor}
               onChange={(e) => settings.updateSettings({ backgroundColor: e.target.value.trim() })}
               placeholder={t('general.appearance.backgroundPlaceholder')}
-              className="max-w-40 text-xs"
+              className="max-w-40 text-sm"
             />
             <Button
               type="button"
               variant="ghost"
               size="sm"
-              className="h-8 text-xs"
+              className="h-8 text-sm"
               onClick={() => settings.updateSettings({ backgroundColor: '' })}
             >
               {t('general.appearance.reset')}
@@ -859,8 +889,15 @@ function GeneralPanel(): React.JSX.Element {
 
         <div className="space-y-2">
           <div>
-            <label className="text-xs font-medium">{t('general.appearance.font')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.appearance.fontDesc')}</p>
+            <label htmlFor="settings-font-family" className="text-sm font-medium">
+              {t('general.appearance.font')}
+            </label>
+            <p
+              id="settings-font-family-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('general.appearance.fontDesc')}
+            </p>
           </div>
           <Select
             value={settings.fontFamily || '__default__'}
@@ -868,12 +905,16 @@ function GeneralPanel(): React.JSX.Element {
               settings.updateSettings({ fontFamily: value === '__default__' ? '' : value })
             }
           >
-            <SelectTrigger className="w-80 text-xs">
+            <SelectTrigger
+              id="settings-font-family"
+              aria-describedby="settings-font-family-description"
+              className="w-full max-w-80 text-sm"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {fontOptions.map((option) => (
-                <SelectItem key={option.label} value={option.value} className="text-xs">
+                <SelectItem key={option.label} value={option.value} className="text-sm">
                   {option.label}
                 </SelectItem>
               ))}
@@ -884,14 +925,21 @@ function GeneralPanel(): React.JSX.Element {
         <div className="space-y-2">
           <div className="flex items-center justify-between max-w-lg">
             <div>
-              <label className="text-xs font-medium">{t('general.appearance.fontSize')}</label>
-              <p className="text-xs text-muted-foreground">
+              <label htmlFor="settings-font-size" className="text-sm font-medium">
+                {t('general.appearance.fontSize')}
+              </label>
+              <p
+                id="settings-font-size-description"
+                className="text-[0.8125rem] text-muted-foreground"
+              >
                 {t('general.appearance.fontSizeDesc')}
               </p>
             </div>
             <span className="text-xs text-muted-foreground">{settings.fontSize}px</span>
           </div>
           <Slider
+            aria-label={t('general.appearance.fontSize')}
+            aria-describedby="settings-font-size-description"
             value={[settings.fontSize]}
             onValueChange={([value]) => settings.updateSettings({ fontSize: clampFontSize(value) })}
             min={12}
@@ -900,6 +948,8 @@ function GeneralPanel(): React.JSX.Element {
             className="max-w-lg"
           />
           <Input
+            id="settings-font-size"
+            aria-describedby="settings-font-size-description"
             type="number"
             min={12}
             max={20}
@@ -908,7 +958,7 @@ function GeneralPanel(): React.JSX.Element {
               const next = clampFontSize(parseInt(e.target.value, 10) || 16)
               settings.updateSettings({ fontSize: next })
             }}
-            className="max-w-32 text-xs"
+            className="max-w-32 text-sm"
           />
         </div>
       </section>
@@ -919,18 +969,29 @@ function GeneralPanel(): React.JSX.Element {
       <section className="space-y-3">
         <div className="flex items-center justify-between max-w-lg">
           <div>
-            <label className="text-sm font-medium">{t('general.animations')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.animationsDesc')}</p>
+            <label htmlFor="settings-animations" className="text-sm font-medium">
+              {t('general.animations')}
+            </label>
+            <p
+              id="settings-animations-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('general.animationsDesc')}
+            </p>
           </div>
           <Switch
+            id="settings-animations"
+            aria-describedby="settings-animations-description"
             checked={settings.animationsEnabled}
             onCheckedChange={(checked) => settings.updateSettings({ animationsEnabled: checked })}
           />
         </div>
         <div className="max-w-2xl space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
           <div>
-            <label className="text-sm font-medium">{t('general.liveOutputAnimation.title')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.liveOutputAnimation.desc')}</p>
+            <h3 className="text-sm font-medium">{t('general.liveOutputAnimation.title')}</h3>
+            <p className="text-[0.8125rem] text-muted-foreground">
+              {t('general.liveOutputAnimation.desc')}
+            </p>
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             {(['agile', 'elegant'] as const).map((style) => {
@@ -949,7 +1010,7 @@ function GeneralPanel(): React.JSX.Element {
                   <div className="text-sm font-medium">
                     {t(`general.liveOutputAnimation.options.${style}.label`)}
                   </div>
-                  <div className="mt-1 text-xs text-muted-foreground">
+                  <div className="mt-1 text-[0.8125rem] text-muted-foreground">
                     {t(`general.liveOutputAnimation.options.${style}.desc`)}
                   </div>
                 </button>
@@ -996,12 +1057,19 @@ function GeneralPanel(): React.JSX.Element {
       <section className="space-y-3">
         <div className="flex items-center justify-between max-w-lg">
           <div>
-            <label className="text-sm font-medium">{t('general.toolbarCollapsedByDefault')}</label>
-            <p className="text-xs text-muted-foreground">
+            <label htmlFor="settings-toolbar-collapsed" className="text-sm font-medium">
+              {t('general.toolbarCollapsedByDefault')}
+            </label>
+            <p
+              id="settings-toolbar-collapsed-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
               {t('general.toolbarCollapsedByDefaultDesc')}
             </p>
           </div>
           <Switch
+            id="settings-toolbar-collapsed"
+            aria-describedby="settings-toolbar-collapsed-description"
             checked={settings.toolbarCollapsedByDefault}
             onCheckedChange={(checked) =>
               settings.updateSettings({ toolbarCollapsedByDefault: checked })
@@ -1010,14 +1078,19 @@ function GeneralPanel(): React.JSX.Element {
         </div>
         <div className="flex items-center justify-between max-w-lg">
           <div>
-            <label className="text-sm font-medium">
+            <label htmlFor="settings-runs-collapsed" className="text-sm font-medium">
               {t('general.collapseExecutionRunsByDefault')}
             </label>
-            <p className="text-xs text-muted-foreground">
+            <p
+              id="settings-runs-collapsed-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
               {t('general.collapseExecutionRunsByDefaultDesc')}
             </p>
           </div>
           <Switch
+            id="settings-runs-collapsed"
+            aria-describedby="settings-runs-collapsed-description"
             checked={settings.collapseExecutionRunsByDefault}
             onCheckedChange={(checked) =>
               settings.updateSettings({ collapseExecutionRunsByDefault: checked })
@@ -1026,8 +1099,15 @@ function GeneralPanel(): React.JSX.Element {
         </div>
         <div className="flex items-center justify-between max-w-lg">
           <div>
-            <label className="text-sm font-medium">{t('general.toolExecutionDensity')}</label>
-            <p className="text-xs text-muted-foreground">{t('general.toolExecutionDensityDesc')}</p>
+            <label htmlFor="settings-tool-density" className="text-sm font-medium">
+              {t('general.toolExecutionDensity')}
+            </label>
+            <p
+              id="settings-tool-density-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('general.toolExecutionDensityDesc')}
+            </p>
           </div>
           <Select
             value={settings.toolExecutionDensity}
@@ -1037,17 +1117,21 @@ function GeneralPanel(): React.JSX.Element {
               })
             }
           >
-            <SelectTrigger className="w-32 text-xs">
+            <SelectTrigger
+              id="settings-tool-density"
+              aria-describedby="settings-tool-density-description"
+              className="w-32 text-sm"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="compact" className="text-xs">
+              <SelectItem value="compact" className="text-sm">
                 {t('general.toolExecutionDensityCompact')}
               </SelectItem>
-              <SelectItem value="balanced" className="text-xs">
+              <SelectItem value="balanced" className="text-sm">
                 {t('general.toolExecutionDensityBalanced')}
               </SelectItem>
-              <SelectItem value="verbose" className="text-xs">
+              <SelectItem value="verbose" className="text-sm">
                 {t('general.toolExecutionDensityVerbose')}
               </SelectItem>
             </SelectContent>
@@ -1060,8 +1144,12 @@ function GeneralPanel(): React.JSX.Element {
       {/* Language */}
       <section className="space-y-3">
         <div>
-          <label className="text-sm font-medium">{t('general.language')}</label>
-          <p className="text-xs text-muted-foreground">{t('general.languageDesc')}</p>
+          <label htmlFor="settings-language" className="text-sm font-medium">
+            {t('general.language')}
+          </label>
+          <p id="settings-language-description" className="text-[0.8125rem] text-muted-foreground">
+            {t('general.languageDesc')}
+          </p>
         </div>
         <Select
           value={settings.language}
@@ -1069,12 +1157,16 @@ function GeneralPanel(): React.JSX.Element {
             settings.updateSettings({ language: v as typeof settings.language })
           }
         >
-          <SelectTrigger className="w-60 text-xs">
+          <SelectTrigger
+            id="settings-language"
+            aria-describedby="settings-language-description"
+            className="w-full max-w-60 text-sm"
+          >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             {LANGUAGE_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value} className="text-xs">
+              <SelectItem key={option.value} value={option.value} className="text-sm">
                 {option.label}
               </SelectItem>
             ))}
@@ -1087,8 +1179,8 @@ function GeneralPanel(): React.JSX.Element {
       {/* Data Management */}
       <section className="space-y-4 rounded-xl border border-border/60 bg-muted/15 p-4">
         <div>
-          <h3 className="text-sm font-semibold">{t('general.data.title')}</h3>
-          <p className="text-xs text-muted-foreground">{t('general.data.subtitle')}</p>
+          <h3 className="text-[0.9375rem] font-semibold">{t('general.data.title')}</h3>
+          <p className="text-[0.8125rem] text-muted-foreground">{t('general.data.subtitle')}</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-lg border border-border/60 bg-background/70 p-4">
@@ -1096,9 +1188,11 @@ function GeneralPanel(): React.JSX.Element {
               <HardDriveDownload className="size-4 text-primary" />
               {t('general.data.backupTitle')}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{t('general.data.backupDesc')}</p>
+            <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+              {t('general.data.backupDesc')}
+            </p>
             <Button
-              className="mt-3 h-8 text-xs"
+              className="mt-3 h-8 text-sm"
               size="sm"
               variant="outline"
               disabled={sessions.length === 0}
@@ -1112,8 +1206,10 @@ function GeneralPanel(): React.JSX.Element {
               <HardDriveUpload className="size-4 text-primary" />
               {t('general.data.importTitle')}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{t('general.data.importDesc')}</p>
-            <Button className="mt-3 h-8 text-xs" size="sm" onClick={handleImportSessions}>
+            <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+              {t('general.data.importDesc')}
+            </p>
+            <Button className="mt-3 h-8 text-sm" size="sm" onClick={handleImportSessions}>
               {t('general.data.importAction')}
             </Button>
           </div>
@@ -1122,9 +1218,11 @@ function GeneralPanel(): React.JSX.Element {
               <Trash2 className="size-4" />
               {t('general.data.clearTitle')}
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{t('general.data.clearDesc')}</p>
+            <p className="mt-1 text-[0.8125rem] text-muted-foreground">
+              {t('general.data.clearDesc')}
+            </p>
             <Button
-              className="mt-3 h-8 text-xs"
+              className="mt-3 h-8 text-sm"
               size="sm"
               variant="destructive"
               onClick={() => void handleClearAllSessions()}
@@ -1143,7 +1241,7 @@ function GeneralPanel(): React.JSX.Element {
         <Button
           variant="outline"
           size="sm"
-          className="text-xs text-muted-foreground"
+          className="text-sm text-muted-foreground"
           onClick={async () => {
             const ok = await confirm({ title: t('general.resetConfirm'), variant: 'destructive' })
             if (!ok) return
@@ -1188,7 +1286,7 @@ function GeneralPanel(): React.JSX.Element {
 function SystemPanel(): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
-  const platform = window.electron.process.platform
+  const platform = window.ola.desktop.platform
   const [shellEnvironmentVariablesDraft, setShellEnvironmentVariablesDraft] = useState(
     settings.shellEnvironmentVariablesText
   )
@@ -1227,18 +1325,34 @@ function SystemPanel(): React.JSX.Element {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold">{t('system.title')}</h2>
+        <h2 className="text-xl font-semibold">{t('system.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('system.subtitle')}</p>
       </div>
 
       <section className="space-y-4 rounded-xl border border-border/60 bg-muted/15 p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
-            <label className="text-sm font-medium">{t('system.shell.endpoint.title')}</label>
-            <p className="text-xs text-muted-foreground">{t('system.shell.endpoint.desc')}</p>
+            <label htmlFor="settings-shell-endpoint" className="text-sm font-medium">
+              {t('system.shell.endpoint.title')}
+            </label>
+            <p
+              id="settings-shell-endpoint-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('system.shell.endpoint.desc')}
+            </p>
           </div>
-          <Badge variant="secondary" className="text-[10px]">
-            {t('system.platform', { platform })}
+          <Badge variant="secondary" className="text-xs">
+            {t('system.platform', {
+              platform:
+                platform === 'win32'
+                  ? 'Windows'
+                  : platform === 'darwin'
+                    ? 'macOS'
+                    : platform === 'linux'
+                      ? 'Linux'
+                      : platform
+            })}
           </Badge>
         </div>
 
@@ -1249,14 +1363,18 @@ function SystemPanel(): React.JSX.Element {
               settings.updateSettings({ shellExecutionEndpoint: value })
             }
           >
-            <SelectTrigger className="w-full max-w-lg text-xs">
+            <SelectTrigger
+              id="settings-shell-endpoint"
+              aria-describedby="settings-shell-endpoint-description"
+              className="w-full max-w-lg text-sm"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectGroup>
                 <SelectLabel>{t('system.shell.endpoint.selectLabel')}</SelectLabel>
                 {shellOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value} className="text-xs">
+                  <SelectItem key={option.value} value={option.value} className="text-sm">
                     {t(option.labelKey)}
                   </SelectItem>
                 ))}
@@ -1264,14 +1382,17 @@ function SystemPanel(): React.JSX.Element {
             </SelectContent>
           </Select>
           {activeShellOption ? (
-            <p className="text-xs text-muted-foreground">{t(activeShellOption.descKey)}</p>
+            <p className="text-[0.8125rem] text-muted-foreground">{t(activeShellOption.descKey)}</p>
           ) : null}
         </div>
 
         {selectedShellEndpoint === 'custom' ? (
           <div className="space-y-2">
-            <label className="text-xs font-medium">{t('system.shell.customPath')}</label>
+            <label htmlFor="settings-shell-custom-path" className="text-sm font-medium">
+              {t('system.shell.customPath')}
+            </label>
             <Input
+              id="settings-shell-custom-path"
               value={settings.customShellExecutable}
               onChange={(event) =>
                 settings.updateSettings({ customShellExecutable: event.target.value })
@@ -1281,12 +1402,12 @@ function SystemPanel(): React.JSX.Element {
                   ? t('system.shell.customPlaceholderWindows')
                   : t('system.shell.customPlaceholderPosix')
               }
-              className="max-w-lg font-mono text-xs"
+              className="max-w-lg font-mono text-sm"
             />
           </div>
         ) : null}
 
-        <p className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+        <p className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-[0.8125rem] text-muted-foreground break-all">
           {resolvedShell
             ? t('system.shell.resolvedShell', { shell: resolvedShell })
             : t('system.shell.resolvedAuto')}
@@ -1294,32 +1415,49 @@ function SystemPanel(): React.JSX.Element {
 
         <div className="space-y-2 rounded-lg border border-border/60 bg-background/60 p-3">
           <div>
-            <label className="text-xs font-medium">{t('system.shell.environment.title')}</label>
-            <p className="text-xs text-muted-foreground">{t('system.shell.environment.desc')}</p>
+            <label htmlFor="settings-shell-environment" className="text-sm font-medium">
+              {t('system.shell.environment.title')}
+            </label>
+            <p
+              id="settings-shell-environment-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('system.shell.environment.desc')}
+            </p>
           </div>
           <Textarea
+            id="settings-shell-environment"
+            aria-invalid={invalidShellEnvironmentVariablesLine !== null}
+            aria-describedby={
+              invalidShellEnvironmentVariablesLine !== null
+                ? 'settings-shell-environment-description settings-shell-environment-error'
+                : 'settings-shell-environment-description'
+            }
             value={shellEnvironmentVariablesDraft}
             onChange={(event) => handleShellEnvironmentVariablesChange(event.target.value)}
             placeholder={t('system.shell.environment.placeholder')}
             rows={8}
-            className={`max-w-lg font-mono text-xs leading-5 ${
+            className={`max-w-lg font-mono text-sm leading-5 ${
               invalidShellEnvironmentVariablesLine !== null
                 ? 'border-destructive focus-visible:ring-destructive'
                 : ''
             }`}
           />
           <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[0.8125rem] text-muted-foreground">
               {t('system.shell.environment.formatHint')}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[0.8125rem] text-muted-foreground">
               {t('system.shell.environment.precedenceHint')}
             </p>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[0.8125rem] text-muted-foreground">
               {t('system.shell.environment.newSessionHint')}
             </p>
             {invalidShellEnvironmentVariablesLine !== null ? (
-              <p className="text-xs text-destructive">
+              <p
+                id="settings-shell-environment-error"
+                className="text-[0.8125rem] text-destructive"
+              >
                 {t('system.shell.environment.validationError', {
                   line: invalidShellEnvironmentVariablesLine
                 })}
@@ -1331,22 +1469,31 @@ function SystemPanel(): React.JSX.Element {
 
       <section className="space-y-3">
         <div>
-          <label className="text-sm font-medium">{t('general.systemProxy')}</label>
-          <p className="text-xs text-muted-foreground">{t('general.systemProxyDesc')}</p>
+          <label htmlFor="settings-system-proxy" className="text-sm font-medium">
+            {t('general.systemProxy')}
+          </label>
+          <p
+            id="settings-system-proxy-description"
+            className="text-[0.8125rem] text-muted-foreground"
+          >
+            {t('general.systemProxyDesc')}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Input
+            id="settings-system-proxy"
+            aria-describedby="settings-system-proxy-description"
             type="text"
             value={settings.systemProxyUrl}
             onChange={(e) => settings.updateSettings({ systemProxyUrl: e.target.value })}
             placeholder="http://127.0.0.1:7890"
-            className="max-w-lg text-xs"
+            className="max-w-lg text-sm"
           />
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-8 text-xs"
+            className="h-8 text-sm"
             onClick={() => settings.updateSettings({ systemProxyUrl: '' })}
           >
             {t('general.appearance.reset')}
@@ -1663,7 +1810,7 @@ function MemoryPanel(): React.JSX.Element {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold">{t('memory.title')}</h2>
+        <h2 className="text-xl font-semibold">{t('memory.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('memory.subtitle')}</p>
       </div>
 
@@ -1671,14 +1818,14 @@ function MemoryPanel(): React.JSX.Element {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="space-y-1">
             <p className="text-sm font-medium">{t('memory.rootPathLabel')}</p>
-            <p className="break-all text-xs text-muted-foreground">
+            <p className="break-all text-[0.8125rem] text-muted-foreground">
               {memoryRootPath || t('memory.pathUnavailable')}
             </p>
           </div>
           <Button
             variant="outline"
             size="sm"
-            className="h-8 text-xs"
+            className="h-8 text-sm"
             onClick={() => void loadGlobalMemoryFiles()}
             disabled={loading || saving}
           >
@@ -1686,7 +1833,7 @@ function MemoryPanel(): React.JSX.Element {
             {t('memory.reloadAction')}
           </Button>
         </div>
-        <p className="text-xs text-muted-foreground">{t('memory.effectiveHint')}</p>
+        <p className="text-[0.8125rem] text-muted-foreground">{t('memory.effectiveHint')}</p>
       </section>
 
       <AutoMemoryPanel variant="global" />
@@ -1702,7 +1849,7 @@ function MemoryPanel(): React.JSX.Element {
                 type="button"
                 size="sm"
                 variant={isActive ? 'default' : 'outline'}
-                className="h-8 text-xs"
+                className="h-8 text-sm"
                 onClick={() => setActiveTab(id)}
               >
                 {t(entry.titleKey)}
@@ -1719,14 +1866,16 @@ function MemoryPanel(): React.JSX.Element {
                   <Wand2 className="size-4 text-primary" />
                   {t('memory.builtin.title')}
                 </p>
-                <p className="text-xs text-muted-foreground">{t('memory.builtin.subtitle')}</p>
+                <p className="text-[0.8125rem] text-muted-foreground">
+                  {t('memory.builtin.subtitle')}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 text-xs"
+                  className="h-8 text-sm"
                   onClick={handleLoadBuiltinSoulTemplate}
                   disabled={loading || saving || !selectedBuiltinSoulTemplate}
                 >
@@ -1736,7 +1885,7 @@ function MemoryPanel(): React.JSX.Element {
                   type="button"
                   variant="destructive"
                   size="sm"
-                  className="h-8 text-xs"
+                  className="h-8 text-sm"
                   onClick={() => void handleOverwriteBuiltinSoulTemplate()}
                   disabled={loading || saving || !selectedBuiltinSoulTemplate}
                 >
@@ -1748,7 +1897,7 @@ function MemoryPanel(): React.JSX.Element {
             {builtinSoulTemplates.length > 0 ? (
               <div className="grid gap-3 lg:grid-cols-[minmax(220px,320px)_1fr]">
                 <div className="space-y-2">
-                  <label className="text-xs font-medium">{t('memory.builtin.selectLabel')}</label>
+                  <label className="text-sm font-medium">{t('memory.builtin.selectLabel')}</label>
                   <Select value={selectedBuiltinSoulId} onValueChange={setSelectedBuiltinSoulId}>
                     <SelectTrigger className="h-9 w-full">
                       <SelectValue />
@@ -1763,11 +1912,11 @@ function MemoryPanel(): React.JSX.Element {
                   </Select>
                   {selectedBuiltinSoulTemplate ? (
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {getBuiltinSoulCategoryLabel(selectedBuiltinSoulTemplate.category)}
                       </Badge>
                       {selectedBuiltinSoulTemplate.tags.map((tag) => (
-                        <Badge key={tag} variant="secondary" className="text-[10px]">
+                        <Badge key={tag} variant="secondary" className="text-xs">
                           {getBuiltinSoulTagLabel(tag)}
                         </Badge>
                       ))}
@@ -1778,14 +1927,14 @@ function MemoryPanel(): React.JSX.Element {
                 {selectedBuiltinSoulTemplate ? (
                   <div className="min-w-0 space-y-2 rounded-md border bg-background/70 p-3">
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold">
+                      <p className="text-sm font-semibold">
                         {getBuiltinSoulTemplateName(selectedBuiltinSoulTemplate)}
                       </p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-[0.8125rem] text-muted-foreground">
                         {getBuiltinSoulTemplateDescription(selectedBuiltinSoulTemplate)}
                       </p>
                     </div>
-                    <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-md bg-muted/40 p-2 font-mono text-[11px] leading-5 text-muted-foreground">
+                    <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-all rounded-md bg-muted/40 p-2 font-mono text-[0.8125rem] leading-5 text-muted-foreground">
                       {selectedBuiltinSoulTemplate.content.slice(0, 1800)}
                       {selectedBuiltinSoulTemplate.content.length > 1800 ? '\n...' : ''}
                     </pre>
@@ -1793,7 +1942,7 @@ function MemoryPanel(): React.JSX.Element {
                 ) : null}
               </div>
             ) : (
-              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+              <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.8125rem] text-amber-600 dark:text-amber-400">
                 {t('memory.builtin.unavailable')}
               </p>
             )}
@@ -1804,12 +1953,14 @@ function MemoryPanel(): React.JSX.Element {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="space-y-1">
               <label className="text-sm font-medium">{t(activeFile.titleKey)}</label>
-              <p className="text-xs text-muted-foreground">{t(activeFile.descriptionKey)}</p>
-              <p className="break-all text-[11px] text-muted-foreground">
+              <p className="text-[0.8125rem] text-muted-foreground">
+                {t(activeFile.descriptionKey)}
+              </p>
+              <p className="break-all text-xs text-muted-foreground">
                 {activeFile.path || t('memory.pathUnavailable')}
               </p>
             </div>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-[0.8125rem] text-muted-foreground">
               {hasUnsavedChanges
                 ? t('memory.unsavedChanges')
                 : activeFile.lastSavedAt
@@ -1821,7 +1972,7 @@ function MemoryPanel(): React.JSX.Element {
           </div>
 
           {activeFile.missingFile && (
-            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+            <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[0.8125rem] text-amber-600 dark:text-amber-400">
               {t('memory.missingFileHint', { file: activeFile.filename })}
             </p>
           )}
@@ -1833,12 +1984,12 @@ function MemoryPanel(): React.JSX.Element {
               file: activeFile.filename || t(activeFile.titleKey)
             })}
             rows={20}
-            className="min-h-[420px] font-mono text-xs leading-5"
+            className="min-h-[420px] font-mono text-sm leading-5"
           />
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              className="h-8 text-xs"
+              className="h-8 text-sm"
               onClick={() => void handleSave()}
               disabled={saving || loading || !canSave}
             >
@@ -1852,7 +2003,7 @@ function MemoryPanel(): React.JSX.Element {
             <Button
               variant="ghost"
               size="sm"
-              className="h-8 text-xs"
+              className="h-8 text-sm"
               onClick={handleReset}
               disabled={saving || loading || !hasUnsavedChanges}
             >
@@ -2071,7 +2222,7 @@ export function AnalyticsPanel(): React.JSX.Element {
     return (
       <span title={`${raw} Token`} className="inline-flex flex-col tabular-nums leading-tight">
         <span>{compact}</span>
-        {shouldShowRaw ? <span className="text-[11px] text-muted-foreground">{raw}</span> : null}
+        {shouldShowRaw ? <span className="text-xs text-muted-foreground">{raw}</span> : null}
       </span>
     )
   }
@@ -2094,14 +2245,14 @@ export function AnalyticsPanel(): React.JSX.Element {
     }>
   ): React.JSX.Element => (
     <section className="space-y-3 rounded-xl border border-border/60 bg-background/60 p-4">
-      <h3 className="text-sm font-semibold">{title}</h3>
+      <h3 className="text-[0.9375rem] font-semibold">{title}</h3>
       {rows.length === 0 ? (
-        <p className="text-xs text-muted-foreground">{t('analytics.empty')}</p>
+        <p className="text-[0.8125rem] text-muted-foreground">{t('analytics.empty')}</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/60 text-left text-muted-foreground">
+              <tr className="border-b border-border/60 text-left text-[0.8125rem] text-muted-foreground">
                 {columns.map((column) => (
                   <th key={column.key} className="px-2 py-2 font-medium">
                     {column.label}
@@ -2128,9 +2279,9 @@ export function AnalyticsPanel(): React.JSX.Element {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold">{t('analytics.title')}</h2>
+          <h2 className="text-xl font-semibold">{t('analytics.title')}</h2>
           <p className="text-sm text-muted-foreground">{t('analytics.subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -2139,7 +2290,7 @@ export function AnalyticsPanel(): React.JSX.Element {
               key={days}
               size="sm"
               variant={rangeDays === days ? 'default' : 'outline'}
-              className="h-8 text-xs"
+              className="h-8 text-sm"
               onClick={() => setRangeDays(days)}
             >
               {days === 1
@@ -2152,7 +2303,7 @@ export function AnalyticsPanel(): React.JSX.Element {
           <Button
             size="sm"
             variant="outline"
-            className="h-8 text-xs text-destructive hover:text-destructive"
+            className="h-8 text-sm text-destructive hover:text-destructive"
             onClick={() => void handleClearLogs()}
             disabled={clearing || loading}
           >
@@ -2168,9 +2319,9 @@ export function AnalyticsPanel(): React.JSX.Element {
 
       <section className="grid gap-3 rounded-2xl border border-border/50 bg-muted/10 p-4 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] md:grid-cols-3 xl:grid-cols-3">
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground">{t('analytics.provider')}</div>
+          <div className="text-[0.8125rem] text-muted-foreground">{t('analytics.provider')}</div>
           <Select value={selectedProviderId} onValueChange={setSelectedProviderId}>
-            <SelectTrigger className="text-xs">
+            <SelectTrigger className="text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -2184,9 +2335,9 @@ export function AnalyticsPanel(): React.JSX.Element {
           </Select>
         </div>
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground">{t('analytics.model')}</div>
+          <div className="text-[0.8125rem] text-muted-foreground">{t('analytics.model')}</div>
           <Select value={selectedModelId} onValueChange={setSelectedModelId}>
-            <SelectTrigger className="text-xs">
+            <SelectTrigger className="text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -2200,9 +2351,9 @@ export function AnalyticsPanel(): React.JSX.Element {
           </Select>
         </div>
         <div className="space-y-2">
-          <div className="text-xs text-muted-foreground">{t('analytics.source')}</div>
+          <div className="text-[0.8125rem] text-muted-foreground">{t('analytics.source')}</div>
           <Select value={selectedSourceKind} onValueChange={setSelectedSourceKind}>
-            <SelectTrigger className="text-xs">
+            <SelectTrigger className="text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -2553,14 +2704,14 @@ function ModelPanel(): React.JSX.Element {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold">{t('model.title')}</h2>
+        <h2 className="text-xl font-semibold">{t('model.title')}</h2>
         <p className="text-sm text-muted-foreground">{t('model.subtitle')}</p>
       </div>
 
       {noProviders ? (
         <div className="rounded-lg border border-dashed p-6 text-center space-y-2">
           <p className="text-sm text-muted-foreground">{t('model.noProviders')}</p>
-          <p className="text-xs text-muted-foreground/60">{t('model.noProvidersHint')}</p>
+          <p className="text-[0.8125rem] text-muted-foreground">{t('model.noProvidersHint')}</p>
         </div>
       ) : (
         <>
@@ -2570,7 +2721,7 @@ function ModelPanel(): React.JSX.Element {
               <label className="text-sm font-medium">
                 {t('model.newSessionDefaultModel.title')}
               </label>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[0.8125rem] text-muted-foreground">
                 {t('model.newSessionDefaultModel.desc')}
               </p>
             </div>
@@ -2599,23 +2750,23 @@ function ModelPanel(): React.JSX.Element {
                   })
                 }}
               >
-                <SelectTrigger className="w-80 text-xs">
+                <SelectTrigger className="w-full max-w-80 text-sm">
                   <SelectValue placeholder={t('model.newSessionDefaultModel.placeholder')} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__global__" className="text-xs">
+                  <SelectItem value="__global__" className="text-sm">
                     {t('model.newSessionDefaultModel.followGlobalActiveModel')}
                   </SelectItem>
                   {chatProviderGroups.map(({ provider, models }) => (
                     <SelectGroup key={`${provider.id}-new-session-default`}>
-                      <SelectLabel className="text-[10px] uppercase tracking-wide">
+                      <SelectLabel className="text-xs uppercase tracking-wide">
                         {provider.name}
                       </SelectLabel>
                       {models.map((m) => (
                         <SelectItem
                           key={`${provider.id}-new-session-${m.id}`}
                           value={buildModelValue(provider.id, m.id)}
-                          className="text-xs"
+                          className="text-sm"
                         >
                           <div className="flex items-center gap-2">
                             <ModelIcon
@@ -2627,7 +2778,7 @@ function ModelPanel(): React.JSX.Element {
                             />
                             <div className="flex flex-col text-left">
                               <span>{m.name}</span>
-                              <span className="text-[10px] text-muted-foreground/60">{m.id}</span>
+                              <span className="text-xs text-muted-foreground">{m.id}</span>
                             </div>
                           </div>
                         </SelectItem>
@@ -2637,7 +2788,7 @@ function ModelPanel(): React.JSX.Element {
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.noModelsHint')}</p>
             )}
           </section>
 
@@ -2645,7 +2796,7 @@ function ModelPanel(): React.JSX.Element {
           <section className="space-y-3">
             <div>
               <label className="text-sm font-medium">{t('model.mainModel')}</label>
-              <p className="text-xs text-muted-foreground">{t('model.mainModelDesc')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.mainModelDesc')}</p>
             </div>
             {hasAnyEnabledModel ? (
               <div className="space-y-2">
@@ -2657,30 +2808,30 @@ function ModelPanel(): React.JSX.Element {
                     })
                   }
                 >
-                  <SelectTrigger className="w-80 text-xs">
+                  <SelectTrigger className="w-full max-w-80 text-sm">
                     <SelectValue placeholder={t('model.selectMainModelMode')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="auto" className="text-xs">
+                    <SelectItem value="auto" className="text-sm">
                       {t('model.autoMode')}
                     </SelectItem>
-                    <SelectItem value="manual" className="text-xs">
+                    <SelectItem value="manual" className="text-sm">
                       {t('model.manualMode')}
                     </SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-xs text-muted-foreground/80">
+                <p className="text-[0.8125rem] text-muted-foreground">
                   {mainModelSelectionMode === 'auto'
                     ? t('model.autoModeDesc')
                     : t('model.manualModeDesc')}
                 </p>
                 <div>
-                  <label className="text-xs font-medium text-muted-foreground">
+                  <label className="text-sm font-medium text-muted-foreground">
                     {mainModelSelectionMode === 'auto'
                       ? t('model.autoMainCandidate')
                       : t('model.manualMainCandidate')}
                   </label>
-                  <p className="mt-1 text-xs text-muted-foreground/70">
+                  <p className="mt-1 text-[0.8125rem] text-muted-foreground">
                     {t('model.manualMainCandidateDesc')}
                   </p>
                 </div>
@@ -2695,20 +2846,20 @@ function ModelPanel(): React.JSX.Element {
                     setActiveModel(parsed.modelId)
                   }}
                 >
-                  <SelectTrigger className="w-80 text-xs">
+                  <SelectTrigger className="w-full max-w-80 text-sm">
                     <SelectValue placeholder={t('model.selectModel')} />
                   </SelectTrigger>
                   <SelectContent>
                     {chatProviderGroups.map(({ provider, models }) => (
                       <SelectGroup key={provider.id}>
-                        <SelectLabel className="text-[10px] uppercase tracking-wide">
+                        <SelectLabel className="text-xs uppercase tracking-wide">
                           {provider.name}
                         </SelectLabel>
                         {models.map((m) => (
                           <SelectItem
                             key={`${provider.id}-${m.id}`}
                             value={buildModelValue(provider.id, m.id)}
-                            className="text-xs"
+                            className="text-sm"
                           >
                             <div className="flex items-center gap-2">
                               <ModelIcon
@@ -2720,7 +2871,7 @@ function ModelPanel(): React.JSX.Element {
                               />
                               <div className="flex flex-col text-left">
                                 <span>{m.name}</span>
-                                <span className="text-[10px] text-muted-foreground/60">{m.id}</span>
+                                <span className="text-xs text-muted-foreground">{m.id}</span>
                               </div>
                             </div>
                           </SelectItem>
@@ -2731,7 +2882,7 @@ function ModelPanel(): React.JSX.Element {
                 </Select>
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.noModelsHint')}</p>
             )}
           </section>
 
@@ -2739,7 +2890,7 @@ function ModelPanel(): React.JSX.Element {
           <section className="space-y-3">
             <div>
               <label className="text-sm font-medium">{t('model.fastModel')}</label>
-              <p className="text-xs text-muted-foreground">{t('model.fastModelDesc')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.fastModelDesc')}</p>
             </div>
             {chatProviderGroups.length > 0 ? (
               <div className="space-y-2">
@@ -2747,12 +2898,12 @@ function ModelPanel(): React.JSX.Element {
                   value={fastProvider?.id ?? ''}
                   onValueChange={(value) => setActiveFastProvider(value)}
                 >
-                  <SelectTrigger className="w-80 text-xs">
+                  <SelectTrigger className="w-full max-w-80 text-sm">
                     <SelectValue placeholder={t('model.selectProvider')} />
                   </SelectTrigger>
                   <SelectContent>
                     {chatProviderGroups.map(({ provider }) => (
-                      <SelectItem key={provider.id} value={provider.id} className="text-xs">
+                      <SelectItem key={provider.id} value={provider.id} className="text-sm">
                         <span className="flex items-center gap-2">
                           <ProviderIcon builtinId={provider.builtinId} size={14} />
                           {provider.name}
@@ -2767,12 +2918,12 @@ function ModelPanel(): React.JSX.Element {
                     value={activeFastModelId || fastProviderEnabledModels[0]?.id || ''}
                     onValueChange={(v) => setActiveFastModel(v)}
                   >
-                    <SelectTrigger className="w-80 text-xs">
+                    <SelectTrigger className="w-full max-w-80 text-sm">
                       <SelectValue placeholder={t('model.selectFastModel')} />
                     </SelectTrigger>
                     <SelectContent>
                       {fastProviderEnabledModels.map((m) => (
-                        <SelectItem key={m.id} value={m.id} className="text-xs">
+                        <SelectItem key={m.id} value={m.id} className="text-sm">
                           <div className="flex items-center gap-2">
                             <ModelIcon
                               icon={m.icon}
@@ -2783,7 +2934,7 @@ function ModelPanel(): React.JSX.Element {
                             />
                             <div className="flex flex-col">
                               <span>{m.name}</span>
-                              <span className="text-[10px] text-muted-foreground/60">{m.id}</span>
+                              <span className="text-xs text-muted-foreground">{m.id}</span>
                             </div>
                           </div>
                         </SelectItem>
@@ -2791,18 +2942,22 @@ function ModelPanel(): React.JSX.Element {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+                  <p className="text-[0.8125rem] text-muted-foreground">
+                    {t('model.noModelsHint')}
+                  </p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.noModelsHint')}</p>
             )}
           </section>
 
           <section className="space-y-3">
             <div>
               <label className="text-sm font-medium">{t('model.promptRecommendationTitle')}</label>
-              <p className="text-xs text-muted-foreground">{t('model.promptRecommendationDesc')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">
+                {t('model.promptRecommendationDesc')}
+              </p>
             </div>
             {chatProviderGroups.length > 0 ? (
               <div className="grid gap-3 md:grid-cols-2">
@@ -2818,7 +2973,7 @@ function ModelPanel(): React.JSX.Element {
                     <div key={mode} className="rounded-lg border p-3 space-y-2">
                       <div>
                         <p className="text-sm font-medium">{t(labelKey)}</p>
-                        <p className="text-xs text-muted-foreground">{t(descKey)}</p>
+                        <p className="text-[0.8125rem] text-muted-foreground">{t(descKey)}</p>
                       </div>
                       <Select
                         value={value}
@@ -2826,26 +2981,26 @@ function ModelPanel(): React.JSX.Element {
                           updatePromptRecommendationModel(mode, nextValue)
                         }
                       >
-                        <SelectTrigger className="w-full text-xs">
+                        <SelectTrigger className="w-full text-sm">
                           <SelectValue placeholder={t('model.selectRecommendationModel')} />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__fast__" className="text-xs">
+                          <SelectItem value="__fast__" className="text-sm">
                             {t('model.useFastModelRecommendation')}
                           </SelectItem>
-                          <SelectItem value="__disabled__" className="text-xs">
+                          <SelectItem value="__disabled__" className="text-sm">
                             {t('model.disableRecommendation')}
                           </SelectItem>
                           {chatProviderGroups.map(({ provider, models }) => (
                             <SelectGroup key={`${provider.id}-recommendation-${mode}`}>
-                              <SelectLabel className="text-[10px] uppercase tracking-wide">
+                              <SelectLabel className="text-xs uppercase tracking-wide">
                                 {provider.name}
                               </SelectLabel>
                               {models.map((m) => (
                                 <SelectItem
                                   key={`${provider.id}-${mode}-${m.id}`}
                                   value={buildModelValue(provider.id, m.id)}
-                                  className="text-xs"
+                                  className="text-sm"
                                 >
                                   <div className="flex items-center gap-2">
                                     <ModelIcon
@@ -2857,9 +3012,7 @@ function ModelPanel(): React.JSX.Element {
                                     />
                                     <div className="flex flex-col text-left">
                                       <span>{m.name}</span>
-                                      <span className="text-[10px] text-muted-foreground/60">
-                                        {m.id}
-                                      </span>
+                                      <span className="text-xs text-muted-foreground">{m.id}</span>
                                     </div>
                                   </div>
                                 </SelectItem>
@@ -2873,7 +3026,7 @@ function ModelPanel(): React.JSX.Element {
                 })}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.noModelsHint')}</p>
             )}
           </section>
 
@@ -2881,7 +3034,9 @@ function ModelPanel(): React.JSX.Element {
           <section className="space-y-3">
             <div>
               <label className="text-sm font-medium">{t('model.translationModel')}</label>
-              <p className="text-xs text-muted-foreground">{t('model.translationModelDesc')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">
+                {t('model.translationModelDesc')}
+              </p>
             </div>
             {chatProviderGroups.length > 0 ? (
               <div className="space-y-2">
@@ -2889,7 +3044,7 @@ function ModelPanel(): React.JSX.Element {
                   value={translationProvider?.id ?? ''}
                   onValueChange={(value) => setActiveTranslationProvider(value)}
                 >
-                  <SelectTrigger className="w-80 text-xs">
+                  <SelectTrigger className="w-full max-w-80 text-sm">
                     <SelectValue placeholder={t('model.selectProvider')} />
                   </SelectTrigger>
                   <SelectContent>
@@ -2897,7 +3052,7 @@ function ModelPanel(): React.JSX.Element {
                       <SelectItem
                         key={`${provider.id}-translation-provider`}
                         value={provider.id}
-                        className="text-xs"
+                        className="text-sm"
                       >
                         <span className="flex items-center gap-2">
                           <ProviderIcon builtinId={provider.builtinId} size={14} />
@@ -2915,7 +3070,7 @@ function ModelPanel(): React.JSX.Element {
                     }
                     onValueChange={(value) => setActiveTranslationModel(value)}
                   >
-                    <SelectTrigger className="w-80 text-xs">
+                    <SelectTrigger className="w-full max-w-80 text-sm">
                       <SelectValue placeholder={t('model.selectTranslationModel')} />
                     </SelectTrigger>
                     <SelectContent>
@@ -2923,7 +3078,7 @@ function ModelPanel(): React.JSX.Element {
                         <SelectItem
                           key={`translation-model-${m.id}`}
                           value={m.id}
-                          className="text-xs"
+                          className="text-sm"
                         >
                           <div className="flex items-center gap-2">
                             <ModelIcon
@@ -2935,7 +3090,7 @@ function ModelPanel(): React.JSX.Element {
                             />
                             <div className="flex flex-col text-left">
                               <span>{m.name}</span>
-                              <span className="text-[10px] text-muted-foreground/60">{m.id}</span>
+                              <span className="text-xs text-muted-foreground">{m.id}</span>
                             </div>
                           </div>
                         </SelectItem>
@@ -2943,11 +3098,13 @@ function ModelPanel(): React.JSX.Element {
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+                  <p className="text-[0.8125rem] text-muted-foreground">
+                    {t('model.noModelsHint')}
+                  </p>
                 )}
               </div>
             ) : (
-              <p className="text-xs text-muted-foreground/60">{t('model.noModelsHint')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.noModelsHint')}</p>
             )}
           </section>
 
@@ -2955,7 +3112,7 @@ function ModelPanel(): React.JSX.Element {
           <section className="space-y-3">
             <div>
               <label className="text-sm font-medium">{t('model.imageModel')}</label>
-              <p className="text-xs text-muted-foreground">{t('model.imageModelDesc')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.imageModelDesc')}</p>
             </div>
             {hasImageModels ? (
               <Select
@@ -2967,20 +3124,20 @@ function ModelPanel(): React.JSX.Element {
                   setActiveImageModel(parsed.modelId)
                 }}
               >
-                <SelectTrigger className="w-80 text-xs">
+                <SelectTrigger className="w-full max-w-80 text-sm">
                   <SelectValue placeholder={t('model.selectImageModel')} />
                 </SelectTrigger>
                 <SelectContent>
                   {imageProviderGroups.map(({ provider, models }) => (
                     <SelectGroup key={`${provider.id}-image`}>
-                      <SelectLabel className="text-[10px] uppercase tracking-wide">
+                      <SelectLabel className="text-xs uppercase tracking-wide">
                         {provider.name}
                       </SelectLabel>
                       {models.map((m) => (
                         <SelectItem
                           key={`${provider.id}-image-${m.id}`}
                           value={buildModelValue(provider.id, m.id)}
-                          className="text-xs"
+                          className="text-sm"
                         >
                           <div className="flex items-center gap-2">
                             <ModelIcon
@@ -2992,7 +3149,7 @@ function ModelPanel(): React.JSX.Element {
                             />
                             <div className="flex flex-col text-left">
                               <span>{m.name}</span>
-                              <span className="text-[10px] text-muted-foreground/60">{m.id}</span>
+                              <span className="text-xs text-muted-foreground">{m.id}</span>
                             </div>
                           </div>
                         </SelectItem>
@@ -3002,7 +3159,7 @@ function ModelPanel(): React.JSX.Element {
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-xs text-muted-foreground/60">{t('model.noImageModels')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.noImageModels')}</p>
             )}
           </section>
 
@@ -3010,7 +3167,7 @@ function ModelPanel(): React.JSX.Element {
           <section className="space-y-3">
             <div>
               <label className="text-sm font-medium">{t('model.speechModel')}</label>
-              <p className="text-xs text-muted-foreground">{t('model.speechModelDesc')}</p>
+              <p className="text-[0.8125rem] text-muted-foreground">{t('model.speechModelDesc')}</p>
             </div>
             {hasSpeechModels ? (
               <Select
@@ -3022,20 +3179,20 @@ function ModelPanel(): React.JSX.Element {
                   setActiveSpeechModel(parsed.modelId)
                 }}
               >
-                <SelectTrigger className="w-80 text-xs">
+                <SelectTrigger className="w-full max-w-80 text-sm">
                   <SelectValue placeholder={t('model.selectSpeechModel')} />
                 </SelectTrigger>
                 <SelectContent>
                   {speechProviderGroups.map(({ provider, models }) => (
                     <SelectGroup key={`${provider.id}-speech`}>
-                      <SelectLabel className="text-[10px] uppercase tracking-wide">
+                      <SelectLabel className="text-xs uppercase tracking-wide">
                         {provider.name}
                       </SelectLabel>
                       {models.map((m) => (
                         <SelectItem
                           key={`${provider.id}-speech-${m.id}`}
                           value={buildModelValue(provider.id, m.id)}
-                          className="text-xs"
+                          className="text-sm"
                         >
                           <div className="flex items-center gap-2">
                             <ModelIcon
@@ -3047,7 +3204,7 @@ function ModelPanel(): React.JSX.Element {
                             />
                             <div className="flex flex-col text-left">
                               <span>{m.name}</span>
-                              <span className="text-[10px] text-muted-foreground/60">{m.id}</span>
+                              <span className="text-xs text-muted-foreground">{m.id}</span>
                             </div>
                           </div>
                         </SelectItem>
@@ -3057,7 +3214,7 @@ function ModelPanel(): React.JSX.Element {
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-xs text-muted-foreground/60">
+              <p className="text-[0.8125rem] text-muted-foreground">
                 {t('model.speechModelNoProviders')}
               </p>
             )}
@@ -3071,12 +3228,21 @@ function ModelPanel(): React.JSX.Element {
       <section className="space-y-3">
         <div className="flex items-center justify-between max-w-lg">
           <div>
-            <label className="text-sm font-medium">{t('model.temperature')}</label>
-            <p className="text-xs text-muted-foreground">{t('model.temperatureDesc')}</p>
+            <span id="settings-model-temperature-label" className="text-sm font-medium">
+              {t('model.temperature')}
+            </span>
+            <p
+              id="settings-model-temperature-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('model.temperatureDesc')}
+            </p>
           </div>
           <span className="text-sm font-mono text-muted-foreground">{settings.temperature}</span>
         </div>
         <Slider
+          aria-labelledby="settings-model-temperature-label"
+          aria-describedby="settings-model-temperature-description"
           value={[settings.temperature]}
           onValueChange={([v]) => settings.updateSettings({ temperature: v })}
           min={0}
@@ -3084,7 +3250,7 @@ function ModelPanel(): React.JSX.Element {
           step={0.1}
           className="max-w-lg"
         />
-        <div className="flex items-center justify-between max-w-lg">
+        <div className="flex flex-wrap items-center justify-between gap-2 max-w-lg">
           {[
             { v: 0, label: t('model.precise') },
             { v: 0.3, label: t('model.balanced') },
@@ -3093,8 +3259,10 @@ function ModelPanel(): React.JSX.Element {
           ].map(({ v, label }) => (
             <button
               key={v}
+              type="button"
+              aria-pressed={settings.temperature === v}
               onClick={() => settings.updateSettings({ temperature: v })}
-              className={`text-[10px] transition-colors ${settings.temperature === v ? 'text-foreground font-medium' : 'text-muted-foreground/50 hover:text-muted-foreground'}`}
+              className={`min-h-8 min-w-8 rounded px-2 text-[0.8125rem] transition-colors ${settings.temperature === v ? 'text-foreground font-medium' : 'text-muted-foreground hover:text-foreground'}`}
             >
               {label}
             </button>
@@ -3106,7 +3274,7 @@ function ModelPanel(): React.JSX.Element {
       <section className="space-y-3">
         <div>
           <label className="text-sm font-medium">{t('model.maxTokens')}</label>
-          <p className="text-xs text-muted-foreground">{t('model.maxTokensDesc')}</p>
+          <p className="text-[0.8125rem] text-muted-foreground">{t('model.maxTokensDesc')}</p>
         </div>
         <Input
           type="number"
@@ -3116,12 +3284,14 @@ function ModelPanel(): React.JSX.Element {
           }
           className="max-w-60"
         />
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {[8192, 16384, 32000, 64000, 128000].map((v) => (
             <button
               key={v}
+              type="button"
+              aria-pressed={settings.maxTokens === v}
               onClick={() => settings.updateSettings({ maxTokens: v })}
-              className={`rounded px-2 py-0.5 text-[10px] transition-colors ${settings.maxTokens === v ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+              className={`min-h-8 min-w-8 rounded px-2 py-1.5 text-[0.8125rem] transition-colors ${settings.maxTokens === v ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
             >
               {v >= 1000 ? `${Math.round(v / 1024)}K` : v}
             </button>
@@ -3167,13 +3337,13 @@ function AboutPanel(): React.JSX.Element {
     <div className="space-y-8">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h2 className="text-lg font-semibold">{t('about.title')}</h2>
+          <h2 className="text-xl font-semibold">{t('about.title')}</h2>
           <p className="text-sm text-muted-foreground">{t('about.subtitle')}</p>
         </div>
         <Button
           variant="outline"
           size="sm"
-          className="gap-1.5 text-xs"
+          className="gap-1.5 text-sm"
           onClick={() => window.open('https://github.com/Leevity/Ola', '_blank', 'noopener')}
         >
           <Github className="size-3.5" /> GitHub
@@ -3231,13 +3401,13 @@ function AboutPanel(): React.JSX.Element {
                 <card.icon className="mt-0.5 size-4 shrink-0 text-primary" />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{card.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{card.desc}</p>
+                  <p className="mt-0.5 text-[0.8125rem] text-muted-foreground">{card.desc}</p>
                 </div>
               </div>
             ))}
           </div>
           <Button
-            className="mt-4 h-9 w-full text-xs"
+            className="mt-4 h-9 w-full text-sm"
             variant="secondary"
             onClick={() =>
               window.open('https://github.com/Leevity/Ola/releases', '_blank', 'noopener')
@@ -3270,7 +3440,7 @@ function AiModelsPanel(): React.JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-col gap-5">
       <div
-        className="inline-flex w-fit shrink-0 rounded-lg border border-border/70 bg-muted/20 p-1"
+        className="flex w-full shrink-0 flex-wrap rounded-lg border border-border/70 bg-muted/20 p-1 sm:w-fit"
         role="tablist"
         aria-label={t('page.groups.aiAndModels')}
       >
@@ -3281,7 +3451,7 @@ function AiModelsPanel(): React.JSX.Element {
             role="tab"
             aria-selected={activeTab === tab.id}
             onClick={() => setSettingsTab(tab.id)}
-            className={`rounded-md px-3 py-1.5 text-xs transition-colors ${
+            className={`min-h-8 rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
               activeTab === tab.id
                 ? 'bg-background font-medium text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground'
@@ -3321,19 +3491,16 @@ export function SettingsPage(): React.JSX.Element {
   const closeSettingsPage = useUIStore((s) => s.closeSettingsPage)
   const isMac = useMemo(() => /Mac/.test(navigator.userAgent), [])
   const [settingsSearch, setSettingsSearch] = useState('')
-  const [saveStatus, setSaveStatus] = useState<'saving' | 'saved'>('saved')
+  const [saveStatus, setSaveStatus] = useState(getSettingsWriteStatus)
 
   useEffect(() => {
-    let savedTimer: ReturnType<typeof setTimeout> | null = null
-    const unsubscribe = useSettingsStore.subscribe(() => {
-      setSaveStatus('saving')
-      if (savedTimer) clearTimeout(savedTimer)
-      savedTimer = setTimeout(() => setSaveStatus('saved'), 500)
-    })
-    return () => {
-      unsubscribe()
-      if (savedTimer) clearTimeout(savedTimer)
-    }
+    const unsubscribe = subscribeSettingsWriteStatus(setSaveStatus)
+    setSaveStatus(getSettingsWriteStatus())
+    return unsubscribe
+  }, [])
+
+  const retrySettingsSave = useCallback(() => {
+    useSettingsStore.setState((state) => ({ ...state }))
   }, [])
 
   const effectiveSettingsTab = settingsTab
@@ -3351,7 +3518,7 @@ export function SettingsPage(): React.JSX.Element {
   }, [settingsSearch, t])
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col bg-muted/10">
+    <div className="settings-page flex h-full min-h-0 w-full flex-col bg-muted/10">
       <header
         className={`titlebar-drag relative flex h-10 shrink-0 items-center gap-3 border-b bg-background/90 px-3 backdrop-blur ${isMac ? 'pl-[104px]' : 'pr-[132px]'}`}
         style={{ paddingRight: isMac ? undefined : 'calc(132px + 0.75rem)' }}
@@ -3359,7 +3526,7 @@ export function SettingsPage(): React.JSX.Element {
         <Button
           variant="ghost"
           size="icon"
-          className="titlebar-no-drag size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+          className="titlebar-no-drag size-8 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
           onClick={closeSettingsPage}
           title={t('page.back', { defaultValue: 'Back' })}
           aria-label={t('page.back', { defaultValue: 'Back' })}
@@ -3368,17 +3535,29 @@ export function SettingsPage(): React.JSX.Element {
         </Button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-foreground/92">{t('page.title')}</div>
-          <div className="hidden truncate text-[11px] text-muted-foreground sm:block">
+          <div className="hidden truncate text-xs text-muted-foreground sm:block">
             {t('page.subtitle')}
           </div>
         </div>
         <div
-          className="titlebar-no-drag hidden items-center gap-1.5 text-[11px] text-muted-foreground sm:flex"
+          className="titlebar-no-drag flex shrink-0 items-center gap-1.5 text-xs"
           aria-live="polite"
         >
-          <span>{t('page.globalScope')}</span>
-          <span aria-hidden="true">·</span>
-          <span>{t(`page.${saveStatus}`)}</span>
+          <span className="hidden text-muted-foreground sm:inline">{t('page.globalScope')} ·</span>
+          {saveStatus === 'failed' ? (
+            <button
+              type="button"
+              className="flex min-h-8 items-center gap-1 rounded px-1 text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={retrySettingsSave}
+              title={t('page.retrySave')}
+              aria-label={t('page.retrySave')}
+            >
+              <RefreshCw className="size-3.5" aria-hidden="true" />
+              {t('page.failed')}
+            </button>
+          ) : (
+            <span className="text-muted-foreground">{t(`page.${saveStatus}`)}</span>
+          )}
         </div>
         {!isMac ? (
           <div className="absolute right-0 top-0 z-10">
@@ -3388,8 +3567,8 @@ export function SettingsPage(): React.JSX.Element {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <div className="flex w-[236px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground">
-          <div className="px-3 pt-3">
+        <div className="flex w-14 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground sm:w-[236px]">
+          <div className="hidden px-3 pt-3 sm:block">
             <div className="relative">
               <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -3397,14 +3576,14 @@ export function SettingsPage(): React.JSX.Element {
                 onChange={(event) => setSettingsSearch(event.target.value)}
                 placeholder={t('page.searchPlaceholder')}
                 aria-label={t('page.searchLabel')}
-                className="h-8 bg-background/55 pl-8 text-xs"
+                className="h-8 bg-background/55 pl-8 text-sm"
               />
             </div>
           </div>
-          <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 pb-2 pt-4">
+          <nav className="flex-1 space-y-3 overflow-y-auto px-1 pb-2 pt-3 sm:space-y-5 sm:px-2.5 sm:pt-4">
             {visibleMenuGroups.map((group) => (
               <div key={group.id} className="space-y-0.5">
-                <p className="mb-1 px-3 text-[11px] font-medium text-muted-foreground/70">
+                <p className="mb-1 hidden px-3 text-xs font-medium text-muted-foreground/80 sm:block">
                   {t(group.labelKey)}
                 </p>
                 {group.items.map((item) => {
@@ -3412,9 +3591,12 @@ export function SettingsPage(): React.JSX.Element {
                   return (
                     <button
                       key={item.id}
+                      type="button"
+                      title={t(item.titleKey)}
+                      aria-label={t(item.titleKey)}
                       onClick={() => setSettingsTab(item.id)}
                       aria-current={active ? 'page' : undefined}
-                      className={`group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors duration-150 ${
+                      className={`group flex min-h-8 w-full items-center justify-center gap-2.5 rounded-lg px-2 py-2 text-left text-sm transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:justify-start sm:px-3 ${
                         active
                           ? 'bg-sidebar-accent font-medium text-sidebar-accent-foreground'
                           : 'text-muted-foreground hover:bg-sidebar-accent/55 hover:text-foreground'
@@ -3432,7 +3614,9 @@ export function SettingsPage(): React.JSX.Element {
                           return <Icon className="size-4" />
                         })()}
                       </span>
-                      <span className="min-w-0 flex-1 truncate">{t(item.titleKey)}</span>
+                      <span className="hidden min-w-0 flex-1 truncate sm:block">
+                        {t(item.titleKey)}
+                      </span>
                     </button>
                   )
                 })}
@@ -3440,12 +3624,12 @@ export function SettingsPage(): React.JSX.Element {
             ))}
           </nav>
 
-          <div className="border-t border-sidebar-border/60 px-4 py-3 text-[11px] text-muted-foreground/55">
+          <div className="hidden border-t border-sidebar-border/60 px-4 py-3 text-xs text-muted-foreground/75 sm:block">
             {t('page.poweredBy')}
           </div>
         </div>
 
-        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-5">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 py-3 sm:px-5 sm:py-5">
           {/* Content */}
           {isSettingsFullPanelTab(effectiveSettingsTab) ? (
             <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
@@ -3453,7 +3637,9 @@ export function SettingsPage(): React.JSX.Element {
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              <div className="w-full px-6 pb-16 pt-10">{activePanelContent}</div>
+              <div className="w-full px-2 pb-10 pt-5 sm:px-6 sm:pb-16 sm:pt-10">
+                {activePanelContent}
+              </div>
             </div>
           )}
         </div>

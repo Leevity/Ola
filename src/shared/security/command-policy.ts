@@ -2,17 +2,7 @@ export type CommandPolicyResult =
   | { allowed: true }
   | { allowed: false; reason: 'empty-command' | 'blocked-token' }
 
-const BLOCKED_TOKENS = [
-  '&&',
-  '||',
-  ';',
-  '\n',
-  '\r',
-  ' >',
-  '>>',
-  '<',
-  '|'
-]
+const BLOCKED_TOKENS = ['&&', '||', ';', '\n', '\r', ' >', '>>', '<', '|']
 
 /** Conservative lexical guard; the existing approval and allow/deny policy remains authoritative. */
 export function evaluateCommandSyntax(command: string): CommandPolicyResult {

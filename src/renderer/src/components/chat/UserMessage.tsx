@@ -34,6 +34,7 @@ import {
   Archive
 } from 'lucide-react'
 import { formatTokens } from '@renderer/lib/format-tokens'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { useMemoizedTokens } from '@renderer/hooks/use-estimated-tokens'
 import {
   writeImageBlobToClipboard,
@@ -499,6 +500,7 @@ export function UserMessage({
   const [previewImageSrc, setPreviewImageSrc] = useState<string | null>(null)
   const [bookmarked, setBookmarked] = useState(() => isConversationBookmarked(sessionId, messageId))
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const compositionEndedAtRef = useRef(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -610,6 +612,7 @@ export function UserMessage({
   }, [previewImageSrc, t])
 
   const handleKeyDown = (e: React.KeyboardEvent): void => {
+    if (isImeCommitKey(e, compositionEndedAtRef.current)) return
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSave()
@@ -661,6 +664,12 @@ export function UserMessage({
               value={editText}
               onChange={(e) => setEditText(e.target.value)}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => {
+                compositionEndedAtRef.current = Number.POSITIVE_INFINITY
+              }}
+              onCompositionEnd={() => {
+                compositionEndedAtRef.current = performance.now()
+              }}
               className="min-h-[60px] w-full resize-none rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
               rows={Math.min(editText.split('\n').length + 1, 8)}
             />

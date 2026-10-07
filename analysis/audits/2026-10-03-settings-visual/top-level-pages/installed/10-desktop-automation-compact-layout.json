@@ -1,0 +1,14 @@
+{
+  "viewport": {
+    "width": 760,
+    "height": 560
+  },
+  "documentWidth": 760,
+  "startButton": {
+    "top": 342.85418701171875,
+    "bottom": 378.85418701171875,
+    "width": 116
+  },
+  "inputLabel": "流程名称",
+  "safetyNoticeVisible": true
+}

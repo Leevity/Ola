@@ -25,7 +25,10 @@ import {
   getCronRunDetail,
   listCronJobs,
   listCronRuns,
+  prepareCronDeliveryRetry,
+  recordCronDelivery,
   replaceCronRunMessages,
+  reconcileCronDelivery,
   setCronJobEnabled,
   softDeleteCronJob,
   updateCronJob,
@@ -45,6 +48,9 @@ import {
   getTsCronExecutionState,
   runTsCronAgentInBackground
 } from '../cron/ts-cron-agent-background'
+import { classifyCronDeliveryResult } from '../cron/cron-delivery-tracking'
+import { executeCronDeliveryRetry } from '../cron/cron-delivery-retry'
+import type { CronAgentRunOptions } from '../cron/cron-runtime-types'
 
 export interface CronAddArgs {
   workspaceId?: string
@@ -78,6 +84,7 @@ export interface CronAddArgs {
 export interface CronUpdateArgs {
   jobId: string
   workspaceId?: string
+  sessionId?: string
   patch: Partial<{
     name: string
     schedule: {
@@ -305,6 +312,8 @@ interface CronRunApi {
   workingFolderSnapshot: string | null
   deliveryModeSnapshot: string | null
   deliveryTargetSnapshot: string | null
+  runKind: 'scheduled' | 'manual' | 'trial'
+  deliveryStatus: 'pending' | 'sent' | 'failed' | 'unknown' | null
 }
 
 interface CronRunMessageApi {
@@ -401,7 +410,9 @@ function runToApi(r: CronRunRecord): CronRunApi {
     modelSourceSnapshot: r.model_source_snapshot,
     workingFolderSnapshot: r.working_folder_snapshot,
     deliveryModeSnapshot: r.delivery_mode_snapshot,
-    deliveryTargetSnapshot: r.delivery_target_snapshot
+    deliveryTargetSnapshot: r.delivery_target_snapshot,
+    runKind: r.run_kind ?? 'scheduled',
+    deliveryStatus: r.delivery_status ?? null
   }
 }
 
@@ -491,6 +502,8 @@ export async function handleCronUpdate(args: CronUpdateArgs): Promise<unknown> {
     if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal')) {
       return { error: `Job "${args.jobId}" not found` }
     }
+    if (args.sessionId && row.session_id !== args.sessionId)
+      return { error: `Job "${args.jobId}" not found` }
 
     const p = args.patch
     const updated: CronJobRecord = { ...row }
@@ -553,6 +566,7 @@ export async function handleCronUpdate(args: CronUpdateArgs): Promise<unknown> {
 export async function handleCronRemove(args: {
   jobId: string
   workspaceId?: string
+  sessionId?: string
 }): Promise<unknown> {
   if (!args.jobId) return { error: 'jobId is required' }
 
@@ -560,6 +574,8 @@ export async function handleCronRemove(args: {
     const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
     if (!row) return { error: `Job "${args.jobId}" not found` }
     if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal'))
+      return { error: `Job "${args.jobId}" not found` }
+    if (args.sessionId && row.session_id !== args.sessionId)
       return { error: `Job "${args.jobId}" not found` }
 
     cancelJob(args.jobId)
@@ -573,6 +589,7 @@ export async function handleCronRemove(args: {
 export async function handleCronDelete(args: {
   jobId: string
   workspaceId?: string
+  sessionId?: string
 }): Promise<unknown> {
   if (!args.jobId) return { error: 'jobId is required' }
 
@@ -580,6 +597,8 @@ export async function handleCronDelete(args: {
     const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
     if (!row) return { error: `Job "${args.jobId}" not found` }
     if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal'))
+      return { error: `Job "${args.jobId}" not found` }
+    if (args.sessionId && row.session_id !== args.sessionId)
       return { error: `Job "${args.jobId}" not found` }
 
     cancelJob(args.jobId)
@@ -686,76 +705,82 @@ export function registerCronHandlers(): void {
     }
   )
 
-  registerCronMessagePackHandler<{ jobId: string; workspaceId?: string }>(
-    'cron:run-now',
-    async (args) => {
-      if (!args.jobId) return { error: 'jobId is required' }
+  registerCronMessagePackHandler<{
+    jobId: string
+    workspaceId?: string
+    trialRun?: boolean
+  }>('cron:run-now', async (args) => {
+    if (!args.jobId) return { error: 'jobId is required' }
 
-      try {
-        const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
-        if (!row) return { error: `Job "${args.jobId}" not found` }
-        if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal')) {
-          return { error: `Job "${args.jobId}" not found` }
-        }
-        if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
-
-        const firedAt = Date.now()
-        if (!markRunning(row.id)) {
-          if (isCronWorkspaceSwitchPending()) return { error: 'WORKSPACE_BUSY_CRON' }
-          const reason = await recordSkippedCronRun(row, firedAt)
-          return { error: reason }
-        }
-        const firedPayload = {
-          jobId: row.id,
-          name: row.name,
-          prompt: row.prompt,
-          agentId: row.agent_id,
-          model: row.model,
-          sourceProviderId: row.source_provider_id,
-          workingFolder: row.working_folder,
-          sshConnectionId: row.ssh_connection_id,
-          sessionId: row.session_id,
-          firedAt,
-          deliveryMode: row.delivery_mode,
-          deliveryTarget: row.delivery_target,
-          maxIterations: row.max_iterations,
-          pluginId: row.plugin_id,
-          pluginChatId: row.plugin_chat_id
-        }
-        sendCronWorkspaceEvent(row.workspace_id ?? 'local-personal', 'cron:fired', firedPayload)
-
-        const runOptions = {
-          jobId: row.id,
-          name: row.name,
-          sessionId: row.session_id,
-          prompt: row.prompt,
-          agentId: row.agent_id,
-          model: row.model,
-          modelSource: parseCronModelBinding(row.model_source, row.workspace_id),
-          workspaceId: row.workspace_id ?? 'local-personal',
-          sourceProviderId: row.source_provider_id,
-          workingFolder: row.working_folder,
-          sshConnectionId: row.ssh_connection_id,
-          firedAt,
-          deliveryMode: row.delivery_mode,
-          deliveryTarget: row.delivery_target,
-          maxIterations: row.max_iterations,
-          pluginId: row.plugin_id,
-          pluginChatId: row.plugin_chat_id,
-          getScheduledState: () => getScheduledJobIds().includes(row.id)
-        }
-        const finished = () => {
-          void markFinished(row.id)
-        }
-        // “Run now” uses the same authoritative TS runtime as scheduled jobs.
-        runTsCronAgentInBackground(runOptions, finished)
-
-        return { success: true, jobId: args.jobId }
-      } catch (err) {
-        return { error: err instanceof Error ? err.message : String(err) }
+    try {
+      const row = await getCronJob(args.jobId, args.workspaceId ?? 'local-personal')
+      if (!row) return { error: `Job "${args.jobId}" not found` }
+      if ((row.workspace_id ?? 'local-personal') !== (args.workspaceId ?? 'local-personal')) {
+        return { error: `Job "${args.jobId}" not found` }
       }
+      if (row.deleted_at) return { error: `Job "${args.jobId}" has been deleted` }
+
+      const firedAt = Date.now()
+      const trialRun = args.trialRun === true
+      if (!markRunning(row.id)) {
+        if (isCronWorkspaceSwitchPending()) return { error: 'WORKSPACE_BUSY_CRON' }
+        const reason = await recordSkippedCronRun(row, firedAt)
+        return { error: reason }
+      }
+      const firedPayload = {
+        jobId: row.id,
+        name: row.name,
+        prompt: row.prompt,
+        agentId: row.agent_id,
+        model: row.model,
+        sourceProviderId: row.source_provider_id,
+        workingFolder: row.working_folder,
+        sshConnectionId: row.ssh_connection_id,
+        sessionId: row.session_id,
+        firedAt,
+        trialRun,
+        deliveryMode: trialRun ? 'none' : row.delivery_mode,
+        runKind: trialRun ? ('trial' as const) : ('manual' as const),
+        deliveryTarget: trialRun ? null : row.delivery_target,
+        maxIterations: row.max_iterations,
+        pluginId: trialRun ? null : row.plugin_id,
+        pluginChatId: trialRun ? null : row.plugin_chat_id
+      }
+      sendCronWorkspaceEvent(row.workspace_id ?? 'local-personal', 'cron:fired', firedPayload)
+
+      const runOptions: CronAgentRunOptions = {
+        jobId: row.id,
+        name: row.name,
+        sessionId: row.session_id,
+        prompt: row.prompt,
+        agentId: row.agent_id,
+        model: row.model,
+        modelSource: parseCronModelBinding(row.model_source, row.workspace_id),
+        workspaceId: row.workspace_id ?? 'local-personal',
+        sourceProviderId: row.source_provider_id,
+        workingFolder: row.working_folder,
+        sshConnectionId: row.ssh_connection_id,
+        firedAt,
+        deliveryMode: trialRun ? 'none' : row.delivery_mode,
+        deliveryTarget: trialRun ? null : row.delivery_target,
+        maxIterations: row.max_iterations,
+        pluginId: trialRun ? null : row.plugin_id,
+        pluginChatId: trialRun ? null : row.plugin_chat_id,
+        trialRun,
+        runKind: trialRun ? 'trial' : 'manual',
+        getScheduledState: () => getScheduledJobIds().includes(row.id)
+      }
+      const finished = () => {
+        void markFinished(row.id)
+      }
+      // “Run now” uses the same authoritative TS runtime as scheduled jobs.
+      runTsCronAgentInBackground(runOptions, finished)
+
+      return { success: true, jobId: args.jobId }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
     }
-  )
+  })
 
   registerCronMessagePackHandler<{ jobId: string; workspaceId: string }>(
     'cron:abort-run',
@@ -868,7 +893,23 @@ export function registerCronHandlers(): void {
               type: row.type,
               content: row.content
             })
-          )
+          ),
+          deliveries: detail.deliveries.map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            status: row.status,
+            startedAt: row.started_at,
+            finishedAt: row.finished_at,
+            errorCode: row.error_code,
+            retryOfId: row.retry_of_id,
+            attemptNumber: row.attempt_number,
+            retryAvailable:
+              row.kind === 'channel' &&
+              row.status === 'failed' &&
+              row.attempt_number < 3 &&
+              !detail.deliveries.some((attempt) => attempt.retry_of_id === row.id) &&
+              Boolean(row.plugin_id && row.chat_id)
+          }))
         }
       } catch (err) {
         return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
@@ -888,4 +929,99 @@ export function registerCronHandlers(): void {
       return { success: true }
     }
   )
+
+  registerCronMessagePackHandler<{
+    runId: string
+    deliveryId: string
+    workspaceId: string
+    outcome: 'sent' | 'failed'
+  }>('cron:delivery-reconcile', async (args) => {
+    if (!args.runId || !args.deliveryId || !['sent', 'failed'].includes(args.outcome))
+      return { error: 'Invalid delivery reconciliation request' }
+    try {
+      const detail = await getCronRunDetail(args.runId, args.workspaceId)
+      const delivery = detail.deliveries.find((item) => item.id === args.deliveryId)
+      if (!delivery || delivery.status !== 'unknown')
+        return { error: 'Cron delivery is no longer awaiting verification' }
+      await reconcileCronDelivery({
+        id: args.deliveryId,
+        runId: args.runId,
+        workspaceId: args.workspaceId,
+        outcome: args.outcome,
+        confirmedAt: Date.now()
+      })
+      return { success: true }
+    } catch (err) {
+      return { error: `DB error: ${err instanceof Error ? err.message : String(err)}` }
+    }
+  })
+
+  registerCronMessagePackHandler<{
+    runId: string
+    deliveryId: string
+    workspaceId: string
+    content: string
+  }>('cron:delivery-retry', async (args) => {
+    const content = typeof args.content === 'string' ? args.content.trim() : ''
+    if (!args.runId || !args.deliveryId || !content || content.length > 65_536)
+      return { error: 'Invalid delivery retry request' }
+    try {
+      const detail = await getCronRunDetail(args.runId, args.workspaceId)
+      if (detail.run.status !== 'success')
+        return { error: 'Only successful Cron runs can retry delivery' }
+      const parent = detail.deliveries.find((item) => item.id === args.deliveryId)
+      if (!parent || parent.status !== 'failed' || parent.kind !== 'channel')
+        return { error: 'Only confirmed channel delivery failures can be retried' }
+      return await executeCronDeliveryRetry({
+        runId: args.runId,
+        workspaceId: args.workspaceId,
+        retryOfId: args.deliveryId,
+        content,
+        createIds: () => ({
+          deliveryId: `delivery-${nanoid(10)}`,
+          toolCallId: `manual-retry-${nanoid(12)}`
+        }),
+        now: Date.now,
+        prepare: async (input) =>
+          await prepareCronDeliveryRetry({
+            id: input.deliveryId,
+            runId: input.runId,
+            retryOfId: input.retryOfId,
+            workspaceId: input.workspaceId,
+            toolCallId: input.toolCallId,
+            startedAt: input.startedAt
+          }),
+        send: async (attempt, message) => {
+          const { executePluginAction } = await import('./channel-handlers')
+          const result = await executePluginAction({
+            pluginId: attempt.pluginId,
+            workspaceId: args.workspaceId,
+            action: 'sendMessage',
+            params: { chatId: attempt.chatId, content: message }
+          })
+          return classifyCronDeliveryResult(result)
+        },
+        record: async (input) => {
+          await recordCronDelivery({
+            runId: input.runId,
+            workspaceId: input.workspaceId,
+            toolCallId: input.toolCallId,
+            kind: 'channel',
+            status: input.status,
+            startedAt: input.startedAt,
+            finishedAt: input.finishedAt,
+            errorCode: input.errorCode,
+            retryOfId: input.retryOfId,
+            attemptNumber: input.attempt.attemptNumber,
+            pluginId: input.attempt.pluginId,
+            chatId: input.attempt.chatId
+          })
+        }
+      })
+    } catch (err) {
+      return {
+        error: `Could not prepare delivery retry: ${err instanceof Error ? err.message : String(err)}`
+      }
+    }
+  })
 }

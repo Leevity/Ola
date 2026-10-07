@@ -1,4 +1,6 @@
 import { canPersistSecrets } from '../credentials/secure-storage-policy'
+import { waitForSafeStorageKeyPersistence } from '../credentials/safe-storage-key-persistence'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { publicWorkspaceDirectory, publicModelDirectory } from '../../shared/workspace-directory'
 import { app, safeStorage, shell } from 'electron'
 import { mkdir, readFile, rename, writeFile, unlink } from 'fs/promises'
@@ -141,6 +143,7 @@ async function savePendingOAuthState(state: typeof pendingOAuthState): Promise<v
   }
   await mkdir(app.getPath('userData'), { recursive: true })
   const encrypted = safeStorage.encryptString(JSON.stringify(state))
+  await waitForSafeStorageKeyPersistence()
   await writeFile(pendingOAuthPath(), encrypted, { mode: 0o600 })
 }
 
@@ -223,6 +226,7 @@ async function saveState(
       const temporary = `${target}.${randomUUID()}.tmp`
       await mkdir(app.getPath('userData'), { recursive: true })
       const encrypted = safeStorage.encryptString(JSON.stringify(state))
+      await waitForSafeStorageKeyPersistence()
       try {
         await writeFile(temporary, encrypted, { mode: 0o600 })
         if (revision === authStateRevision) await rename(temporary, target)
@@ -439,6 +443,10 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     authorizeUrl.searchParams.set('state', state)
     authorizeUrl.searchParams.set('code_challenge', challenge)
     authorizeUrl.searchParams.set('code_challenge_method', 'S256')
+    if (process.env.OLA_E2E_DATA_ROOT !== undefined) {
+      olaDataRoot()
+      return { started: true, authorizeUrl: authorizeUrl.toString() }
+    }
     await shell.openExternal(authorizeUrl.toString())
     return { started: true }
   }

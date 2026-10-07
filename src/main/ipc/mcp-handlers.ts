@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 import { McpAutoConnectCoordinator } from '../mcp/autoconnect-coordinator'
 import { McpConfigStore } from '../mcp/mcp-config-store'
 import { McpManager } from '../mcp/mcp-manager'
@@ -52,7 +53,8 @@ function isTrustedMcpIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 

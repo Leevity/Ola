@@ -80,7 +80,7 @@ import { useUIStore } from '@renderer/stores/ui-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore } from '@renderer/stores/team-store'
-import { abortSession } from '@renderer/hooks/use-chat-actions'
+import { abortSession, clearPendingSessionMessages } from '@renderer/hooks/use-chat-actions'
 import {
   exportSessionMarkdownFromDb,
   exportSessionSnapshotFromDb
@@ -260,7 +260,7 @@ export function AppSidebar(): React.JSX.Element {
     activeTeamSessionId
   ])
 
-  const confirmDelete = useCallback(() => {
+  const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return
     const session = getSessionSnapshot(deleteTarget.id)
     if (!session) {
@@ -279,7 +279,11 @@ export function AppSidebar(): React.JSX.Element {
       abortSession(session.id)
     }
     const snapshot = createRestorableSessionSnapshot(session)
-    deleteSession(session.id)
+    if (!(await deleteSession(session.id))) {
+      toast.error(t('sidebar_toast.deleteFailed'))
+      return
+    }
+    clearPendingSessionMessages(session.id)
     setDeleteTarget(null)
     toast.success(t('sidebar_toast.sessionDeleted'), {
       action: {
@@ -711,14 +715,20 @@ export function AppSidebar(): React.JSX.Element {
                                   }
                                   const snapshot = getSessionSnapshot(session.id)
                                   if (!snapshot) return
-                                  deleteSession(snapshot.id)
-                                  toast.success(t('sidebar_toast.sessionDeleted'), {
-                                    action: {
-                                      label: t('action.undo', { ns: 'common' }),
-                                      onClick: () =>
-                                        useChatStore.getState().restoreSession(snapshot)
-                                    },
-                                    duration: 5000
+                                  void deleteSession(snapshot.id).then((deleted) => {
+                                    if (!deleted) {
+                                      toast.error(t('sidebar_toast.deleteFailed'))
+                                      return
+                                    }
+                                    clearPendingSessionMessages(snapshot.id)
+                                    toast.success(t('sidebar_toast.sessionDeleted'), {
+                                      action: {
+                                        label: t('action.undo', { ns: 'common' }),
+                                        onClick: () =>
+                                          useChatStore.getState().restoreSession(snapshot)
+                                      },
+                                      duration: 5000
+                                    })
                                   })
                                 }}
                                 title={t('action.delete', { ns: 'common' })}
@@ -794,8 +804,8 @@ export function AppSidebar(): React.JSX.Element {
                                 </ContextMenuItem>
                                 <ContextMenuSeparator />
                                 <ContextMenuItem
-                                  onClick={() => {
-                                    clearSessionMessages(session.id)
+                                  onClick={async () => {
+                                    if (!(await clearSessionMessages(session.id))) return
                                     toast.success(t('sidebar_toast.messagesCleared'))
                                   }}
                                 >
@@ -905,13 +915,20 @@ export function AppSidebar(): React.JSX.Element {
                                 }
                                 const snapshot = getSessionSnapshot(session.id)
                                 if (!snapshot) return
-                                deleteSession(snapshot.id)
-                                toast.success(t('sidebar_toast.sessionDeleted'), {
-                                  action: {
-                                    label: t('action.undo', { ns: 'common' }),
-                                    onClick: () => useChatStore.getState().restoreSession(snapshot)
-                                  },
-                                  duration: 5000
+                                void deleteSession(snapshot.id).then((deleted) => {
+                                  if (!deleted) {
+                                    toast.error(t('sidebar_toast.deleteFailed'))
+                                    return
+                                  }
+                                  clearPendingSessionMessages(snapshot.id)
+                                  toast.success(t('sidebar_toast.sessionDeleted'), {
+                                    action: {
+                                      label: t('action.undo', { ns: 'common' }),
+                                      onClick: () =>
+                                        useChatStore.getState().restoreSession(snapshot)
+                                    },
+                                    duration: 5000
+                                  })
                                 })
                               }}
                             >

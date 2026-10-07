@@ -145,16 +145,16 @@ export function LoginStepPanel(): React.JSX.Element | null {
               data-step-status={state.status}
               data-step-current={isCurrent}
               title={t(STEP_TRANSLATION_KEYS[id])}
-              className={`flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] ${stepBgClass(
+              className={`flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-xs ${stepBgClass(
                 state.status,
                 isCurrent
               )}`}
             >
-              <span className="font-mono text-[9px] text-muted-foreground">{idx + 1}</span>
+              <span className="font-mono text-xs text-muted-foreground">{idx + 1}</span>
               <StepIcon status={state.status} isCurrent={isCurrent} />
               <span className="whitespace-nowrap font-medium">{t(STEP_TRANSLATION_KEYS[id])}</span>
               {state.finishedAt && state.startedAt ? (
-                <span className="text-[9px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   {((state.finishedAt - state.startedAt) / 1000).toFixed(1)}s
                 </span>
               ) : null}
@@ -164,11 +164,11 @@ export function LoginStepPanel(): React.JSX.Element | null {
       </div>
 
       {/* Current step message + handoff controls */}
-      <div className="flex items-center gap-2 text-[11px]">
+      <div className="flex items-center gap-2 text-xs">
         {canStart ? (
           <Button
             size="sm"
-            className="h-6 px-2 text-[10px]"
+            className="h-6 px-2 text-xs"
             onClick={() => void onStart()}
             data-testid="login-start"
           >
@@ -188,7 +188,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="outline"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               data-testid="login-handoff-resume"
               onClick={() => machine?.resumeFromHandoff()}
               disabled={!hasMachine}
@@ -198,7 +198,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="outline"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               onClick={() => machine?.skipCurrentStep()}
               disabled={!hasMachine}
             >
@@ -207,7 +207,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="outline"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               onClick={() => machine?.reportFailed()}
               disabled={!hasMachine}
             >
@@ -219,7 +219,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="outline"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               data-testid="login-takeover"
               onClick={() => machine?.requestHandoff('user_requested')}
               disabled={!hasMachine || currentStepState.status !== 'in_progress'}
@@ -230,7 +230,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               onClick={() => machine?.skipCurrentStep()}
               disabled={!hasMachine || currentStepState.status === 'in_progress'}
             >
@@ -239,7 +239,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               onClick={() => machine?.retryCurrentStep()}
               disabled={!hasMachine || currentStepState.status === 'in_progress'}
             >
@@ -248,7 +248,7 @@ export function LoginStepPanel(): React.JSX.Element | null {
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[10px]"
+              className="h-6 px-2 text-xs"
               onClick={() => machine?.cancel()}
               disabled={!hasMachine}
             >

@@ -48,3 +48,49 @@ it('invalidates a stale acknowledgement when the workspace directory changes', a
   await ensureWindowWorkspaceRegistered('team-a')
   expect(invoke).toHaveBeenCalledTimes(2)
 })
+
+it('waits for the replacement registration when a same-workspace request is superseded', async () => {
+  let rejectOld: ((error: Error) => void) | undefined
+  let releaseNew: ((value: unknown) => void) | undefined
+  invoke
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject
+        })
+    )
+    .mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseNew = resolve
+        })
+    )
+  const { ensureWindowWorkspaceRegistered, invalidateWindowWorkspaceRegistration } =
+    await import('../../src/renderer/src/lib/window-workspace-registration')
+  const old = ensureWindowWorkspaceRegistered('team-a')
+  invalidateWindowWorkspaceRegistration()
+  const current = ensureWindowWorkspaceRegistered('team-a')
+  rejectOld?.(new Error('WINDOW_WORKSPACE_SUPERSEDED'))
+  releaseNew?.({ workspaceId: 'team-a' })
+  await expect(Promise.all([old, current])).resolves.toEqual([undefined, undefined])
+  await ensureWindowWorkspaceRegistered('team-a')
+  expect(invoke).toHaveBeenCalledTimes(2)
+})
+
+it('does not accept a superseded registration for a different workspace', async () => {
+  let rejectOld: ((error: Error) => void) | undefined
+  invoke
+    .mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectOld = reject
+        })
+    )
+    .mockResolvedValueOnce({ workspaceId: 'team-b' })
+  const { ensureWindowWorkspaceRegistered } =
+    await import('../../src/renderer/src/lib/window-workspace-registration')
+  const old = ensureWindowWorkspaceRegistered('team-a')
+  await ensureWindowWorkspaceRegistered('team-b')
+  rejectOld?.(new Error('WINDOW_WORKSPACE_SUPERSEDED'))
+  await expect(old).rejects.toThrow('WINDOW_WORKSPACE_SUPERSEDED')
+})

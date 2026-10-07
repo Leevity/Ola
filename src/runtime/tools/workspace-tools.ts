@@ -200,6 +200,69 @@ export function createLegacyBashTool(root: string | WorkspaceRootResolver): Tool
   )
 }
 
+/** Windows PowerShell alias backed by Main's approved, workspace-confined shell executor. */
+export function createLegacyPowerShellTool(root: string | WorkspaceRootResolver): ToolDefinition {
+  const target = createLocalShellCommandTool(root, {
+    shell: 'powershell.exe',
+    defaultTimeoutMs: 600_000,
+    maxTimeoutMs: 3_600_000
+  })
+  return legacyAlias(
+    'PowerShell',
+    'Execute a command through Windows PowerShell in the configured workspace.',
+    {
+      type: 'object',
+      properties: {
+        command: { type: 'string' },
+        timeout: { type: 'integer', minimum: 1, maximum: 3_600_000 }
+      },
+      required: ['command'],
+      additionalProperties: false
+    },
+    target,
+    (input) => {
+      const value = record(input)
+      only(value, ['command', 'timeout'])
+      return {
+        command: value.command,
+        ...(value.timeout === undefined ? {} : { timeoutMs: value.timeout })
+      }
+    }
+  )
+}
+
+/** Matches the existing Monitor implementation, which runs a foreground command. */
+export function createLegacyMonitorTool(root: string | WorkspaceRootResolver): ToolDefinition {
+  const target = createLocalShellCommandTool(root, {
+    defaultTimeoutMs: 600_000,
+    maxTimeoutMs: 600_000
+  })
+  return legacyAlias(
+    'Monitor',
+    'Run and monitor a command in the configured workspace.',
+    {
+      type: 'object',
+      properties: {
+        command: { type: 'string' },
+        description: { type: 'string', maxLength: 512 }
+      },
+      required: ['command'],
+      additionalProperties: false
+    },
+    target,
+    (input) => {
+      const value = record(input)
+      only(value, ['command', 'description'])
+      if (
+        value.description !== undefined &&
+        (typeof value.description !== 'string' || value.description.length > 512)
+      )
+        throw new RuntimeError('INVALID_TOOL_INPUT')
+      return { command: value.command }
+    }
+  )
+}
+
 type LegacyWriteInput = { path: string; content: string }
 
 function legacyWriteInput(input: unknown): LegacyWriteInput {
@@ -306,6 +369,147 @@ export function createLegacyEditTool(root: string | WorkspaceRootResolver): Tool
         ? source.split(value.oldString).join(value.newString)
         : source.replace(value.oldString, value.newString)
       return await write.execute({ path: value.path, content }, context)
+    }
+  }
+}
+
+type LegacyNotebookEditInput = {
+  path: string
+  cellId?: string
+  cellIndex: number
+  mode: 'replace' | 'insert' | 'delete'
+  source?: string
+  cellType: 'code' | 'markdown' | 'raw'
+}
+
+function legacyNotebookEditInput(input: unknown): LegacyNotebookEditInput {
+  const value = record(input)
+  only(value, [
+    'notebook_path',
+    'file_path',
+    'cell_id',
+    'cell_index',
+    'mode',
+    'new_source',
+    'source',
+    'cell_type'
+  ])
+  const path = value.notebook_path ?? value.file_path
+  if (
+    typeof path !== 'string' ||
+    !path.trim() ||
+    path.length > 4096 ||
+    (value.notebook_path !== undefined &&
+      value.file_path !== undefined &&
+      value.notebook_path !== value.file_path)
+  )
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  const cellId = value.cell_id
+  if (cellId !== undefined && (typeof cellId !== 'string' || !cellId.trim() || cellId.length > 256))
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  const cellIndex = value.cell_index ?? 0
+  if (
+    !Number.isSafeInteger(cellIndex) ||
+    (cellIndex as number) < 0 ||
+    (cellIndex as number) > 100_000
+  )
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  const mode = value.mode ?? 'replace'
+  if (mode !== 'replace' && mode !== 'insert' && mode !== 'delete')
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  if (cellId === undefined && value.cell_index === undefined && mode !== 'insert')
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  const source = value.new_source ?? value.source
+  if (
+    source !== undefined &&
+    (typeof source !== 'string' || Buffer.byteLength(source) > 128 * 1024)
+  )
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  if (mode !== 'delete' && typeof source !== 'string') throw new RuntimeError('INVALID_TOOL_INPUT')
+  const cellType = value.cell_type ?? 'code'
+  if (cellType !== 'code' && cellType !== 'markdown' && cellType !== 'raw')
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  return {
+    path,
+    ...(typeof cellId === 'string' ? { cellId } : {}),
+    cellIndex: cellIndex as number,
+    mode,
+    ...(typeof source === 'string' ? { source } : {}),
+    cellType
+  }
+}
+
+/** Jupyter edits use workspace confinement and the same authorization path as Edit. */
+export function createLegacyNotebookEditTool(root: string | WorkspaceRootResolver): ToolDefinition {
+  const read = createLocalReadFileTool(root)
+  const write = createLegacyWriteTool(root)
+  return {
+    name: 'NotebookEdit',
+    description: 'Edit a Jupyter notebook cell by index or cell_id inside the workspace.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        notebook_path: { type: 'string' },
+        file_path: { type: 'string' },
+        cell_id: { type: 'string' },
+        cell_index: { type: 'integer', minimum: 0, maximum: 100_000 },
+        mode: { type: 'string', enum: ['replace', 'insert', 'delete'] },
+        new_source: { type: 'string' },
+        source: { type: 'string' },
+        cell_type: { type: 'string', enum: ['code', 'markdown', 'raw'] }
+      },
+      additionalProperties: false
+    },
+    effect: 'write',
+    validate: legacyNotebookEditInput,
+    resources: (input, context) =>
+      read.resources({ path: (input as LegacyNotebookEditInput).path }, context),
+    execute: async (rawInput, context) => {
+      const input = rawInput as LegacyNotebookEditInput
+      const content = await read.execute({ path: input.path }, context)
+      if (typeof content !== 'string') throw new RuntimeError('TOOL_READ_FAILED')
+      let notebook: { cells: Array<Record<string, unknown>>; [key: string]: unknown }
+      try {
+        const parsed: unknown = JSON.parse(content)
+        if (
+          !parsed ||
+          typeof parsed !== 'object' ||
+          !Array.isArray((parsed as { cells?: unknown }).cells)
+        )
+          throw new RuntimeError('INVALID_NOTEBOOK')
+        notebook = parsed as { cells: Array<Record<string, unknown>>; [key: string]: unknown }
+      } catch (error) {
+        if (error instanceof RuntimeError) throw error
+        throw new RuntimeError('INVALID_NOTEBOOK')
+      }
+      const index = input.cellId
+        ? notebook.cells.findIndex((cell) => cell.id === input.cellId)
+        : input.cellIndex
+      if (input.mode !== 'insert' && (index < 0 || index >= notebook.cells.length))
+        throw new RuntimeError('NOTEBOOK_CELL_NOT_FOUND')
+      if (input.mode === 'delete') {
+        notebook.cells.splice(index, 1)
+      } else {
+        const sourceLines = (input.source ?? '').split(/(?<=\n)/)
+        if (input.mode === 'insert') {
+          notebook.cells.splice(input.cellIndex, 0, {
+            cell_type: input.cellType,
+            id: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+            metadata: {},
+            source: sourceLines
+          })
+        } else {
+          notebook.cells[index] = {
+            ...notebook.cells[index],
+            cell_type: input.cellType,
+            source: sourceLines
+          }
+        }
+      }
+      return await write.execute(
+        { path: input.path, content: `${JSON.stringify(notebook, null, 2)}\n` },
+        context
+      )
     }
   }
 }

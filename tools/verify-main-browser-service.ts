@@ -5,7 +5,7 @@ const service = await readFile('src/main/browser/browser-service.ts', 'utf8')
 const handlers = await readFile('src/main/ipc/browser-handlers.ts', 'utf8')
 const panel = await readFile('src/renderer/src/components/layout/BrowserPanel.tsx', 'utf8')
 const tools = await readFile('src/renderer/src/lib/tools/browser-native-ui.ts', 'utf8')
-const channels = await readFile('src/renderer/src/lib/ipc/channels.ts', 'utf8')
+const channels = await readFile('src/shared/ipc/contract.ts', 'utf8')
 const packageJson = await readFile('package.json', 'utf8')
 
 assert.match(service, /class MainBrowserService/)

@@ -14,6 +14,7 @@ import { executeLocalShell } from '../shell/local-shell-executor'
 import { buildShellEnvironment } from './shell-environment'
 import { decodeMessagePackPayload, toMessagePackChannel } from '../../shared/messagepack/binary-ipc'
 import { registerMessagePackHandler } from './messagepack-handler'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 
 const ANSI_ESCAPE_RE = new RegExp(`${String.fromCharCode(27)}\\[[0-9;?]*[ -/]*[@-~]`, 'g')
 const COMPACT_OUTPUT_CHAR_THRESHOLD = 6000
@@ -83,7 +84,8 @@ function getTrustedShellOwnerWindow(
   return ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
     ? ownerWindow
     : null
 }

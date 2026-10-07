@@ -73,3 +73,51 @@ it('removes the local connection token even if service shutdown fails', async ()
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+it('registers completed external media once across concurrent retries and restart', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'ola-external-media-'))
+  const runtime = new DesktopRuntime(join(root, 'desktop-runtime.json'))
+  const spec = {
+    runId: 'media-result-test',
+    taskId: 'media-result-test',
+    requestId: 'media-result-test',
+    traceId: 'media-result-test',
+    sessionId: 'session',
+    projectId: 'project',
+    workspaceId: 'local-personal',
+    environmentId: 'local',
+    modelSource: { kind: 'local', providerId: 'removed-provider', modelId: 'video' },
+    prompt: 'Video result',
+    unattended: false
+  } as import('../../src/shared/runtime/contracts').RunSpec
+  const artifact = { path: join(root, 'video.mp4'), mediaType: 'video/mp4' }
+  try {
+    await runtime.start(root)
+    await Promise.all([
+      runtime.recordExternalArtifact(spec, artifact),
+      runtime.recordExternalArtifact(spec, artifact)
+    ])
+    const snapshot = await runtime.request<
+      import('../../src/shared/runtime/contracts').RunSnapshot
+    >('run.snapshot', { runId: spec.runId, workspaceId: spec.workspaceId })
+    expect(snapshot.run.status).toBe('completed')
+    expect(snapshot.run.projectId).toBe('project')
+    expect(snapshot.events.filter((event) => event.type === 'artifact.registered')).toHaveLength(1)
+    await runtime.stop()
+    await runtime.start(root)
+    await runtime.recordExternalArtifact(spec, artifact)
+    const restored = await runtime.request<
+      import('../../src/shared/runtime/contracts').RunSnapshot
+    >('run.snapshot', { runId: spec.runId, workspaceId: spec.workspaceId })
+    expect(restored.events.filter((event) => event.type === 'artifact.registered')).toHaveLength(1)
+    await expect(
+      runtime.recordExternalArtifact(
+        { ...spec, runId: 'forbidden', workspaceId: 'unknown-team' },
+        artifact
+      )
+    ).rejects.toThrow('WORKSPACE_FORBIDDEN')
+  } finally {
+    await runtime.stop()
+    await rm(root, { recursive: true, force: true })
+  }
+})

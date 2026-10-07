@@ -502,8 +502,14 @@ async function recordSyntheticEntry(args: {
   targetPath?: string | null
   error?: string | null
 }): Promise<void> {
+  const sourceSession = args.sourceSessionId
+    ? useChatStore.getState().sessions.find((session) => session.id === args.sourceSessionId)
+    : undefined
   await recordEntry({
-    workspaceId: args.workspaceId,
+    workspaceId:
+      args.workspaceId ??
+      sourceSession?.workspaceId ??
+      useWorkspaceStore.getState().activeWorkspaceId,
     scope: 'main',
     rootScope: args.rootScope ?? null,
     memoryRootId: args.memoryRootId ?? null,
@@ -1215,6 +1221,7 @@ export async function runMemoryAutomationForSession(options: RunSessionOptions):
     const activeStage1Inputs = stage1Inputs.filter((input) => input.status !== 'filtered')
     const completed = await completeStage1({
       sessionId: options.sessionId,
+      workspaceId: session.workspaceId ?? 'local-personal',
       jobId: stage1JobId,
       status: activeStage1Inputs.length > 0 ? 'succeeded' : 'succeeded_no_output',
       outputs: stage1Inputs
@@ -1247,6 +1254,9 @@ export async function runMemoryAutomationForSession(options: RunSessionOptions):
     if (stage1JobId) {
       await completeStage1({
         sessionId: options.sessionId,
+        workspaceId:
+          useChatStore.getState().sessions.find((session) => session.id === options.sessionId)
+            ?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
         jobId: stage1JobId,
         status: 'failed',
         error: message === INVALID_MEMORY_JSON_ERROR ? INVALID_MEMORY_JSON_ERROR : message,

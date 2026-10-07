@@ -314,6 +314,7 @@ export function ImageEditDialog({ sessionId }: ImageEditDialogProps): React.JSX.
                     {t('assistantMessage.maskBrush', { defaultValue: 'Brush' })}
                   </span>
                   <Slider
+                    aria-label={t('assistantMessage.maskBrush', { defaultValue: 'Brush' })}
                     className="w-full max-w-36"
                     min={MIN_BRUSH_SIZE}
                     max={MAX_BRUSH_SIZE}

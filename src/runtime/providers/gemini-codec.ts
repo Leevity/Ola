@@ -57,6 +57,24 @@ export const geminiCodec: ModelCodec = {
         ]
       if (contents.at(-1)?.role === role) contents.at(-1)!.parts.push(...parts)
       else contents.push({ role, parts })
+      if (message.role === 'tool') {
+        const imageParts = message.results.flatMap((result) =>
+          (result.images ?? []).flatMap((image) => [
+            { text: `Image returned by ${result.name}: ${String(result.output)}` },
+            image.data
+              ? { inlineData: { mimeType: image.mimeType, data: image.data } }
+              : image.assetId
+                ? {
+                    inlineData: {
+                      mimeType: image.mimeType,
+                      data: runtimeImageSource(image, input.run.workspaceId).split(',', 2)[1]
+                    }
+                  }
+                : { fileData: { mimeType: image.mimeType, fileUri: image.url } }
+          ])
+        )
+        if (imageParts.length) contents.push({ role: 'user', parts: imageParts })
+      }
     }
     const thinking = options.thinkingLevel
       ? { thinkingLevel: options.thinkingLevel }

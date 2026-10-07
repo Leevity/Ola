@@ -10,6 +10,7 @@ import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { resolveIntlLocale } from '@renderer/lib/i18n-language'
 import {
   getUsageActivityByModel,
@@ -316,7 +317,7 @@ function StatTile({
       <div className="truncate text-lg font-semibold tabular-nums">{value}</div>
       <div className="mt-0.5 truncate text-xs text-muted-foreground">{label}</div>
       {detail ? (
-        <div className="mt-1 truncate text-[11px] text-muted-foreground/70">{detail}</div>
+        <div className="mt-1 truncate text-xs text-muted-foreground/70">{detail}</div>
       ) : null}
     </div>
   )
@@ -403,7 +404,7 @@ function ActivityHeatmap({
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-[11px] text-muted-foreground">{tooltipDetail.date}</div>
+              <div className="text-xs text-muted-foreground">{tooltipDetail.date}</div>
               <div className="mt-1 text-sm font-semibold tabular-nums">
                 {t('profile.activity.totalTokensValue', {
                   tokens: tooltipDetail.compactTokens,
@@ -412,7 +413,7 @@ function ActivityHeatmap({
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-xs text-muted-foreground">
                 {t('profile.activity.tooltip.cost', { defaultValue: 'Cost' })}
               </div>
               <div className="mt-1 text-sm font-semibold tabular-nums text-sky-500">
@@ -421,20 +422,20 @@ function ActivityHeatmap({
             </div>
           </div>
           <div className="mt-2 rounded-lg border border-border/40 bg-muted/15 px-2.5 py-2">
-            <div className="flex items-center justify-between gap-3 text-[11px]">
+            <div className="flex items-center justify-between gap-3 text-xs">
               <span className="text-muted-foreground">
                 {t('profile.activity.tooltip.totalRawTokens', { defaultValue: 'Total raw' })}
               </span>
               <span className="font-medium tabular-nums">{tooltipDetail.tokens}</span>
             </div>
-            <div className="mt-1 flex items-center justify-between gap-3 text-[11px]">
+            <div className="mt-1 flex items-center justify-between gap-3 text-xs">
               <span className="text-muted-foreground">
                 {t('profile.activity.tooltip.requests', { defaultValue: 'Requests' })}
               </span>
               <span className="font-medium tabular-nums">{tooltipDetail.requests}</span>
             </div>
           </div>
-          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
+          <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
             {tooltipDetail.rows.map((row) => (
               <div key={row.label} className="flex min-w-0 items-center justify-between gap-2">
                 <span className="truncate text-muted-foreground">{row.label}</span>
@@ -468,7 +469,7 @@ function ActivityHeatmap({
       <div className="overflow-x-auto pb-1">
         <div className="relative w-max min-w-full pt-5">
           <div
-            className="absolute left-0 top-0 grid gap-1 text-[10px] text-muted-foreground/70"
+            className="absolute left-0 top-0 grid gap-1 text-xs text-muted-foreground/70"
             style={{ gridTemplateColumns: `repeat(${weeks.length}, 0.75rem)` }}
           >
             {monthLabels.map((item) => (
@@ -564,6 +565,7 @@ function ActivityHeatmap({
 }
 
 export function ProfilePanel(): React.JSX.Element {
+  const activeWorkspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const { t, i18n } = useTranslation('settings')
   const settings = useSettingsStore()
   const sessionCount = useChatStore((state) => state.sessions.length)
@@ -600,6 +602,7 @@ export function ProfilePanel(): React.JSX.Element {
         const query = {
           from: rangeStart.getTime(),
           to: endOfDay(today).getTime(),
+          workspaceId: activeWorkspaceId,
           limit: 20,
           offset: 0
         }
@@ -628,7 +631,7 @@ export function ProfilePanel(): React.JSX.Element {
     return () => {
       signal.cancelled = true
     }
-  }, [rangeStart, today])
+  }, [activeWorkspaceId, rangeStart, today])
 
   const { weeks, byDay } = useMemo(
     () => buildActivityWeeks(daily, rangeStart, today),

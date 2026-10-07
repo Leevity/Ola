@@ -53,7 +53,7 @@ export function CredentialList({
                     {ref.usernameHint ? `· ${ref.usernameHint}` : ''}
                   </span>
                 </div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {ref.lastVerifiedAt
                     ? t('list.lastVerified', { when: formatDate(ref.lastVerifiedAt) })
                     : t('list.neverVerified')}
@@ -79,7 +79,7 @@ export function CredentialList({
               <Button
                 variant="outline"
                 size="sm"
-                className="h-7 text-[11px]"
+                className="h-7 text-xs"
                 onClick={() => onVerify(ref.id)}
                 disabled={verifying}
               >

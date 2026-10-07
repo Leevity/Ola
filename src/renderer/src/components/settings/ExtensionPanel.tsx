@@ -134,7 +134,9 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {extension.id} · {extension.manifest.tools.length} {t('extension.tools')} ·{' '}
                   {extension.manifest.renderers?.length ?? 0} {t('extension.renderers')} ·{' '}
-                  {components.length} {t('extension.components')}
+                  {components.length} {t('extension.components')} ·{' '}
+                  {extension.manifest.views?.length ?? 0} {t('extension.workbenchViews')} ·{' '}
+                  {extension.manifest.commands?.length ?? 0} {t('extension.workbenchCommands')}
                 </p>
               </div>
               <ChevronDown
@@ -167,7 +169,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                   {t('extension.tools')}
                 </div>
                 <div className="mt-1 text-lg font-semibold">{extension.manifest.tools.length}</div>
-                <div className="mt-1 text-[11px] text-muted-foreground">
+                <div className="mt-1 text-xs text-muted-foreground">
                   {t('extension.readOnlyCount', { count: readOnlyTools })}
                 </div>
               </div>
@@ -184,7 +186,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                   {t('extension.components')}
                 </div>
                 <div className="mt-1 text-lg font-semibold">{components.length}</div>
-                <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
+                <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
                   <Shapes className="size-3" />
                   {t('extension.hostRendered')}
                 </div>
@@ -216,7 +218,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                             {field.required ? ' *' : ''}
                           </span>
                           {missing ? (
-                            <Badge variant="outline" className="text-[10px] text-destructive">
+                            <Badge variant="outline" className="text-xs text-destructive">
                               {t('extension.required')}
                             </Badge>
                           ) : null}
@@ -344,7 +346,7 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                               {component.description}
                             </div>
                           ) : null}
-                          <div className="truncate font-mono text-[11px] text-muted-foreground/80">
+                          <div className="truncate font-mono text-xs text-muted-foreground/80">
                             {component.entry}
                           </div>
                         </div>
@@ -352,6 +354,36 @@ function ExtensionCard({ extension }: { extension: ExtensionInstance }): React.J
                       </div>
                     ))}
                   </div>
+                </div>
+              ) : null}
+              {(extension.manifest.commands?.length ?? 0) > 0 ? (
+                <div className="lg:col-span-2">
+                  <div className="mb-2 text-xs font-medium text-muted-foreground">
+                    {t('extension.workbenchCommands')}
+                  </div>
+                  <div className="space-y-1.5">
+                    {extension.manifest.commands?.map((command) => {
+                      const view = extension.manifest.views?.find(
+                        (candidate) => candidate.name === command.view
+                      )
+                      return (
+                        <div
+                          key={command.name}
+                          className="flex items-center justify-between gap-3 border-b border-border/40 py-1.5 text-xs last:border-0"
+                        >
+                          <span className="min-w-0 truncate font-medium text-foreground">
+                            {command.title}
+                          </span>
+                          <span className="shrink-0 text-muted-foreground">
+                            {view?.title ?? command.view}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {t('extension.workbenchCommandsHint')}
+                  </p>
                 </div>
               ) : null}
             </div>

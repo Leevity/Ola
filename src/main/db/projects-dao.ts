@@ -207,17 +207,21 @@ export async function deleteProject(
   return result.deleted ? result : null
 }
 
-export async function ensureDefaultProject(workspaceId = 'local-personal'): Promise<ProjectRow> {
+export async function ensureDefaultProject(
+  workspaceId = 'local-personal',
+  preferredName?: string
+): Promise<ProjectRow> {
   const writer = businessWriteCanary()
   if (writer) {
     return writer.ensureDefaultProject<ProjectRow>({
       workspaceId,
+      preferredName,
       baseDirectory: getPreferredLocalProjectBaseDirectory()
     })
   }
   return getTsDatabaseRouteGuard().request<ProjectRow>(
     'db/projects-ensure-default',
-    withProjectBaseDirectory({ workspaceId }),
+    withProjectBaseDirectory({ workspaceId, preferredName }),
     120_000
   )
 }

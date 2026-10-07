@@ -8,6 +8,7 @@ import {
   type RuntimeCapability
 } from '../../shared/runtime/contracts'
 import { RunScheduler } from '../scheduler/run-scheduler'
+import type { ExecutionPageKey } from '../../shared/execution-record'
 import { FrameDecoder, encodeFrame } from './framing'
 
 export interface RuntimeAuthority {
@@ -33,6 +34,18 @@ function id(value: unknown): string {
   )
     throw new RuntimeError('INVALID_REQUEST')
   return value.trim()
+}
+function pageKey(value: unknown): ExecutionPageKey | undefined {
+  if (value === undefined) return undefined
+  const candidate = record(value)
+  if (
+    Object.keys(candidate).some((key) => key !== 'at' && key !== 'id') ||
+    typeof candidate.at !== 'number' ||
+    !Number.isSafeInteger(candidate.at) ||
+    candidate.at < 0
+  )
+    throw new RuntimeError('INVALID_REQUEST')
+  return { at: candidate.at, id: id(candidate.id) }
 }
 function matchesToken(left: unknown, right: string): boolean {
   if (typeof left !== 'string') return false
@@ -184,14 +197,70 @@ export class RuntimeServer {
       }
       case 'run.list': {
         this.requireCapability(capabilities, 'runs')
-        const runs = await this.scheduler.journal.list(workspaceId)
+        const limit = params.limit ?? 100
+        const offset = params.offset ?? 0
+        const attentionOnly = params.attentionOnly ?? false
+        if (
+          typeof limit !== 'number' ||
+          !Number.isSafeInteger(limit) ||
+          limit < 1 ||
+          limit > 200 ||
+          typeof offset !== 'number' ||
+          !Number.isSafeInteger(offset) ||
+          offset < 0 ||
+          typeof attentionOnly !== 'boolean'
+        )
+          throw new RuntimeError('INVALID_REQUEST')
+        const runs = await this.scheduler.journal.list(
+          workspaceId,
+          limit,
+          offset,
+          attentionOnly,
+          pageKey(params.anchor),
+          pageKey(params.after)
+        )
         await this.requireCurrentWorkspaceAccess(workspaceId)
         return runs
+      }
+      case 'artifact.list': {
+        this.requireCapability(capabilities, 'runs')
+        const limit = params.limit ?? 50
+        const offset = params.offset ?? 0
+        if (
+          typeof limit !== 'number' ||
+          !Number.isSafeInteger(limit) ||
+          limit < 1 ||
+          limit > 200 ||
+          typeof offset !== 'number' ||
+          !Number.isSafeInteger(offset) ||
+          offset < 0
+        )
+          throw new RuntimeError('INVALID_REQUEST')
+        const runId = params.runId === undefined ? undefined : id(params.runId)
+        const artifacts = await this.scheduler.journal.artifacts(workspaceId, limit, offset, runId)
+        await this.requireCurrentWorkspaceAccess(workspaceId)
+        return artifacts
+      }
+      case 'artifact.hide': {
+        this.requireCapability(capabilities, 'runs')
+        const seq = params.seq
+        if (typeof seq !== 'number' || !Number.isSafeInteger(seq) || seq < 1)
+          throw new RuntimeError('INVALID_REQUEST')
+        const result = await this.scheduler.journal.hideArtifact(workspaceId, id(params.runId), seq)
+        await this.requireCurrentWorkspaceAccess(workspaceId)
+        return result
       }
       case 'run.cancel':
         this.requireCapability(capabilities, 'cancel')
         await this.scheduler.cancel(id(params.runId), workspaceId)
         return { ok: true }
+      case 'run.cancel-session': {
+        this.requireCapability(capabilities, 'cancel')
+        const sessionId = id(params.sessionId)
+        await this.scheduler.cancelSessionRuns(workspaceId, sessionId)
+        await this.requireCurrentWorkspaceAccess(workspaceId)
+        return { ok: true }
+      }
       case 'run.interact':
         this.requireCapability(capabilities, 'interactions')
         await this.scheduler.respondInteraction(

@@ -76,6 +76,62 @@ describe('extension HTTP tools', () => {
     ).rejects.toThrow('Network access denied')
   })
 
+  it('extracts only declared credential-free HTTP links as artifacts', async () => {
+    const linkManifest: ExtensionManifest = {
+      ...manifest,
+      tools: [
+        {
+          ...manifest.tools[0],
+          artifact: { kind: 'link', urlPointer: '/report/url', titlePointer: '/report/name' }
+        }
+      ]
+    }
+    const result = await executeExtensionHttpTool({
+      manifest: linkManifest,
+      enabled: true,
+      config: {},
+      toolName: 'lookup',
+      fetch: async () =>
+        new Response(
+          JSON.stringify({
+            report: { url: 'https://reports.example.com/123', name: 'Quarterly report' }
+          }),
+          { status: 200 }
+        )
+    })
+    expect(result.artifacts).toEqual([
+      {
+        kind: 'link',
+        url: 'https://reports.example.com/123',
+        title: 'Quarterly report'
+      }
+    ])
+    const rejected = await executeExtensionHttpTool({
+      manifest: linkManifest,
+      enabled: true,
+      config: {},
+      toolName: 'lookup',
+      fetch: async () =>
+        new Response(JSON.stringify({ report: { url: 'javascript:alert(1)', name: 'unsafe' } }), {
+          status: 200
+        })
+    })
+    expect(rejected.artifacts).toEqual([])
+    const failed = await executeExtensionHttpTool({
+      manifest: linkManifest,
+      enabled: true,
+      config: {},
+      toolName: 'lookup',
+      fetch: async () =>
+        new Response(JSON.stringify({ report: { url: 'https://reports.example.com/failed' } }), {
+          status: 503,
+          statusText: 'Unavailable'
+        })
+    })
+    expect(failed.data).toMatchObject({ ok: false, status: 503 })
+    expect(failed.artifacts).toEqual([])
+  })
+
   it('rejects oversized extension responses before they enter runtime events', async () => {
     await expect(
       executeExtensionHttpTool({

@@ -78,7 +78,7 @@ export function SkinSection({ pet }: SkinSectionProps): React.JSX.Element {
             onClick={() => setActive(pose)}
           >
             <span className="block">{t(`poses.${pose.id}`)}</span>
-            <span className="block text-[9px] opacity-70">Lv.{pose.unlockLevel}</span>
+            <span className="block text-xs opacity-70">Lv.{pose.unlockLevel}</span>
           </Button>
         ))}
       </div>
@@ -94,7 +94,7 @@ export function SkinSection({ pet }: SkinSectionProps): React.JSX.Element {
             <p className="text-sm font-medium">
               {disabled ? t('skin.aiStudio.lockedTitle') : t('skin.aiStudio.title')}
             </p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {disabled ? t('skin.aiStudio.lockedDesc') : t('skin.aiStudio.desc')}
             </p>
             <Button

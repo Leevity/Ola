@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { Switch } from '@renderer/components/ui/switch'
 import {
   Select,
@@ -126,7 +127,7 @@ export function PermissionPanel(): React.JSX.Element {
             className="max-w-72 font-mono text-xs"
             onChange={(event) => setToolInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') addTool(toolInput)
+              if (event.key === 'Enter' && !isImeCommitKey(event)) addTool(toolInput)
             }}
           />
           <Button variant="outline" size="sm" onClick={() => addTool(toolInput)}>

@@ -26,6 +26,12 @@ export interface ExtensionToolDefinition {
   http?: ExtensionHttpDefinition
   handler?: string
   readOnly?: boolean
+  /** Extract one verified HTTP(S) link from a JSON response into run artifacts. */
+  artifact?: {
+    kind: 'link'
+    urlPointer: string
+    titlePointer?: string
+  }
 }
 
 export interface ExtensionFetchRequest {
@@ -58,6 +64,21 @@ export interface ExtensionComponentDefinition {
   description?: string
 }
 
+export interface ExtensionWorkbenchViewDefinition {
+  name: string
+  title: string
+  description?: string
+  entry: string
+}
+
+export interface ExtensionWorkbenchCommandDefinition {
+  name: string
+  title: string
+  description?: string
+  keywords?: string[]
+  view: string
+}
+
 export interface ExtensionManifest {
   schemaVersion: 1
   id: string
@@ -72,6 +93,8 @@ export interface ExtensionManifest {
   tools: ExtensionToolDefinition[]
   renderers?: ExtensionRendererDefinition[]
   components?: ExtensionComponentDefinition[]
+  views?: ExtensionWorkbenchViewDefinition[]
+  commands?: ExtensionWorkbenchCommandDefinition[]
 }
 
 export interface ExtensionInstance {
@@ -93,4 +116,5 @@ export interface ExtensionToolResult {
     kind: ExtensionUiKind
     [key: string]: unknown
   }
+  artifacts?: Array<{ kind: 'link'; url: string; title: string }>
 }

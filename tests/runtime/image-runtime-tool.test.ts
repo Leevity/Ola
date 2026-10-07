@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { createImageRuntimeTool } from '../../src/main/runtime/image-runtime-tool'
 import { hydrateProviderMainMirror } from '../../src/main/providers/provider-main-store'
 import { PROVIDER_STORE_KEY } from '../../src/shared/provider-contract'
-import type { ToolContext } from '../../src/runtime/tools/tool-executor'
+import { ToolExecutor, type ToolContext } from '../../src/runtime/tools/tool-executor'
 import type { RunSpec } from '../../src/shared/runtime/contracts'
 
 vi.mock('../../src/main/remote/account-client', () => ({
@@ -93,14 +93,35 @@ describe('TS ImageGenerate runtime tool', () => {
 
     const tool = createImageRuntimeTool()
     expect(() => tool.validate({ prompt: '', count: 1 })).toThrow('INVALID_TOOL_INPUT')
-    const result = await tool.execute(tool.validate({ prompt: 'a mascot', count: 1 }), context())
-    const parsed = JSON.parse(result as string) as {
+    const events: Array<{ type: string; data: unknown }> = []
+    const executor = new ToolExecutor([tool], async () => true)
+    const result = await executor.executeAll(
+      [{ id: 'image-tool-call', name: 'ImageGenerate', input: { prompt: 'a mascot', count: 1 } }],
+      context(),
+      async (type, data) => {
+        events.push({ type, data })
+      }
+    )
+    const parsed = JSON.parse(result[0].output as string) as {
       __olaImageResult: boolean
       images: Array<{ filePath: string; mediaType: string }>
     }
     expect(parsed.__olaImageResult).toBe(true)
     expect(parsed.images).toHaveLength(1)
     expect(parsed.images[0].mediaType).toBe('image/png')
+    expect(events.filter((event) => event.type === 'artifact.registered')).toEqual([
+      {
+        type: 'artifact.registered',
+        data: {
+          toolCallId: 'image-tool-call',
+          kind: 'file',
+          transport: 'local',
+          path: parsed.images[0].filePath,
+          operation: 'create',
+          mediaType: 'image/png'
+        }
+      }
+    ])
     expect(globalThis.fetch).toHaveBeenCalledWith(
       'https://images.example.test/v1/images/generations',
       expect.objectContaining({ method: 'POST' })

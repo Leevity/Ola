@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 import { execSshCommand } from './ssh-handlers'
 import {
   currentSshWorkspaceId,
@@ -596,7 +597,8 @@ function registerGitMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     try {
       const args = decodeMessagePackPayload<TArgs>(bytes)
       const rawWorkspaceId = (args as { workspaceId?: unknown } | null)?.workspaceId

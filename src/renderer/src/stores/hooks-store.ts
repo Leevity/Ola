@@ -7,9 +7,9 @@ interface HooksStore {
   history: HookRunRecord[]
   loading: boolean
   error: string | null
-  refresh: (projectPath?: string) => Promise<void>
-  trust: (trustKey: string, projectPath?: string) => Promise<void>
-  revoke: (trustKey: string, projectPath?: string) => Promise<void>
+  refresh: (sessionId?: string) => Promise<void>
+  trust: (trustKey: string, sessionId?: string) => Promise<void>
+  revoke: (trustKey: string, sessionId?: string) => Promise<void>
 }
 
 export const useHooksStore = create<HooksStore>((set, get) => ({
@@ -17,11 +17,11 @@ export const useHooksStore = create<HooksStore>((set, get) => ({
   history: [],
   loading: false,
   error: null,
-  refresh: async (projectPath) => {
+  refresh: async (sessionId) => {
     set({ loading: true, error: null })
     try {
       const [hooks, history] = await Promise.all([
-        ipcClient.invoke('hooks:list', { projectPath }) as Promise<LoadedHook[]>,
+        ipcClient.invoke('hooks:list', { sessionId }) as Promise<LoadedHook[]>,
         ipcClient.invoke('hooks:history', {}) as Promise<HookRunRecord[]>
       ])
       set({ hooks, history, loading: false })
@@ -29,12 +29,12 @@ export const useHooksStore = create<HooksStore>((set, get) => ({
       set({ error: error instanceof Error ? error.message : String(error), loading: false })
     }
   },
-  trust: async (trustKey, projectPath) => {
-    await ipcClient.invoke('hooks:trust', { trustKey, projectPath })
-    await get().refresh(projectPath)
+  trust: async (trustKey, sessionId) => {
+    await ipcClient.invoke('hooks:trust', { trustKey, sessionId })
+    await get().refresh(sessionId)
   },
-  revoke: async (trustKey, projectPath) => {
+  revoke: async (trustKey, sessionId) => {
     await ipcClient.invoke('hooks:revoke', { trustKey })
-    await get().refresh(projectPath)
+    await get().refresh(sessionId)
   }
 }))

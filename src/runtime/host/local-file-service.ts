@@ -132,7 +132,7 @@ function errorMessage(error: unknown): string {
 }
 
 function normalizeFileToolPattern(pattern: string): string {
-  let normalized = pattern.trim().replace(/\\\\/g, '/').replace(/^\/+/, '')
+  let normalized = pattern.trim().replaceAll('\\', '/').replace(/^\/+/, '')
   if (normalized.startsWith('./')) normalized = normalized.slice(2)
   if (normalized.startsWith('**/')) normalized = normalized.slice(3)
   return normalized
@@ -206,7 +206,7 @@ async function readDirectoryIgnorePatterns(
 }
 
 function normalizeSearchPath(value: string): string {
-  return value.replace(/\\\\/g, '/').toLowerCase()
+  return value.replaceAll('\\', '/').toLowerCase()
 }
 
 function scoreLocalFileSearchMatch(filePath: string, query: string): number {
@@ -457,7 +457,7 @@ export async function listLocalDirectory(args: {
       const directory = entry.isDirectory()
       if (!directory && !entry.isFile()) continue
       if (directory && DEFAULT_IGNORED_DIRECTORY_NAMES.has(entry.name.toLowerCase())) continue
-      const relativePath = relative(args.path, entryPath).replace(/\\\\/g, '/')
+      const relativePath = relative(args.path, entryPath).replaceAll('\\', '/')
       if (patterns.some((pattern) => fileToolGlobMatches(pattern, relativePath, entry.name)))
         continue
       result.push({ name: entry.name, type: directory ? 'directory' : 'file', path: entryPath })
@@ -491,7 +491,7 @@ export async function searchLocalFiles(args: {
       const entryPath = join(directory, entry.name)
       const directoryEntry = entry.isDirectory()
       if (entry.isSymbolicLink()) continue
-      const relativePath = relative(args.path, entryPath).replace(/\\\\/g, '/')
+      const relativePath = relative(args.path, entryPath).replaceAll('\\', '/')
       if (directoryEntry && DEFAULT_IGNORED_DIRECTORY_NAMES.has(entry.name.toLowerCase())) continue
       if (patterns.some((pattern) => fileToolGlobMatches(pattern, relativePath, entry.name)))
         continue
@@ -553,7 +553,7 @@ export async function globLocalFiles(args: {
       if (entry.isSymbolicLink()) continue
       const directoryEntry = entry.isDirectory()
       if (!directoryEntry && !entry.isFile()) continue
-      const relativePath = relative(args.path, entryPath).replace(/\\\\/g, '/')
+      const relativePath = relative(args.path, entryPath).replaceAll('\\', '/')
       const depth = Math.max(0, relativePath.split('/').filter(Boolean).length - 1)
       if (args.maxDepth !== null && depth > args.maxDepth) continue
       if (!args.hidden && hasHiddenPathSegment(relativePath)) continue

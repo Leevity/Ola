@@ -1,5 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type {
   AppendTeamRuntimeMessageArgs,
   ConsumeTeamRuntimeMessagesArgs,
@@ -14,13 +13,13 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../shared/messagepack/binary-ipc'
-import { isKnownIpcChannel } from '../shared/ipc/contract'
+import { isKnownIpcTransportChannel } from '../shared/ipc/contract'
 
 const strictIpcAllowlist =
   process.env.NODE_ENV === 'production' || process.env.OLA_STRICT_IPC_ALLOWLIST === '1'
 
 function validateIpcChannel(channel: string): void {
-  if (isKnownIpcChannel(channel)) return
+  if (isKnownIpcTransportChannel(channel)) return
   if (strictIpcAllowlist) {
     throw new Error(`IPC channel is not registered: ${channel}`)
   }
@@ -86,6 +85,15 @@ const api = {
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
 const ola = {
+  desktop: {
+    platform: process.platform,
+    versions: {
+      electron: process.versions.electron ?? '',
+      chrome: process.versions.chrome ?? '',
+      node: process.versions.node ?? ''
+    },
+    getPathForFile: (file: File): string => webUtils.getPathForFile(file)
+  },
   ipc: olaIpc,
   media: {
     downloadImage: api.downloadImage,
@@ -106,7 +114,6 @@ const ola = {
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('ola', ola)
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
@@ -115,7 +122,6 @@ if (process.contextIsolated) {
   // @ts-ignore (define in dts)
   window.ola = ola
   // @ts-ignore (define in dts)
-  window.electron = electronAPI
   // @ts-ignore (define in dts)
   window.api = api
 }

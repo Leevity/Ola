@@ -1,5 +1,5 @@
 import { useWorkspaceProviders, useWorkspaceModelRoute } from '@renderer/hooks/use-workspace-models'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   CheckCircle2,
@@ -202,7 +202,7 @@ function ProductDesignDependencyRow({
         <p className="text-sm font-medium">{label}</p>
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       </div>
-      <Badge variant={ready ? 'secondary' : 'outline'} className="shrink-0 text-[10px]">
+      <Badge variant={ready ? 'secondary' : 'outline'} className="shrink-0 text-xs">
         {ready
           ? t('plugin.productDesign.ready')
           : optional
@@ -216,6 +216,7 @@ function ProductDesignDependencyRow({
 export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): React.JSX.Element {
   const { t } = useTranslation('settings')
   const [selectedPluginId, setSelectedPluginId] = useState<AppPluginId>(IMAGE_PLUGIN_ID)
+  const pluginTabRefs = useRef<Array<HTMLButtonElement | null>>([])
   const [clearingCookies, setClearingCookies] = useState(false)
   const [exportingCookies, setExportingCookies] = useState(false)
   const [cookieProfiles, setCookieProfiles] = useState<BrowserCookieProfile[]>([])
@@ -472,7 +473,7 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="app-plugin-panel flex h-full min-h-0 flex-col gap-4">
       {!embedded ? (
         <div>
           <h2 className="text-lg font-semibold">{t('plugin.title')}</h2>
@@ -480,11 +481,11 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
         </div>
       ) : null}
       <div
-        className="flex min-h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60"
+        className="app-plugin-tab-list flex min-h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-border/60"
         role="tablist"
         aria-label={t('plugin.title')}
       >
-        {visibleDescriptors.map((descriptor) => {
+        {visibleDescriptors.map((descriptor, index) => {
           const plugin =
             projectPlugins.find((item) => item.id === descriptor.id) ??
             createFallbackPlugin(descriptor.id)
@@ -494,17 +495,35 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
               key={descriptor.id}
               type="button"
               role="tab"
+              id={`app-plugin-tab-${descriptor.id}`}
+              aria-controls="app-plugin-panel-content"
               aria-selected={selected}
+              tabIndex={selected ? 0 : -1}
+              ref={(element) => {
+                pluginTabRefs.current[index] = element
+              }}
+              onKeyDown={(event) => {
+                let nextIndex = index
+                if (event.key === 'ArrowRight') nextIndex = (index + 1) % visibleDescriptors.length
+                else if (event.key === 'ArrowLeft')
+                  nextIndex = (index + visibleDescriptors.length - 1) % visibleDescriptors.length
+                else if (event.key === 'Home') nextIndex = 0
+                else if (event.key === 'End') nextIndex = visibleDescriptors.length - 1
+                else return
+                event.preventDefault()
+                setSelectedPluginId(visibleDescriptors[nextIndex].id)
+                pluginTabRefs.current[nextIndex]?.focus()
+              }}
               onClick={() => setSelectedPluginId(descriptor.id)}
-              className={`flex shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-left text-sm transition-colors ${
+              className={`flex min-w-0 shrink-0 items-center gap-2 border-b-2 px-3 py-3 text-left text-sm transition-colors ${
                 selected
                   ? 'border-primary font-medium text-foreground'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
               }`}
             >
-              <span className="text-muted-foreground">{getPluginIcon(descriptor.id)}</span>
-              <span className="whitespace-nowrap">{t(`plugin.items.${descriptor.id}.title`)}</span>
-              <span className="text-[10px] text-muted-foreground">
+              <span className="shrink-0 text-muted-foreground">{getPluginIcon(descriptor.id)}</span>
+              <span className="min-w-0 truncate">{t(`plugin.items.${descriptor.id}.title`)}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
                 {plugin?.enabled ? t('plugin.enabled') : t('plugin.disabled')}
               </span>
             </button>
@@ -512,7 +531,13 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
         })}
       </div>
 
-      <div className="min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-background p-6">
+      <div
+        id="app-plugin-panel-content"
+        role="tabpanel"
+        aria-labelledby={`app-plugin-tab-${selectedPluginId}`}
+        tabIndex={0}
+        className="app-plugin-content min-h-0 min-w-0 flex-1 overflow-y-auto rounded-xl border border-border/60 bg-background p-6"
+      >
         {selectedPlugin && selectedDescriptor ? (
           <div className="space-y-6">
             <div className="space-y-1">
@@ -538,6 +563,7 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
                   <p className="text-xs text-muted-foreground">{t('plugin.enableDesc')}</p>
                 </div>
                 <Switch
+                  aria-label={t('plugin.enable')}
                   checked={selectedPlugin.enabled}
                   onCheckedChange={(checked) => void handlePluginEnabledChange(checked)}
                 />
@@ -555,7 +581,7 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
 
                 <div className="flex flex-wrap gap-2">
                   {productDesignWorkflowLabels.map((label) => (
-                    <Badge key={label} variant="outline" className="text-[11px]">
+                    <Badge key={label} variant="outline" className="text-xs">
                       {t(`plugin.productDesign.workflows.${label}`)}
                     </Badge>
                   ))}
@@ -641,7 +667,10 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
                     })
                   }}
                 >
-                  <SelectTrigger className="w-80 text-xs">
+                  <SelectTrigger
+                    aria-label={t('plugin.modelSource')}
+                    className="w-full max-w-80 text-xs"
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -700,7 +729,10 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
                           })
                         }}
                       >
-                        <SelectTrigger className="mt-1 w-80 text-xs">
+                        <SelectTrigger
+                          aria-label={t('plugin.provider')}
+                          className="mt-1 w-full max-w-80 text-xs"
+                        >
                           <SelectValue placeholder={t('plugin.selectProvider')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -724,7 +756,10 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
                           updatePlugin(selectedPlugin.id, { modelId: value })
                         }
                       >
-                        <SelectTrigger className="mt-1 w-80 text-xs">
+                        <SelectTrigger
+                          aria-label={t('plugin.model')}
+                          className="mt-1 w-full max-w-80 text-xs"
+                        >
                           <SelectValue placeholder={t('plugin.selectModel')} />
                         </SelectTrigger>
                         <SelectContent>
@@ -964,7 +999,7 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
                       <p className="mt-2 text-xs text-muted-foreground">
                         {t(`plugin.toolArgsMap.${toolName}`)}
                       </p>
-                      <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+                      <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
                         {TOOL_ARG_LABELS[toolName].map((label) => (
                           <span key={label} className="rounded-full bg-muted px-2 py-0.5">
                             {label}

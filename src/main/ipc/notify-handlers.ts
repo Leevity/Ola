@@ -5,11 +5,16 @@ import { registerMessagePackHandler } from './messagepack-handler'
 // Deduplication cache to prevent duplicate notifications
 const notificationCache = new Map<string, number>()
 const DEBOUNCE_MS = 2000 // Prevent same notification within 2 seconds
+const NOTIFICATION_RESULT_TIMEOUT_MS = 2000
+
+export type DesktopNotificationOutcome = 'shown' | 'failed' | 'unknown'
 
 // Send a system notification using Electron's native Notification API
-export function showSystemNotification(title: string, body: string): void {
-  console.log('[Notify] Attempting to show notification:', { title, body })
-
+export function showSystemNotification(
+  title: string,
+  body: string
+): Promise<DesktopNotificationOutcome> {
+  if (!Notification.isSupported()) return Promise.resolve('failed')
   // Create a cache key from title + body
   const cacheKey = `${title}:${body}`
   const now = Date.now()
@@ -17,8 +22,8 @@ export function showSystemNotification(title: string, body: string): void {
 
   // Skip if same notification was shown recently
   if (lastShown && now - lastShown < DEBOUNCE_MS) {
-    console.log('[Notify] Skipping duplicate notification:', title)
-    return
+    console.log('[Notify] Skipping duplicate notification')
+    return Promise.resolve('unknown')
   }
 
   // Update cache
@@ -31,40 +36,50 @@ export function showSystemNotification(title: string, body: string): void {
     }
   }
 
-  try {
-    const notification = new Notification({
-      title,
-      body,
-      silent: false,
-      urgency: 'critical', // Force notification to show even in focus assist mode
-      timeoutType: 'default'
-    })
-
-    notification.on('show', () => {
-      console.log('[Notify] Notification shown successfully')
-    })
-
-    notification.on('failed', (_, error) => {
-      console.error('[Notify] Notification failed:', error)
-    })
-
-    notification.show()
-    console.log('[Notify] Notification.show() called')
-  } catch (err) {
-    console.error('[Notify] Error creating notification:', err)
-  }
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (outcome: DesktopNotificationOutcome): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (outcome === 'failed') notificationCache.delete(cacheKey)
+      resolve(outcome)
+    }
+    const timer = setTimeout(() => finish('unknown'), NOTIFICATION_RESULT_TIMEOUT_MS)
+    try {
+      const notification = new Notification({
+        title,
+        body,
+        silent: false,
+        urgency: 'critical',
+        timeoutType: 'default'
+      })
+      notification.once('show', () => finish('shown'))
+      notification.once('failed', () => finish('failed'))
+      notification.show()
+    } catch (error) {
+      console.error('[Notify] Notification request failed:', error)
+      finish('failed')
+    }
+  })
 }
 
 export function registerNotifyHandlers(): void {
   registerMessagePackHandler<
     { title: string; body: string; type?: string; duration?: number },
-    { success: boolean; error?: string }
+    { success: boolean; status: DesktopNotificationOutcome; error?: string }
   >('notify:desktop', async (args) => {
     try {
-      showSystemNotification(args.title ?? 'Ola', args.body ?? '')
-      return { success: true }
+      const status = await showSystemNotification(args.title ?? 'Ola', args.body ?? '')
+      return status === 'failed'
+        ? { success: false, status, error: 'NOTIFICATION_FAILED' }
+        : { success: true, status }
     } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
+      return {
+        success: false,
+        status: 'failed',
+        error: err instanceof Error ? err.message : String(err)
+      }
     }
   })
 

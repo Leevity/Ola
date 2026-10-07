@@ -27,6 +27,22 @@ function runtimeChannel(name: string): string {
 
 const RUNTIME_INLINE_IMAGE_BYTES = 512 * 1024
 
+function summarizeRunContractValue(value: unknown): unknown {
+  if (typeof value === 'string') return { type: 'string', length: value.length }
+  if (typeof value === 'number' || typeof value === 'boolean') return { type: typeof value }
+  if (Array.isArray(value)) {
+    const first = value[0]
+    return {
+      type: 'array',
+      length: value.length,
+      firstItemKeys:
+        first && typeof first === 'object' && !Array.isArray(first) ? Object.keys(first) : undefined
+    }
+  }
+  if (value && typeof value === 'object') return { type: 'object', keys: Object.keys(value) }
+  return { type: typeof value }
+}
+
 async function stageRuntimeImages(
   workspaceId: string,
   images: readonly RuntimeImage[] | undefined
@@ -72,6 +88,7 @@ async function pause(signal?: AbortSignal): Promise<void> {
 export interface TsRuntimeTextTurn {
   workspaceId: string
   sessionId: string
+  businessTaskId?: string
   /** Stable chat message target retained in the runtime journal for reattach. */
   assistantMessageId?: string
   channelContext?: { pluginId: string; chatId: string; messageId?: string }
@@ -195,9 +212,10 @@ export async function* streamTsRuntimeTextTurn(
         }))
       )
     : undefined
-  const run = parseRunSpec({
+  const runInput = {
     runId: crypto.randomUUID(),
     taskId: crypto.randomUUID(),
+    ...(input.businessTaskId ? { businessTaskId: input.businessTaskId } : {}),
     requestId: crypto.randomUUID(),
     traceId: crypto.randomUUID(),
     sessionId: input.sessionId,
@@ -222,7 +240,51 @@ export async function* streamTsRuntimeTextTurn(
     ...(promptImages?.length ? { promptImages } : {}),
     ...(history?.length ? { history } : {}),
     unattended: input.unattended ?? false
-  })
+  }
+  let run: ReturnType<typeof parseRunSpec>
+  try {
+    run = parseRunSpec(runInput)
+  } catch (error) {
+    const requiredFields = [
+      'runId',
+      'taskId',
+      'requestId',
+      'traceId',
+      'sessionId',
+      'workspaceId',
+      'environmentId',
+      'modelSource',
+      'prompt',
+      'unattended'
+    ]
+    const requiredInput = Object.fromEntries(
+      requiredFields.map((key) => [key, runInput[key as keyof typeof runInput]])
+    )
+    const invalidFields: string[] = []
+    try {
+      parseRunSpec(requiredInput)
+      for (const [field, value] of Object.entries(runInput)) {
+        if (requiredFields.includes(field)) continue
+        try {
+          parseRunSpec({ ...requiredInput, [field]: value })
+        } catch {
+          invalidFields.push(field)
+        }
+      }
+    } catch {
+      invalidFields.push('required-contract')
+    }
+    console.error(
+      '[TS Runtime] Run contract validation failed; values redacted',
+      JSON.stringify({
+        invalidFields,
+        fields: Object.fromEntries(
+          Object.entries(runInput).map(([key, value]) => [key, summarizeRunContractValue(value)])
+        )
+      })
+    )
+    throw error
+  }
   let submitted = false
   let afterSeq = 0
   const projectionState = createTsRuntimeProjectionState()

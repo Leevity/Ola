@@ -1,8 +1,10 @@
 import { app, ipcMain, BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from 'electron'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 import { Client, type ConnectConfig, type ClientChannel, type SFTPWrapper, type Stats } from 'ssh2'
 import * as fs from 'fs'
 import * as path from 'path'
 import { SftpWorkspaceActivity } from '../ssh/sftp-workspace-activity'
+import { resolveSshScenarioPath } from '../ssh/ssh-scenario-scope'
 import { SshWorkspaceSwitchGate } from '../ssh/ssh-workspace-switch-gate'
 import { revokeUnavailableWorkspaceResources } from '../ssh/ssh-workspace-revocation'
 import {
@@ -1247,23 +1249,27 @@ function sftpReadDirectory(sftp: SFTPWrapper, filePath: string): Promise<unknown
   })
 }
 
-function sftpGlob(
+export function sftpGlob(
   sftp: SFTPWrapper,
   rootPath: string,
-  pattern: string
+  pattern: string,
+  skipSymlinks = false
 ): Promise<Array<{ path: string; type: 'file' | 'directory' }>> {
   const normalizedPattern = pattern.replaceAll('\\', '/').replace(/^\.\//, '')
-  const expression = new RegExp(
-    `^${normalizedPattern
-      .split('**')
-      .map((part) =>
-        part
-          .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-          .replace(/\*/g, '[^/]*')
-          .replace(/\?/g, '[^/]')
-      )
-      .join('(?:.*/)?')}$`
-  )
+  let expressionSource = ''
+  for (let index = 0; index < normalizedPattern.length; index += 1) {
+    const remaining = normalizedPattern.slice(index)
+    if (remaining.startsWith('**/')) {
+      expressionSource += '(?:.*/)?'
+      index += 2
+    } else if (remaining.startsWith('**')) {
+      expressionSource += '.*'
+      index += 1
+    } else if (remaining[0] === '*') expressionSource += '[^/]*'
+    else if (remaining[0] === '?') expressionSource += '[^/]'
+    else expressionSource += remaining[0].replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  }
+  const expression = new RegExp(`^${expressionSource}$`)
   const results: Array<{ path: string; type: 'file' | 'directory' }> = []
   const visit = async (directory: string, depth: number): Promise<void> => {
     if (results.length >= 1000 || depth > 32) return
@@ -1274,6 +1280,7 @@ function sftpGlob(
     )
     for (const entry of entries) {
       if (results.length >= 1000) break
+      if (skipSymlinks && entry.attrs.isSymbolicLink()) continue
       const absolute = `${directory.replace(/\/$/, '')}/${entry.filename}`
       const relative = absolute.replace(`${rootPath.replace(/\/$/, '')}/`, '')
       const type = entry.attrs.isDirectory() ? 'directory' : 'file'
@@ -1462,7 +1469,8 @@ function isTrustedSshIpcSender(event: IpcMainInvokeEvent | IpcMainEvent): boolea
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 
@@ -1578,6 +1586,18 @@ async function handleSshStatPath(args: { connectionId: string; path: string }): 
   } catch (err) {
     return { error: String(err) }
   }
+}
+
+/** Main-owned remote stat primitive for workspace-authorized runtime artifact indexing. */
+export async function statSshRuntimePath(
+  workspaceId: string,
+  connectionId: string,
+  filePath: string
+): Promise<unknown> {
+  const authorizedWorkspace = await authorizeSshWorkspace(workspaceId, loadOfflineWorkspaceIds)
+  return await withSshWorkspace(authorizedWorkspace, () =>
+    handleSshStatPath({ connectionId, path: filePath })
+  )
 }
 
 async function handleSshWriteFile(args: SshWriteFileArgs): Promise<unknown> {
@@ -2869,9 +2889,15 @@ export async function readSshRuntimeFile(
   connectionId: string,
   filePath: string,
   offset = 1,
-  limit = 2000
+  limit = 2000,
+  scenarioRoot?: string
 ): Promise<string> {
-  const content = await withSftp(connectionId, async (sftp) => await sftpReadFile(sftp, filePath))
+  const content = await withSftp(connectionId, async (sftp) => {
+    const safePath = scenarioRoot
+      ? await resolveSshScenarioPath((input) => sftpRealPath(sftp, input), scenarioRoot, filePath)
+      : filePath
+    return await sftpReadFile(sftp, safePath)
+  })
   const lines = content.toString('utf8').replace(/\r\n/g, '\n').split('\n')
   const start = Math.max(0, offset - 1)
   const end = Math.min(lines.length, start + Math.max(1, Math.min(limit, 2000)))
@@ -2896,10 +2922,14 @@ export async function writeSshRuntimeFile(
 
 export async function listSshRuntimeDirectory(
   connectionId: string,
-  filePath: string
+  filePath: string,
+  scenarioRoot?: string
 ): Promise<unknown[]> {
   return await withSftp(connectionId, async (sftp) => {
-    const entries = await sftpReadDirectory(sftp, filePath)
+    const safePath = scenarioRoot
+      ? await resolveSshScenarioPath((input) => sftpRealPath(sftp, input), scenarioRoot, filePath)
+      : filePath
+    const entries = await sftpReadDirectory(sftp, safePath)
     return entries.slice(0, 1000)
   })
 }
@@ -2907,17 +2937,21 @@ export async function listSshRuntimeDirectory(
 export async function globSshRuntimeFiles(
   connectionId: string,
   pattern: string,
-  filePath = '.'
+  filePath = '.',
+  scenarioRoot?: string
 ): Promise<unknown> {
   return await withSftp(connectionId, async (sftp) => {
-    const matches = await sftpGlob(sftp, filePath, pattern)
+    const searchRoot = scenarioRoot
+      ? await resolveSshScenarioPath((input) => sftpRealPath(sftp, input), scenarioRoot, filePath)
+      : filePath
+    const matches = await sftpGlob(sftp, searchRoot, pattern, Boolean(scenarioRoot))
     return {
       kind: 'glob',
       matches,
       meta: {
         backend: 'ssh',
         engine: 'ssh2-sftp',
-        searchRoot: filePath,
+        searchRoot,
         pathStyle: 'absolute',
         truncated: matches.length >= 1000,
         timedOut: false,
@@ -2932,7 +2966,8 @@ export async function globSshRuntimeFiles(
 
 export async function grepSshRuntimeFiles(
   connectionId: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  scenarioRoot?: string
 ): Promise<unknown> {
   const pattern = typeof input.pattern === 'string' ? input.pattern : ''
   if (!pattern.trim()) throw new Error('Grep pattern is required')
@@ -2956,7 +2991,10 @@ export async function grepSshRuntimeFiles(
       : 'matches'
 
   return await withSftp(connectionId, async (sftp) => {
-    const candidates = (await sftpGlob(sftp, searchRoot, '**/*')).filter(
+    const safeSearchRoot = scenarioRoot
+      ? await resolveSshScenarioPath((path) => sftpRealPath(sftp, path), scenarioRoot, searchRoot)
+      : searchRoot
+    const candidates = (await sftpGlob(sftp, safeSearchRoot, '**/*', Boolean(scenarioRoot))).filter(
       (entry) => entry.type === 'file'
     )
     const matches: SshGrepResult['matches'] = []
@@ -3013,7 +3051,7 @@ export async function grepSshRuntimeFiles(
       meta: {
         backend: 'ssh',
         engine: 'ssh2-sftp',
-        searchRoot,
+        searchRoot: safeSearchRoot,
         pathStyle: 'absolute',
         truncated: candidates.length > maxResults || matches.length >= maxResults,
         timedOut: false,

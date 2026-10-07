@@ -1,4 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+vi.mock('../../src/main/renderer-security', () => ({
+  assertTrustedRendererIpcEvent: () => undefined,
+  isTrustedRendererIpcEvent: () => true,
+  registerTrustedRendererUrl: () => undefined
+}))
 import { encode } from '@msgpack/msgpack'
 
 const handlers = new Map<string, (event: unknown, bytes: Uint8Array) => Promise<Uint8Array>>()

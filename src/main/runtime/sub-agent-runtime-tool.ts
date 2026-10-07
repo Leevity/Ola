@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { RuntimeError, type RunSnapshot } from '../../shared/runtime/contracts'
 import type { ToolContext, ToolDefinition } from '../../runtime/tools/tool-executor'
 import { TeamRuntimeStore } from '../teams/team-runtime-store'
+import type { AgentInfo } from '../user-content/agent-catalog'
 
 const MAX_DESCRIPTION_LENGTH = 256
 const MAX_PROMPT_LENGTH = 128 * 1024
@@ -61,10 +62,11 @@ function completedText(snapshot: RunSnapshot): string {
   return completed.at(-1) ?? ''
 }
 
-function subAgentSystemPrompt(type: string, workingDirectory?: string): string {
+function subAgentSystemPrompt(type: string, workingDirectory?: string, agent?: AgentInfo): string {
   return [
     'You are a focused Ola TS sub-agent executing one delegated task.',
     `Agent type: ${type}.`,
+    ...(agent ? [agent.systemPrompt] : []),
     'Work autonomously and return a concise report containing the result, changed files, and verification evidence.',
     'Do not use Task recursively. Do not claim work that you did not perform.',
     ...(workingDirectory ? [`Working directory: ${workingDirectory}`] : [])
@@ -72,8 +74,12 @@ function subAgentSystemPrompt(type: string, workingDirectory?: string): string {
 }
 
 /** Main-owned synchronous Task execution for the TS runtime. */
-export function createSubAgentRuntimeTool(name: 'Task' | 'Agent' = 'Task'): ToolDefinition {
+export function createSubAgentRuntimeTool(
+  name: 'Task' | 'Agent' = 'Task',
+  agents?: AgentInfo[]
+): ToolDefinition {
   const teamStore = new TeamRuntimeStore()
+  const agentsByName = new Map(agents?.map((agent) => [agent.name, agent]))
   return {
     name,
     description:
@@ -83,7 +89,9 @@ export function createSubAgentRuntimeTool(name: 'Task' | 'Agent' = 'Task'): Tool
       properties: {
         description: { type: 'string', minLength: 1, maxLength: MAX_DESCRIPTION_LENGTH },
         prompt: { type: 'string', minLength: 1, maxLength: MAX_PROMPT_LENGTH },
-        subagent_type: { type: 'string', minLength: 1, maxLength: 128 },
+        subagent_type: agents
+          ? { type: 'string', enum: [...agentsByName.keys(), 'custom'] }
+          : { type: 'string', minLength: 1, maxLength: 128 },
         run_in_background: { type: 'boolean', const: true },
         name: { type: 'string', minLength: 1, maxLength: 128 },
         team_name: { type: 'string', minLength: 1, maxLength: 128 },
@@ -101,6 +109,9 @@ export function createSubAgentRuntimeTool(name: 'Task' | 'Agent' = 'Task'): Tool
     ],
     execute: async (rawInput, context: ToolContext) => {
       const input = rawInput as ReturnType<typeof validateTaskInput>
+      const selectedAgent = agentsByName.get(input.subagentType)
+      if (agents && input.subagentType !== 'custom' && !selectedAgent)
+        throw new RuntimeError('INVALID_TOOL_INPUT')
       if (context.run.unattended) throw new RuntimeError('UNATTENDED_SUBAGENT_FORBIDDEN')
       if (!context.runNested && !context.submitNested)
         throw new RuntimeError('NESTED_RUNTIME_UNAVAILABLE')
@@ -110,7 +121,10 @@ export function createSubAgentRuntimeTool(name: 'Task' | 'Agent' = 'Task'): Tool
           toolName !== 'Task' &&
           toolName !== 'Agent' &&
           toolName !== 'EnterPlanMode' &&
-          toolName !== 'ExitPlanMode'
+          toolName !== 'ExitPlanMode' &&
+          (!selectedAgent ||
+            (selectedAgent.tools.includes(toolName) &&
+              !selectedAgent.disallowedTools.includes(toolName)))
       )
       const teamName = input.teamName ?? context.run.teamContext?.teamName
       if (input.background && !teamName) throw new RuntimeError('TEAM_NOT_ACTIVE')
@@ -168,17 +182,25 @@ export function createSubAgentRuntimeTool(name: 'Task' | 'Agent' = 'Task'): Tool
           ? {
               modelOptions: {
                 ...context.run.modelOptions,
-                systemPrompt: subAgentSystemPrompt(input.subagentType, context.run.workingDirectory)
+                systemPrompt: subAgentSystemPrompt(
+                  input.subagentType,
+                  context.run.workingDirectory,
+                  selectedAgent
+                )
               }
             }
           : {
               modelOptions: {
-                systemPrompt: subAgentSystemPrompt(input.subagentType, context.run.workingDirectory)
+                systemPrompt: subAgentSystemPrompt(
+                  input.subagentType,
+                  context.run.workingDirectory,
+                  selectedAgent
+                )
               }
             }),
         prompt: input.prompt,
         unattended: input.background,
-        maxTurns: Math.min(context.run.maxTurns ?? 32, 32),
+        maxTurns: Math.min(context.run.maxTurns ?? 32, selectedAgent?.maxTurns || 32, 32),
         maxToolCalls: Math.min(context.run.maxToolCalls ?? 128, 128)
       }
       if (input.background) {

@@ -2,6 +2,10 @@ export interface WorkbenchAction {
   id: string
   title: string
   keywords?: string[]
+  group?: string
+  shortcut?: string
+  showInPalette?: boolean
+  enabledWhen?: () => boolean
   run: () => void | Promise<void>
 }
 
@@ -33,6 +37,9 @@ function refreshActionSnapshot(): void {
 }
 
 function register<T extends RegistryItem>(kind: RegistryKind, item: T): () => void {
+  if (items[kind].has(item.id)) {
+    throw new Error(`Workbench ${kind} id is already registered: ${item.id}`)
+  }
   items[kind].set(item.id, item)
   if (kind === 'action') refreshActionSnapshot()
   listeners.forEach((listener) => listener())
@@ -52,6 +59,14 @@ export const registerWorkbenchDrawer = (drawer: WorkbenchDrawer): (() => void) =
 export const listWorkbenchActions = (): WorkbenchAction[] =>
   [...items.action.values()] as WorkbenchAction[]
 export const getWorkbenchActionsSnapshot = (): WorkbenchAction[] => actionSnapshot
+export const getWorkbenchAction = (id: string): WorkbenchAction | undefined =>
+  items.action.get(id) as WorkbenchAction | undefined
+export const runWorkbenchAction = (id: string): boolean => {
+  const action = getWorkbenchAction(id)
+  if (!action || (action.enabledWhen && !action.enabledWhen())) return false
+  void action.run()
+  return true
+}
 export const listWorkbenchPanes = (): WorkbenchPane[] => [...items.pane.values()] as WorkbenchPane[]
 export const listWorkbenchDrawers = (): WorkbenchDrawer[] =>
   [...items.drawer.values()] as WorkbenchDrawer[]

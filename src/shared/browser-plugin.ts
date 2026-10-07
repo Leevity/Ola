@@ -35,6 +35,11 @@ export function browserPartitionForWorkspace(workspaceId: string): string {
   return `${BUILTIN_BROWSER_PARTITION}-${encodeURIComponent(normalized)}`
 }
 
+/** External browser data belongs only to the local personal workspace. */
+export function usesDefaultBrowserSession(workspaceId: string, reuseEnabled: boolean): boolean {
+  return reuseEnabled && workspaceId === LOCAL_PERSONAL_WORKSPACE_ID
+}
+
 export function isBuiltInBrowserPartition(value: unknown): boolean {
   return (
     typeof value === 'string' &&

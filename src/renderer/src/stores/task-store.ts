@@ -9,6 +9,7 @@ import {
   DB_TASKS_UPDATE_MSGPACK_CHANNEL
 } from '../../../shared/messagepack/binary-ipc'
 import { useChatStore } from './chat-store'
+import { fromTaskDateInput, toTaskDateInput } from '../lib/task-calendar-date'
 
 export type TaskStatus =
   | 'pending'
@@ -23,6 +24,9 @@ export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export interface TaskBoardMetadata {
   priority?: TaskPriority
   tags?: string[]
+  startDate?: string
+  dueDate?: string
+  /** Local-midnight projections for timeline calculations; never persisted for new edits. */
   startAt?: number
   dueAt?: number
 }
@@ -46,7 +50,7 @@ export interface TaskItem {
 /** @deprecated Use TaskItem instead */
 export type TodoItem = TaskItem
 
-// --- DB persistence helpers (fire-and-forget) ---
+// --- DB persistence helpers ---
 
 function workspaceForSession(sessionId: string | undefined): string {
   if (!sessionId) return 'local-personal'
@@ -56,9 +60,9 @@ function workspaceForSession(sessionId: string | undefined): string {
   )
 }
 
-function dbCreateTask(task: TaskItem, sortOrder: number): void {
-  if (!task.sessionId) return
-  invokeMessagePackBinary(DB_TASKS_CREATE_MSGPACK_CHANNEL, {
+function dbCreateTask(task: TaskItem, sortOrder: number): Promise<unknown> {
+  if (!task.sessionId) return Promise.reject(new Error('TASK_SESSION_REQUIRED'))
+  return invokeMessagePackBinary(DB_TASKS_CREATE_MSGPACK_CHANNEL, {
     id: task.id,
     sessionId: task.sessionId,
     workspaceId: workspaceForSession(task.sessionId),
@@ -74,24 +78,40 @@ function dbCreateTask(task: TaskItem, sortOrder: number): void {
     sortOrder,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt
-  }).catch(() => {})
+  })
 }
 
-function dbUpdateTask(id: string, workspaceId: string, patch: Record<string, unknown>): void {
-  invokeMessagePackBinary(DB_TASKS_UPDATE_MSGPACK_CHANNEL, { id, workspaceId, patch }).catch(
-    () => {}
-  )
+function dbUpdateTask(
+  id: string,
+  workspaceId: string,
+  patch: Record<string, unknown>,
+  expectedUpdatedAt: number
+): Promise<unknown> {
+  return invokeMessagePackBinary(DB_TASKS_UPDATE_MSGPACK_CHANNEL, {
+    id,
+    workspaceId,
+    patch,
+    expectedUpdatedAt
+  })
 }
 
-function dbDeleteTask(id: string, workspaceId: string): void {
-  invokeMessagePackBinary(DB_TASKS_DELETE_MSGPACK_CHANNEL, { id, workspaceId }).catch(() => {})
+function dbDeleteTask(
+  id: string,
+  workspaceId: string,
+  expectedUpdatedAt: number
+): Promise<unknown> {
+  return invokeMessagePackBinary(DB_TASKS_DELETE_MSGPACK_CHANNEL, {
+    id,
+    workspaceId,
+    expectedUpdatedAt
+  })
 }
 
-function dbDeleteTasksBySession(sessionId: string, workspaceId: string): void {
-  invokeMessagePackBinary(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, {
+function dbDeleteTasksBySession(sessionId: string, workspaceId: string): Promise<unknown> {
+  return invokeMessagePackBinary(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, {
     sessionId,
     workspaceId
-  }).catch(() => {})
+  })
 }
 
 export interface TaskRow {
@@ -140,6 +160,14 @@ function normalizeTaskStatus(status: string): TaskStatus {
     : 'pending'
 }
 
+function isTaskStale(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    (error.message.includes('BUSINESS_TASK_CONFLICT') ||
+      error.message.includes('BUSINESS_TASK_NOT_FOUND'))
+  )
+}
+
 export function readTaskBoardMetadata(
   metadata: Record<string, unknown> | undefined
 ): TaskBoardMetadata {
@@ -150,25 +178,52 @@ export function readTaskBoardMetadata(
   const tags = Array.isArray(value.tags)
     ? value.tags.filter((tag): tag is string => typeof tag === 'string')
     : []
-  const startAt =
+  const legacyStartAt =
     typeof value.startAt === 'number' && Number.isFinite(value.startAt) ? value.startAt : undefined
-  const dueAt =
+  const legacyDueAt =
     typeof value.dueAt === 'number' && Number.isFinite(value.dueAt) ? value.dueAt : undefined
+  const startDate =
+    typeof value.startDate === 'string' && fromTaskDateInput(value.startDate) !== undefined
+      ? value.startDate
+      : toTaskDateInput(legacyStartAt)
+  const dueDate =
+    typeof value.dueDate === 'string' && fromTaskDateInput(value.dueDate) !== undefined
+      ? value.dueDate
+      : toTaskDateInput(legacyDueAt)
+  const startAt = startDate ? fromTaskDateInput(startDate) : undefined
+  const dueAt = dueDate ? fromTaskDateInput(dueDate) : undefined
   return {
     ...(priority === 'low' || priority === 'medium' || priority === 'high' || priority === 'urgent'
       ? { priority }
       : {}),
     ...(tags.length ? { tags } : {}),
-    ...(startAt ? { startAt } : {}),
-    ...(dueAt ? { dueAt } : {})
+    ...(startDate ? { startDate, startAt } : {}),
+    ...(dueDate ? { dueDate, dueAt } : {})
   }
 }
 
 export function withTaskBoardMetadata(
   metadata: Record<string, unknown> | undefined,
-  patch: TaskBoardMetadata
+  patch: Partial<Pick<TaskBoardMetadata, 'priority' | 'tags' | 'startDate' | 'dueDate'>>
 ): Record<string, unknown> {
-  return { ...metadata, board: { ...readTaskBoardMetadata(metadata), ...patch } }
+  const existing = metadata?.board
+  const board: Record<string, unknown> =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...(existing as Record<string, unknown>) }
+      : {}
+  if (patch.priority !== undefined) board.priority = patch.priority
+  if (patch.tags !== undefined) board.tags = patch.tags
+  for (const [dateKey, legacyKey] of [
+    ['startDate', 'startAt'],
+    ['dueDate', 'dueAt']
+  ] as const) {
+    if (!Object.hasOwn(patch, dateKey)) continue
+    delete board[legacyKey]
+    const date = patch[dateKey]
+    if (date && fromTaskDateInput(date) !== undefined) board[dateKey] = date
+    else delete board[dateKey]
+  }
+  return { ...metadata, board }
 }
 
 function buildDbPatch(
@@ -196,17 +251,19 @@ interface TaskStore {
 
   /** Load tasks for a session from DB */
   loadTasksForSession: (sessionId: string) => Promise<void>
+  /** Refresh a session projection without changing the visible session. */
+  refreshTasksForSession: (sessionId: string) => Promise<void>
   /** Add a single task (returns the added task) */
-  addTask: (task: TaskItem) => TaskItem
+  addTask: (task: TaskItem) => Promise<TaskItem>
   /** Get a task by ID */
   getTask: (id: string) => TaskItem | undefined
   /** Update a task by ID (partial patch). Returns updated task or undefined if not found. */
   updateTask: (
     id: string,
     patch: Partial<Omit<TaskItem, 'id' | 'createdAt'>>
-  ) => TaskItem | undefined
+  ) => Promise<TaskItem | undefined>
   /** Delete a task by ID */
-  deleteTask: (id: string) => boolean
+  deleteTask: (id: string) => Promise<boolean>
   /** Get all tasks */
   getTasks: () => TaskItem[]
   /** Get tasks for a specific session */
@@ -221,7 +278,11 @@ interface TaskStore {
   cacheTasks: (tasks: TaskItem[]) => void
   releaseDormantSessionTasks: (residentSessionIds: string[]) => void
   /** Delete all tasks for a session from DB and memory */
-  deleteSessionTasks: (sessionId: string) => void
+  deleteSessionTasks: (sessionId: string) => Promise<void>
+  /** Prevent local task writes while a conversation-level clear is being committed. */
+  beginSessionTaskClear: (sessionId: string) => () => void
+  /** Apply a task clear already committed with its parent conversation. */
+  confirmSessionTasksCleared: (sessionId: string) => void
   applySyncedTaskAdd: (task: TaskItem) => void
   applySyncedTaskUpdate: (id: string, patch: Partial<Omit<TaskItem, 'id' | 'createdAt'>>) => void
   applySyncedTaskDelete: (id: string) => void
@@ -238,6 +299,28 @@ interface TaskStore {
   getActiveTodo: () => TaskItem | undefined
 }
 
+const pendingTaskWrites = new Set<string>()
+const pendingSessionWrites = new Map<string, number>()
+const pendingSessionClears = new Set<string>()
+const sessionLoadRevision = new Map<string, number>()
+
+function invalidateSessionTaskLoads(sessionId: string): number {
+  const revision = (sessionLoadRevision.get(sessionId) ?? 0) + 1
+  sessionLoadRevision.set(sessionId, revision)
+  return revision
+}
+
+function beginTaskWrite(sessionId: string): void {
+  if (pendingSessionClears.has(sessionId)) throw new Error('TASK_SESSION_CLEAR_IN_PROGRESS')
+  pendingSessionWrites.set(sessionId, (pendingSessionWrites.get(sessionId) ?? 0) + 1)
+}
+
+function endTaskWrite(sessionId: string): void {
+  const pending = (pendingSessionWrites.get(sessionId) ?? 1) - 1
+  if (pending > 0) pendingSessionWrites.set(sessionId, pending)
+  else pendingSessionWrites.delete(sessionId)
+}
+
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
   tasksBySession: {},
@@ -251,26 +334,31 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     })
 
     try {
-      const rows = await invokeMessagePackBinary<TaskRow[]>(
-        DB_TASKS_LIST_BY_SESSION_MSGPACK_CHANNEL,
-        { sessionId, workspaceId: workspaceForSession(sessionId) }
-      )
-      const tasks = rows.map(taskRowToItem)
-      set((state) => {
-        const nextTasksBySession = { ...state.tasksBySession, [sessionId]: tasks }
-        // If user switched again before this async request resolved,
-        // only refresh the cache and keep current visible list intact.
-        if (state.currentSessionId !== sessionId) {
-          return { tasksBySession: nextTasksBySession }
-        }
-        return { tasks, todos: tasks, tasksBySession: nextTasksBySession }
-      })
+      await get().refreshTasksForSession(sessionId)
     } catch (err) {
       console.error('[TaskStore] Failed to load tasks for session:', err)
     }
   },
 
-  addTask: (task) => {
+  refreshTasksForSession: async (sessionId) => {
+    const revision = invalidateSessionTaskLoads(sessionId)
+    const rows = await invokeMessagePackBinary<TaskRow[]>(
+      DB_TASKS_LIST_BY_SESSION_MSGPACK_CHANNEL,
+      {
+        sessionId,
+        workspaceId: workspaceForSession(sessionId)
+      }
+    )
+    if (sessionLoadRevision.get(sessionId) !== revision) return
+    const tasks = rows.map(taskRowToItem)
+    set((state) => {
+      const nextTasksBySession = { ...state.tasksBySession, [sessionId]: tasks }
+      if (state.currentSessionId !== sessionId) return { tasksBySession: nextTasksBySession }
+      return { tasks, todos: tasks, tasksBySession: nextTasksBySession }
+    })
+  },
+
+  addTask: async (task) => {
     const now = Date.now()
     const newTask: TaskItem = {
       ...task,
@@ -279,42 +367,21 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       createdAt: task.createdAt ?? now,
       updatedAt: now
     }
-    let sortOrder = 0
-    set((state) => {
-      const sessionId = newTask.sessionId
-      if (!sessionId) {
-        sortOrder = state.tasks.length
-        const updated = [...state.tasks, newTask]
-        return { tasks: updated, todos: updated }
-      }
-
-      const sessionTasks =
-        state.tasksBySession[sessionId] ?? (state.currentSessionId === sessionId ? state.tasks : [])
-      sortOrder = sessionTasks.length
-      const nextSessionTasks = [...sessionTasks, newTask]
-      const nextTasksBySession = { ...state.tasksBySession, [sessionId]: nextSessionTasks }
-
-      if (
-        state.currentSessionId === sessionId ||
-        (!state.currentSessionId && state.tasks.length === 0)
-      ) {
-        return {
-          currentSessionId: state.currentSessionId ?? sessionId,
-          tasks: nextSessionTasks,
-          todos: nextSessionTasks,
-          tasksBySession: nextTasksBySession
-        }
-      }
-      return { tasksBySession: nextTasksBySession }
-    })
-    dbCreateTask(newTask, sortOrder)
-    if (newTask.sessionId) {
+    if (!newTask.sessionId) throw new Error('TASK_SESSION_REQUIRED')
+    beginTaskWrite(newTask.sessionId)
+    try {
+      const sortOrder = get().getTasksBySession(newTask.sessionId).length
+      await dbCreateTask(newTask, sortOrder)
+      invalidateSessionTaskLoads(newTask.sessionId)
+      get().applySyncedTaskAdd(newTask)
       useChatStore.getState().clearSessionPromptSnapshot(newTask.sessionId)
+      if (!isAgentRuntimeSyncSuppressed()) {
+        emitAgentRuntimeSync({ kind: 'task_add', task: newTask })
+      }
+      return newTask
+    } finally {
+      endTaskWrite(newTask.sessionId)
     }
-    if (!isAgentRuntimeSyncSuppressed()) {
-      emitAgentRuntimeSync({ kind: 'task_add', task: newTask })
-    }
-    return newTask
   },
 
   getTask: (id) => {
@@ -330,97 +397,73 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     return undefined
   },
 
-  updateTask: (id, patch) => {
-    const now = Date.now()
-    let updatedTask: TaskItem | undefined
-
-    set((state) => {
-      const nextTasksBySession = { ...state.tasksBySession }
-
-      const sessionEntries = Object.entries(state.tasksBySession)
-      if (state.currentSessionId && !state.tasksBySession[state.currentSessionId]) {
-        sessionEntries.push([state.currentSessionId, state.tasks])
-      }
-
-      for (const [sessionId, sessionTasks] of sessionEntries) {
-        const idx = sessionTasks.findIndex((t) => t.id === id)
-        if (idx === -1) continue
-
-        const updated = { ...sessionTasks[idx], ...patch, updatedAt: now }
-        const nextSessionTasks = [...sessionTasks]
-        nextSessionTasks[idx] = updated
-        nextTasksBySession[sessionId] = nextSessionTasks
-        updatedTask = updated
-
-        if (state.currentSessionId === sessionId) {
-          return {
-            tasks: nextSessionTasks,
-            todos: nextSessionTasks,
-            tasksBySession: nextTasksBySession
-          }
-        }
-        return { tasksBySession: nextTasksBySession }
-      }
-
-      return {}
-    })
-
-    // Persist even when task is currently off-screen (another active session).
-    if (updatedTask) {
-      dbUpdateTask(id, workspaceForSession(updatedTask.sessionId), buildDbPatch(patch, now))
-      if (updatedTask.sessionId) {
-        useChatStore.getState().clearSessionPromptSnapshot(updatedTask.sessionId)
-      }
+  updateTask: async (id, patch) => {
+    const current = get().getTask(id)
+    if (!current) return undefined
+    if (!current.sessionId) throw new Error('TASK_SESSION_REQUIRED')
+    if (pendingTaskWrites.has(id)) throw new Error('TASK_WRITE_IN_PROGRESS')
+    beginTaskWrite(current.sessionId)
+    pendingTaskWrites.add(id)
+    try {
+      const updatedAt = Math.max(Date.now(), current.updatedAt + 1)
+      const updatedTask = { ...current, ...patch, updatedAt }
+      await dbUpdateTask(
+        id,
+        workspaceForSession(current.sessionId),
+        buildDbPatch(patch, updatedAt),
+        current.updatedAt
+      )
+      invalidateSessionTaskLoads(current.sessionId)
+      get().applySyncedTaskUpdate(id, { ...patch, updatedAt })
+      useChatStore.getState().clearSessionPromptSnapshot(current.sessionId)
       if (!isAgentRuntimeSyncSuppressed()) {
-        emitAgentRuntimeSync({ kind: 'task_update', id, patch })
+        emitAgentRuntimeSync({ kind: 'task_update', id, patch: { ...patch, updatedAt } })
       }
+      return updatedTask
+    } catch (error) {
+      if (isTaskStale(error)) {
+        await get()
+          .refreshTasksForSession(current.sessionId)
+          .catch((refreshError) =>
+            console.error('[TaskStore] Failed to refresh conflicted task:', refreshError)
+          )
+      }
+      throw error
+    } finally {
+      pendingTaskWrites.delete(id)
+      endTaskWrite(current.sessionId)
     }
-    return updatedTask
   },
 
-  deleteTask: (id) => {
-    const existingTask = get().getTask(id)
-    let deleted = false
-
-    set((state) => {
-      const nextTasksBySession = { ...state.tasksBySession }
-      const sessionEntries = Object.entries(state.tasksBySession)
-      if (state.currentSessionId && !state.tasksBySession[state.currentSessionId]) {
-        sessionEntries.push([state.currentSessionId, state.tasks])
+  deleteTask: async (id) => {
+    const current = get().getTask(id)
+    if (!current) return false
+    if (!current.sessionId) throw new Error('TASK_SESSION_REQUIRED')
+    if (pendingTaskWrites.has(id)) throw new Error('TASK_WRITE_IN_PROGRESS')
+    beginTaskWrite(current.sessionId)
+    pendingTaskWrites.add(id)
+    try {
+      await dbDeleteTask(id, workspaceForSession(current.sessionId), current.updatedAt)
+      invalidateSessionTaskLoads(current.sessionId)
+      get().applySyncedTaskDelete(id)
+      useChatStore.getState().clearSessionPromptSnapshot(current.sessionId)
+      if (!isAgentRuntimeSyncSuppressed()) {
+        emitAgentRuntimeSync({ kind: 'task_delete', id })
       }
-
-      for (const [sessionId, sessionTasks] of sessionEntries) {
-        const hasTarget = sessionTasks.some((t) => t.id === id)
-        if (!hasTarget) continue
-
-        const cleaned = sessionTasks
-          .filter((t) => t.id !== id)
-          .map((t) => ({
-            ...t,
-            blocks: t.blocks.filter((b) => b !== id),
-            blockedBy: t.blockedBy.filter((b) => b !== id)
-          }))
-        nextTasksBySession[sessionId] = cleaned
-        deleted = true
-
-        if (state.currentSessionId === sessionId) {
-          return { tasks: cleaned, todos: cleaned, tasksBySession: nextTasksBySession }
-        }
-        return { tasksBySession: nextTasksBySession }
+      return true
+    } catch (error) {
+      if (isTaskStale(error)) {
+        await get()
+          .refreshTasksForSession(current.sessionId)
+          .catch((refreshError) =>
+            console.error('[TaskStore] Failed to refresh conflicted task:', refreshError)
+          )
       }
-
-      return {}
-    })
-
-    if (!deleted) return false
-    dbDeleteTask(id, workspaceForSession(existingTask?.sessionId))
-    if (existingTask?.sessionId) {
-      useChatStore.getState().clearSessionPromptSnapshot(existingTask.sessionId)
+      throw error
+    } finally {
+      pendingTaskWrites.delete(id)
+      endTaskWrite(current.sessionId)
     }
-    if (!isAgentRuntimeSyncSuppressed()) {
-      emitAgentRuntimeSync({ kind: 'task_delete', id })
-    }
-    return true
   },
 
   getTasks: () => get().tasks,
@@ -476,23 +519,27 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     })
   },
 
-  deleteSessionTasks: (sessionId) => {
-    set((state) => {
-      const nextTasksBySession = { ...state.tasksBySession }
-      delete nextTasksBySession[sessionId]
+  deleteSessionTasks: async (sessionId) => {
+    const release = get().beginSessionTaskClear(sessionId)
+    const workspaceId = workspaceForSession(sessionId)
+    try {
+      await dbDeleteTasksBySession(sessionId, workspaceId)
+      get().confirmSessionTasksCleared(sessionId)
+    } finally {
+      release()
+    }
+  },
 
-      if (state.currentSessionId !== sessionId) {
-        return { tasksBySession: nextTasksBySession }
-      }
+  beginSessionTaskClear: (sessionId) => {
+    if (pendingSessionClears.has(sessionId) || pendingSessionWrites.has(sessionId))
+      throw new Error('TASK_WRITE_IN_PROGRESS')
+    pendingSessionClears.add(sessionId)
+    return () => pendingSessionClears.delete(sessionId)
+  },
 
-      return {
-        tasks: [],
-        todos: [],
-        currentSessionId: null,
-        tasksBySession: nextTasksBySession
-      }
-    })
-    dbDeleteTasksBySession(sessionId, workspaceForSession(sessionId))
+  confirmSessionTasksCleared: (sessionId) => {
+    invalidateSessionTaskLoads(sessionId)
+    get().applySyncedDeleteSessionTasks(sessionId)
     useChatStore.getState().clearSessionPromptSnapshot(sessionId)
     if (!isAgentRuntimeSyncSuppressed()) {
       emitAgentRuntimeSync({ kind: 'task_delete_session', sessionId })

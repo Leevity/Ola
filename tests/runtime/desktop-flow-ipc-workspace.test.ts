@@ -1,4 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+import type { DesktopFlow } from '../../src/shared/desktop-flow'
 
 const state = vi.hoisted(() => {
   const sender = { id: 11, mainFrame: {}, once: vi.fn() }
@@ -9,6 +10,9 @@ const state = vi.hoisted(() => {
     handlers: new Map<string, (event: unknown, args: unknown) => Promise<unknown>>(),
     registeredWorkspaceId: 'team-a',
     recordingOwnerId: null as number | null,
+    activeFlow: null as DesktopFlow | null,
+    recordingPaused: false,
+    recordingStops: 0,
     available: new Set(['team-a']),
     revokeDuringList: false,
     revokeDuringRunsList: false,
@@ -17,6 +21,7 @@ const state = vi.hoisted(() => {
     revokeDuringScreenshot: false,
     clicks: 0,
     replayApproved: false,
+    lastDialogOptions: null as Record<string, unknown> | null,
     saveError: null as Error | null,
     listedScopes: [] as string[],
     savedScopes: [] as string[],
@@ -59,12 +64,21 @@ vi.mock('electron', () => ({
   BrowserWindow: {
     fromWebContents: (value: unknown) => (value === state.sender ? state.window : null)
   },
-  dialog: { showMessageBox: async () => ({ response: state.replayApproved ? 1 : 0 }) },
+  dialog: {
+    showMessageBox: async (...args: unknown[]) => {
+      state.lastDialogOptions = args.at(-1) as Record<string, unknown>
+      return { response: state.replayApproved ? 1 : 0 }
+    }
+  },
   ipcMain: {
     handle: (channel: string, handler: (event: unknown, args: unknown) => Promise<unknown>) => {
       state.handlers.set(channel, handler)
     }
   }
+}))
+vi.mock('../../src/main/renderer-security', () => ({
+  assertTrustedRendererIpcEvent: () => undefined,
+  isTrustedRendererIpcEvent: () => true
 }))
 vi.mock('../../src/main/window-ipc', () => ({
   getRegisteredWindowWorkspace: () => state.registeredWorkspaceId
@@ -73,12 +87,28 @@ vi.mock('../../src/main/remote/account-client', () => ({
   loadOfflineWorkspaceIds: async () => state.available
 }))
 vi.mock('../../src/main/desktop/desktop-flow-recorder', () => ({
-  getActiveDesktopFlow: () => null,
+  getActiveDesktopFlow: () => state.activeFlow,
   getDesktopFlowRecordingOwnerId: () => state.recordingOwnerId,
-  getDesktopFlowRecordingStatus: () => ({ recording: false }),
-  setDesktopFlowRecordingPaused: () => ({ recording: false }),
-  startDesktopFlowRecording: () => teamFlow,
-  stopDesktopFlowRecording: () => null,
+  getDesktopFlowRecordingStatus: () => ({
+    recording: Boolean(state.activeFlow),
+    paused: state.recordingPaused
+  }),
+  setDesktopFlowRecordingPaused: (value: boolean) => {
+    state.recordingPaused = value
+    return { recording: Boolean(state.activeFlow), paused: value }
+  },
+  startDesktopFlowRecording: () => {
+    state.activeFlow = teamFlow
+    state.recordingOwnerId = state.sender.id
+    return teamFlow
+  },
+  stopDesktopFlowRecording: () => {
+    const flow = state.activeFlow
+    state.activeFlow = null
+    state.recordingOwnerId = null
+    state.recordingStops++
+    return flow
+  },
   updateActiveDesktopFlow: () => null
 }))
 vi.mock('../../src/main/ipc/desktop-control', () => ({
@@ -158,10 +188,10 @@ vi.mock('../../src/main/db/capability-dao', () => ({
       await new Promise<void>((resolve) => {
         state.releaseNativeSave = resolve
       })
-    state.savedScopes.push(workspaceId)
-    state.persistedFlows.push(_flow)
     if (state.revokeDuringNativeSave) state.available = new Set()
     if (state.saveError) throw state.saveError
+    state.savedScopes.push(workspaceId)
+    state.persistedFlows.push(_flow)
   },
   startPersistedDesktopFlowRun: async (_id: string, flowId: string, workspaceId: string) => {
     if (state.auditStartError) throw new Error('Native unavailable')
@@ -181,6 +211,9 @@ beforeEach(() => {
   state.handlers.clear()
   state.registeredWorkspaceId = 'team-a'
   state.recordingOwnerId = null
+  state.activeFlow = null
+  state.recordingPaused = false
+  state.recordingStops = 0
   state.available = new Set(['team-a'])
   state.revokeDuringList = false
   state.revokeDuringRunsList = false
@@ -189,6 +222,7 @@ beforeEach(() => {
   state.revokeDuringScreenshot = false
   state.clicks = 0
   state.replayApproved = false
+  state.lastDialogOptions = null
   state.saveError = null
   state.listedScopes = []
   state.savedScopes = []
@@ -223,6 +257,42 @@ it('lists and saves only flows owned by the sender window workspace', async () =
   await expect(save(event, { ...teamFlow, workspaceId: 'local-personal' })).rejects.toThrow(
     'DESKTOP_FLOW_WORKSPACE_UNAVAILABLE'
   )
+})
+
+it('keeps a recording active when the stop-and-save write fails, then saves once on retry', async () => {
+  state.activeFlow = teamFlow
+  state.recordingOwnerId = state.sender.id
+  state.saveError = new Error('Disk temporarily unavailable')
+  const stop = state.handlers.get('desktop-recorder:stop')!
+
+  await expect(stop(event, { workspaceId: 'team-a' })).rejects.toThrow(
+    'Disk temporarily unavailable'
+  )
+  expect(state.activeFlow).toEqual(teamFlow)
+  expect(state.recordingPaused).toBe(false)
+  expect(state.recordingStops).toBe(0)
+  expect(state.persistedFlows).toEqual([])
+
+  state.saveError = null
+  await expect(stop(event, { workspaceId: 'team-a' })).resolves.toEqual(teamFlow)
+  expect(state.activeFlow).toBeNull()
+  expect(state.recordingStops).toBe(1)
+  expect(state.persistedFlows).toEqual([teamFlow])
+})
+
+it('removes captured text before persisting a stopped recording', async () => {
+  state.activeFlow = {
+    ...teamFlow,
+    steps: [
+      { id: 'type-a', type: 'type', text: 'private input', createdAt: 1, riskLevel: 'medium' }
+    ]
+  }
+  state.recordingOwnerId = state.sender.id
+  const stop = state.handlers.get('desktop-recorder:stop')!
+  const saved = await stop(event, { workspaceId: 'team-a' })
+  expect(JSON.stringify(saved)).not.toContain('private input')
+  expect(JSON.stringify(state.persistedFlows)).not.toContain('private input')
+  expect(saved).toMatchObject({ requiresReview: true })
 })
 
 it('lists only TS-persisted flows for the authorized workspace', async () => {
@@ -400,6 +470,31 @@ it('requires approval for desktop input even when flow risk metadata says low', 
   expect(state.clicks).toBe(1)
   expect(state.startedRuns).toEqual([{ flowId: teamFlow.id, workspaceId: 'team-a' }])
   expect(state.finishedRuns).toEqual([{ workspaceId: 'team-a', state: 'succeeded' }])
+})
+
+it('uses the selected UI language for native replay confirmation while keeping cancel as the default', async () => {
+  const replay = state.handlers.get('desktop-flow:replay')!
+  const flow = {
+    ...teamFlow,
+    steps: [{ id: 'click-a', type: 'click', x: 5, y: 5, createdAt: 1, riskLevel: 'low' }]
+  }
+  await replay(event, { workspaceId: 'team-a', locale: 'zh-CN', flow })
+  expect(state.lastDialogOptions).toMatchObject({
+    title: '确认桌面自动化',
+    buttons: ['取消', '运行桌面操作'],
+    defaultId: 0,
+    cancelId: 0
+  })
+  expect(state.clicks).toBe(0)
+
+  await replay(event, { workspaceId: 'team-a', locale: 'en', flow })
+  expect(state.lastDialogOptions).toMatchObject({
+    title: 'Confirm desktop automation',
+    buttons: ['Cancel', 'Run desktop steps'],
+    defaultId: 0,
+    cancelId: 0
+  })
+  expect(state.clicks).toBe(0)
 })
 
 it('records cancellation rather than success when the final wait step is cancelled', async () => {

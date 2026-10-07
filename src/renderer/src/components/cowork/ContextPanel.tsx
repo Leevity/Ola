@@ -1,4 +1,5 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { useTranslation } from 'react-i18next'
 import {
@@ -39,6 +40,7 @@ import {
 } from '@renderer/lib/format-tokens'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { useChatActions } from '@renderer/hooks/use-chat-actions'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { GoalPanelCard } from '@renderer/components/goal/GoalSessionControls'
 import { ContextTimeline } from './ContextTimeline'
 import {
@@ -129,12 +131,12 @@ function BackgroundShellsSection({
       </div>
 
       {processes.length === 0 ? (
-        <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-[11px] text-muted-foreground/65">
+        <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground/70">
           {t('context.backgroundShellsEmpty')}
         </div>
       ) : (
         <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-[10px] text-muted-foreground/60">
+          <div className="flex items-center justify-between text-xs text-muted-foreground/70">
             <span>
               {t('context.backgroundShellsSummary', {
                 running: runningCount,
@@ -175,16 +177,16 @@ function BackgroundShellsSection({
                     />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-mono text-[11px] text-foreground/88">
+                    <span className="block truncate font-mono text-xs text-foreground/88">
                       {command}
                     </span>
-                    <span className="block truncate text-[10px] text-muted-foreground/60">
+                    <span className="block truncate text-xs text-muted-foreground/70">
                       {sessionLabel}
                       {process.cwd ? ` · ${compactShellPath(process.cwd)}` : ''}
                     </span>
                   </span>
                 </button>
-                <span className="hidden max-w-24 truncate text-[9px] text-muted-foreground/55 lg:inline">
+                <span className="hidden max-w-24 truncate text-xs text-muted-foreground/70 lg:inline">
                   {metaParts.join(' · ')}
                 </span>
                 {isRunning ? (
@@ -222,7 +224,7 @@ function BackgroundShellsSection({
             )
           })}
           {processes.length > visibleProcesses.length ? (
-            <div className="px-1 text-[10px] text-muted-foreground/55">
+            <div className="px-1 text-xs text-muted-foreground/70">
               {t('context.moreBackgroundShells', {
                 count: processes.length - visibleProcesses.length
               })}
@@ -241,7 +243,29 @@ export function ContextPanel(): React.JSX.Element {
   const [compressing, setCompressing] = useState(false)
   const [showCompressPanel, setShowCompressPanel] = useState(false)
   const [focusPrompt, setFocusPrompt] = useState('')
+  const compositionEndedAtRef = useRef(0)
+  const compressionPendingRef = useRef(false)
   const { manualCompressContext } = useChatActions()
+
+  const submitManualCompression = async (): Promise<void> => {
+    if (compressionPendingRef.current) return
+    compressionPendingRef.current = true
+    setCompressing(true)
+    try {
+      const result = await manualCompressContext(focusPrompt.trim() || undefined)
+      if (result === 'compressed') {
+        setShowCompressPanel(false)
+        setFocusPrompt('')
+      }
+    } catch {
+      toast.error(t('context.compression.failedTitle'), {
+        description: t('context.compression.unexpectedFailure')
+      })
+    } finally {
+      compressionPendingRef.current = false
+      setCompressing(false)
+    }
+  }
   const {
     activeSessionId,
     resolvedProjectId,
@@ -326,7 +350,7 @@ export function ContextPanel(): React.JSX.Element {
     }
     if (result.canceled || !result.path) return
 
-    updateProjectDirectory(resolvedProjectId, {
+    await updateProjectDirectory(resolvedProjectId, {
       workingFolder: result.path,
       sshConnectionId: null
     })
@@ -362,7 +386,7 @@ export function ContextPanel(): React.JSX.Element {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 gap-1.5 px-2 text-[10px] text-muted-foreground"
+                  className="min-h-8 gap-1.5 px-2 text-xs text-muted-foreground"
                   onClick={handleSelectFolder}
                 >
                   <RefreshCw className="size-3" />
@@ -371,7 +395,7 @@ export function ContextPanel(): React.JSX.Element {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-6 gap-1.5 px-2 text-[10px] text-muted-foreground"
+                  className="min-h-8 gap-1.5 px-2 text-xs text-muted-foreground"
                   onClick={() => ipcClient.invoke('shell:openPath', workingFolder)}
                 >
                   <ExternalLink className="size-3" />
@@ -598,10 +622,8 @@ export function ContextPanel(): React.JSX.Element {
                     )}
                     {pct !== null && (
                       <div className="mt-1 space-y-0.5">
-                        <div className="flex items-center justify-between text-[9px] text-muted-foreground/40">
-                          <span>
-                            {t('compressionBudget', { defaultValue: 'Compression budget' })}
-                          </span>
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted-foreground/70">
+                          <span>{t('context.compression.budget')}</span>
                           <span>
                             {formatTokens(ctxUsed)} / {formatTokens(ctxGaugeLimit!)} (
                             {pct.toFixed(0)}%)
@@ -614,16 +636,14 @@ export function ContextPanel(): React.JSX.Element {
                           />
                         </div>
                         {manualCompressionTrigger && autoCompressionTrigger ? (
-                          <div className="flex items-center justify-between text-[9px] text-muted-foreground/40">
+                          <div className="flex flex-wrap items-center justify-between gap-x-2 text-xs text-muted-foreground/70">
                             <span>
-                              {t('manualCompressionThreshold', {
-                                defaultValue: 'Recommend manual compress >= {{threshold}}',
+                              {t('context.compression.manualThreshold', {
                                 threshold: formatTokens(manualCompressionTrigger)
                               })}
                             </span>
                             <span>
-                              {t('autoCompressionThreshold', {
-                                defaultValue: 'Auto compress >= {{threshold}}',
+                              {t('context.compression.autoThreshold', {
                                 threshold: formatTokens(autoCompressionTrigger)
                               })}
                             </span>
@@ -636,18 +656,18 @@ export function ContextPanel(): React.JSX.Element {
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="mt-1 h-6 gap-1.5 px-2 text-[10px] text-muted-foreground"
+                          className="mt-1 min-h-8 gap-1.5 px-2 text-xs text-muted-foreground"
                           disabled={compressing}
                           onClick={() => setShowCompressPanel(true)}
                         >
                           <Archive className="size-3" />
-                          {compressing ? 'Compressing...' : 'Compress context'}
+                          {compressing
+                            ? t('context.compression.running')
+                            : t('context.compression.open')}
                         </Button>
                         {manualCompressionTrigger && ctxUsed < manualCompressionTrigger ? (
-                          <p className="mt-1 text-[10px] text-muted-foreground/60">
-                            {t('manualCompressionHint', {
-                              defaultValue:
-                                'Current {{used}}, recommend compressing after reaching {{threshold}}',
+                          <p className="mt-1 text-xs text-muted-foreground/70">
+                            {t('context.compression.hint', {
                               used: formatTokens(ctxUsed),
                               threshold: formatTokens(manualCompressionTrigger)
                             })}
@@ -657,22 +677,30 @@ export function ContextPanel(): React.JSX.Element {
                     )}
                     {showCompressPanel && (
                       <div className="mt-1.5 space-y-1.5 rounded-md border p-2">
+                        <label className="sr-only" htmlFor="context-compression-focus">
+                          {t('context.compression.focusLabel')}
+                        </label>
                         <input
+                          id="context-compression-focus"
                           type="text"
-                          className="w-full rounded border bg-background px-2 py-1 text-[11px] placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
-                          placeholder="Focus area (optional), e.g.: keep API-related changes"
+                          className="min-h-8 w-full rounded border bg-background px-2 py-1 text-xs placeholder:text-muted-foreground/70 focus:outline-none focus:ring-1 focus:ring-ring"
+                          placeholder={t('context.compression.focusPlaceholder')}
                           value={focusPrompt}
                           onChange={(e) => setFocusPrompt(e.target.value)}
                           disabled={compressing}
+                          onCompositionStart={() => {
+                            compositionEndedAtRef.current = Number.POSITIVE_INFINITY
+                          }}
+                          onCompositionEnd={() => {
+                            compositionEndedAtRef.current = performance.now()
+                          }}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter' && !compressing) {
+                            if (
+                              e.key === 'Enter' &&
+                              !isImeCommitKey(e, compositionEndedAtRef.current)
+                            ) {
                               e.preventDefault()
-                              setCompressing(true)
-                              manualCompressContext(focusPrompt || undefined).finally(() => {
-                                setCompressing(false)
-                                setShowCompressPanel(false)
-                                setFocusPrompt('')
-                              })
+                              void submitManualCompression()
                             }
                           }}
                         />
@@ -680,31 +708,26 @@ export function ContextPanel(): React.JSX.Element {
                           <Button
                             variant="default"
                             size="sm"
-                            className="h-5 px-2 text-[10px]"
+                            className="min-h-8 px-2 text-xs"
                             disabled={compressing}
-                            onClick={() => {
-                              setCompressing(true)
-                              manualCompressContext(focusPrompt || undefined).finally(() => {
-                                setCompressing(false)
-                                setShowCompressPanel(false)
-                                setFocusPrompt('')
-                              })
-                            }}
+                            onClick={() => void submitManualCompression()}
                           >
                             <Archive className="size-3 mr-1" />
-                            {compressing ? 'Compressing...' : 'Confirm compression'}
+                            {compressing
+                              ? t('context.compression.running')
+                              : t('context.compression.confirm')}
                           </Button>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-5 px-2 text-[10px] text-muted-foreground"
+                            className="min-h-8 px-2 text-xs text-muted-foreground"
                             disabled={compressing}
                             onClick={() => {
                               setShowCompressPanel(false)
                               setFocusPrompt('')
                             }}
                           >
-                            Cancel
+                            {t('context.compression.cancel')}
                           </Button>
                         </div>
                       </div>

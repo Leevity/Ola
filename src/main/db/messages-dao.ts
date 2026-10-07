@@ -325,13 +325,18 @@ export async function updateMessage(
   await requestMutation('db/messages-update', { id: msgId, patch })
 }
 
-export async function clearMessages(sessionId: string, workspaceId?: string): Promise<void> {
+export async function clearMessages(
+  sessionId: string,
+  workspaceId?: string,
+  options: { clearTasks?: boolean; updatedAt?: number } = {}
+): Promise<void> {
   const writer = businessWriteCanary()
   if (writer) {
     if (!workspaceId) throw new Error('TS_BUSINESS_WORKSPACE_REQUIRED')
-    await writer.clearMessages(sessionId, workspaceId)
+    await writer.clearMessages(sessionId, workspaceId, options)
     return
   }
+  if (options.clearTasks) throw new Error('BUSINESS_CONVERSATION_CLEAR_UNAVAILABLE')
   await requestMutation('db/messages-clear', { sessionId })
 }
 

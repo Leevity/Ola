@@ -4,7 +4,6 @@ import type {
   ToolDefinition,
   UnifiedMessage
 } from '@renderer/lib/api/types'
-import type { CompressionResult } from '@renderer/lib/agent/context-compression'
 import {
   RESPONSES_SESSION_SCOPE_AUXILIARY_TEXT_REQUEST,
   withAuxiliaryResponsesRequestPolicy
@@ -185,47 +184,4 @@ export async function runTsTextRequest(args: {
   }
 
   throw new Error('TS_RUNTIME_TEXT_REQUIRED')
-}
-
-export async function runTsContextCompression(args: {
-  provider: ProviderConfig
-  messages: UnifiedMessage[]
-  signal?: AbortSignal
-  preserveCount?: number
-  focusPrompt?: string
-  pinnedContext?: string
-  trigger?: 'auto' | 'manual'
-  preTokens?: number
-}): Promise<{ messages: UnifiedMessage[]; result: CompressionResult }> {
-  if (args.signal?.aborted) {
-    throw new Error('aborted')
-  }
-
-  const initialized = await agentBridge.initialize()
-  if (!initialized) {
-    throw new Error('TS_RUNTIME_UNAVAILABLE')
-  }
-
-  const result = await invokeMessagePackBinary<{
-    messages: UnifiedMessage[]
-    result: CompressionResult
-  }>(toMessagePackChannel('agent:compress-context'), {
-    provider: args.provider,
-    messages: args.messages,
-    ...(typeof args.preserveCount === 'number' && Number.isFinite(args.preserveCount)
-      ? { preserveCount: args.preserveCount }
-      : {}),
-    ...(args.focusPrompt ? { focusPrompt: args.focusPrompt } : {}),
-    ...(args.pinnedContext ? { pinnedContext: args.pinnedContext } : {}),
-    ...(args.trigger ? { trigger: args.trigger } : {}),
-    ...(typeof args.preTokens === 'number' && Number.isFinite(args.preTokens)
-      ? { preTokens: args.preTokens }
-      : {})
-  })
-
-  if (args.signal?.aborted) {
-    throw new Error('aborted')
-  }
-
-  return result
 }

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createLocalListDirectoryTool } from '../../src/runtime/tools/local-list-directory'
+import { skipWhenSymlinkUnavailable, tryCreateTestSymlink } from './symlink-fixture'
 
 const cleanup: string[] = []
 afterEach(async () => {
@@ -10,14 +11,15 @@ afterEach(async () => {
 })
 
 describe('local directory listing tool', () => {
-  it('lists bounded, sorted metadata without following a symlink', async () => {
+  it('lists bounded, sorted metadata without following a symlink', async ({ skip }) => {
     const root = await mkdtemp(join(tmpdir(), 'ola-list-root-'))
     const outside = await mkdtemp(join(tmpdir(), 'ola-list-outside-'))
     cleanup.push(root, outside)
     await mkdir(join(root, 'folder'))
     await writeFile(join(root, 'z.txt'), 'z')
     await writeFile(join(outside, 'secret.txt'), 'secret')
-    await symlink(join(outside, 'secret.txt'), join(root, 'escape'))
+    const linked = await tryCreateTestSymlink(join(outside, 'secret.txt'), join(root, 'escape'))
+    skipWhenSymlinkUnavailable({ skip }, linked)
     const tool = createLocalListDirectoryTool(root)
     expect(await tool.execute({ path: '.', limit: 2 }, {} as never)).toEqual([
       { name: 'escape', type: 'symlink' },

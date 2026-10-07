@@ -4,6 +4,7 @@ import {
   type BrowserTabOwnership
 } from '../../runtime/host/browser-ownership'
 import { RuntimeError } from '../../shared/runtime/contracts'
+import { checkBrowserUrlAccess } from './browser-access-policy'
 
 export interface BrowserUserTabRegistration {
   tabId: string
@@ -11,12 +12,16 @@ export interface BrowserUserTabRegistration {
   profileId: string
   hostWebContentsId: number
   guestWebContentsId: number
+  sessionId?: string | null
+  projectId?: string | null
 }
 
 export interface RegisteredBrowserTab {
   ownership: BrowserTabOwnership
   hostWebContentsId: number
   guestWebContentsId: number
+  sessionId?: string | null
+  projectId?: string | null
 }
 
 export type BrowserNavigationAction = 'back' | 'forward' | 'reload' | 'stop' | 'goto'
@@ -68,6 +73,7 @@ export class MainBrowserService {
   private readonly ownership = new BrowserOwnershipRegistry()
   private readonly tabsById = new Map<string, RegisteredBrowserTab>()
   private readonly tabIdByGuestWebContentsId = new Map<number, string>()
+  private readonly navigationPermits = new Set<string>()
   private readonly hostsWithCleanup = new Set<number>()
 
   registerUserTab(input: BrowserUserTabRegistration): BrowserTabOwnership {
@@ -99,7 +105,9 @@ export class MainBrowserService {
         existing.hostWebContentsId === host.id &&
         existing.guestWebContentsId === guest.id &&
         existing.ownership.workspaceId === input.workspaceId &&
-        existing.ownership.profileId === input.profileId
+        existing.ownership.profileId === input.profileId &&
+        existing.sessionId === input.sessionId &&
+        existing.projectId === input.projectId
       if (!isSameRegistration) throw new RuntimeError('BROWSER_TAB_EXISTS')
       return { ...existing.ownership }
     }
@@ -121,9 +129,44 @@ export class MainBrowserService {
     this.tabsById.set(input.tabId, {
       ownership,
       hostWebContentsId: host.id,
-      guestWebContentsId: guest.id
+      guestWebContentsId: guest.id,
+      ...(input.sessionId !== undefined ? { sessionId: input.sessionId } : {}),
+      ...(input.projectId !== undefined ? { projectId: input.projectId } : {})
     })
     this.tabIdByGuestWebContentsId.set(guest.id, input.tabId)
+    const navigationGuard = (event: Electron.Event, targetUrl: string): void => {
+      const current = this.tabsById.get(input.tabId)
+      const controller = this.ownership.get(input.tabId)?.controller
+      if (!current || controller?.kind !== 'run') return
+      const normalized = safeBrowserUrl(targetUrl)
+      if (!normalized) {
+        event.preventDefault()
+        return
+      }
+      const permit = `${input.tabId}\n${normalized}`
+      if (this.navigationPermits.delete(permit)) return
+      event.preventDefault()
+      const runId = controller.runId
+      void checkBrowserUrlAccess(normalized, current.projectId)
+        .then(async (decision) => {
+          const latest = this.tabsById.get(input.tabId)
+          const latestController = this.ownership.get(input.tabId)?.controller
+          if (
+            !decision.allowed ||
+            latest !== current ||
+            latestController?.kind !== 'run' ||
+            latestController.runId !== runId
+          )
+            return
+          this.navigationPermits.add(permit)
+          await guest.loadURL(normalized).catch(() => {
+            this.navigationPermits.delete(permit)
+          })
+        })
+        .catch(() => undefined)
+    }
+    guest.on('will-navigate', navigationGuard)
+    guest.on('will-redirect', navigationGuard)
     guest.once('destroyed', () => this.remove(input.tabId))
     if (!this.hostsWithCleanup.has(host.id)) {
       this.hostsWithCleanup.add(host.id)
@@ -259,6 +302,11 @@ export class MainBrowserService {
     if (input.action === 'goto') {
       const url = safeBrowserUrl(input.url)
       if (!url) throw new RuntimeError('BROWSER_URL_INVALID')
+      if (input.runId) {
+        const decision = await checkBrowserUrlAccess(url, tab.projectId)
+        if (!decision.allowed) throw new RuntimeError(decision.reason ?? 'BROWSER_ACCESS_DENIED')
+        this.navigationPermits.add(`${tab.ownership.tabId}\n${url}`)
+      }
       await guest.loadURL(url)
     } else if (input.action === 'back') {
       if (!guest.canGoBack()) throw new RuntimeError('BROWSER_CANNOT_GO_BACK')
@@ -289,6 +337,24 @@ export class MainBrowserService {
     if (!tabId) return null
     const tab = this.tabsById.get(tabId)
     if (!tab || tab.hostWebContentsId !== input.hostWebContentsId) return null
+    return { ...tab, ownership: { ...tab.ownership } }
+  }
+
+  findUserTab(input: {
+    workspaceId: string
+    sessionId: string
+    projectId?: string
+  }): RegisteredBrowserTab {
+    const matches = [...this.tabsById.values()].filter(
+      (tab) =>
+        tab.ownership.workspaceId === input.workspaceId &&
+        tab.sessionId === input.sessionId &&
+        (input.projectId === undefined || tab.projectId === input.projectId)
+    )
+    if (matches.length !== 1) {
+      throw new RuntimeError(matches.length ? 'BROWSER_TAB_AMBIGUOUS' : 'BROWSER_TAB_NOT_FOUND')
+    }
+    const tab = matches[0]
     return { ...tab, ownership: { ...tab.ownership } }
   }
 
@@ -391,4 +457,12 @@ export function getRegisteredBrowserGuest(input: {
   guestWebContentsId: number
 }): RegisteredBrowserTab | null {
   return browserService.getRegisteredGuest(input)
+}
+
+export function findBrowserUserTab(input: {
+  workspaceId: string
+  sessionId: string
+  projectId?: string
+}): RegisteredBrowserTab {
+  return browserService.findUserTab(input)
 }

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   BUILTIN_BROWSER_PARTITION,
   browserPartitionForWorkspace,
-  isBuiltInBrowserPartition
+  isBuiltInBrowserPartition,
+  usesDefaultBrowserSession
 } from '../../src/shared/browser-plugin'
 
 describe('workspace browser partitions', () => {
@@ -19,5 +20,11 @@ describe('workspace browser partitions', () => {
     expect(isBuiltInBrowserPartition(BUILTIN_BROWSER_PARTITION)).toBe(true)
     expect(isBuiltInBrowserPartition(browserPartitionForWorkspace('team-a'))).toBe(true)
     expect(isBuiltInBrowserPartition('persist:another-app')).toBe(false)
+  })
+
+  it('never reuses the local default browser session for a team workspace', () => {
+    expect(usesDefaultBrowserSession('local-personal', true)).toBe(true)
+    expect(usesDefaultBrowserSession('local-personal', false)).toBe(false)
+    expect(usesDefaultBrowserSession('team-a', true)).toBe(false)
   })
 })

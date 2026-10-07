@@ -1,4 +1,4 @@
-export const LATEST_JOURNAL_SCHEMA_VERSION = 3
+export const LATEST_JOURNAL_SCHEMA_VERSION = 6
 
 const migrations = [
   {
@@ -31,6 +31,24 @@ const migrations = [
   {
     version: 3,
     sql: `CREATE INDEX IF NOT EXISTS runs_session_workspace ON runs(session_id, workspace_id);`
+  },
+  {
+    version: 4,
+    sql: `CREATE INDEX IF NOT EXISTS events_artifacts_recent
+      ON events(type, timestamp DESC, run_id, seq DESC);`
+  },
+  {
+    version: 5,
+    sql: `CREATE TABLE IF NOT EXISTS hidden_artifacts (
+      run_id TEXT NOT NULL, artifact_seq INTEGER NOT NULL, hidden_at INTEGER NOT NULL,
+      PRIMARY KEY(run_id, artifact_seq),
+      FOREIGN KEY(run_id, artifact_seq) REFERENCES events(run_id, seq)
+    );`
+  },
+  {
+    version: 6,
+    sql: `CREATE INDEX IF NOT EXISTS runs_workspace_created_id
+      ON runs(workspace_id, created_at DESC, id DESC);`
   }
 ]
 

@@ -314,6 +314,8 @@ function RunningTerminalRow({
 export function RuntimeStatusPanel({
   sessionId = null
 }: RuntimeStatusPanelProps): React.JSX.Element {
+  const panelRootRef = React.useRef<HTMLDivElement>(null)
+  const [compactLayout, setCompactLayout] = React.useState(false)
   const { t } = useTranslation('layout')
   const resolvedSessionId = useChatStore((state) => sessionId ?? state.activeSessionId)
   const context = useChatStore(
@@ -339,7 +341,28 @@ export function RuntimeStatusPanel({
   )
   const rightPanelOpen = useUIStore((state) => state.rightPanelOpen)
   const runtimeStatusPanelOpen = useUIStore((state) => state.runtimeStatusPanelOpen)
+  const setRuntimeStatusPanelOpen = useUIStore((state) => state.setRuntimeStatusPanelOpen)
   const visible = Boolean(resolvedSessionId && runtimeStatusPanelOpen && !rightPanelOpen)
+  React.useEffect(() => {
+    const parent = panelRootRef.current?.parentElement
+    if (!parent) return
+    const update = (): void => setCompactLayout(parent.clientWidth < 640)
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(parent)
+    return () => observer.disconnect()
+  }, [])
+
+  React.useEffect(() => {
+    if (!visible) return
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      setRuntimeStatusPanelOpen(false)
+      requestAnimationFrame(() => document.getElementById('runtime-status-trigger')?.focus())
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [setRuntimeStatusPanelOpen, visible])
   const sourceFiles = useInputDraftStore(
     useShallow((state) => {
       if (!resolvedSessionId) return []
@@ -447,7 +470,15 @@ export function RuntimeStatusPanel({
   const sourceTitle = sourceFiles.map((file) => file.sendPath).join('\n')
 
   return (
-    <div className="pointer-events-none absolute inset-0 z-30">
+    <div
+      ref={panelRootRef}
+      id="runtime-status-panel"
+      className={
+        compactLayout
+          ? 'relative z-20 w-full shrink-0'
+          : 'pointer-events-none absolute inset-0 z-30'
+      }
+    >
       <AnimatePresence initial={false}>
         {visible ? (
           <motion.aside
@@ -456,15 +487,34 @@ export function RuntimeStatusPanel({
             animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
             exit={{ opacity: 0, y: -8, scale: 0.98, filter: 'blur(4px)' }}
             transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
-            className="pointer-events-auto absolute right-3 top-12 max-h-[min(420px,calc(100%-4rem))] w-[min(320px,calc(100%-1.5rem))] overflow-y-auto rounded-lg border border-border/70 bg-background/95 p-3 shadow-[-8px_10px_34px_rgba(0,0,0,0.22)] backdrop-blur-xl"
-            style={{ transformOrigin: 'top right' }}
+            className={
+              compactLayout
+                ? 'pointer-events-auto relative mx-2 mb-2 max-h-[min(9rem,25vh)] overflow-y-auto rounded-lg border border-border/70 bg-background/95 p-3 shadow-md backdrop-blur-xl'
+                : 'pointer-events-auto absolute right-3 top-12 max-h-[min(420px,calc(100%-4rem))] max-[900px]:max-h-[220px] w-[min(320px,calc(100%-1.5rem))] overflow-y-auto rounded-lg border border-border/70 bg-background/95 p-3 shadow-[-8px_10px_34px_rgba(0,0,0,0.22)] backdrop-blur-xl'
+            }
+            style={{ transformOrigin: compactLayout ? 'top center' : 'top right' }}
+            role="region"
+            aria-label={t('runtimeStatus.contextTitle')}
           >
             <div className="space-y-3">
               <section className="space-y-2">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-xs font-medium text-muted-foreground">
+                  <h3 className="text-sm font-medium text-foreground">
                     {t('runtimeStatus.contextTitle')}
                   </h3>
+                  <button
+                    type="button"
+                    className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label={t('runtimeStatus.close')}
+                    onClick={() => {
+                      setRuntimeStatusPanelOpen(false)
+                      requestAnimationFrame(() =>
+                        document.getElementById('runtime-status-trigger')?.focus()
+                      )
+                    }}
+                  >
+                    <X className="size-3.5" />
+                  </button>
                   {gitSummary.loading ? (
                     <Loader2 className="size-3.5 animate-spin text-muted-foreground/60" />
                   ) : null}

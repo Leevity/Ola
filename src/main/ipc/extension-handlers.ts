@@ -1,5 +1,4 @@
 import { shell } from 'electron'
-import { readFile } from 'node:fs/promises'
 import { registerMessagePackHandler } from './messagepack-handler'
 import type { ExtensionInstance } from '../../shared/extension-types'
 import {
@@ -8,6 +7,7 @@ import {
   getExtensionStorage
 } from '../extensions/extension-runtime'
 import { executeExtensionHttpTool } from '../extensions/extension-http-tool'
+import { readExtensionAsset } from '../extensions/extension-assets'
 
 type MutationResult = {
   success: boolean
@@ -114,7 +114,7 @@ export function registerExtensionHandlers(): void {
       try {
         await getExtensionService().getManifest(args.id)
         return {
-          content: await readFile(getExtensionService().getAssetPath(args.id, args.path), 'utf8')
+          content: await readExtensionAsset(getExtensionService().getPath(args.id), args.path)
         }
       } catch (error) {
         return { error: error instanceof Error ? error.message : String(error) }

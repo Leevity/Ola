@@ -40,6 +40,7 @@ interface ResourcesStore {
   listLoading: boolean
   detailLoading: boolean
   saving: boolean
+  listError: string | null
   error: string | null
 
   loadAll: () => Promise<void>
@@ -113,10 +114,11 @@ export const useResourcesStore = create<ResourcesStore>((set, get) => ({
   listLoading: false,
   detailLoading: false,
   saving: false,
+  listError: null,
   error: null,
 
   loadAll: async () => {
-    set({ listLoading: true, error: null })
+    set({ listLoading: true, listError: null })
     try {
       const [agentsResult, commandsResult] = await Promise.all([
         ipcClient.invoke(IPC.AGENTS_MANAGE_LIST),
@@ -126,20 +128,21 @@ export const useResourcesStore = create<ResourcesStore>((set, get) => ({
       set({
         agents: normalizeList('agents', agentsResult),
         commands: normalizeList('commands', commandsResult),
-        listLoading: false
+        listLoading: false,
+        listError: null
       })
     } catch (error) {
       set({
         agents: [],
         commands: [],
         listLoading: false,
-        error: error instanceof Error ? error.message : String(error)
+        listError: error instanceof Error ? error.message : String(error)
       })
     }
   },
 
   loadItems: async (kind) => {
-    set({ listLoading: true, error: null })
+    set({ listLoading: true, listError: null })
     try {
       const result = await ipcClient.invoke(getListChannel(kind))
       const items = normalizeList(kind, result)
@@ -147,11 +150,13 @@ export const useResourcesStore = create<ResourcesStore>((set, get) => ({
         kind === 'agents'
           ? {
               agents: items,
-              listLoading: false
+              listLoading: false,
+              listError: null
             }
           : {
               commands: items,
-              listLoading: false
+              listLoading: false,
+              listError: null
             }
       )
     } catch (error) {
@@ -161,12 +166,12 @@ export const useResourcesStore = create<ResourcesStore>((set, get) => ({
           ? {
               agents: [],
               listLoading: false,
-              error: message
+              listError: message
             }
           : {
               commands: [],
               listLoading: false,
-              error: message
+              listError: message
             }
       )
     }

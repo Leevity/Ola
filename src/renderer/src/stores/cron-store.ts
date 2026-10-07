@@ -76,6 +76,8 @@ export interface CronRunEntry {
   workingFolderSnapshot: string | null
   deliveryModeSnapshot: string | null
   deliveryTargetSnapshot: string | null
+  runKind: 'scheduled' | 'manual' | 'trial'
+  deliveryStatus?: 'pending' | 'sent' | 'failed' | 'unknown' | null
 }
 
 export interface CronAgentLogEntry {
@@ -96,6 +98,8 @@ export interface CronRunsLoadOptions {
 // ── Store ────────────────────────────────────────────────────────
 
 interface CronStore {
+  jobsLoadError: string | null
+  runsLoadError: string | null
   jobs: CronJobEntry[]
   runs: CronRunEntry[]
   agentLogs: Record<string, CronAgentLogEntry[]>
@@ -123,30 +127,43 @@ interface CronStore {
 const MAX_RUNS = 1000
 const MAX_AGENT_LOG_ENTRIES = 100
 let cronWorkspaceGeneration = 0
+let jobsRequestId = 0
+let runsRequestId = 0
 
 export const useCronStore = create<CronStore>((set) => ({
+  jobsLoadError: null,
+  runsLoadError: null,
   jobs: [],
   runs: [],
   agentLogs: {},
 
   clearWorkspace: () => {
     cronWorkspaceGeneration++
-    set({ jobs: [], runs: [], agentLogs: {} })
+    set({ jobs: [], runs: [], agentLogs: {}, jobsLoadError: null, runsLoadError: null })
   },
 
   loadJobs: async () => {
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
     const generation = cronWorkspaceGeneration
+    const requestId = ++jobsRequestId
     try {
       const result = await ipcClient.invoke(IPC.CRON_LIST, { workspaceId })
+      if (!Array.isArray(result)) throw new Error('CRON_LIST_UNAVAILABLE')
       if (
+        requestId === jobsRequestId &&
         generation === cronWorkspaceGeneration &&
         workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
         Array.isArray(result)
       ) {
-        set({ jobs: result as CronJobEntry[] })
+        set({ jobs: result as CronJobEntry[], jobsLoadError: null })
       }
     } catch (err) {
+      if (
+        requestId === jobsRequestId &&
+        generation === cronWorkspaceGeneration &&
+        workspaceId === useWorkspaceStore.getState().activeWorkspaceId
+      )
+        set({ jobsLoadError: err instanceof Error ? err.message : 'CRON_LIST_UNAVAILABLE' })
       console.error('[CronStore] Failed to load jobs:', err)
     }
   },
@@ -154,6 +171,7 @@ export const useCronStore = create<CronStore>((set) => ({
   loadRuns: async (jobIdOrOptions?: string | CronRunsLoadOptions) => {
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
     const generation = cronWorkspaceGeneration
+    const requestId = ++runsRequestId
     try {
       const options =
         typeof jobIdOrOptions === 'string' ? { jobId: jobIdOrOptions } : (jobIdOrOptions ?? {})
@@ -162,14 +180,22 @@ export const useCronStore = create<CronStore>((set) => ({
         workspaceId,
         limit: options.limit ?? MAX_RUNS
       })
+      if (!Array.isArray(result)) throw new Error('CRON_RUNS_UNAVAILABLE')
       if (
+        requestId === runsRequestId &&
         generation === cronWorkspaceGeneration &&
         workspaceId === useWorkspaceStore.getState().activeWorkspaceId &&
         Array.isArray(result)
       ) {
-        set({ runs: result as CronRunEntry[] })
+        set({ runs: result as CronRunEntry[], runsLoadError: null })
       }
     } catch (err) {
+      if (
+        requestId === runsRequestId &&
+        generation === cronWorkspaceGeneration &&
+        workspaceId === useWorkspaceStore.getState().activeWorkspaceId
+      )
+        set({ runsLoadError: err instanceof Error ? err.message : 'CRON_RUNS_UNAVAILABLE' })
       console.error('[CronStore] Failed to load runs:', err)
     }
   },
@@ -179,15 +205,23 @@ export const useCronStore = create<CronStore>((set) => ({
   removeJob: (id) => set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) })),
 
   deleteJob: async (id) => {
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    const generation = cronWorkspaceGeneration
     try {
       const result = (await ipcClient.invoke(IPC.CRON_DELETE, {
         jobId: id,
-        workspaceId: useWorkspaceStore.getState().activeWorkspaceId
+        workspaceId
       })) as {
         error?: string
         success?: boolean
       }
-      if (result.error) return { success: false, error: result.error }
+      if (result?.success !== true)
+        return { success: false, error: result?.error ?? 'CRON_DELETE_FAILED' }
+      if (
+        generation !== cronWorkspaceGeneration ||
+        workspaceId !== useWorkspaceStore.getState().activeWorkspaceId
+      )
+        return { success: true }
       set((s) => ({ jobs: s.jobs.filter((j) => j.id !== id) }))
       return { success: true }
     } catch (err) {

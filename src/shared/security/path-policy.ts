@@ -35,9 +35,7 @@ export function resolveWorkspacePath(
 
   const relative = path.relative(root, candidate)
   const outside =
-    relative === '..' ||
-    relative.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relative)
+    relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
 
   return outside
     ? { allowed: false, reason: 'outside-workspace' }

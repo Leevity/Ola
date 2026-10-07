@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createLocalReadFileTool } from '../../src/runtime/tools/local-read-file'
+import { skipWhenSymlinkUnavailable, tryCreateTestSymlink } from './symlink-fixture'
 
 const cleanup: string[] = []
 afterEach(async () => {
@@ -10,18 +11,21 @@ afterEach(async () => {
 })
 
 describe('local read file tool', () => {
-  it('reads files under its real workspace root and rejects traversal and symlink escapes', async () => {
+  it('reads files under its real workspace root and rejects traversal and symlink escapes', async ({
+    skip
+  }) => {
     const root = await mkdtemp(join(tmpdir(), 'ola-tool-root-'))
     const outside = await mkdtemp(join(tmpdir(), 'ola-tool-outside-'))
     cleanup.push(root, outside)
     await writeFile(join(root, 'safe.txt'), 'safe')
     await writeFile(join(outside, 'secret.txt'), 'secret')
-    await symlink(join(outside, 'secret.txt'), join(root, 'escape.txt'))
     const tool = createLocalReadFileTool(root)
     expect(await tool.execute({ path: 'safe.txt' }, {} as never)).toBe('safe')
     await expect(tool.resources({ path: '../secret.txt' }, {} as never)).rejects.toThrow(
       'TOOL_PATH_FORBIDDEN'
     )
+    const linked = await tryCreateTestSymlink(join(outside, 'secret.txt'), join(root, 'escape.txt'))
+    skipWhenSymlinkUnavailable({ skip }, linked)
     await expect(tool.resources({ path: 'escape.txt' }, {} as never)).rejects.toThrow(
       'TOOL_PATH_FORBIDDEN'
     )

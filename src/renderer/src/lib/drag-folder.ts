@@ -16,7 +16,7 @@ interface StatPathResult {
  * are filtered out.
  */
 export function getDroppedLocalPaths(dataTransfer: DataTransfer | null | undefined): string[] {
-  const getPathForFile = window.electron?.webUtils?.getPathForFile
+  const getPathForFile = window.ola?.desktop?.getPathForFile
   if (!dataTransfer || typeof getPathForFile !== 'function') return []
 
   const paths: string[] = []

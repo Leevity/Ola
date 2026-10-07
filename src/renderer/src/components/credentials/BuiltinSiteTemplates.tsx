@@ -98,12 +98,12 @@ export function BuiltinSiteTemplates(): React.JSX.Element {
     <div className="space-y-4">
       <div>
         <h3 className="text-sm font-semibold">{t('templates.title')}</h3>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">{t('templates.subtitle')}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t('templates.subtitle')}</p>
       </div>
       <div className="space-y-4">
         {Array.from(groups.entries()).map(([category, items]) => (
           <div key={category} className="space-y-1.5">
-            <div className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/80">
+            <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
               {category}
             </div>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -116,15 +116,13 @@ export function BuiltinSiteTemplates(): React.JSX.Element {
                   >
                     <div className="min-w-0">
                       <div className="truncate text-xs font-medium">{profile.displayName}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">
-                        {profile.domain}
-                      </div>
+                      <div className="truncate text-xs text-muted-foreground">{profile.domain}</div>
                     </div>
                     {enabled ? (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-6 px-2 text-[10px]"
+                        className="h-6 px-2 text-xs"
                         onClick={() => {
                           const ref = refs.find((r) => r.domain === profile.domain)
                           if (ref) void onRevalidate(ref.id)
@@ -144,7 +142,7 @@ export function BuiltinSiteTemplates(): React.JSX.Element {
                       <Button
                         size="sm"
                         variant="outline"
-                        className="h-6 px-2 text-[10px]"
+                        className="h-6 px-2 text-xs"
                         onClick={() => {
                           setActiveId(profile.id)
                           setUsername('')

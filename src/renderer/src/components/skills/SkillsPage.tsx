@@ -251,6 +251,7 @@ export function SkillsPage(): React.JSX.Element {
   const editContent = useSkillsStore((s) => s.editContent)
   const marketSkills = useSkillsStore((s) => s.marketSkills)
   const marketLoading = useSkillsStore((s) => s.marketLoading)
+  const marketError = useSkillsStore((s) => s.marketError)
   const marketQuery = useSkillsStore((s) => s.marketQuery)
   const marketTotal = useSkillsStore((s) => s.marketTotal)
   const loadSkills = useSkillsStore((s) => s.loadSkills)
@@ -408,7 +409,21 @@ export function SkillsPage(): React.JSX.Element {
           <div className="flex-1 overflow-y-auto p-8">
             {marketLoading && marketSkills.length === 0 ? (
               <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-                <Wand2 className="size-4 mr-2 animate-pulse" /> Loading...
+                <Wand2 className="size-4 mr-2 animate-pulse" /> {t('skillsPage.loading')}
+              </div>
+            ) : marketError && marketSkills.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+                <p className="text-sm font-medium">{t('skillsPage.marketErrorTitle')}</p>
+                <p className="max-w-lg text-xs text-muted-foreground">
+                  {t(`skillsPage.marketError.${marketError}`)}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void loadMarketSkills(marketQuery, true)}
+                >
+                  {t('skillsPage.retry')}
+                </Button>
               </div>
             ) : marketSkills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-16 gap-2">
@@ -431,8 +446,21 @@ export function SkillsPage(): React.JSX.Element {
                   ))}
                 </div>
 
+                {marketError && (
+                  <div className="flex items-center justify-center gap-3 py-4 text-xs text-muted-foreground">
+                    <span>{t(`skillsPage.marketError.${marketError}`)}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void loadMarketSkills(marketQuery, false)}
+                    >
+                      {t('skillsPage.retry')}
+                    </Button>
+                  </div>
+                )}
+
                 {/* Load More */}
-                {marketSkills.length < marketTotal && (
+                {!marketError && marketSkills.length < marketTotal && (
                   <div className="flex items-center justify-center py-4">
                     <Button
                       size="sm"
@@ -443,10 +471,13 @@ export function SkillsPage(): React.JSX.Element {
                       {marketLoading ? (
                         <>
                           <Loader2 className="size-3.5 animate-spin mr-2" />
-                          Loading...
+                          {t('skillsPage.loading')}
                         </>
                       ) : (
-                        `Load More (${marketSkills.length}/${marketTotal})`
+                        t('skillsPage.loadMore', {
+                          loaded: marketSkills.length,
+                          total: marketTotal
+                        })
                       )}
                     </Button>
                   </div>
@@ -472,7 +503,7 @@ export function SkillsPage(): React.JSX.Element {
           <div className="flex-1 overflow-y-auto px-2 py-2">
             {loading ? (
               <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-                Loading...
+                {t('skillsPage.loading')}
               </div>
             ) : filteredInstalled.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-1 py-8 text-center">
@@ -614,7 +645,7 @@ export function SkillsPage(): React.JSX.Element {
                   </div>
                 ) : (
                   <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
-                    Loading...
+                    {t('skillsPage.loading')}
                   </div>
                 )}
               </div>

@@ -25,8 +25,20 @@
       "evidence": [
         "docs/migrations/ts-runtime/acceptance-report-2026-09-20.md",
         "scripts/verify-electron-startup.mjs",
-        "docs/migrations/ts-runtime/evidence/electron-startup-2026-09-20.log",
-        "docs/migrations/ts-runtime/evidence/electron-startup-2026-09-20.png"
+        "scripts/verify-packaged-electron-startup.mjs",
+        "docs/migrations/ts-runtime/evidence/electron-startup-2026-10-02.txt",
+        "docs/migrations/ts-runtime/evidence/electron-startup-2026-10-02.png",
+        "docs/migrations/ts-runtime/evidence/electron-packaged-startup-2026-10-01T21-50-18-654Z.txt",
+        "docs/migrations/ts-runtime/evidence/electron-packaged-startup-2026-10-01T21-50-18-654Z.png",
+        "tests/runtime/pending-session-queue-electron.test.ts",
+        "docs/migrations/ts-runtime/evidence/electron-workspace-regression-2026-10-02.md",
+        "docs/migrations/ts-runtime/evidence/workspace-session-event-regression-2026-10-02.md",
+        "docs/migrations/ts-runtime/evidence/first-success-local-provider-attempt-2026-10-02.md",
+        "docs/migrations/ts-runtime/evidence/session-create-failure-electron-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/session-delete-failure-electron-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/dynamic-skill-request-snapshot-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/dynamic-subagent-request-snapshot-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/extension-request-project-scope-2026-10-04.md"
       ],
       "status": "实现中"
     },
@@ -49,9 +61,15 @@
         "tests/runtime/offline-workspace-account-client.test.ts",
         "tests/runtime/workspace-model-store.test.ts",
         "tests/runtime/provider-secret-store.test.ts",
+        "tests/runtime/provider-auth-persistence.test.ts",
+        "tests/runtime/provider-config-encryption.test.ts",
+        "tests/runtime/safe-storage-key-persistence.test.ts",
+        "tests/runtime/secret-vault-persistence.test.ts",
+        "tests/runtime/settings-save-failure-electron.test.ts",
+        "docs/migrations/ts-runtime/evidence/provider-credential-storage-2026-10-04.md",
         "tests/runtime/workspace-directory.test.ts"
       ],
-      "status": "通过"
+      "status": "实现中"
     },
     {
       "id": "P4",
@@ -131,7 +149,53 @@
     {
       "id": "P10",
       "criterion": "对话和全部既有功能页验收",
-      "evidence": [],
+      "evidence": [
+        "scripts/verify-electron-startup.mjs",
+        "scripts/verify-packaged-electron-startup.mjs",
+        "docs/migrations/ts-runtime/evidence/electron-startup-2026-10-02.txt",
+        "docs/migrations/ts-runtime/evidence/electron-startup-2026-10-02.png",
+        "docs/migrations/ts-runtime/evidence/electron-packaged-startup-2026-10-01T21-50-18-654Z.txt",
+        "docs/migrations/ts-runtime/evidence/electron-packaged-startup-2026-10-01T21-50-18-654Z.png",
+        "tests/runtime/pending-session-queue-electron.test.ts",
+        "tests/runtime/top-level-pages-electron.test.ts",
+        "tests/runtime/context-compression-ts-runtime.test.ts",
+        "tests/runtime/context-compression-persistence.test.ts",
+        "docs/migrations/ts-runtime/evidence/context-compression-entry-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/context-compression-durability-2026-10-04.md",
+        "tests/runtime/skill-market-client.test.ts",
+        "tests/runtime/session-delete-electron.test.ts",
+        "docs/migrations/ts-runtime/evidence/electron-workspace-regression-2026-10-02.md",
+        "docs/migrations/ts-runtime/evidence/workspace-session-event-regression-2026-10-02.md",
+        "docs/migrations/ts-runtime/evidence/first-success-local-provider-attempt-2026-10-02.md",
+        "docs/migrations/ts-runtime/evidence/project-review-local-preflight-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/cron-session-delivery-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/settings-persistence-status-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/settings-plugin-model-responsive-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/settings-capability-compact-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/settings-plugin-tabs-keyboard-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/settings-semantic-targets-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/settings-oauth-import-dialog-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/settings-oauth-account-flow-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/settings-responsive-pages-2026-10-03.json",
+        "docs/migrations/ts-runtime/evidence/windows-settings-rename-retry-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/codegraph-wasm-packaging-2026-10-03.md",
+        "analysis/audits/2026-10-03-settings-visual/审查记录.md",
+        "docs/migrations/ts-runtime/evidence/session-create-failure-electron-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/task-board-save-failure-electron-2026-10-03.md",
+        "docs/migrations/ts-runtime/evidence/session-delete-failure-electron-2026-10-04.md",
+        "tests/runtime/resources-command-electron.test.ts",
+        "docs/migrations/ts-runtime/evidence/resources-command-workflow-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/resources-list-failure-retry-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/resources-detail-failure-retry-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/dynamic-skill-request-snapshot-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/dynamic-subagent-request-snapshot-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/extension-request-project-scope-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/extension-http-failure-artifact-2026-10-04.md",
+        "docs/migrations/ts-runtime/evidence/extension-http-desktop-flow-2026-10-04.md",
+        "tests/runtime/project-create-persistence.test.ts",
+        "tests/runtime/project-directory-transaction.test.ts",
+        "docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md"
+      ],
       "status": "实现中"
     },
     {
@@ -256,11 +320,18 @@
       "legacyEntrypoint": "agent/compress-context",
       "legacySource": "sidecars/Ola.Native.Worker/Modules/AgentRuntime/AgentRuntimeModule.cs",
       "inventoryHint": "legacy",
-      "tsImplementation": "src/renderer/src/lib/ipc/agent-bridge.ts",
+      "tsImplementation": "src/renderer/src/lib/agent/context-compression.ts",
       "productionCallPath": "src/main/ipc/ts-runtime-handlers.ts",
       "legacyPathRemoved": true,
-      "contractEvidence": ["tests/runtime/context-compression-ts-runtime.test.ts"],
-      "e2eEvidence": ["tests/runtime/context-compression-ts-runtime.test.ts"],
+      "contractEvidence": [
+        "tests/runtime/context-compression-ts-runtime.test.ts",
+        "tests/runtime/context-compression-persistence.test.ts",
+        "tests/runtime/db-ipc-message-scope.test.ts"
+      ],
+      "e2eEvidence": [
+        "tests/runtime/top-level-pages-electron.test.ts",
+        "docs/migrations/ts-runtime/evidence/context-compression-durability-2026-10-04.md"
+      ],
       "status": "通过"
     },
     {
@@ -4158,7 +4229,6 @@
       "legacyPathRemoved": true,
       "contractEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
-      "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "status": "通过"
     },
     {
@@ -4231,7 +4301,6 @@
       "legacyPathRemoved": true,
       "contractEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
-      "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "status": "通过"
     },
     {
@@ -4255,7 +4324,6 @@
       "productionCallPath": "src/main/ipc/ssh-handlers.ts",
       "legacyPathRemoved": true,
       "contractEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
-      "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "status": "通过"
     },
@@ -4346,7 +4414,6 @@
       "productionCallPath": "src/main/ipc/ssh-handlers.ts",
       "legacyPathRemoved": true,
       "contractEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
-      "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "e2eEvidence": ["tests/runtime/ssh-sftp-contract.test.ts"],
       "status": "通过"
     },
@@ -4830,13 +4897,26 @@
   "releaseTargets": [
     {
       "id": "windows-x64",
-      "buildEvidence": ["docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md"],
-      "installEvidence": [],
-      "upgradeEvidence": [],
-      "launchEvidence": [],
+      "buildEvidence": [
+        "docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/windows-x64-current-process-startup-2026-10-03.json"
+      ],
+      "installEvidence": [
+        "docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/windows-x64-current-process-startup-2026-10-03.json"
+      ],
+      "upgradeEvidence": ["docs/migrations/ts-runtime/evidence/windows-x64-upgrade-2026-10-03.md"],
+      "launchEvidence": [
+        "docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/windows-x64-current-process-startup-2026-10-03.json"
+      ],
       "signingEvidence": ["docs/migrations/ts-runtime/evidence/signing-waiver-2026-09-20.md"],
-      "noDotnetEvidence": ["docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md", "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"],
-      "status": "受外部条件阻塞"
+      "noDotnetEvidence": [
+        "docs/migrations/ts-runtime/evidence/windows-x64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/windows-x64-current-process-startup-2026-10-03.json"
+      ],
+      "status": "实现中"
     },
     {
       "id": "windows-arm64",
@@ -4845,7 +4925,10 @@
       "upgradeEvidence": [],
       "launchEvidence": [],
       "signingEvidence": ["docs/migrations/ts-runtime/evidence/signing-waiver-2026-09-20.md"],
-      "noDotnetEvidence": ["docs/migrations/ts-runtime/evidence/windows-arm64-2026-09-20.md", "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"],
+      "noDotnetEvidence": [
+        "docs/migrations/ts-runtime/evidence/windows-arm64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"
+      ],
       "status": "受外部条件阻塞"
     },
     {
@@ -4855,7 +4938,10 @@
       "upgradeEvidence": [],
       "launchEvidence": [],
       "signingEvidence": [],
-      "noDotnetEvidence": ["docs/migrations/ts-runtime/evidence/linux-x64-2026-09-20.md", "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"],
+      "noDotnetEvidence": [
+        "docs/migrations/ts-runtime/evidence/linux-x64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"
+      ],
       "status": "受外部条件阻塞"
     },
     {
@@ -4865,7 +4951,10 @@
       "upgradeEvidence": [],
       "launchEvidence": [],
       "signingEvidence": [],
-      "noDotnetEvidence": ["docs/migrations/ts-runtime/evidence/linux-arm64-2026-09-20.md", "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"],
+      "noDotnetEvidence": [
+        "docs/migrations/ts-runtime/evidence/linux-arm64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"
+      ],
       "status": "受外部条件阻塞"
     },
     {
@@ -4875,7 +4964,10 @@
       "upgradeEvidence": ["docs/migrations/ts-runtime/evidence/macos-x64-2026-09-20.md"],
       "launchEvidence": ["docs/migrations/ts-runtime/evidence/macos-x64-2026-09-20.md"],
       "signingEvidence": ["docs/migrations/ts-runtime/evidence/signing-waiver-2026-09-20.md"],
-      "noDotnetEvidence": ["docs/migrations/ts-runtime/evidence/macos-x64-2026-09-20.md", "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"],
+      "noDotnetEvidence": [
+        "docs/migrations/ts-runtime/evidence/macos-x64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"
+      ],
       "status": "受外部条件阻塞"
     },
     {
@@ -4885,7 +4977,10 @@
       "upgradeEvidence": ["docs/migrations/ts-runtime/evidence/macos-arm64-2026-09-20.md"],
       "launchEvidence": ["docs/migrations/ts-runtime/evidence/macos-arm64-2026-09-20.md"],
       "signingEvidence": ["docs/migrations/ts-runtime/evidence/signing-waiver-2026-09-20.md"],
-      "noDotnetEvidence": ["docs/migrations/ts-runtime/evidence/macos-arm64-2026-09-20.md", "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"],
+      "noDotnetEvidence": [
+        "docs/migrations/ts-runtime/evidence/macos-arm64-2026-09-20.md",
+        "docs/migrations/ts-runtime/evidence/release-staging-current-2026-09-20.md"
+      ],
       "status": "受外部条件阻塞"
     }
   ],

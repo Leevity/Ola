@@ -114,6 +114,16 @@ export class RunScheduler {
       }
     })
   }
+  async cancelSessionRuns(workspaceId: string, sessionId: string): Promise<void> {
+    const matching = [...this.queue, ...[...this.running.values()].map(({ run }) => run)].filter(
+      (run) => run.workspaceId === workspaceId && run.sessionId === sessionId
+    )
+    await Promise.all(matching.map((run) => this.cancel(run.runId, workspaceId)))
+    const active = [...this.running.values()].filter(
+      ({ run }) => run.workspaceId === workspaceId && run.sessionId === sessionId
+    )
+    await Promise.allSettled(active.map(({ done }) => done))
+  }
   revokeUnavailableWorkspaces(availableIds: ReadonlySet<string>): void {
     const revoked = [...this.queue, ...[...this.running.values()].map(({ run }) => run)].filter(
       (run) => run.workspaceId !== 'local-personal' && !availableIds.has(run.workspaceId)

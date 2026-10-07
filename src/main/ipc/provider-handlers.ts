@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { listProviderHealth, resetProviderHealth } from '../provider/provider-health-registry'
 import { resolveProviderFallback } from '../provider/provider-fallback-resolver'
 import type { ProviderCandidate } from '../../shared/provider-health'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 
 function isTrustedProviderIpcSender(event: IpcMainInvokeEvent): boolean {
   const ownerWindow = BrowserWindow.fromWebContents(event.sender)
@@ -9,7 +10,8 @@ function isTrustedProviderIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 

@@ -1,4 +1,21 @@
 {
+  "providerHealth": {
+    "title": "模型服务健康",
+    "description": "记录临时请求成功率，不读取或展示请求凭据。",
+    "lastChecked": "最近检查：{{time}}",
+    "notChecked": "尚未检查服务状态",
+    "loadFailed": "状态检查失败",
+    "retryHint": "无法读取服务状态。可手动刷新重试；失败不会显示为健康。",
+    "refresh": "刷新服务状态",
+    "requestCounts": "成功请求数 / 总请求数",
+    "reset": "重置 {{provider}} 的健康统计",
+    "empty": "尚无请求记录，当前不能判断服务是否健康。",
+    "status": {
+      "healthy": "健康",
+      "degraded": "不稳定",
+      "down": "不可用"
+    }
+  },
   "wiki": {
     "title": "项目 Wiki",
     "subtitle": "构建增量本地项目地图",
@@ -44,7 +61,18 @@
     "cancelReplay": "取消重放",
     "flowSummary": "{{name}} · {{count}} 个步骤",
     "run": "运行",
-    "delete": "删除 {{name}}"
+    "delete": "删除 {{name}}",
+    "errors": {
+      "workspaceUnavailable": "当前工作区暂不可用，无法读取桌面流程。",
+      "loadFailed": "读取桌面流程失败，请重试。",
+      "retry": "重试读取",
+      "startFailed": "开始录制失败，请检查桌面录制权限后重试。",
+      "stopFailed": "停止或保存录制失败，请检查当前录制状态。",
+      "saveFailed": "保存桌面流程失败。",
+      "replayFailed": "重放失败，请检查流程和运行记录。",
+      "cancelFailed": "取消重放失败。",
+      "deleteFailed": "删除桌面流程失败。"
+    }
   },
   "hooks": {
     "title": "自动化 Hook",
@@ -118,6 +146,8 @@
     "globalScope": "全局",
     "saving": "正在保存…",
     "saved": "已保存",
+    "failed": "保存失败",
+    "retrySave": "重试保存设置",
     "poweredBy": "Powered by Ola",
     "groups": {
       "general": "通用",
@@ -160,7 +190,7 @@
       "subtitle": "最近一年每天的 Token 使用量。",
       "window": "最近 {{count}} 天",
       "cellTitle": "{{date}}：{{tokens}} Token，{{requests}} 次请求，{{cost}}",
-      "totalTokensValue": "{{tokens}} Token",
+      "totalTokensValue": "{{tokens}} 个 Token",
       "detailLine": "总计 {{tokens}} Token · {{requests}} 次请求",
       "tooltip": {
         "cost": "消费",
@@ -281,8 +311,8 @@
     "chinese": "中文",
     "english": "English",
     "systemPromptPlaceholder": "添加自定义指令...",
-    "teamTools": "Team Tools",
-    "teamToolsDesc": "启用 Agent Team 协作功能，允许 AI 创建和管理并行团队",
+    "teamTools": "团队工具",
+    "teamToolsDesc": "启用 Agent 团队协作，允许 AI 创建和管理并行团队",
     "teamToolsEnabled": "已启用：AI 可使用 TeamCreate、Task(run_in_background) 等工具进行多智能体协作",
     "builtinBrowser": "内置浏览器",
     "builtinBrowserDesc": "启用内置浏览器面板和浏览器自动化工具，允许 Agent 浏览网页、提取内容、截图、点击元素和填写表单",
@@ -408,6 +438,13 @@
     },
     "status": {
       "title": "状态",
+      "state": {
+        "idle": "空闲",
+        "running": "同步中",
+        "success": "已同步",
+        "conflict": "待处理冲突",
+        "error": "同步失败"
+      },
       "device": "设备：{{deviceId}}",
       "lastRun": "最近同步",
       "remoteUpdated": "远端更新时间",
@@ -677,16 +714,16 @@
   "model": {
     "title": "模型配置",
     "subtitle": "选择 AI 服务商和模型，调整生成参数",
-    "noProviders": "暂无可用 AI 服务商",
-    "noProvidersHint": "请先前往「AI 服务商」页面启用服务商并完成鉴权配置",
+    "noProviders": "暂无已启用且完成鉴权的 AI 服务商",
+    "noProvidersHint": "请前往「AI 服务商」页面启用服务商，并配置 API 密钥或登录鉴权。仅打开启用开关还不能选择模型。",
     "provider": "AI 服务商",
     "providerDesc": "选择已启用的服务商",
     "mainModel": "主模型",
-    "mainModelDesc": "用于主对话与 Agent 主循环；可设为 Auto 或手动固定模型",
+    "mainModelDesc": "用于主对话与 Agent 主循环；可设为自动模式或手动固定模型",
     "selectMainModelMode": "选择主模型模式",
-    "autoMode": "Auto",
+    "autoMode": "自动",
     "manualMode": "手动",
-    "autoModeDesc": "Auto 会先用快速模型识别本次最新输入的任务类型，再在主模型 / 快速模型之间选择；轻量改写、总结、翻译、格式化更容易命中快速模型，失败时回退主模型。",
+    "autoModeDesc": "自动模式会先用快速模型识别本次最新输入的任务类型，再在主模型 / 快速模型之间选择；轻量改写、总结、翻译、格式化更容易命中快速模型，失败时回退主模型。",
     "manualModeDesc": "手动模式始终使用下方指定的主模型。",
     "autoMainCandidate": "主模型候选",
     "manualMainCandidate": "手动主模型",
@@ -731,7 +768,7 @@
       "placeholder": "选择默认模型",
       "followGlobalActiveModel": "跟随当前活动模型"
     },
-    "temperature": "Temperature",
+    "temperature": "温度",
     "temperatureDesc": "控制生成文本的随机性",
     "precise": "精确",
     "balanced": "平衡",
@@ -774,8 +811,58 @@
     }
   },
   "capabilityCenter": {
+    "refreshFailed": "部分能力检查失败，请查看对应状态，并打开其设置进行修复。",
     "title": "能力中心",
-    "description": "在一个入口统一管理已安装能力、自定义 Extension、MCP、Skills、消息渠道、作用域、权限与健康状态。",
+    "description": "在一个入口统一管理已安装能力、自定义扩展、MCP 服务器、技能、消息渠道、作用域、权限与健康状态。",
+    "healthTitle": "能力连接与安装状态",
+    "healthDescription": "汇总当前已读取到的状态。未检查、无请求记录和加载失败会单独显示，不会推断为健康。",
+    "refreshHealth": "刷新状态",
+    "openSettings": "设置",
+    "diagnostics": {
+      "export": "导出脱敏诊断",
+      "exportSuccess": "脱敏诊断文件已保存。",
+      "exportFailed": "诊断文件导出失败。",
+      "privacyHint": "仅导出聚合状态、计数和时间；不包含名称、标识、路径、配置、凭据、消息或原始错误。"
+    },
+    "health": {
+      "providers": "模型服务",
+      "skills": "Skills",
+      "extensions": "Extensions",
+      "builtinPlugins": "内置插件配置",
+      "mcp": "MCP 服务",
+      "channels": "当前工作区消息渠道"
+    },
+    "healthTone": {
+      "healthy": "正常",
+      "attention": "需关注",
+      "unknown": "未确认",
+      "inventory": "已盘点"
+    },
+    "healthDetail": {
+      "loadFailed": "读取状态失败，请到对应设置页重试。",
+      "notChecked": "尚未读取状态。",
+      "noProviderRequests": "尚无请求记录，无法判断服务状态。",
+      "providerCounts": "{{healthy}} / {{total}} 个服务近期请求正常；读取于 {{checkedAt}}",
+      "skillCount": "已安装 {{count}} 个 Skill；安装情况不代表每个 Skill 均适用于当前任务。",
+      "extensionCounts": "已安装 {{installed}} 个，已启用 {{enabled}} 个；启用状态不代表扩展运行正常。",
+      "builtinPluginCounts": "已启用 {{enabled}} / {{total}} 个；有 {{needsSetup}} 个需要补齐必要配置（检查范围含图像模型配置）。",
+      "mcpCounts": "已启用 {{enabled}} 个，已连接 {{connected}} 个，连接中 {{connecting}} 个，未连接 {{disconnected}} 个，错误 {{failed}} 个；检查于 {{checkedAt}}",
+      "channelCounts": "已启用 {{enabled}} 个，运行中 {{running}} 个，已停止 {{stopped}} 个，错误 {{failed}} 个；检查于 {{checkedAt}}",
+      "noneEnabled": "当前没有启用项。",
+      "statusCheckFailed": "无法读取一个或多个渠道的运行状态。请在消息渠道设置中重试。"
+    },
+    "lifecycleTitle": "能力交付状态",
+    "lifecycleDescription": "按实际交付阶段标记能力，确保展示状态与可用范围一致。",
+    "lifecyclePolicy": "交付状态",
+    "status": { "ga": "正式可用", "beta": "测试中" },
+    "capabilities": {
+      "local-agent-workspace": "本地 Agent 工作区",
+      "remote-ssh-operations": "远程 SSH 操作",
+      "channel-automation": "消息渠道自动化",
+      "browser-cookie-import": "浏览器 Cookie 导入",
+      "media-generation": "媒体生成",
+      "unified-execution-audit": "统一执行审计"
+    },
     "installed": "已安装能力",
     "extensions": "Extension",
     "mcp": "MCP Server",
@@ -1004,6 +1091,27 @@
   "migration": {
     "title": "迁移中心",
     "subtitle": "预览并迁移 OpenCode 配置到 Ola",
+    "businessHandoverTitle": "业务数据切换到 TypeScript 运行时",
+    "businessHandoverDescription": "先创建可回退的数据库快照，停止旧写入端，再由离线优先的 TypeScript 运行时接管业务数据。",
+    "businessHandoverActive": "已由 TypeScript 接管",
+    "businessHandoverPending": "尚未切换",
+    "businessHandoverAction": "切换到 TypeScript",
+    "businessHandoverRunning": "准备中…",
+    "businessHandoverDone": "已完成",
+    "businessHandoverUnavailable": "运行时未就绪或安全开关未启用，当前无法切换。",
+    "businessHandoverPreflight": "切换前检查：{{reason}}",
+    "businessHandoverWarning": "切换期间，现有项目 Wiki 记录会保存在 TypeScript 管理的归档中。",
+    "businessHandoverBackup": "回退快照",
+    "businessHandoverManifest": "切换记录",
+    "businessHandoverConfirm": "现在创建回退快照，并将业务数据写入切换到 TypeScript 运行时吗？",
+    "businessHandoverSuccess": "业务数据已由 TypeScript 运行时接管。",
+    "businessHandoverIncomplete": "切换未完成，请查看状态后重试。",
+    "businessHandoverFailed": "业务数据切换失败：{{error}}",
+    "businessHandoverSchemaUnsupported": "旧数据库缺少必要的业务字段。",
+    "businessHandoverBackupSpace": "可用空间不足，无法创建回退快照。",
+    "businessHandoverBackupDirectory": "回退目录不可用或不安全。",
+    "businessHandoverSourceUnavailable": "旧业务数据库尚不可用。",
+    "businessHandoverPreflightUnknown": "切换前检查未完成：{{reason}}",
     "sourceTitle": "OpenCode 迁移源",
     "sourceDesc": "当前仅支持读取 ~/.config/opencode/opencode.json，并迁移 provider、模型选择、commands、agents、MCP 和 instructions。",
     "reloadAction": "重新预览",
@@ -1107,15 +1215,19 @@
     "model": "模型",
     "noModels": "暂无可用模型",
     "fastModel": "快速模型",
-    "fastModelDesc": "用于 Auto 路由分类、轻量主对话请求、标题生成和子代理任务",
+    "fastModelDesc": "用于自动路由分类、轻量主对话请求、标题生成和子代理任务",
     "noProvidersEnabled": "暂无可用 AI 服务商",
     "configureProviders": "配置服务商",
-    "temperature": "Temperature",
+    "temperature": "温度",
     "maxTokens": "最大 Token 数",
     "theme": "主题",
     "openFullSettings": "打开完整设置"
   },
   "provider": {
+    "credentialVaultUnavailable": {
+      "title": "服务商凭据暂时无法读取",
+      "description": "加密存储不可用。已暂停此页编辑，避免覆盖已保存的账户。请正常退出并重新打开 Ola；若问题持续，请保留本机数据并查看日志。"
+    },
     "accounts": {
       "title": "OAuth 账户",
       "addAccount": "新增账户",
@@ -1154,6 +1266,7 @@
         "importFailed": "导入失败：{{error}}",
         "fileApiMissing": "文件选择 API 不可用",
         "exportCopied": "账户 JSON 已复制到剪贴板",
+        "clipboardUnavailable": "剪贴板不可用",
         "exportFailed": "导出失败：{{error}}",
         "refreshSuccess": "令牌已刷新",
         "refreshFailed": "刷新失败：{{error}}",
@@ -1477,6 +1590,31 @@
   "channel": {
     "title": "频道",
     "subtitle": "配置和管理聊天频道",
+    "narrowPaneLabel": "频道视图",
+    "narrowList": "频道列表",
+    "narrowConfig": "频道配置",
+    "builtin": {
+      "feishu-bot": { "name": "飞书机器人", "description": "通过内置 WebSocket 接入飞书消息。" },
+      "dingtalk-bot": { "name": "钉钉机器人", "description": "通过 Stream API 接入钉钉消息。" },
+      "wecom-bot": { "name": "企业微信机器人", "description": "接入企业微信消息。" },
+      "qq-bot": { "name": "QQ 机器人", "description": "通过官方 Gateway WebSocket 接入 QQ 消息。" },
+      "weixin-official": {
+        "name": "微信官方频道",
+        "description": "通过扫码登录和长轮询接入微信消息。"
+      },
+      "telegram-bot": {
+        "name": "Telegram 机器人",
+        "description": "接入 Telegram 消息，需要 WebSocket 中继。"
+      },
+      "discord-bot": {
+        "name": "Discord 机器人",
+        "description": "通过内置 Gateway WebSocket 接入 Discord 消息。"
+      },
+      "whatsapp-bot": {
+        "name": "WhatsApp 机器人",
+        "description": "通过 Cloud API 接入 WhatsApp 消息，需要 WebSocket 中继。"
+      }
+    },
     "search": "搜索频道...",
     "addChannel": "添加频道",
     "addChannelDesc": "选择要添加的频道提供商。",
@@ -1507,7 +1645,7 @@
     "disabled": "已禁用",
     "conversations": "对话记录",
     "conversationsDesc": "频道的对话记录将显示在此处。",
-    "messagesCleared": "消息已清空",
+    "messagesCleared": "对话和任务已清空",
     "sessionDeleted": "对话已删除",
     "clearMessages": "清空消息",
     "deleteSession": "删除对话",
@@ -1767,6 +1905,9 @@
     "tools": "工具",
     "renderers": "渲染器",
     "components": "组件",
+    "workbenchViews": "工作台视图",
+    "workbenchCommands": "工作台命令",
+    "workbenchCommandsHint": "启用的命令可在命令面板中使用。",
     "hostRendered": "宿主渲染",
     "network": "网络",
     "noNetwork": "无网络权限",
@@ -1813,8 +1954,12 @@
     "toggleRightPanel": "切换右侧面板",
     "commandPalette": "命令面板",
     "prevNextSession": "上一个/下一个会话",
-    "switchMode": "切换模式（对话/协作/编程）",
+    "previousSession": "切换到上一个会话",
+    "nextSession": "切换到下一个会话",
+    "switchMode": "切换模式（对话/澄清/执行/ACP）",
     "scrollTopBottom": "滚动到顶部/底部",
+    "scrollTop": "滚动到对话顶部",
+    "scrollBottom": "滚动到对话底部",
     "cycleRightTab": "切换右侧面板标签",
     "sendMessage": "发送消息",
     "sendMessageAlt": "发送消息（备选）",
@@ -1830,8 +1975,8 @@
   "workModes": {
     "title": "工作方式",
     "subtitle": "选择新对话优先处理日常工作还是代码项目。",
-    "work": "Work",
-    "code": "Code",
+    "work": "日常工作",
+    "code": "代码项目",
     "sharedLabel": "通用",
     "autoSummarize": "生成结构化结果",
     "autoSummarizeDesc": "工具执行后总结完成内容、验证结果和剩余事项。",

@@ -6,7 +6,12 @@ import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
 import { useLiveCompressionStore } from '@renderer/stores/live-compression-store'
 import i18n from '@renderer/locales'
-import { useChatStore, type Session } from '@renderer/stores/chat-store'
+import {
+  awaitPendingSessionCreate,
+  hasPendingSessionCreateFailure,
+  useChatStore,
+  type Session
+} from '@renderer/stores/chat-store'
 import { resolveReasoningEffortForModel, useSettingsStore } from '@renderer/stores/settings-store'
 import {
   modelSupportsComputerUse,
@@ -16,10 +21,18 @@ import {
 } from '@renderer/stores/provider-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
 import { useAgentStore } from '@renderer/stores/agent-store'
+import {
+  clearSessionAbortController,
+  getSessionAbortController,
+  hasSessionAbortController,
+  registerSessionAbortController
+} from '@renderer/lib/agent/session-run-lifecycle'
 import { useBackgroundSessionStore } from '@renderer/stores/background-session-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
 import { toolRegistry } from '@renderer/lib/agent/tool-registry'
+import { createRequestTaskToolDefinition } from '@renderer/lib/agent/sub-agents/builtin'
+import { createRequestToolDefinitionSnapshot } from '@renderer/lib/agent/task-profile-tool-definitions'
 import {
   buildCacheShapeDebugInfo,
   calculateCacheReadRatio,
@@ -50,6 +63,7 @@ import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { decodeIpcMessagePack, invokeMessagePack } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { resolveRuntimeApprovalRequest } from '@renderer/lib/ipc/runtime-approval-registry'
+import { recoverPendingSessionQueue } from '@renderer/lib/workbench/pending-session-queue'
 import {
   DB_MESSAGES_TRUNCATE_FROM_MSGPACK_CHANNEL,
   RUNTIME_APPROVAL_REQUEST_MSGPACK_CHANNEL,
@@ -60,6 +74,7 @@ import {
   handleNativeAskUserRequest
 } from '@renderer/lib/tools/ask-user-tool'
 import type { HookEvent, HookOutput } from '../../../shared/hooks/types'
+import { scenarioAllowsTool } from '../../../shared/scenario-policy'
 
 import { ACP_MODE_ALLOWED_TOOLS, PLAN_MODE_ALLOWED_TOOLS } from '@renderer/lib/tools/plan-tool'
 import { usePlanStore, type Plan } from '@renderer/stores/plan-store'
@@ -113,6 +128,7 @@ import { generateFinalOutcome } from '@renderer/lib/agent/final-outcome'
 import { recordUsageEvent } from '@renderer/lib/usage-analytics'
 import {
   getCompactSummaryDisplayText,
+  compressMessages,
   isCompactBoundaryMessage,
   isCompactSummaryLikeMessage,
   isCompactSummaryMessage,
@@ -152,6 +168,7 @@ import { useChannelStore } from '@renderer/stores/channel-store'
 import { useAppPluginStore } from '@renderer/stores/app-plugin-store'
 import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
 import { useExtensionStore } from '@renderer/stores/extension-store'
+import { withRequestExtensionToolDefinitions } from '@renderer/lib/extensions/extension-tools'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import {
   registerPluginTools,
@@ -168,6 +185,7 @@ import {
 } from '@renderer/lib/mcp/mcp-tools'
 import {
   loadLayeredMemorySnapshot,
+  type LayeredMemorySnapshot,
   type SessionMemoryScope
 } from '@renderer/lib/agent/memory-files'
 import {
@@ -206,7 +224,6 @@ import {
   type TailToolExecutionState
 } from '@renderer/components/chat/transcript-utils'
 import type { AutoModelSelectionStatus } from '@renderer/stores/ui-store'
-import { runTsContextCompression } from '@renderer/lib/ipc/agent-bridge'
 import {
   isTsRuntimeAvailable,
   respondTsRuntimeInteraction,
@@ -223,9 +240,9 @@ import {
 } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { assessTsRuntimeAgentEligibility } from '@renderer/lib/ipc/ts-runtime-agent-eligibility'
 import { normalizeRuntimeApprovalRequest } from '@renderer/lib/ipc/runtime-approval-protocol'
+import { resolveTsRuntimeBrowserInteraction } from '@renderer/lib/ipc/browser-runtime-interaction'
 
 /** Per-session abort controllers — module-level so concurrent sessions don't overwrite each other */
-const sessionAbortControllers = new Map<string, AbortController>()
 const hookStartedSessions = new Set<string>()
 const stopAfterCurrentRequestSessions = new Set<string>()
 const continuingToolExecutionSessions = new Set<string>()
@@ -319,6 +336,12 @@ async function emitHooks(
     cancellationKey?: string
   }
 ): Promise<HookOutput[]> {
+  if (
+    useChatStore
+      .getState()
+      .sessions.some((session) => session.id === invocation.sessionId && session.scenarioPolicy)
+  )
+    return []
   return (await ipcClient.invoke('hooks:emit', { event, invocation })) as HookOutput[]
 }
 
@@ -543,7 +566,13 @@ function resolveSessionWorkingFolder(
 async function ensureChatSessionWorkingFolder(sessionId: string): Promise<void> {
   const chatStore = useChatStore.getState()
   const session = chatStore.sessions.find((item) => item.id === sessionId)
-  if (!session || session.mode !== 'chat' || session.sshConnectionId) return
+  if (
+    !session ||
+    session.mode !== 'chat' ||
+    session.sshConnectionId ||
+    session.scenarioPolicy === 'materials-no-tools'
+  )
+    return
   if (session.workingFolder?.trim()) return
 
   const folder = await ensureDefaultChatWorkingFolder()
@@ -597,6 +626,8 @@ type PendingSessionDispatchMode = 'after_loop' | 'interrupt_next'
 const SELECTED_FILE_READ_MAX_LINES = 1_000
 
 export interface SendMessageOptions {
+  /** Business TaskItem explicitly chosen by the user for this run. */
+  businessTaskId?: string
   longRunningMode?: boolean
   clearCompletedTasksOnTurnStart?: boolean
   skipPendingPlanRevision?: boolean
@@ -623,6 +654,7 @@ interface QueuedSessionMessage {
   source?: MessageSource
   options?: SendMessageOptions
   dispatchMode?: PendingSessionDispatchMode
+  recoveryState?: 'dispatching' | 'needs_review'
   createdAt: number
 }
 
@@ -631,6 +663,11 @@ const pendingSessionMessages = new Map<string, QueuedSessionMessage[]>()
 const pendingSessionMessageViews = new Map<string, PendingSessionMessageItem[]>()
 const pendingSessionMessageListeners = new Set<() => void>()
 const pausedPendingSessionDispatch = new Set<string>()
+const pendingQueueHydrationPromises = new Map<string, Promise<void>>()
+const hydratedPendingQueueSessions = new Set<string>()
+const pendingQueuePersistence = new Map<string, Promise<void>>()
+const pendingQueuePersistenceErrorNotified = new Set<string>()
+const pendingDispatchingMessages = new Map<string, QueuedSessionMessage>()
 const MAX_PENDING_SESSION_MESSAGES = 50
 
 const QUEUED_MESSAGE_SYSTEM_REMIND = `<system-reminder>
@@ -863,8 +900,7 @@ async function mergeCompressedMessagesIntoSession(args: {
 
   if (!merged) return false
 
-  useChatStore.getState().replaceSessionMessages(args.sessionId, merged)
-  return true
+  return useChatStore.getState().replaceSessionMessagesPersisted(args.sessionId, merged)
 }
 
 function hasMeaningfulAssistantContent(message: UnifiedMessage | undefined): boolean {
@@ -1796,6 +1832,101 @@ function notifyPendingSessionMessageListeners(): void {
   }
 }
 
+function persistPendingSessionQueue(sessionId: string, messages: QueuedSessionMessage[]): void {
+  const session = useChatStore.getState().sessions.find((item) => item.id === sessionId)
+  if (!session) return
+  const workspaceId = session.workspaceId ?? 'local-personal'
+  const previous = pendingQueuePersistence.get(sessionId) ?? Promise.resolve()
+  const next = previous
+    .catch(() => undefined)
+    .then(async () => {
+      await ipcClient.invoke(IPC.DB_PENDING_SESSION_QUEUE_REPLACE, {
+        sessionId,
+        workspaceId,
+        messages: [
+          ...(pendingDispatchingMessages.has(sessionId)
+            ? [pendingDispatchingMessages.get(sessionId)!]
+            : []),
+          ...messages
+        ]
+      })
+      pendingQueuePersistenceErrorNotified.delete(sessionId)
+    })
+    .catch((error: unknown) => {
+      console.error('[SessionQueue] Failed to persist queued messages:', error)
+      if (pendingQueuePersistenceErrorNotified.has(sessionId)) return
+      pendingQueuePersistenceErrorNotified.add(sessionId)
+      toast.error(
+        i18n.t('chat:pendingQueue.persistFailed', {
+          defaultValue: 'Queued messages could not be saved. Keep Ola open and try again.'
+        })
+      )
+    })
+  pendingQueuePersistence.set(sessionId, next)
+}
+
+export function hydratePendingSessionQueue(sessionId: string): Promise<void> {
+  if (hydratedPendingQueueSessions.has(sessionId)) return Promise.resolve()
+  const existing = pendingQueueHydrationPromises.get(sessionId)
+  if (existing) return existing
+  const session = useChatStore.getState().sessions.find((item) => item.id === sessionId)
+  if (!session) return Promise.resolve()
+  const workspaceId = session.workspaceId ?? 'local-personal'
+
+  const hydration = (async () => {
+    try {
+      await awaitPendingSessionCreate(sessionId)
+    } catch (error) {
+      // A newly created local session has no stored queue when its row fails
+      // to commit. The send flow owns the creation error and draft recovery.
+      if (hasPendingSessionCreateFailure(sessionId)) return
+      throw error
+    }
+    const result = await ipcClient.invoke(IPC.DB_PENDING_SESSION_QUEUE_GET, {
+      sessionId,
+      workspaceId
+    })
+    const current = pendingSessionMessages.get(sessionId) ?? []
+    const recovered = Array.isArray(result) ? result : []
+    const merged = recoverPendingSessionQueue<QueuedSessionMessage>(
+      result,
+      current,
+      MAX_PENDING_SESSION_MESSAGES + 1
+    )
+    hydratedPendingQueueSessions.add(sessionId)
+    if (merged.length > 0) {
+      pendingSessionMessages.set(sessionId, merged)
+      pendingSessionMessageViews.set(
+        sessionId,
+        merged.filter((message) => !isHiddenFromQueueView(message)).map(toPendingItem)
+      )
+      persistPendingSessionQueue(sessionId, merged)
+    }
+    if (recovered.length > 0) {
+      setPendingSessionDispatchPaused(sessionId, true)
+    }
+    notifyPendingSessionMessageListeners()
+  })()
+    .catch((error: unknown) => {
+      console.error('[SessionQueue] Failed to restore queued messages:', error)
+      toast.error(
+        i18n.t('chat:pendingQueue.restoreFailed', {
+          defaultValue: 'Queued messages could not be restored.'
+        })
+      )
+    })
+    .finally(() => pendingQueueHydrationPromises.delete(sessionId))
+  pendingQueueHydrationPromises.set(sessionId, hydration)
+  return hydration
+}
+
+async function flushPendingSessionQueue(sessionId: string): Promise<void> {
+  await pendingQueuePersistence.get(sessionId)
+  if (pendingQueuePersistenceErrorNotified.has(sessionId)) {
+    throw new Error('PENDING_SESSION_QUEUE_PERSIST_FAILED')
+  }
+}
+
 function setPendingSessionDispatchPaused(sessionId: string, paused: boolean): void {
   const changed = paused
     ? !pausedPendingSessionDispatch.has(sessionId)
@@ -1815,7 +1946,11 @@ function isHiddenFromQueueView(msg: QueuedSessionMessage): boolean {
   return !!msg.options?.preRenderedUserMessageId
 }
 
-function replaceSessionPendingMessages(sessionId: string, next: QueuedSessionMessage[]): void {
+function replaceSessionPendingMessages(
+  sessionId: string,
+  next: QueuedSessionMessage[],
+  persist = true
+): void {
   if (next.length === 0) {
     pendingSessionMessages.delete(sessionId)
     pendingSessionMessageViews.delete(sessionId)
@@ -1829,6 +1964,8 @@ function replaceSessionPendingMessages(sessionId: string, next: QueuedSessionMes
       pendingSessionMessageViews.set(sessionId, views)
     }
   }
+  if (persist && hydratedPendingQueueSessions.has(sessionId))
+    persistPendingSessionQueue(sessionId, next)
   notifyPendingSessionMessageListeners()
 }
 
@@ -1838,6 +1975,7 @@ export interface PendingSessionMessageItem {
   images: ImageAttachment[]
   command: SystemCommandSnapshot | null
   createdAt: number
+  recoveryState?: 'dispatching' | 'needs_review'
 }
 
 const EMPTY_PENDING_SESSION_MESSAGES: PendingSessionMessageItem[] = []
@@ -1848,7 +1986,8 @@ function toPendingItem(msg: QueuedSessionMessage): PendingSessionMessageItem {
     text: msg.text,
     images: cloneImageAttachments(msg.images),
     command: msg.command ?? null,
-    createdAt: msg.createdAt
+    createdAt: msg.createdAt,
+    recoveryState: msg.recoveryState
   }
 }
 
@@ -1940,7 +2079,7 @@ export function removePendingSessionMessage(sessionId: string, messageId: string
 }
 
 function hasActiveSessionRun(sessionId: string): boolean {
-  const hasAbortController = sessionAbortControllers.has(sessionId)
+  const hasAbortController = hasSessionAbortController(sessionId)
   const hasStreamingMessage = Boolean(useChatStore.getState().streamingMessages[sessionId])
   const sessionRunStatus = useAgentStore.getState().runningSessions[sessionId]
   const statusIsRunning = sessionRunStatus === 'running' || sessionRunStatus === 'retrying'
@@ -2025,7 +2164,7 @@ function requestStopAfterCurrentRequest(sessionId: string): boolean {
 }
 
 function abortCurrentRunImmediately(sessionId: string): void {
-  const activeAbortController = sessionAbortControllers.get(sessionId)
+  const activeAbortController = getSessionAbortController(sessionId)
   if (activeAbortController && !activeAbortController.signal.aborted) {
     activeAbortController.abort()
   }
@@ -2062,7 +2201,7 @@ export function promotePendingSessionMessageForImmediateDispatch(
     // into the conversation right away instead of waiting for the next turn
     // boundary. On run completion, dispatchNextQueuedMessage picks up the head.
     queueMicrotask(() => {
-      const activeAbortController = sessionAbortControllers.get(sessionId)
+      const activeAbortController = getSessionAbortController(sessionId)
       if (activeAbortController && !activeAbortController.signal.aborted) {
         activeAbortController.abort()
       }
@@ -2170,7 +2309,7 @@ function dequeuePendingSessionMessage(sessionId: string): QueuedSessionMessage |
   const queue = pendingSessionMessages.get(sessionId)
   if (!queue || queue.length === 0) return null
   const [head, ...rest] = queue
-  replaceSessionPendingMessages(sessionId, rest)
+  replaceSessionPendingMessages(sessionId, rest, false)
   return {
     ...head,
     text: head.text,
@@ -2938,7 +3077,8 @@ function drainLeadMessages(): void {
 }
 
 function dispatchNextQueuedMessage(sessionId: string): boolean {
-  if (!_sendMessageFn) return false
+  const sendQueuedMessage = _sendMessageFn
+  if (!sendQueuedMessage) return false
 
   const sessionExists = useChatStore.getState().sessions.some((s) => s.id === sessionId)
   if (!sessionExists) {
@@ -2952,17 +3092,35 @@ function dispatchNextQueuedMessage(sessionId: string): boolean {
   const next = dequeuePendingSessionMessage(sessionId)
   if (!next) return false
 
+  pendingDispatchingMessages.set(sessionId, { ...next, recoveryState: 'dispatching' })
+  if (hydratedPendingQueueSessions.has(sessionId))
+    persistPendingSessionQueue(sessionId, pendingSessionMessages.get(sessionId) ?? [])
+
   setPendingSessionDispatchPaused(sessionId, false)
   setTimeout(() => {
-    void _sendMessageFn?.(
-      next.text,
-      next.images,
-      next.source ?? 'queued',
-      sessionId,
-      next.command,
-      undefined,
-      next.options
-    )
+    void (async () => {
+      try {
+        await flushPendingSessionQueue(sessionId)
+        await sendQueuedMessage(
+          next.text,
+          next.images,
+          next.source ?? 'queued',
+          sessionId,
+          next.command,
+          undefined,
+          next.options
+        )
+        pendingDispatchingMessages.delete(sessionId)
+        persistPendingSessionQueue(sessionId, pendingSessionMessages.get(sessionId) ?? [])
+      } catch (error) {
+        pendingDispatchingMessages.delete(sessionId)
+        const needsReview = { ...next, recoveryState: 'needs_review' as const }
+        const current = pendingSessionMessages.get(sessionId) ?? []
+        replaceSessionPendingMessages(sessionId, [needsReview, ...current])
+        setPendingSessionDispatchPaused(sessionId, true)
+        console.error('[SessionQueue] Dispatch failed; item returned for review:', error)
+      }
+    })()
   }, 0)
   return true
 }
@@ -2989,11 +3147,8 @@ function finishStoppingSession(sessionId: string): void {
   clearGoalContinuationState(sessionId)
   stopAfterCurrentRequestSessions.delete(sessionId)
 
-  const ac = sessionAbortControllers.get(sessionId)
-  if (ac) {
-    ac.abort()
-    sessionAbortControllers.delete(sessionId)
-  }
+  const ac = getSessionAbortController(sessionId)
+  if (ac) ac.abort()
 
   void ipcClient
     .invoke('hooks:cancel', { key: sessionId })
@@ -3330,7 +3485,9 @@ function createSubAgentEventBuffer(sessionId: string): {
 export type ManualCompressionResult = 'compressed' | 'skipped' | 'blocked' | 'failed'
 
 export interface ContextCompressionPreview {
+  sessionId: string
   targetMessageId: string
+  sourceSnapshot: string
   compressedMessages: UnifiedMessage[]
   messagesSummarized: number
   summary: string
@@ -3429,6 +3586,7 @@ export function useChatActions(): {
         })
       }
       await ensureChatSessionWorkingFolder(sessionId)
+      await awaitPendingSessionCreate(sessionId)
       const hookSession = useChatStore.getState().sessions.find((item) => item.id === sessionId)
       if (!hookStartedSessions.has(sessionId)) {
         hookStartedSessions.add(sessionId)
@@ -3496,6 +3654,8 @@ export function useChatActions(): {
         return
       }
 
+      await hydratePendingSessionQueue(sessionId)
+
       const hasActiveRun = hasActiveSessionRun(sessionId)
       const sessionRunStatus = useAgentStore.getState().runningSessions[sessionId]
       const statusIsRunning = sessionRunStatus === 'running' || sessionRunStatus === 'retrying'
@@ -3521,6 +3681,7 @@ export function useChatActions(): {
           })
           return
         }
+        await flushPendingSessionQueue(sessionId)
         if (source === undefined) {
           setPendingSessionDispatchPaused(sessionId, false)
           dispatchNextQueuedMessage(sessionId)
@@ -3553,6 +3714,7 @@ export function useChatActions(): {
             description: `This conversation can hold up to ${MAX_PENDING_SESSION_MESSAGES} pending messages.`
           })
         }
+        if (queued !== null) await flushPendingSessionQueue(sessionId)
         return
       }
 
@@ -3574,7 +3736,7 @@ export function useChatActions(): {
           source !== 'team' &&
           shouldClearCompletedSessionTasks(sessionId)
         ) {
-          useTaskStore.getState().deleteSessionTasks(sessionId)
+          await useTaskStore.getState().deleteSessionTasks(sessionId)
         }
 
         const pendingReviewPlan =
@@ -3975,26 +4137,27 @@ export function useChatActions(): {
 
         // Setup abort controller (per-session)
         // If this session already has a running agent, abort it first
-        const existingAc = sessionAbortControllers.get(sessionId)
+        const existingAc = getSessionAbortController(sessionId)
         if (existingAc) existingAc.abort()
         const abortController = new AbortController()
-        sessionAbortControllers.set(sessionId, abortController)
+        registerSessionAbortController(sessionId, abortController)
 
         updateAppPluginToolRegistration()
-        await ensureRequestToolCatalogFresh(session?.taskProfile ?? 'work')
 
         const mode = sessionMode
         const activeChannels = useChannelStore.getState().getActiveChannels()
-        const needsPluginTools = activeChannels.length > 0 || !!session?.pluginId
+        const needsPluginTools =
+          !session?.scenarioPolicy && (activeChannels.length > 0 || !!session?.pluginId)
         if (needsPluginTools && !isPluginToolsRegistered()) {
           registerPluginTools()
         } else if (!needsPluginTools && isPluginToolsRegistered()) {
           unregisterPluginTools()
         }
 
-        const scopedActiveChannels = session?.projectId
-          ? activeChannels.filter((channel) => channel.projectId === session.projectId)
-          : []
+        const scopedActiveChannels =
+          session?.projectId && !session.scenarioPolicy
+            ? activeChannels.filter((channel) => channel.projectId === session.projectId)
+            : []
         const sessionGoalSnapshot =
           useGoalStore.getState().getGoalBySession(sessionId) ??
           (await useGoalStore.getState().loadGoalForSession(sessionId, true))
@@ -4002,22 +4165,40 @@ export function useChatActions(): {
           !!sessionGoalSnapshot &&
           sessionGoalSnapshot.status !== 'paused' &&
           sessionGoalSnapshot.status !== 'complete'
-        let mcpStore = useMcpStore.getState()
-        if (mcpStore.servers.length === 0) {
-          await mcpStore.loadServers()
-          mcpStore = useMcpStore.getState()
-        }
-        if (mcpStore.servers.some((server) => server.enabled)) {
-          // Keep the renderer cache in sync with main-process auto-connects before resolving MCP tools.
-          await mcpStore.refreshAllServers()
+        if (!session?.scenarioPolicy) {
+          let mcpStore = useMcpStore.getState()
+          if (mcpStore.servers.length === 0) {
+            await mcpStore.loadServers()
+            mcpStore = useMcpStore.getState()
+          }
+          if (mcpStore.servers.some((server) => server.enabled)) {
+            // Keep the renderer cache in sync with main-process auto-connects before resolving MCP tools.
+            await mcpStore.refreshAllServers()
+          }
         }
         const chatMcpContext =
-          mode === 'chat' ? resolveActiveMcpContext(session?.projectId ?? null) : null
-        const registeredToolDefs = toolRegistry.getStableDefinitions()
+          mode === 'chat' && !session?.scenarioPolicy
+            ? resolveActiveMcpContext(session?.projectId ?? null)
+            : null
+        const taskProfile = session?.taskProfile ?? 'work'
+        const registeredToolDefs = withRequestExtensionToolDefinitions(
+          await createRequestToolDefinitionSnapshot({
+            taskProfile,
+            refreshCatalog: ensureRequestToolCatalogFresh,
+            getDefinitions: () => toolRegistry.getStableDefinitions(),
+            getTaskDefinition: createRequestTaskToolDefinition
+          }),
+          session?.projectId ?? null
+        )
+        const scenarioToolDefs = session?.scenarioPolicy
+          ? registeredToolDefs.filter((definition) =>
+              scenarioAllowsTool(session.scenarioPolicy!, definition.name)
+            )
+          : registeredToolDefs
         const baseChatModeToolDefs =
           mode === 'chat' &&
           !(providerResolution.modelConfig?.category === 'image' && source !== 'continue')
-            ? registeredToolDefs
+            ? scenarioToolDefs
             : []
         const chatModeToolDefs = filterChatModeToolDefinitions(baseChatModeToolDefs).filter(
           (definition) =>
@@ -4025,12 +4206,20 @@ export function useChatActions(): {
         )
         const sessionScope: SessionMemoryScope = session?.pluginId ? 'channel' : 'main'
         const sessionWorkingFolder = resolveSessionWorkingFolder(session)
-        const memorySnapshot = await loadLayeredMemorySnapshot(ipcClient, {
-          workspaceId: session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
-          workingFolder: sessionWorkingFolder,
-          sshConnectionId: session?.sshConnectionId,
-          scope: sessionScope
-        })
+        const memorySnapshot: LayeredMemorySnapshot =
+          session?.scenarioPolicy === 'materials-no-tools'
+            ? {
+                workspaceId: session.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
+                globalDailyMemory: [],
+                projectDailyMemory: [],
+                version: 0
+              }
+            : await loadLayeredMemorySnapshot(ipcClient, {
+                workspaceId: session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
+                workingFolder: sessionWorkingFolder,
+                sshConnectionId: session?.sshConnectionId,
+                scope: sessionScope
+              })
         const sshConnection = session?.sshConnectionId
           ? useSshStore
               .getState()
@@ -4041,7 +4230,7 @@ export function useChatActions(): {
           workingFolder: sessionWorkingFolder,
           sshConnection
         })
-        const activeTeam = useTeamStore.getState().activeTeam
+        const activeTeam = session?.scenarioPolicy ? null : useTeamStore.getState().activeTeam
 
         // This is the first tool-capable TS chat slice. The whitelist is kept
         // deliberately narrow: it consists only of Main-owned read tools whose
@@ -4152,6 +4341,7 @@ export function useChatActions(): {
               {
                 includeTrailingAssistantPlaceholder: !!existingAssistantMessage,
                 expectedUserMessage: expectedUserRequestMessage,
+                ...(options?.businessTaskId ? { businessTaskId: options.businessTaskId } : {}),
                 ...(tsCompatibleChatTools ? { toolDefinitions: chatModeToolDefs } : {})
               }
             )
@@ -4160,9 +4350,13 @@ export function useChatActions(): {
             if (abortController.signal.aborted) simpleChatStatus = 'canceled'
             agentStore.setSessionStatus(sessionId, simpleChatStatus)
             useRuntimeProjectionStore.getState().finish(sessionId, simpleChatStatus)
-            sessionAbortControllers.delete(sessionId)
+            clearSessionAbortController(sessionId, abortController)
             stopAfterCurrentRequestSessions.delete(sessionId)
-            if (sessionScope === 'main' && !abortController.signal.aborted) {
+            if (
+              sessionScope === 'main' &&
+              !session?.scenarioPolicy &&
+              !abortController.signal.aborted
+            ) {
               void runMemoryAutomationForSession({
                 sessionId,
                 assistantMessageId: assistantMsgId,
@@ -4188,12 +4382,20 @@ export function useChatActions(): {
           // always have plugin tools available, regardless of the per-project "active
           // channels" toggle — otherwise the agent sees `Available channel tools: …`
           // in its user_rules but cannot actually call them. See issue #73.
-          const { activeMcps, activeMcpTools } =
-            chatMcpContext ?? resolveActiveMcpContext(session?.projectId ?? null)
+          const { activeMcps, activeMcpTools } = session?.scenarioPolicy
+            ? { activeMcps: [], activeMcpTools: {} }
+            : (chatMcpContext ?? resolveActiveMcpContext(session?.projectId ?? null))
 
           // Filter out team tools when the feature is disabled. Capture after registration changes.
-          const allToolDefs = toolRegistry.getStableDefinitions()
-          const finalToolDefs = filterTeamToolDefinitions(allToolDefs, settings.teamToolsEnabled)
+          const allToolDefs = registeredToolDefs
+          const finalToolDefs = filterTeamToolDefinitions(
+            session?.scenarioPolicy
+              ? allToolDefs.filter((definition) =>
+                  scenarioAllowsTool(session.scenarioPolicy!, definition.name)
+                )
+              : allToolDefs,
+            settings.teamToolsEnabled
+          )
           let promptCandidateToolDefs = finalToolDefs
 
           const isPlanMode = useUIStore.getState().isPlanModeEnabled(sessionId)
@@ -4212,11 +4414,13 @@ export function useChatActions(): {
             promptCandidateToolDefs = []
           }
 
-          const desktopControlMode = resolveDesktopControlMode({
-            providerConfig: baseProviderConfig,
-            modelConfig: resolvedModelConfig,
-            desktopPluginEnabled: useAppPluginStore.getState().isDesktopControlToolAvailable()
-          })
+          const desktopControlMode = session?.scenarioPolicy
+            ? 'disabled'
+            : resolveDesktopControlMode({
+                providerConfig: baseProviderConfig,
+                modelConfig: resolvedModelConfig,
+                desktopPluginEnabled: useAppPluginStore.getState().isDesktopControlToolAvailable()
+              })
 
           if (desktopControlMode === 'computer-use') {
             promptCandidateToolDefs = promptCandidateToolDefs.filter(
@@ -4284,7 +4488,9 @@ export function useChatActions(): {
             userPrompt = userPrompt ? `${userPrompt}\n${mcpSection}` : mcpSection
           }
 
-          const imagePluginConfig = useAppPluginStore.getState().getResolvedImagePluginConfig()
+          const imagePluginConfig = session?.scenarioPolicy
+            ? null
+            : useAppPluginStore.getState().getResolvedImagePluginConfig()
           if (promptAllowsToolContext && imagePluginConfig) {
             const imagePluginSection = [
               '\n## Enabled Plugins',
@@ -4695,6 +4901,12 @@ export function useChatActions(): {
               sessionId,
               useTsAgent,
               executionPath: useTsAgent ? 'ts-runtime' : 'unavailable',
+              eligibilityReason:
+                tsAgentEligibility?.eligible === false
+                  ? tsAgentEligibility.reason
+                  : useTsAgent
+                    ? null
+                    : 'RUNTIME_UNAVAILABLE',
               providerType: agentProviderConfig.type,
               toolNames: effectiveToolDefs.map((tool) => tool.name),
               isPlanMode,
@@ -4716,6 +4928,7 @@ export function useChatActions(): {
                 ? streamTsRuntimeTextTurn({
                     workspaceId: tsAgentWorkspaceId,
                     sessionId,
+                    ...(options?.businessTaskId ? { businessTaskId: options.businessTaskId } : {}),
                     assistantMessageId: assistantMsgId,
                     ...(activeTeam
                       ? {
@@ -4741,7 +4954,9 @@ export function useChatActions(): {
                       : {}),
                     ...(tsAgentExtensionIds.length ? { extensionIds: tsAgentExtensionIds } : {}),
                     toolNames: effectiveToolDefs.map((tool) => tool.name),
-                    maxTurns: DEFAULT_AGENT_MAX_ITERATIONS,
+                    ...(DEFAULT_AGENT_MAX_ITERATIONS > 0
+                      ? { maxTurns: DEFAULT_AGENT_MAX_ITERATIONS }
+                      : {}),
                     onRunIdAssigned: (runId) =>
                       useRuntimeProjectionStore.getState().begin(sessionId, runId, assistantMsgId),
                     signal: abortController.signal
@@ -5308,6 +5523,10 @@ export function useChatActions(): {
                     await resolveTsRuntimeQuestion(event, sessionId!)
                     break
                   }
+                  if (event.interaction.kind === 'browser-tool') {
+                    await resolveTsRuntimeBrowserInteraction(event.interaction, sessionId!)
+                    break
+                  }
                   // The TS scheduler persists this request before exposing it.
                   // Reuse the existing approval UI and always resolve malformed
                   // or unsupported interactions so an Execute run cannot stall.
@@ -5499,7 +5718,7 @@ export function useChatActions(): {
                         `[ChatActions] Promoted queued message detected at iteration_end, interrupting current run at the turn boundary for session ${sessionId}`
                       )
                       queueMicrotask(() => {
-                        const activeAbortController = sessionAbortControllers.get(sessionId!)
+                        const activeAbortController = getSessionAbortController(sessionId!)
                         if (activeAbortController && !activeAbortController.signal.aborted) {
                           activeAbortController.abort()
                         }
@@ -5832,6 +6051,8 @@ export function useChatActions(): {
               }).catch(() => ({ providerConfig: null, modelConfig: null }))
               const toolCalls = [...runToolCalls.values()]
               const outcome = await generateFinalOutcome({
+                sessionId: sessionId!,
+                workspaceId: session?.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
                 goal: effectiveResolvedCommand.userText || text,
                 taskProfile: session?.taskProfile,
                 loopEndReason: resolvedLoopEndReason,
@@ -5952,7 +6173,7 @@ export function useChatActions(): {
             agentStore.setSessionStatus(sessionId, terminalStatus)
             useRuntimeProjectionStore.getState().finish(sessionId, terminalStatus)
             setStreamingMessageIdWithSync(sessionId, null)
-            sessionAbortControllers.delete(sessionId)
+            clearSessionAbortController(sessionId, abortController)
             stopAfterCurrentRequestSessions.delete(sessionId)
             // Derive global isRunning from remaining running sessions
             const hasOtherRunning = Object.values(useAgentStore.getState().runningSessions).some(
@@ -5969,7 +6190,11 @@ export function useChatActions(): {
               if (!dispatchedQueuedMessage) {
                 tryDispatchPendingGoalContinuation(sessionId)
               }
-              if (sessionScope === 'main' && !abortController.signal.aborted) {
+              if (
+                sessionScope === 'main' &&
+                !session?.scenarioPolicy &&
+                !abortController.signal.aborted
+              ) {
                 void runMemoryAutomationForSession({
                   sessionId,
                   assistantMessageId: assistantMsgId,
@@ -6271,7 +6496,7 @@ export function useChatActions(): {
       if (!nextMessages || nextMessages.length === messages.length) return
 
       if (nextMessages.length === 0) {
-        chatStore.clearSessionMessages(sessionId)
+        await chatStore.clearSessionMessages(sessionId)
         return
       }
 
@@ -6305,6 +6530,7 @@ export function useChatActions(): {
 
       const config: ProviderConfig = {
         ...providerConfig,
+        sessionId,
         maxTokens: providerStore.getEffectiveMaxTokens(settings.maxTokens),
         temperature: settings.temperature,
         systemPrompt: settings.systemPrompt || undefined
@@ -6321,17 +6547,24 @@ export function useChatActions(): {
       }
 
       const preTokens = estimateManualCompressionInputTokens(messages, config)
-      const { messages: compressed, result } = await runTsContextCompression({
+      const { messages: compressed, result } = await compressMessages(
         messages,
-        provider: config,
+        config,
+        undefined,
+        0,
+        undefined,
+        undefined,
+        'manual',
         preTokens
-      })
+      )
       const summaryMessage = compressed.find(isCompactSummaryMessage)
       const summary = summaryMessage ? getCompactSummaryDisplayText(summaryMessage).trim() : ''
       if (!result.compressed || !summary) return null
 
       return {
+        sessionId,
         targetMessageId: messageId,
+        sourceSnapshot: JSON.stringify(messages),
         compressedMessages: compressed,
         messagesSummarized: result.messagesSummarized ?? 0,
         summary
@@ -6345,13 +6578,18 @@ export function useChatActions(): {
       const chatStore = useChatStore.getState()
       const agentStore = useAgentStore.getState()
       const sessionId = chatStore.activeSessionId
-      if (!sessionId || agentStore.runningSessions[sessionId]) return 'blocked'
+      if (!sessionId || sessionId !== preview.sessionId || agentStore.runningSessions[sessionId]) {
+        return 'blocked'
+      }
 
       const currentMessages = await chatStore.getFullSessionMessagesForMutation(sessionId)
       const targetIndex = currentMessages.findIndex(
         (message) => message.id === preview.targetMessageId
       )
       if (targetIndex < 0) return 'failed'
+      if (JSON.stringify(currentMessages.slice(0, targetIndex + 1)) !== preview.sourceSnapshot) {
+        return 'blocked'
+      }
 
       const nextMessageId = currentMessages[targetIndex + 1]?.id
       const merged = await mergeCompressedMessagesIntoSession({
@@ -6366,18 +6604,24 @@ export function useChatActions(): {
   )
 
   const manualCompressContext = useCallback(async (focusPrompt?: string) => {
+    const compressionToastId = 'manual-context-compression'
+    toast.dismiss(compressionToastId)
     const chatStore = useChatStore.getState()
     const agentStore = useAgentStore.getState()
     const sessionId = chatStore.activeSessionId
     if (!sessionId) {
-      toast.error('Cannot compress', { description: 'No active session' })
+      toast.error(i18n.t('context.compression.blockedTitle', { ns: 'cowork' }), {
+        id: compressionToastId,
+        description: i18n.t('context.compression.noSession', { ns: 'cowork' })
+      })
       return 'blocked'
     }
     // Limitation 1: agent must not be running
     const sessionStatus = agentStore.runningSessions[sessionId]
     if (sessionStatus === 'running' || sessionStatus === 'retrying') {
-      toast.error('Cannot compress', {
-        description: 'Agent is running, please wait for completion before manual compression'
+      toast.error(i18n.t('context.compression.blockedTitle', { ns: 'cowork' }), {
+        id: compressionToastId,
+        description: i18n.t('context.compression.agentRunning', { ns: 'cowork' })
       })
       return 'blocked'
     }
@@ -6387,8 +6631,9 @@ export function useChatActions(): {
       includeTrailingAssistantPlaceholder: false
     })
     if (messages.length === 0) {
-      toast.error('Cannot compress', {
-        description: 'No messages to compress'
+      toast.error(i18n.t('context.compression.blockedTitle', { ns: 'cowork' }), {
+        id: compressionToastId,
+        description: i18n.t('context.compression.noMessages', { ns: 'cowork' })
       })
       return 'blocked'
     }
@@ -6400,8 +6645,9 @@ export function useChatActions(): {
     if (activeProvider) {
       const ready = await ensureProviderAuthReady(activeProvider.id)
       if (!ready) {
-        toast.error('Authentication missing', {
-          description: 'Please complete provider login in settings first'
+        toast.error(i18n.t('context.compression.authMissingTitle', { ns: 'cowork' }), {
+          id: compressionToastId,
+          description: i18n.t('context.compression.providerLogin', { ns: 'cowork' })
         })
         return 'blocked'
       }
@@ -6423,6 +6669,7 @@ export function useChatActions(): {
     const config: ProviderConfig | null = providerConfig
       ? {
           ...providerConfig,
+          sessionId,
           maxTokens: effectiveMaxTokens,
           temperature: settings.temperature,
           systemPrompt: settings.systemPrompt || undefined,
@@ -6433,7 +6680,10 @@ export function useChatActions(): {
       : null
 
     if (!config) {
-      toast.error('Cannot compress', { description: 'AI provider not configured' })
+      toast.error(i18n.t('context.compression.blockedTitle', { ns: 'cowork' }), {
+        id: compressionToastId,
+        description: i18n.t('context.compression.providerMissing', { ns: 'cowork' })
+      })
       return 'blocked'
     }
 
@@ -6442,8 +6692,9 @@ export function useChatActions(): {
     if (compressSession?.providerId && compressSession?.modelId) {
       const ready = await ensureProviderAuthReady(compressSession.providerId)
       if (!ready) {
-        toast.error('Authentication missing', {
-          description: 'Please complete session provider login in settings first'
+        toast.error(i18n.t('context.compression.authMissingTitle', { ns: 'cowork' }), {
+          id: compressionToastId,
+          description: i18n.t('context.compression.sessionProviderLogin', { ns: 'cowork' })
         })
         return 'blocked'
       }
@@ -6451,21 +6702,32 @@ export function useChatActions(): {
         compressSession.providerId,
         compressSession.modelId
       )
-      if (!sessionProviderConfig) return 'blocked'
+      if (!sessionProviderConfig) {
+        toast.error(i18n.t('context.compression.blockedTitle', { ns: 'cowork' }), {
+          id: compressionToastId,
+          description: i18n.t('context.compression.sessionProviderMissing', { ns: 'cowork' })
+        })
+        return 'blocked'
+      }
       Object.assign(config, sessionProviderConfig, { sessionId })
     }
 
     try {
       const preTokens = estimateManualCompressionInputTokens(messages, config)
-      const { messages: compressed, result } = await runTsContextCompression({
+      const { messages: compressed, result } = await compressMessages(
         messages,
-        provider: config,
-        focusPrompt: focusPrompt || undefined,
+        config,
+        undefined,
+        0,
+        focusPrompt || undefined,
+        undefined,
+        'manual',
         preTokens
-      })
+      )
       if (!result.compressed) {
-        toast.warning('No compression needed', {
-          description: 'No compressible context found'
+        toast.warning(i18n.t('context.compression.skippedTitle', { ns: 'cowork' }), {
+          id: compressionToastId,
+          description: i18n.t('context.compression.noCompressible', { ns: 'cowork' })
         })
         return 'skipped'
       }
@@ -6474,14 +6736,19 @@ export function useChatActions(): {
         compressedMessages: compressed
       })
       if (!merged) {
-        toast.error('Compression failed', { description: 'Could not merge compressed context' })
+        toast.error(i18n.t('context.compression.failedTitle', { ns: 'cowork' }), {
+          id: compressionToastId,
+          description: i18n.t('context.compression.mergeFailed', { ns: 'cowork' })
+        })
         return 'failed'
       }
       return 'compressed'
     } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err)
       console.error('[Manual Compress Error]', err)
-      toast.error('Compression failed', { description: errMsg })
+      toast.error(i18n.t('context.compression.failedTitle', { ns: 'cowork' }), {
+        id: compressionToastId,
+        description: i18n.t('context.compression.unexpectedFailure', { ns: 'cowork' })
+      })
       return 'failed'
     }
   }, [])
@@ -6692,7 +6959,7 @@ export async function sendImplementPlanInNewSession(planId: string): Promise<voi
         description: error instanceof Error ? error.message : latestPlan.filePath
       }
     )
-    useChatStore.getState().deleteSession(newSessionId)
+    await useChatStore.getState().deleteSession(newSessionId)
   }
 }
 
@@ -6728,6 +6995,7 @@ async function runSimpleChat(
   config: ProviderConfig,
   signal: AbortSignal,
   options?: {
+    businessTaskId?: string
     includeTrailingAssistantPlaceholder?: boolean
     expectedUserMessage?: UnifiedMessage | null
     /** A compatibility-proven, read-only Chat tool snapshot. */
@@ -6811,6 +7079,7 @@ async function runSimpleChat(
       stream = streamTsRuntimeTextTurn({
         workspaceId,
         sessionId,
+        ...(options?.businessTaskId ? { businessTaskId: options.businessTaskId } : {}),
         assistantMessageId: assistantMsgId,
         modelSource: tsRuntimeModelSource,
         prompt: tsRuntimeEligibility.prompt,
@@ -6966,6 +7235,10 @@ async function runSimpleChat(
         case 'runtime_interaction_requested': {
           if (event.interaction.kind === 'question') {
             await resolveTsRuntimeQuestion(event, sessionId)
+            break
+          }
+          if (event.interaction.kind === 'browser-tool') {
+            await resolveTsRuntimeBrowserInteraction(event.interaction, sessionId)
             break
           }
           // The TS scheduler persists an interaction before it emits it. Reuse
@@ -7189,6 +7462,19 @@ export function triggerSendMessage(
     return
   }
   void _sendMessageFn(text, images, undefined, targetSessionId)
+}
+
+/** Start a user-selected business task in its owning session with a durable run link. */
+export function triggerBusinessTaskRun(
+  text: string,
+  sessionId: string,
+  businessTaskId: string
+): Promise<void> {
+  const sendMessage = _sendMessageFn
+  if (!sendMessage) return Promise.reject(new Error('CHAT_ACTIONS_UNAVAILABLE'))
+  return sendMessage(text, undefined, undefined, sessionId, undefined, undefined, {
+    businessTaskId
+  })
 }
 
 function mergeUsage(target: TokenUsage, incoming: TokenUsage): void {

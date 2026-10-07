@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { skipWhenSymlinkUnavailable, tryCreateTestSymlink } from './symlink-fixture'
 import {
   normalizeSshConfigDocument,
   readSshConfigDocument,
@@ -175,7 +176,7 @@ describe('TS SSH configuration reader', () => {
     expect(await readFile(path, 'utf8')).toBe(original)
   })
 
-  it('refuses corrupt or symlink targets without overwriting them', async () => {
+  it('refuses corrupt or symlink targets without overwriting them', async ({ skip }) => {
     const directory = await mkdtemp(join(tmpdir(), 'ola-ssh-config-write-'))
     directories.push(directory)
     const path = join(directory, '.ola.json')
@@ -185,7 +186,8 @@ describe('TS SSH configuration reader', () => {
     )
     expect(await readFile(path, 'utf8')).toBe('{broken')
     const linked = join(directory, 'linked.json')
-    await symlink(path, linked)
+    const isSymlink = await tryCreateTestSymlink(path, linked)
+    skipWhenSymlinkUnavailable({ skip }, isSymlink)
     expect(await readSshConfigDocument(linked)).toBeNull()
     await expect(mutateSshConfigFile(linked, (current) => current)).rejects.toThrow(
       'SSH_CONFIG_UNSAFE_FILE'

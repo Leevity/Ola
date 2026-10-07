@@ -1,14 +1,25 @@
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { basename, join, resolve, sep } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createPackage } from '@electron/asar'
 
 const roots: string[] = []
 const script = resolve(import.meta.dirname, '../../scripts/verify-legacy-artifacts.mjs')
 
 afterEach(() => {
-  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+  const tempRoot = resolve(tmpdir())
+  for (const root of roots.splice(0)) {
+    const target = resolve(root)
+    if (
+      !target.startsWith(`${tempRoot}${sep}`) ||
+      !basename(target).startsWith('ola-no-dotnet-artifacts-')
+    ) {
+      throw new Error(`Unexpected legacy scan fixture path: ${target}`)
+    }
+    rmSync(target, { recursive: true, force: true })
+  }
 })
 
 function fixture(): string {
@@ -34,4 +45,17 @@ describe('release artifact .NET gate', () => {
       expect(() => execFileSync(process.execPath, [script, root], { stdio: 'pipe' })).toThrow()
     }
   )
+
+  it('rejects a legacy Worker hidden inside app.asar', async () => {
+    const root = fixture()
+    const source = join(root, 'source')
+    const output = join(root, 'output')
+    mkdirSync(source)
+    mkdirSync(output)
+    writeFileSync(join(source, 'Ola.Native.Worker.exe'), '')
+    await createPackage(source, join(output, 'app.asar'))
+    expect(() => execFileSync(process.execPath, [script, output], { stdio: 'pipe' })).toThrow(
+      /legacy runtime artifact/
+    )
+  })
 })

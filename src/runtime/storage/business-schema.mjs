@@ -1,4 +1,4 @@
-export const LATEST_BUSINESS_SCHEMA_VERSION = 3
+export const LATEST_BUSINESS_SCHEMA_VERSION = 12
 
 const REQUIRED_COLUMNS = {
   sessions: [
@@ -20,6 +20,9 @@ const REQUIRED_COLUMNS = {
     'model_id',
     'model_selection_mode',
     'model_source',
+    'task_profile',
+    'task_profile_locked',
+    'scenario_policy',
     'workspace_id'
   ],
   messages: ['id', 'session_id', 'role', 'content', 'meta', 'created_at', 'usage', 'sort_order'],
@@ -120,7 +123,8 @@ const REQUIRED_COLUMNS = {
     'model_source_snapshot',
     'working_folder_snapshot',
     'delivery_mode_snapshot',
-    'delivery_target_snapshot'
+    'delivery_target_snapshot',
+    'run_kind'
   ],
   cron_run_messages: [
     'id',
@@ -558,6 +562,7 @@ function freshColumnType(column) {
     column === 'seq' ||
     column === 'enabled' ||
     column === 'pinned' ||
+    column === 'task_profile_locked' ||
     column === 'is_generating' ||
     column === 'is_error' ||
     column === 'deleted_at' ||
@@ -571,10 +576,17 @@ function freshColumnType(column) {
 function createFreshBusinessTables(db) {
   for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
     const key = FRESH_PRIMARY_KEYS[table]
-    const definitions = columns.map(
-      (column) =>
-        `${column} ${freshColumnType(column)}${column === 'workspace_id' ? " DEFAULT 'local-personal'" : ''}`
-    )
+    const definitions = columns.map((column) => {
+      const defaultClause =
+        column === 'workspace_id'
+          ? " DEFAULT 'local-personal'"
+          : column === 'run_kind'
+            ? " NOT NULL DEFAULT 'scheduled'"
+            : column === 'task_profile_locked'
+              ? ' NOT NULL DEFAULT 0'
+              : ''
+      return `${column} ${freshColumnType(column)}${defaultClause}`
+    })
     if (key) definitions.push(`PRIMARY KEY (${key.join(',')})`)
     db.exec(`CREATE TABLE IF NOT EXISTS ${table} (${definitions.join(',')})`)
   }
@@ -597,6 +609,38 @@ function createFreshBusinessTables(db) {
     const key = auxiliaryKeys[table]
     if (key) definitions.push(`PRIMARY KEY (${key.join(',')})`)
     db.exec(`CREATE TABLE IF NOT EXISTS ${table} (${definitions.join(',')})`)
+  }
+}
+
+/**
+ * A legacy Native database may already hold a business table that predates a
+ * column the TS contract requires (e.g. `workspace_id` or `model_source`).
+ * `CREATE TABLE IF NOT EXISTS` never alters an existing table, so additive
+ * migrations must backfill these columns on a real user DB before the schema
+ * is verified. Types and defaults mirror `createFreshBusinessTables` so a
+ * migrated legacy row and a freshly created row share the same shape: legacy
+ * rows are claimed by the local-personal workspace by default.
+ */
+function addMissingLegacyColumns(db) {
+  for (const [table, required] of Object.entries(REQUIRED_COLUMNS)) {
+    const existing = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name=?")
+      .get(table)
+    if (!existing) continue
+    const columns = columnsForTable(db, table)
+    for (const column of required) {
+      if (columns.has(column)) continue
+      const type = freshColumnType(column)
+      const defaultClause =
+        column === 'workspace_id'
+          ? " DEFAULT 'local-personal'"
+          : column === 'run_kind'
+            ? " DEFAULT 'scheduled'"
+            : column === 'task_profile_locked'
+              ? ' NOT NULL DEFAULT 0'
+              : ''
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}${defaultClause}`)
+    }
   }
 }
 
@@ -662,6 +706,7 @@ function normalizeNativeProjectWikiTables(db) {
 export function migrateBusinessSchema(db, options = {}) {
   if (options.direct) createFreshBusinessTables(db)
   normalizeNativeProjectWikiTables(db)
+  addMissingLegacyColumns(db)
   verifyLegacyBusinessTables(db)
   db.exec('BEGIN IMMEDIATE')
   try {
@@ -754,6 +799,142 @@ export function migrateBusinessSchema(db, options = {}) {
         db.prepare(
           'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
         ).run(version, Date.now(), 'workspace ownership for project wiki tables')
+      } else if (version === 4) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS ola_pending_session_queues (
+            session_id TEXT PRIMARY KEY NOT NULL,
+            workspace_id TEXT NOT NULL,
+            messages_json TEXT NOT NULL,
+            updated_at INTEGER NOT NULL
+          );
+          CREATE INDEX IF NOT EXISTS idx_ola_pending_session_queues_workspace
+            ON ola_pending_session_queues(workspace_id, updated_at DESC);
+        `)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'persisted per-session pending user message queues')
+      } else if (version === 5) {
+        db.exec(`CREATE INDEX IF NOT EXISTS idx_cron_runs_started_id
+          ON cron_runs(started_at DESC, id DESC);`)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'stable cron run history pagination')
+      } else if (version === 6) {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS cron_run_deliveries (
+            id TEXT PRIMARY KEY NOT NULL,
+            run_id TEXT NOT NULL REFERENCES cron_runs(id) ON DELETE CASCADE,
+            tool_call_id TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('desktop', 'channel')),
+            status TEXT NOT NULL CHECK(status IN ('pending', 'sent', 'failed', 'unknown')),
+            started_at INTEGER NOT NULL,
+            finished_at INTEGER,
+            error_code TEXT,
+            UNIQUE(run_id, tool_call_id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_cron_run_deliveries_run
+            ON cron_run_deliveries(run_id, started_at, id);
+        `)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'persisted Cron delivery attempts independent of execution')
+      } else if (version === 7) {
+        const columns = new Set(
+          db
+            .prepare('PRAGMA table_info(cron_run_deliveries)')
+            .all()
+            .map((row) => row.name)
+        )
+        if (!columns.has('retry_of_id'))
+          db.exec('ALTER TABLE cron_run_deliveries ADD COLUMN retry_of_id TEXT')
+        if (!columns.has('attempt_number'))
+          db.exec(
+            'ALTER TABLE cron_run_deliveries ADD COLUMN attempt_number INTEGER NOT NULL DEFAULT 1'
+          )
+        if (!columns.has('plugin_id'))
+          db.exec('ALTER TABLE cron_run_deliveries ADD COLUMN plugin_id TEXT')
+        if (!columns.has('chat_id'))
+          db.exec('ALTER TABLE cron_run_deliveries ADD COLUMN chat_id TEXT')
+        db.exec(`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_cron_run_deliveries_retry_parent
+            ON cron_run_deliveries(retry_of_id) WHERE retry_of_id IS NOT NULL;
+        `)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'idempotent Cron delivery-only retries')
+      } else if (version === 8) {
+        const columns = new Set(
+          db
+            .prepare('PRAGMA table_info(cron_runs)')
+            .all()
+            .map((row) => row.name)
+        )
+        if (!columns.has('run_kind'))
+          db.exec("ALTER TABLE cron_runs ADD COLUMN run_kind TEXT NOT NULL DEFAULT 'scheduled'")
+        db.exec("UPDATE cron_runs SET run_kind='scheduled' WHERE run_kind IS NULL")
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'distinguish scheduled, manual, and trial Cron runs')
+      } else if (version === 9) {
+        const columns = new Set(
+          db
+            .prepare('PRAGMA table_info(desktop_flows)')
+            .all()
+            .map((row) => row.name)
+        )
+        if (!columns.has('workspace_id'))
+          db.exec("ALTER TABLE desktop_flows ADD COLUMN workspace_id TEXT DEFAULT 'local-personal'")
+        db.exec(`
+          UPDATE desktop_flows
+          SET workspace_id='local-personal'
+          WHERE workspace_id IS NULL OR workspace_id='';
+          CREATE INDEX IF NOT EXISTS idx_desktop_flows_workspace
+            ON desktop_flows(workspace_id, updated_at DESC);
+        `)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'workspace ownership for desktop automation flows')
+      } else if (version === 10) {
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'persist task profile selection and lock state on sessions')
+      } else if (version === 11) {
+        db.exec(`
+          CREATE TABLE cron_run_deliveries_v11 (
+            id TEXT PRIMARY KEY NOT NULL,
+            run_id TEXT NOT NULL REFERENCES cron_runs(id) ON DELETE CASCADE,
+            tool_call_id TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('desktop', 'channel', 'session')),
+            status TEXT NOT NULL CHECK(status IN ('pending', 'sent', 'failed', 'unknown')),
+            started_at INTEGER NOT NULL,
+            finished_at INTEGER,
+            error_code TEXT,
+            retry_of_id TEXT,
+            attempt_number INTEGER NOT NULL DEFAULT 1,
+            plugin_id TEXT,
+            chat_id TEXT,
+            UNIQUE(run_id, tool_call_id)
+          );
+          INSERT INTO cron_run_deliveries_v11
+            (id,run_id,tool_call_id,kind,status,started_at,finished_at,error_code,
+             retry_of_id,attempt_number,plugin_id,chat_id)
+          SELECT id,run_id,tool_call_id,kind,status,started_at,finished_at,error_code,
+                 retry_of_id,attempt_number,plugin_id,chat_id
+          FROM cron_run_deliveries;
+          DROP TABLE cron_run_deliveries;
+          ALTER TABLE cron_run_deliveries_v11 RENAME TO cron_run_deliveries;
+          CREATE INDEX idx_cron_run_deliveries_run
+            ON cron_run_deliveries(run_id, started_at, id);
+          CREATE UNIQUE INDEX idx_cron_run_deliveries_retry_parent
+            ON cron_run_deliveries(retry_of_id) WHERE retry_of_id IS NOT NULL;
+        `)
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'durable session delivery for Cron runs')
+      } else if (version === 12) {
+        db.prepare(
+          'INSERT INTO ola_ts_schema_migrations(version, applied_at, description) VALUES(?,?,?)'
+        ).run(version, Date.now(), 'persist immutable read-only scenario policy on sessions')
       }
     }
     db.exec('COMMIT')

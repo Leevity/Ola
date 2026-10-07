@@ -1,11 +1,14 @@
 import { nanoid } from 'nanoid'
 import { desktopRuntime } from '../runtime/desktop-runtime'
 import { sendCronWorkspaceEvent } from './cron-workspace-events'
+import { deliverCronSessionResult } from './cron-session-delivery'
+import { classifyCronDeliveryResult } from './cron-delivery-tracking'
 import {
   appendCronRunLog,
   createCronRun,
   getCronJob,
   getCronRun,
+  recordCronDelivery,
   replaceCronRunMessages,
   updateCronRun,
   type CronRunLogType,
@@ -88,16 +91,24 @@ function setProgress(
 }
 
 function cronPrompt(options: CronAgentRunOptions, definition: AgentDefinition): string {
+  if (options.trialRun) {
+    return `${definition.systemPrompt}\n\nYou are performing a Cron trial run for task (ID: ${options.jobId}).\n\n## Trial Run Rules\nDo not change files, run commands, connect to external services, or send messages or notifications. Inspect only the explicitly selected workspace using read-only tools. Explain what you could verify, what would be changed or executed during a real run, and any missing requirements. Do not claim that the scheduled task was completed.\n\n## Task Preview\n${options.prompt}\n\nReturn a concise preview in the language of the task. This is a trial run; do not deliver the result externally.`
+  }
   const channelInfo = options.deliveryTarget ? `\nTarget session: ${options.deliveryTarget}` : ''
   const channelDelivery =
-    options.pluginId && options.pluginChatId
+    options.deliveryMode !== 'session' &&
+    options.deliveryMode !== 'none' &&
+    options.pluginId &&
+    options.pluginChatId
       ? `When finished, call PluginSendMessage exactly once with plugin_id="${options.pluginId}" and chat_id="${options.pluginChatId}". Send only the concise result summary, then stop.`
       : null
   const delivery = channelDelivery
     ? channelDelivery
-    : options.deliveryMode === 'none'
-      ? 'Do not send a desktop notification. Give the final result in your response.'
-      : 'When finished, call Notify exactly once with a concise, friendly desktop result summary.'
+    : options.deliveryMode === 'session'
+      ? 'Give the final result in your response. The application will save it to the target session; do not call Notify.'
+      : options.deliveryMode === 'none'
+        ? 'Do not send a desktop notification. Give the final result in your response.'
+        : 'When finished, call Notify exactly once with a concise, friendly desktop result summary.'
   return `${definition.systemPrompt}\n\nYou are a scheduled task assistant running cron job (ID: ${options.jobId}).${channelInfo}\n\n## Your Task\n${options.prompt}\n\n## Delivery Instructions\n${delivery}\n\nMatch the language of the task prompt in your delivery message (Chinese task → Chinese reply, English task → English reply). Be concise and friendly.\n\nBegin working on this task now.`
 }
 
@@ -113,12 +124,18 @@ const TS_CRON_WORKSPACE_TOOL_NAMES = new Set([
 
 function toolNames(options: CronAgentRunOptions, definition: AgentDefinition): string[] {
   const allowed = new Set(definition.allowedTools)
+  if (options.trialRun) {
+    return ['Read', 'LS', 'Glob', 'Grep'].filter((name) => allowed.has(name))
+  }
   const names =
-    options.pluginId && options.pluginChatId
+    options.deliveryMode !== 'session' &&
+    options.deliveryMode !== 'none' &&
+    options.pluginId &&
+    options.pluginChatId
       ? allowed.has('PluginSendMessage')
         ? ['PluginSendMessage']
         : []
-      : options.deliveryMode === 'none'
+      : options.deliveryMode === 'none' || options.deliveryMode === 'session'
         ? []
         : allowed.has('Notify')
           ? ['Notify']
@@ -181,7 +198,11 @@ export function createTsCronRunSpec(
     environmentId: 'local',
     ...(options.workingFolder ? { workingDirectory: options.workingFolder } : {}),
     ...(options.sshConnectionId ? { sshConnectionId: options.sshConnectionId } : {}),
-    ...(options.pluginId && options.pluginChatId
+    ...(!options.trialRun &&
+    options.deliveryMode !== 'session' &&
+    options.deliveryMode !== 'none' &&
+    options.pluginId &&
+    options.pluginChatId
       ? { channelContext: { pluginId: options.pluginId, chatId: options.pluginChatId } }
       : {}),
     toolNames: toolNames(options, definition),
@@ -218,7 +239,8 @@ function toRunPayload(run: NonNullable<Awaited<ReturnType<typeof getCronRun>>>) 
     modelSourceSnapshot: run.model_source_snapshot,
     workingFolderSnapshot: run.working_folder_snapshot,
     deliveryModeSnapshot: run.delivery_mode_snapshot,
-    deliveryTargetSnapshot: run.delivery_target_snapshot
+    deliveryTargetSnapshot: run.delivery_target_snapshot,
+    deliveryStatus: run.delivery_status ?? null
   }
 }
 
@@ -231,6 +253,18 @@ async function emitFinished(
   error?: string
 ): Promise<void> {
   const workspaceId = resolveWorkspaceId(options)
+  if (!options.trialRun && options.deliveryMode === 'session') {
+    try {
+      await deliverCronSessionResult({
+        runId,
+        workspaceId,
+        targetSessionId: options.deliveryTarget || options.sessionId || null,
+        content: outputSummary || error || 'Scheduled task finished without output.'
+      })
+    } catch (deliveryError) {
+      console.error('[CronDelivery] Failed to persist session delivery:', deliveryError)
+    }
+  }
   const [run, job] = await Promise.all([
     getCronRun(runId, workspaceId),
     getCronJob(options.jobId, workspaceId)
@@ -284,6 +318,16 @@ async function projectEvent(
     if (typeof data.text === 'string') state.output += data.text
   } else if (event.type === 'tool.generated') {
     const name = typeof data.name === 'string' ? data.name : 'tool'
+    if ((name === 'Notify' || name === 'PluginSendMessage') && typeof data.id === 'string') {
+      await recordCronDelivery({
+        runId,
+        workspaceId: resolveWorkspaceId(options),
+        toolCallId: data.id,
+        kind: name === 'Notify' ? 'desktop' : 'channel',
+        status: 'pending',
+        startedAt: event.timestamp
+      }).catch((error) => console.error('[CronDelivery] Failed to record pending delivery', error))
+    }
     await appendLog(options, runId, 'tool_call', `${name}(${eventText(data.input)})`)
     setProgress(options, runId, startedAt, {
       iteration: state.iteration,
@@ -293,6 +337,25 @@ async function projectEvent(
   } else if (event.type === 'tool.result') {
     state.toolCalls += 1
     const name = typeof data.name === 'string' ? data.name : 'tool'
+    if ((name === 'Notify' || name === 'PluginSendMessage') && typeof data.id === 'string') {
+      const output = eventObject(data.output)
+      const deliveryStatus = data.isError === true ? 'unknown' : classifyCronDeliveryResult(output)
+      await recordCronDelivery({
+        runId,
+        workspaceId: resolveWorkspaceId(options),
+        toolCallId: data.id,
+        kind: name === 'Notify' ? 'desktop' : 'channel',
+        status: deliveryStatus,
+        startedAt: event.timestamp,
+        finishedAt: event.timestamp,
+        errorCode:
+          deliveryStatus === 'failed'
+            ? 'TOOL_DELIVERY_FAILED'
+            : data.isError === true
+              ? 'TOOL_RESULT_AMBIGUOUS'
+              : null
+      }).catch((error) => console.error('[CronDelivery] Failed to record delivery result', error))
+    }
     await appendLog(
       options,
       runId,
@@ -324,6 +387,8 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
     options.deliveryMode === 'session' || options.deliveryMode === 'none'
       ? options.deliveryMode
       : 'desktop'
+  const runKind = options.runKind ?? (options.trialRun ? 'trial' : 'scheduled')
+  const scheduledFor = runKind === 'scheduled' ? (options.firedAt ?? null) : null
   const writer = businessWriteCanary()
   if (writer) {
     const started = await writer.startCronRun({
@@ -331,7 +396,7 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
       jobId: options.jobId,
       workspaceId,
       startedAt,
-      scheduledFor: options.firedAt ?? null,
+      scheduledFor,
       jobNameSnapshot: options.name ?? null,
       promptSnapshot: options.prompt,
       sourceSessionIdSnapshot: options.sessionId ?? null,
@@ -339,6 +404,7 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
       modelSourceSnapshot: JSON.stringify(options.modelSource),
       workingFolderSnapshot: options.workingFolder ?? null,
       deliveryModeSnapshot: deliveryMode,
+      runKind,
       deliveryTargetSnapshot: options.deliveryTarget ?? null,
       firedAt: options.firedAt ?? startedAt
     })
@@ -349,7 +415,7 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
       jobId: options.jobId,
       workspaceId,
       startedAt,
-      scheduledFor: options.firedAt ?? null,
+      scheduledFor,
       jobNameSnapshot: options.name ?? null,
       promptSnapshot: options.prompt,
       sourceSessionIdSnapshot: options.sessionId ?? null,
@@ -357,6 +423,7 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
       modelSourceSnapshot: JSON.stringify(options.modelSource),
       workingFolderSnapshot: options.workingFolder ?? null,
       deliveryModeSnapshot: deliveryMode,
+      runKind,
       deliveryTargetSnapshot: options.deliveryTarget ?? null
     })
   }

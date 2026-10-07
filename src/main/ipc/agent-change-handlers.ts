@@ -17,6 +17,7 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 
 export type RunChangeStatus = 'open' | 'reverted'
 export type FileChangeStatus = 'open' | 'reverted'
@@ -106,7 +107,8 @@ function registerAgentChangeMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args))
   })

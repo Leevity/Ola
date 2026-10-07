@@ -1,5 +1,6 @@
 import { ipcMain, dialog, BrowserWindow, app, type IpcMainInvokeEvent } from 'electron'
 import { randomUUID } from 'crypto'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath, pathToFileURL } from 'url'
@@ -577,7 +578,8 @@ function isTrustedFilesystemIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 

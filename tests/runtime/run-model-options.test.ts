@@ -16,6 +16,20 @@ const spec = {
 }
 
 describe('public run model options', () => {
+  it('accepts multiline system prompts while rejecting non-text control characters', () => {
+    expect(
+      parseRunSpec({
+        ...spec,
+        modelOptions: {
+          systemPrompt: 'Be precise.\nUse the provided context.\tKeep the answer concise.'
+        }
+      }).modelOptions?.systemPrompt
+    ).toBe('Be precise.\nUse the provided context.\tKeep the answer concise.')
+    expect(() =>
+      parseRunSpec({ ...spec, modelOptions: { systemPrompt: 'Invalid\u0000prompt' } })
+    ).toThrow('INVALID_RUN')
+  })
+
   it('accepts bounded public execution parameters', () => {
     expect(
       parseRunSpec({
@@ -78,6 +92,13 @@ describe('public run model options', () => {
       'assistant-1'
     )
     expect(() => parseRunSpec({ ...spec, assistantMessageId: '' })).toThrow('INVALID_RUN')
+    expect(parseRunSpec({ ...spec, businessTaskId: 'business-task-1' }).businessTaskId).toBe(
+      'business-task-1'
+    )
+    expect(() => parseRunSpec({ ...spec, businessTaskId: '' })).toThrow('INVALID_RUN')
+    expect(() => parseRunSpec({ ...spec, businessTaskTitle: 'orphan title' })).toThrow(
+      'INVALID_RUN'
+    )
   })
 
   it('accepts bounded image content but rejects unsafe or oversized images', () => {

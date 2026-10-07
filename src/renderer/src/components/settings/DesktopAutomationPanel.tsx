@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import { MousePointer2, Play, Save, Square, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import {
-  SETTINGS_PANEL_CLASS,
   SettingsEmptyState,
-  SettingsField,
   SettingsInfoNotice,
   SettingsPageHeader,
   SettingsSafetyNotice,
@@ -22,7 +21,7 @@ import type {
 } from '../../../../shared/desktop-flow'
 
 export function DesktopAutomationPanel(): React.JSX.Element {
-  const { t } = useTranslation('settings')
+  const { t, i18n } = useTranslation('settings')
   const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const [name, setName] = useState(() => t('desktopAutomation.defaultFlowName'))
   const [status, setStatus] = useState<DesktopFlowRecordingStatus | null>(null)
@@ -31,9 +30,15 @@ export function DesktopAutomationPanel(): React.JSX.Element {
   const [runs, setRuns] = useState<DesktopFlowRun[]>([])
   const [replaying, setReplaying] = useState(false)
   const [lastReplay, setLastReplay] = useState<DesktopFlowReplayResult | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
+    setLoadError(null)
     try {
+      const availability = (await ipcClient.invoke('desktop-flow:sync', { workspaceId })) as {
+        available: boolean
+      }
+      if (!availability.available) throw new Error('DESKTOP_FLOW_WORKSPACE_UNAVAILABLE')
       const nextStatus = (await ipcClient.invoke('desktop-recorder:status', {
         workspaceId
       })) as DesktopFlowRecordingStatus
@@ -52,62 +57,50 @@ export function DesktopAutomationPanel(): React.JSX.Element {
       setFlows(nextFlows)
       setRuns(nextRuns)
     } catch (error) {
-      // A local workspace may be unavailable while the account directory is
-      // offline or during a guarded workspace transition. Keep the page
-      // usable without leaking an unhandled rejection into the renderer.
-      if (!String(error).includes('DESKTOP_FLOW_WORKSPACE_UNAVAILABLE')) throw error
+      if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
       setStatus(null)
       setCurrent(null)
       setFlows([])
       setRuns([])
+      setLoadError(
+        String(error).includes('DESKTOP_FLOW_WORKSPACE_UNAVAILABLE')
+          ? 'desktopAutomation.errors.workspaceUnavailable'
+          : 'desktopAutomation.errors.loadFailed'
+      )
     }
   }, [workspaceId])
 
   useEffect(() => {
-    let cancelled = false
     setStatus(null)
     setCurrent(null)
     setFlows([])
     setRuns([])
     setLastReplay(null)
-    void refresh().catch(() => {})
-    void (async () => {
-      try {
-        for (let round = 0; round < 10; round++) {
-          if (cancelled || useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
-          const sync = (await ipcClient.invoke('desktop-flow:sync', { workspaceId })) as {
-            available: boolean
-            savedFlows: number
-            deletedFlows: number
-            savedRuns: number
-            failed: number
-          }
-          const attempted = sync.savedFlows + sync.deletedFlows + sync.savedRuns + sync.failed
-          if (!sync.available || attempted < 20) break
-        }
-        if (!cancelled && useWorkspaceStore.getState().activeWorkspaceId === workspaceId)
-          await refresh()
-      } catch {
-        // Refresh failures are surfaced by the next explicit refresh; there is
-        // no second persistence store to fall back to.
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
+    void refresh()
+    // The TS repository owns desktop flows. The sync endpoint only checks
+    // workspace availability; refreshing it again would not import data.
   }, [refresh, workspaceId])
 
   async function start(): Promise<void> {
-    await ipcClient.invoke('desktop-recorder:start', { name, workspaceId })
-    await refresh()
+    try {
+      await ipcClient.invoke('desktop-recorder:start', { name, workspaceId })
+      await refresh()
+    } catch {
+      toast.error(t('desktopAutomation.errors.startFailed'))
+    }
   }
 
   async function stopAndSave(): Promise<void> {
-    const flow = (await ipcClient.invoke('desktop-recorder:stop', {
-      workspaceId
-    })) as DesktopFlow | null
-    if (flow) await ipcClient.invoke('desktop-flow:save', flow)
-    await refresh()
+    try {
+      const flow = (await ipcClient.invoke('desktop-recorder:stop', {
+        workspaceId
+      })) as DesktopFlow | null
+      if (!flow) throw new Error('DESKTOP_FLOW_RECORDING_UNAVAILABLE')
+      await refresh()
+    } catch {
+      toast.error(t('desktopAutomation.errors.stopFailed'))
+      await refresh()
+    }
   }
 
   async function replay(flow: DesktopFlow): Promise<void> {
@@ -117,9 +110,13 @@ export function DesktopAutomationPanel(): React.JSX.Element {
         (await ipcClient.invoke('desktop-flow:replay', {
           flow,
           workspaceId,
+          locale: i18n.resolvedLanguage ?? i18n.language,
           verifyScreenshots: true
         })) as DesktopFlowReplayResult
       )
+      await refresh()
+    } catch {
+      toast.error(t('desktopAutomation.errors.replayFailed'))
       await refresh()
     } finally {
       setReplaying(false)
@@ -127,28 +124,36 @@ export function DesktopAutomationPanel(): React.JSX.Element {
   }
 
   return (
-    <div className={SETTINGS_PANEL_CLASS}>
+    <div className="w-full space-y-3">
       <SettingsPageHeader
         icon={MousePointer2}
         title={t('desktopAutomation.title')}
         description={t('desktopAutomation.subtitle')}
       />
       <SettingsSafetyNotice>{t('desktopAutomation.safetyNotice')}</SettingsSafetyNotice>
-      <SettingsSectionCard
-        title={t('desktopAutomation.recording.title')}
-        description={t('desktopAutomation.recording.description')}
-      >
-        <div className="space-y-4">
-          <SettingsField
-            label={t('desktopAutomation.flowName')}
-            description={t('desktopAutomation.flowNameDescription')}
-          >
+      <SettingsSectionCard title={t('desktopAutomation.recording.title')}>
+        <div className="space-y-3">
+          <div className="space-y-2">
+            <label
+              htmlFor="desktop-flow-name"
+              className="block text-sm font-medium text-foreground/90"
+            >
+              {t('desktopAutomation.flowName')}
+            </label>
+            <p
+              id="desktop-flow-name-description"
+              className="text-[0.8125rem] text-muted-foreground"
+            >
+              {t('desktopAutomation.flowNameDescription')}
+            </p>
             <Input
-              className="w-72"
+              id="desktop-flow-name"
+              aria-describedby="desktop-flow-name-description"
+              className="w-full max-w-sm"
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
-          </SettingsField>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button disabled={Boolean(status?.recording)} onClick={() => void start()}>
               <Play className="mr-2 size-4" />
@@ -175,6 +180,17 @@ export function DesktopAutomationPanel(): React.JSX.Element {
           ) : null}
         </div>
       </SettingsSectionCard>
+      {loadError ? (
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-destructive/40 p-3 text-sm"
+        >
+          <span className="min-w-0 flex-1">{t(loadError)}</span>
+          <Button size="sm" variant="outline" onClick={() => void refresh()}>
+            {t('desktopAutomation.errors.retry')}
+          </Button>
+        </div>
+      ) : null}
       {lastReplay ? (
         <SettingsInfoNotice>
           {lastReplay.success
@@ -195,7 +211,12 @@ export function DesktopAutomationPanel(): React.JSX.Element {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => void ipcClient.invoke('desktop-flow:save', current).then(refresh)}
+                onClick={() => {
+                  void ipcClient
+                    .invoke('desktop-flow:save', current)
+                    .then(refresh)
+                    .catch(() => toast.error(t('desktopAutomation.errors.saveFailed')))
+                }}
               >
                 <Save className="mr-2 size-4" />
                 {t('desktopAutomation.saveCurrent')}
@@ -214,7 +235,15 @@ export function DesktopAutomationPanel(): React.JSX.Element {
           {replaying ? (
             <Button
               variant="destructive"
-              onClick={() => void ipcClient.invoke('desktop-flow:cancel', { workspaceId })}
+              onClick={() => {
+                void ipcClient
+                  .invoke('desktop-flow:cancel', { workspaceId })
+                  .then((result) => {
+                    if (!(result as { success?: boolean })?.success)
+                      toast.error(t('desktopAutomation.errors.cancelFailed'))
+                  })
+                  .catch(() => toast.error(t('desktopAutomation.errors.cancelFailed')))
+              }}
             >
               <X className="mr-2 size-4" />
               {t('desktopAutomation.cancelReplay')}
@@ -248,9 +277,15 @@ export function DesktopAutomationPanel(): React.JSX.Element {
                 size="icon"
                 variant="ghost"
                 aria-label={t('desktopAutomation.delete', { name: flow.name })}
-                onClick={async () => {
-                  await ipcClient.invoke('desktop-flow:delete', { id: flow.id, workspaceId })
-                  await refresh()
+                onClick={() => {
+                  void ipcClient
+                    .invoke('desktop-flow:delete', { id: flow.id, workspaceId })
+                    .then(async (result) => {
+                      if (!(result as { success?: boolean })?.success)
+                        throw new Error('DESKTOP_FLOW_DELETE_FAILED')
+                      await refresh()
+                    })
+                    .catch(() => toast.error(t('desktopAutomation.errors.deleteFailed')))
                 }}
               >
                 <Trash2 className="size-4" />

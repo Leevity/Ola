@@ -1,8 +1,9 @@
 import * as React from 'react'
-import { BookOpen, LayoutDashboard, Network } from 'lucide-react'
+import { BookOpen, LayoutDashboard, Network, Package } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { CodeGraphDashboard } from '@renderer/components/settings/CodeGraphDashboard'
 import { ProjectWikiPanel } from '@renderer/components/settings/ProjectWikiPanel'
+import { ExecutionResultsPage } from '@renderer/components/tasks/ExecutionResultsPage'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useUIStore } from '@renderer/stores/ui-store'
 import { cn } from '@renderer/lib/utils'
@@ -16,7 +17,9 @@ export function WorkspaceHome(): React.JSX.Element {
   const projectRoot = useChatStore(
     (state) => state.projects.find((project) => project.id === activeProjectId)?.workingFolder
   )
-  const [activeTab, setActiveTab] = React.useState<'overview' | 'wiki' | 'codegraph'>('overview')
+  const [activeTab, setActiveTab] = React.useState<'overview' | 'wiki' | 'codegraph' | 'results'>(
+    'overview'
+  )
 
   React.useEffect(() => {
     setActiveTab('overview')
@@ -31,7 +34,8 @@ export function WorkspaceHome(): React.JSX.Element {
       icon: LayoutDashboard
     },
     { id: 'wiki' as const, label: t('workspaceHome.wiki'), icon: BookOpen },
-    { id: 'codegraph' as const, label: t('workspaceHome.codegraph'), icon: Network }
+    { id: 'codegraph' as const, label: t('workspaceHome.codegraph'), icon: Network },
+    { id: 'results' as const, label: t('workspaceHome.results'), icon: Package }
   ]
 
   return (
@@ -65,6 +69,11 @@ export function WorkspaceHome(): React.JSX.Element {
 
       {activeTab === 'overview' ? (
         <ChatHomePage />
+      ) : activeTab === 'results' && activeProjectId ? (
+        <ExecutionResultsPage
+          scopeProjectId={activeProjectId}
+          onBack={() => setActiveTab('overview')}
+        />
       ) : (
         <section
           className="min-h-0 flex-1 overflow-y-auto px-6 py-6"

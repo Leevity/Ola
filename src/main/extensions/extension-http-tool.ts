@@ -27,6 +27,37 @@ function nestedValue(value: unknown, dottedPath: string): unknown {
   return current
 }
 
+function pointerValue(value: unknown, pointer: string): unknown {
+  let current = value
+  for (const rawSegment of pointer.slice(1).split('/')) {
+    const segment = rawSegment.replace(/~1/g, '/').replace(/~0/g, '~')
+    if (!current || typeof current !== 'object' || !Object.hasOwn(current, segment))
+      return undefined
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return current
+}
+
+function extensionLinkArtifact(
+  body: unknown,
+  declaration: ExtensionToolDefinition['artifact']
+): Array<{ kind: 'link'; url: string; title: string }> {
+  if (!declaration) return []
+  const candidate = pointerValue(body, declaration.urlPointer)
+  if (typeof candidate !== 'string' || candidate.length > 4096) return []
+  let url: URL
+  try {
+    url = new URL(candidate)
+  } catch {
+    return []
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return []
+  const label = declaration.titlePointer ? pointerValue(body, declaration.titlePointer) : undefined
+  const title =
+    typeof label === 'string' && label.trim() ? label.trim().slice(0, 256) : url.hostname
+  return [{ kind: 'link', url: url.toString(), title }]
+}
+
 function replacement(value: unknown): string {
   if (value === undefined || value === null) return ''
   return typeof value === 'string' ? value : JSON.stringify(value)
@@ -222,6 +253,7 @@ export async function executeExtensionHttpTool(args: {
   }
   if (!response) throw new Error('Extension fetch failed')
   const data = responseResult(response, await readResponseText(response))
+  const responseBody = data.json ?? data.text
   return {
     __olaExtensionResult: true,
     extensionId: args.manifest.id,
@@ -234,7 +266,8 @@ export async function executeExtensionHttpTool(args: {
       status: data.status,
       statusText: data.statusText,
       headers: data.headers,
-      body: data.json ?? data.text
-    }
+      body: responseBody
+    },
+    artifacts: data.ok ? extensionLinkArtifact(responseBody, tool.artifact) : []
   }
 }

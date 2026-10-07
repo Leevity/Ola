@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { BrowserWindow, IpcMainInvokeEvent } from 'electron'
 import { decodeMessagePackPayload } from '../../src/shared/messagepack/binary-ipc'
+import { registerTrustedRendererUrl } from '../../src/main/renderer-security'
 
 const state = vi.hoisted(() => ({
   windows: [] as unknown[],
@@ -35,16 +36,28 @@ function fakeWindow(focused = false): {
     isFocused: () => focused,
     on: (event: string, listener: () => void) => listeners.set(event, listener),
     webContents: {
-      mainFrame: {},
+      mainFrame: { url: 'file:///ola/index.html' },
+      getURL: () => 'file:///ola/index.html',
       isDestroyed: () => false,
       isCrashed: () => false,
       on: (event: string, listener: () => void) => listeners.set(event, listener),
+      setWindowOpenHandler: () => undefined,
       postMessage: (channel: string, bytes: ArrayBuffer) => {
         received.push({ channel, payload: decodeMessagePackPayload(new Uint8Array(bytes)) })
       }
     }
   } as unknown as BrowserWindow
-  return { window, received, reload: () => listeners.get('did-start-loading')?.() }
+  registerTrustedRendererUrl(window, 'file:///ola/index.html')
+  return {
+    window,
+    received,
+    reload: () =>
+      (
+        listeners.get('did-start-navigation') as
+          | ((_event: unknown, url: string, isInPlace: boolean, isMainFrame: boolean) => void)
+          | undefined
+      )?.(null, 'file:///ola/index.html', false, true)
+  }
 }
 
 describe('Main window workspace routing', () => {

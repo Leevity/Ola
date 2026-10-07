@@ -50,7 +50,10 @@ const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
   ...TS_RUNTIME_READ_ONLY_TOOL_NAMES,
   'Write',
   'Edit',
+  'NotebookEdit',
   'Bash',
+  'PowerShell',
+  'Monitor',
   'Notify',
   'TaskList',
   'TaskGet',
@@ -58,6 +61,7 @@ const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
   'TaskUpdate',
   'TaskDelete',
   'Task',
+  'Skill',
   'Agent',
   'AskUserQuestion',
   'visualize_show_widget',
@@ -67,6 +71,22 @@ const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
   'get_goal',
   'create_goal',
   'update_goal',
+  'CronAdd',
+  'CronCreate',
+  'CronUpdate',
+  'CronRemove',
+  'CronDelete',
+  'CronList',
+  'MemoryList',
+  'MemoryRead',
+  'MemorySearch',
+  'BrowserNavigate',
+  'BrowserGetContent',
+  'BrowserScreenshot',
+  'BrowserSnapshot',
+  'BrowserClick',
+  'BrowserType',
+  'BrowserScroll',
   'TeamCreate',
   'SendMessage',
   'TeamStatus',
@@ -80,7 +100,10 @@ const TS_RUNTIME_LOCAL_AGENT_TOOL_NAMES = new Set([
   ...TS_RUNTIME_LOCAL_READ_TOOL_NAMES,
   'Write',
   'Edit',
-  'Bash'
+  'NotebookEdit',
+  'Bash',
+  'PowerShell',
+  'Monitor'
 ])
 const TS_RUNTIME_MCP_TOOL_NAME = /^mcp__[A-Za-z0-9_-]{1,96}__[A-Za-z0-9_-]{1,96}$/
 
@@ -176,14 +199,27 @@ export function assessTsRuntimeTextEligibility(input: {
           : {})
       }
     : {}
-  const current = input.messages.at(-1)
-  if (!current || current.role !== 'user')
+  // Background memory/context services may persist a system reminder after the
+  // submitted user turn. Treat those reminders as preceding turn context for
+  // the runtime projection; assistant/tool tails still fail closed because
+  // they may represent an incomplete tool round-trip.
+  let currentUserIndex = -1
+  for (let index = input.messages.length - 1; index >= 0; index -= 1) {
+    if (input.messages[index].role === 'user') {
+      currentUserIndex = index
+      break
+    }
+  }
+  const current = currentUserIndex >= 0 ? input.messages[currentUserIndex] : undefined
+  const trailingContext = input.messages.slice(currentUserIndex + 1)
+  if (!current || trailingContext.some((message) => message.role !== 'system'))
     return { eligible: false, reason: 'CURRENT_PROMPT_NOT_MIGRATED' }
   const currentContent = extractRuntimeContent(current.content)
   if (!currentContent || (!currentContent.text && currentContent.images.length === 0))
     return { eligible: false, reason: 'CURRENT_PROMPT_NOT_MIGRATED' }
   const history: RuntimeTextMessage[] = []
-  for (const message of input.messages.slice(0, -1)) {
+  const historyMessages = [...input.messages.slice(0, currentUserIndex), ...trailingContext]
+  for (const message of historyMessages) {
     if (
       (message.role !== 'system' && message.role !== 'user' && message.role !== 'assistant') ||
       !extractRuntimeContent(message.content)

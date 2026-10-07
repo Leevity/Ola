@@ -7,6 +7,7 @@ import {
   listSshRuntimeDirectory,
   readSshRuntimeFile,
   readSshRuntimeText,
+  statSshRuntimePath,
   writeSshRuntimeFile
 } from '../ipc/ssh-handlers'
 import { withSshWorkspace } from '../ssh/ssh-config'
@@ -32,11 +33,11 @@ function pathInput(value: unknown, required = true): string {
   return candidate.trim()
 }
 
-function shellInput(value: unknown): { command: string; timeoutMs: number } {
+function shellInput(value: unknown): { command: string; timeoutMs: number; outputFiles: string[] } {
   const item = record(value)
   const command = item.command
   const timeoutMs = item.timeoutMs
-  if (Object.keys(item).some((key) => key !== 'command' && key !== 'timeoutMs'))
+  if (Object.keys(item).some((key) => !['command', 'timeoutMs', 'outputFiles'].includes(key)))
     throw new RuntimeError('INVALID_TOOL_INPUT')
   if (
     typeof command !== 'string' ||
@@ -52,7 +53,33 @@ function shellInput(value: unknown): { command: string; timeoutMs: number } {
       timeoutMs > MAX_TIMEOUT_MS)
   )
     throw new RuntimeError('INVALID_TOOL_INPUT')
-  return { command, timeoutMs: timeoutMs === undefined ? 30_000 : timeoutMs }
+  const outputFiles = item.outputFiles ?? []
+  if (
+    !Array.isArray(outputFiles) ||
+    outputFiles.length > 16 ||
+    outputFiles.some(
+      (path) =>
+        typeof path !== 'string' ||
+        !path.startsWith('/') ||
+        path.length > 4096 ||
+        path.includes('\0') ||
+        path.split('/').includes('..')
+    )
+  )
+    throw new RuntimeError('INVALID_TOOL_INPUT')
+  return {
+    command,
+    timeoutMs: timeoutMs === undefined ? 30_000 : timeoutMs,
+    outputFiles: [...new Set(outputFiles)]
+  }
+}
+
+type RemoteFileSnapshot = {
+  exists?: boolean
+  type?: string | null
+  size?: number | null
+  mtimeMs?: number | null
+  error?: string
 }
 
 async function workspaceCall<T>(
@@ -75,7 +102,11 @@ function resource(
   return `ssh:${context.run.workspaceId}:${connectionId}`
 }
 
-function fileTool(connectionId: string, name: 'Read' | 'Write' | 'Edit'): ToolDefinition {
+function fileTool(
+  connectionId: string,
+  name: 'Read' | 'Write' | 'Edit',
+  scenarioRoot?: string
+): ToolDefinition {
   const write = name !== 'Read'
   return {
     name,
@@ -136,12 +167,41 @@ function fileTool(connectionId: string, name: 'Read' | 'Write' | 'Edit'): ToolDe
       }
     },
     resources: async (_value, context) => [resource(connectionId, context)],
+    artifacts: async (output, context) => {
+      if (!write) return []
+      const result = record(output)
+      if (result.success !== true || typeof result.path !== 'string' || !result.path.trim())
+        return []
+      context.signal.throwIfAborted()
+      const stat = (await statSshRuntimePath(
+        context.run.workspaceId,
+        connectionId,
+        result.path
+      )) as { exists?: boolean; type?: string | null; error?: string }
+      context.signal.throwIfAborted()
+      if (!stat.exists || stat.type !== 'file') return []
+      return [
+        {
+          kind: 'file',
+          transport: 'ssh',
+          connectionId,
+          path: result.path,
+          operation: name === 'Write' ? 'create' : 'modify'
+        }
+      ]
+    },
     execute: async (value, context) => {
       const item = value as Record<string, unknown>
       const filePath = item.file_path as string
       if (name === 'Read')
         return await workspaceCall(connectionId, context, () =>
-          readSshRuntimeFile(connectionId, filePath, item.offset as number, item.limit as number)
+          readSshRuntimeFile(
+            connectionId,
+            filePath,
+            item.offset as number,
+            item.limit as number,
+            scenarioRoot
+          )
         )
       if (name === 'Write') {
         await workspaceCall(connectionId, context, () =>
@@ -170,30 +230,100 @@ function fileTool(connectionId: string, name: 'Read' | 'Write' | 'Edit'): ToolDe
 }
 
 /** Main-owned SSH filesystem and shell tools. Credentials stay inside Main. */
-export function createSshRuntimeTools(connectionId: string): ToolDefinition[] {
+export function createSshRuntimeTools(
+  connectionId: string,
+  scenarioRoot?: string
+): ToolDefinition[] {
   const shell: ToolDefinition = {
     name: 'Bash',
-    description: 'Run an approved shell command on the selected SSH host.',
+    description:
+      'Run an approved shell command on the selected SSH host. Declare absolute outputFiles expected to be created or modified; only confirmed changes after a successful command become results.',
     inputSchema: {
       type: 'object',
-      properties: { command: { type: 'string' }, timeoutMs: { type: 'integer' } },
+      properties: {
+        command: { type: 'string' },
+        timeoutMs: { type: 'integer', minimum: 1, maximum: MAX_TIMEOUT_MS },
+        outputFiles: { type: 'array', items: { type: 'string' }, maxItems: 16 }
+      },
       required: ['command'],
       additionalProperties: false
     },
     effect: 'write',
     validate: shellInput,
     resources: async (_value, context) => [resource(connectionId, context)],
+    artifacts: async (output, context) => {
+      const result = record(output)
+      if (result.exitCode !== 0 || result.timedOut !== false || !Array.isArray(result.artifacts))
+        return []
+      const artifacts: Awaited<ReturnType<NonNullable<ToolDefinition['artifacts']>>> = []
+      for (const entry of result.artifacts.slice(0, 16)) {
+        const candidate = record(entry)
+        if (
+          typeof candidate.path !== 'string' ||
+          !['create', 'modify'].includes(candidate.operation as string)
+        )
+          continue
+        context.signal.throwIfAborted()
+        const stat = (await statSshRuntimePath(
+          context.run.workspaceId,
+          connectionId,
+          candidate.path
+        )) as RemoteFileSnapshot
+        context.signal.throwIfAborted()
+        if (stat.exists === true && stat.type === 'file')
+          artifacts.push({
+            kind: 'file',
+            transport: 'ssh',
+            connectionId,
+            path: candidate.path,
+            operation: candidate.operation as 'create' | 'modify'
+          })
+      }
+      return artifacts
+    },
     execute: async (value, context) => {
       const request = value as ReturnType<typeof shellInput>
+      const before = new Map<string, RemoteFileSnapshot>()
+      for (const path of request.outputFiles ?? []) {
+        context.signal.throwIfAborted()
+        const stat = (await statSshRuntimePath(
+          context.run.workspaceId,
+          connectionId,
+          path
+        )) as RemoteFileSnapshot
+        if (stat.error) throw new RuntimeError('SSH_STAT_FAILED')
+        before.set(path, stat)
+      }
       const result = await workspaceCall(connectionId, context, () =>
         execSshCommand(connectionId, request.command, request.timeoutMs)
       )
       if (!result.success && result.error) throw new RuntimeError('SSH_EXEC_FAILED')
+      const artifacts: Array<{ path: string; operation: 'create' | 'modify' }> = []
+      if (result.success && result.exitCode === 0 && result.timing?.timedOut !== true) {
+        for (const [path, previous] of before) {
+          context.signal.throwIfAborted()
+          const after = (await statSshRuntimePath(
+            context.run.workspaceId,
+            connectionId,
+            path
+          )) as RemoteFileSnapshot
+          if (after.exists !== true || after.type !== 'file' || after.error) continue
+          // SFTP timestamps may be coarse. If a change cannot be confirmed, omit the result.
+          if (
+            previous.exists === false ||
+            (previous.type === 'file' &&
+              (previous.size !== after.size || previous.mtimeMs !== after.mtimeMs))
+          )
+            artifacts.push({ path, operation: previous.exists ? 'modify' : 'create' })
+        }
+      }
+      context.signal.throwIfAborted()
       return {
         exitCode: result.exitCode,
         stdout: result.stdout,
         stderr: result.stderr,
-        timedOut: result.timing?.timedOut === true
+        timedOut: result.timing?.timedOut === true,
+        ...(before.size ? { artifacts } : {})
       }
     }
   }
@@ -206,7 +336,7 @@ export function createSshRuntimeTools(connectionId: string): ToolDefinition[] {
     resources: async (_value, context) => [resource(connectionId, context)],
     execute: async (value, context) =>
       await workspaceCall(connectionId, context, () =>
-        listSshRuntimeDirectory(connectionId, (value as { path: string }).path)
+        listSshRuntimeDirectory(connectionId, (value as { path: string }).path, scenarioRoot)
       )
   }
   const glob: ToolDefinition = {
@@ -230,7 +360,8 @@ export function createSshRuntimeTools(connectionId: string): ToolDefinition[] {
         globSshRuntimeFiles(
           connectionId,
           (value as { pattern: string }).pattern,
-          (value as { path: string }).path
+          (value as { path: string }).path,
+          scenarioRoot
         )
       )
   }
@@ -252,11 +383,11 @@ export function createSshRuntimeTools(connectionId: string): ToolDefinition[] {
     resources: async (_value, context) => [resource(connectionId, context)],
     execute: async (value, context) =>
       await workspaceCall(connectionId, context, () =>
-        grepSshRuntimeFiles(connectionId, value as Record<string, unknown>)
+        grepSshRuntimeFiles(connectionId, value as Record<string, unknown>, scenarioRoot)
       )
   }
   return [
-    fileTool(connectionId, 'Read'),
+    fileTool(connectionId, 'Read', scenarioRoot),
     ls,
     glob,
     grep,

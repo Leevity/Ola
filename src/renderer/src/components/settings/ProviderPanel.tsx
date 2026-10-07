@@ -20,7 +20,8 @@ import {
   Sparkles,
   Copy,
   MonitorSmartphone,
-  Layers
+  Layers,
+  TriangleAlert
 } from 'lucide-react'
 import { nanoid } from 'nanoid'
 import { toast } from 'sonner'
@@ -506,7 +507,7 @@ function AddProviderDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="settings-dialog max-w-md">
         <DialogHeader>
           <DialogTitle>{t('provider.addCustomProvider')}</DialogTitle>
           <DialogDescription>{t('provider.addCustomProviderDesc')}</DialogDescription>
@@ -867,7 +868,7 @@ function ModelFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+      <DialogContent className="settings-dialog max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t('provider.editModel') : t('provider.addModelTitle')}
@@ -904,7 +905,7 @@ function ModelFormDialog({
             </div>
           </div>
           {reusableManagedModel && (
-            <p className="text-[11px] text-emerald-600 dark:text-emerald-400">
+            <p className="text-xs text-emerald-600 dark:text-emerald-400">
               {t('provider.modelManagementDefaultsApplied', {
                 name: reusableManagedModel.name
               })}
@@ -914,7 +915,7 @@ function ModelFormDialog({
           {/* Protocol type override */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium">{t('provider.modelTypeOverride')}</label>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {providerType
                 ? t('provider.modelTypeOverrideHint', { type: providerType })
                 : t('provider.modelTypeOverrideGlobalHint')}
@@ -952,7 +953,7 @@ function ModelFormDialog({
           {/* Model category */}
           <div className="space-y-1.5">
             <label className="text-xs font-medium">{t('provider.modelCategory')}</label>
-            <p className="text-[11px] text-muted-foreground">{t('provider.modelCategoryHint')}</p>
+            <p className="text-xs text-muted-foreground">{t('provider.modelCategoryHint')}</p>
             <Select value={category} onValueChange={(v) => setCategory(v as ModelCategory)}>
               <SelectTrigger className="text-xs">
                 <SelectValue />
@@ -1005,7 +1006,7 @@ function ModelFormDialog({
             <label className="text-xs font-medium">
               {t('provider.contextCompressionThreshold')}
             </label>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('provider.contextCompressionThresholdDesc', {
                 min: Math.round(MIN_CONTEXT_COMPRESSION_THRESHOLD * 100),
                 max: Math.round(MAX_CONTEXT_COMPRESSION_THRESHOLD * 100)
@@ -1024,7 +1025,7 @@ function ModelFormDialog({
 
           <div className="space-y-1.5">
             <label className="text-xs font-medium">{t('provider.requestTimeoutSeconds')}</label>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('provider.requestTimeoutSecondsDesc')}
             </p>
             <Input
@@ -1047,7 +1048,7 @@ function ModelFormDialog({
             </label>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">{t('provider.inputPrice')}</p>
+                <p className="text-xs text-muted-foreground">{t('provider.inputPrice')}</p>
                 <Input
                   type="number"
                   step="0.01"
@@ -1058,7 +1059,7 @@ function ModelFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">{t('provider.outputPrice')}</p>
+                <p className="text-xs text-muted-foreground">{t('provider.outputPrice')}</p>
                 <Input
                   type="number"
                   step="0.01"
@@ -1069,9 +1070,7 @@ function ModelFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">
-                  {t('provider.cacheCreationPrice')}
-                </p>
+                <p className="text-xs text-muted-foreground">{t('provider.cacheCreationPrice')}</p>
                 <Input
                   type="number"
                   step="0.01"
@@ -1082,7 +1081,7 @@ function ModelFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">{t('provider.cacheHitPrice')}</p>
+                <p className="text-xs text-muted-foreground">{t('provider.cacheHitPrice')}</p>
                 <Input
                   type="number"
                   step="0.01"
@@ -1095,7 +1094,7 @@ function ModelFormDialog({
             </div>
             <div className="grid grid-cols-2 gap-3 pt-2">
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t('provider.premiumRequestMultiplier')}
                 </p>
                 <Input
@@ -1108,7 +1107,7 @@ function ModelFormDialog({
                 />
               </div>
               <div className="space-y-1">
-                <p className="text-[11px] text-muted-foreground">{t('provider.availablePlans')}</p>
+                <p className="text-xs text-muted-foreground">{t('provider.availablePlans')}</p>
                 <Input
                   placeholder="pro, pro+, business"
                   value={availablePlans}
@@ -1133,7 +1132,7 @@ function ModelFormDialog({
                 }`}
                 title={t('provider.modelIconAuto')}
               >
-                <span className="text-[10px] text-muted-foreground">auto</span>
+                <span className="text-xs text-muted-foreground">auto</span>
               </button>
               {MODEL_ICON_OPTIONS.map((key) => (
                 <button
@@ -1152,7 +1151,7 @@ function ModelFormDialog({
               ))}
             </div>
             {icon && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t('provider.modelIconSelected', { icon })}
               </p>
             )}
@@ -1172,20 +1171,20 @@ function ModelFormDialog({
                     setResponseSummary(v as 'auto' | 'concise' | 'detailed' | 'none')
                   }
                 >
-                  <SelectTrigger className="h-7 w-36 text-[11px]">
+                  <SelectTrigger className="h-7 w-36 text-xs">
                     <SelectValue placeholder={t('provider.responsesSummaryAuto')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none" className="text-[11px]">
+                    <SelectItem value="none" className="text-xs">
                       {t('provider.responsesSummaryNone')}
                     </SelectItem>
-                    <SelectItem value="auto" className="text-[11px]">
+                    <SelectItem value="auto" className="text-xs">
                       {t('provider.responsesSummaryAuto')}
                     </SelectItem>
-                    <SelectItem value="concise" className="text-[11px]">
+                    <SelectItem value="concise" className="text-xs">
                       {t('provider.responsesSummaryConcise')}
                     </SelectItem>
-                    <SelectItem value="detailed" className="text-[11px]">
+                    <SelectItem value="detailed" className="text-xs">
                       {t('provider.responsesSummaryDetailed')}
                     </SelectItem>
                   </SelectContent>
@@ -1215,7 +1214,7 @@ function ModelFormDialog({
                     <div className="space-y-2 rounded-md border border-border/60 p-2">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationAction')}
                           </span>
                           <Select
@@ -1228,7 +1227,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1236,12 +1235,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_ACTIONS.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1249,7 +1248,7 @@ function ModelFormDialog({
                           </Select>
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationBackground')}
                           </span>
                           <Select
@@ -1262,7 +1261,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1270,12 +1269,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_BACKGROUNDS.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1285,7 +1284,7 @@ function ModelFormDialog({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationQuality')}
                           </span>
                           <Select
@@ -1298,7 +1297,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1306,12 +1305,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_QUALITIES.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1319,7 +1318,7 @@ function ModelFormDialog({
                           </Select>
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationSize')}
                           </span>
                           <Select
@@ -1332,7 +1331,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1340,12 +1339,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_SIZES.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1355,7 +1354,7 @@ function ModelFormDialog({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationOutputFormat')}
                           </span>
                           <Select
@@ -1368,7 +1367,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1376,12 +1375,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_OUTPUT_FORMATS.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1389,7 +1388,7 @@ function ModelFormDialog({
                           </Select>
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationModeration')}
                           </span>
                           <Select
@@ -1402,7 +1401,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1410,12 +1409,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_MODERATIONS.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1425,7 +1424,7 @@ function ModelFormDialog({
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationInputFidelity')}
                           </span>
                           <Select
@@ -1438,7 +1437,7 @@ function ModelFormDialog({
                               )
                             }
                           >
-                            <SelectTrigger className="h-7 text-[11px]">
+                            <SelectTrigger className="h-7 text-xs">
                               <SelectValue
                                 placeholder={t('provider.responsesImageGenerationDefault')}
                               />
@@ -1446,12 +1445,12 @@ function ModelFormDialog({
                             <SelectContent>
                               <SelectItem
                                 value={RESPONSES_IMAGE_GENERATION_DEFAULT_OPTION}
-                                className="text-[11px]"
+                                className="text-xs"
                               >
                                 {t('provider.responsesImageGenerationDefault')}
                               </SelectItem>
                               {RESPONSES_IMAGE_GENERATION_INPUT_FIDELITIES.map((value) => (
-                                <SelectItem key={value} value={value} className="text-[11px]">
+                                <SelectItem key={value} value={value} className="text-xs">
                                   {t(`provider.responsesImageGenerationOption.${value}`)}
                                 </SelectItem>
                               ))}
@@ -1459,7 +1458,7 @@ function ModelFormDialog({
                           </Select>
                         </div>
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationOutputCompression')}
                           </span>
                           <Input
@@ -1471,13 +1470,13 @@ function ModelFormDialog({
                             onChange={(e) =>
                               setResponsesImageGenerationOutputCompression(e.target.value)
                             }
-                            className="h-7 text-[11px]"
+                            className="h-7 text-xs"
                           />
                         </div>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
                         <div className="space-y-1">
-                          <span className="text-[11px] text-muted-foreground">
+                          <span className="text-xs text-muted-foreground">
                             {t('provider.responsesImageGenerationPartialImages')}
                           </span>
                           <Input
@@ -1488,7 +1487,7 @@ function ModelFormDialog({
                             onChange={(e) =>
                               setResponsesImageGenerationPartialImages(e.target.value)
                             }
-                            className="h-7 text-[11px]"
+                            className="h-7 text-xs"
                           />
                         </div>
                       </div>
@@ -1509,7 +1508,7 @@ function ModelFormDialog({
                 <div className="flex items-center justify-between">
                   <span className="text-xs text-muted-foreground">{t('provider.cacheTtl')}</span>
                   <Select value={cacheTtl} onValueChange={(v) => setCacheTtl(v as '5m' | '1h')}>
-                    <SelectTrigger className="w-20 h-7 text-[11px]">
+                    <SelectTrigger className="w-20 h-7 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -1751,7 +1750,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
 
     return (
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center justify-between text-xs">
           <span className="font-medium text-foreground/90">{label}</span>
           <div className="flex items-center gap-2">
             <span className="font-bold">{Math.round(percent)}%</span>
@@ -1769,7 +1768,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
           />
         </div>
         {windowMinutes && (
-          <div className="text-[10px] text-muted-foreground/50 text-right">
+          <div className="text-xs text-muted-foreground/50 text-right">
             {t('provider.codexQuotaWindow', { time: windowMinutes })}
           </div>
         )}
@@ -2310,7 +2309,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
           <ProviderIcon builtinId={provider.builtinId} size={24} />
           <div>
             <h3 className="text-sm font-semibold">{provider.name}</h3>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {provider.type === 'anthropic'
                 ? 'Anthropic Messages API'
                 : provider.type === 'openai-responses'
@@ -2348,7 +2347,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 gap-1 px-2 text-[11px] text-muted-foreground"
+                  className="h-7 gap-1 px-2 text-xs text-muted-foreground"
                   onClick={() => void openExternal(apiKeyUrl)}
                 >
                   <ExternalLink className="size-3" />
@@ -2412,7 +2411,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 gap-1 px-1.5 text-[11px]"
+                    className="h-6 gap-1 px-1.5 text-xs"
                     onClick={() => void handleCopyAccountJson()}
                   >
                     <Copy className="size-3" />
@@ -2422,20 +2421,20 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
               </div>
             </div>
             {provider.oauth?.accountId && (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 {t('provider.oauthAccount', { account: provider.oauth.accountId })}
               </p>
             )}
             {oauthConnecting && oauthDeviceInfo && (
               <div className="rounded-md border bg-muted/30 px-3 py-2 space-y-2">
                 <div className="flex items-center justify-between gap-3">
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {t('provider.oauthVerificationUrl')}
                   </span>
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 gap-1 px-1.5 text-[11px]"
+                    className="h-6 gap-1 px-1.5 text-xs"
                     onClick={() =>
                       void openExternal(
                         oauthDeviceInfo.verificationUriComplete || oauthDeviceInfo.verificationUri
@@ -2448,7 +2447,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 </div>
                 <div className="text-xs font-mono break-all">{oauthDeviceInfo.verificationUri}</div>
                 <div className="flex items-center justify-between gap-3 pt-1 border-t">
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {t('provider.oauthDeviceCode')}
                   </span>
                   <span className="text-sm font-mono font-semibold tracking-widest">
@@ -2515,7 +2514,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   )}
                 </div>
                 {!hideOAuthSettings && !oauthConfigReady && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t('provider.oauthConfigMissing')}
                   </p>
                 )}
@@ -2528,7 +2527,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
         {isOAuthAuth && supportsManualOAuth && oauthLoginTab === 'manual' && (
           <section className="space-y-2">
             <label className="text-sm font-medium">{t('provider.oauthManualTitle')}</label>
-            <p className="text-[11px] text-muted-foreground">{t('provider.oauthManualDesc')}</p>
+            <p className="text-xs text-muted-foreground">{t('provider.oauthManualDesc')}</p>
             <textarea
               value={manualOAuthJson}
               onChange={(e) => {
@@ -2539,7 +2538,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
               className="w-full h-28 rounded-md border bg-muted/30 px-3 py-2 font-mono text-xs resize-none focus:outline-none focus:ring-1 focus:ring-ring"
               spellCheck={false}
             />
-            {manualOAuthError && <p className="text-[11px] text-destructive">{manualOAuthError}</p>}
+            {manualOAuthError && <p className="text-xs text-destructive">{manualOAuthError}</p>}
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
@@ -2590,7 +2589,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                         <span className="text-xs font-mono">{formatCredits(codexQuota)}</span>
                       </div>
                       {codexQuota.primaryOverSecondaryLimitPercent !== undefined && (
-                        <div className="text-[10px] text-muted-foreground border-t pt-2">
+                        <div className="text-xs text-muted-foreground border-t pt-2">
                           {t('provider.codexQuotaLimitOver', {
                             percent:
                               formatPercent(codexQuota.primaryOverSecondaryLimitPercent) ?? '-'
@@ -2628,9 +2627,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 />
               </div>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
-                {t('provider.codexQuotaUnavailable')}
-              </p>
+              <p className="text-xs text-muted-foreground">{t('provider.codexQuotaUnavailable')}</p>
             )}
           </section>
         )}
@@ -2723,15 +2720,13 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 </div>
                 <div className="space-y-1 pt-1 border-t">
                   <div className="text-muted-foreground">{t('provider.copilotQuotaApiBase')}</div>
-                  <div className="font-mono break-all text-[11px]">
+                  <div className="font-mono break-all text-xs">
                     {copilotQuota.apiBaseUrl || '-'}
                   </div>
                 </div>
               </div>
             ) : (
-              <p className="text-[11px] text-muted-foreground">
-                {t('provider.codexQuotaUnavailable')}
-              </p>
+              <p className="text-xs text-muted-foreground">{t('provider.codexQuotaUnavailable')}</p>
             )}
           </section>
         )}
@@ -2751,7 +2746,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   />
                 </div>
               ) : (
-                <div className="text-[11px] text-muted-foreground">
+                <div className="text-xs text-muted-foreground">
                   {t('provider.oauthClientIdLocked')}
                 </div>
               )}
@@ -2896,7 +2891,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="h-6 gap-1 px-1.5 text-[11px]"
+                    className="h-6 gap-1 px-1.5 text-xs"
                     onClick={() => void handleCopyAccountJson()}
                   >
                     <Copy className="size-3" />
@@ -2917,7 +2912,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   disabled={channelAppIdLocked}
                 />
                 {channelAppIdLocked && (
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t('provider.channelAppIdLocked')}
                   </p>
                 )}
@@ -2948,7 +2943,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   </div>
                 </div>
               ) : (
-                <div className="flex items-end text-[11px] text-muted-foreground">
+                <div className="flex items-end text-xs text-muted-foreground">
                   {t('provider.channelAppTokenOptional')}
                 </div>
               )}
@@ -3061,7 +3056,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
             </div>
 
             {provider.channel?.accessToken && provider.channel?.userInfo && (
-              <div className="rounded-md border bg-muted/30 p-2 text-[11px] font-mono whitespace-pre-wrap">
+              <div className="rounded-md border bg-muted/30 p-2 text-xs font-mono whitespace-pre-wrap">
                 {JSON.stringify(provider.channel.userInfo, null, 2)}
               </div>
             )}
@@ -3075,7 +3070,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
               disabled={!builtinPreset || provider.baseUrl === builtinPreset.defaultBaseUrl}
               onClick={() => {
                 if (!builtinPreset) return
@@ -3094,7 +3089,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
             onChange={(e) => updateProvider(provider.id, { baseUrl: e.target.value })}
             className="text-xs"
           />
-          <p className="text-[11px] text-muted-foreground">{t('provider.proxyUrlHint')}</p>
+          <p className="text-xs text-muted-foreground">{t('provider.proxyUrlHint')}</p>
         </section>
 
         {/* User-Agent */}
@@ -3106,7 +3101,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-[11px]"
+              className="h-6 px-2 text-xs"
               disabled={!provider.userAgent}
               onClick={() => {
                 updateProvider(provider.id, { userAgent: undefined })
@@ -3126,7 +3121,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
             onChange={(e) => updateProvider(provider.id, { userAgent: e.target.value })}
             className="text-xs font-mono"
           />
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t('provider.userAgentHint', {
               defaultValue:
                 'Leave empty to use {{defaultUserAgent}}. Set a custom value to simulate another client.',
@@ -3217,7 +3212,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 <SelectItem value="1h">1h</SelectItem>
               </SelectContent>
             </Select>
-            <p className="text-[11px] text-muted-foreground">{t('provider.cacheTtlHint')}</p>
+            <p className="text-xs text-muted-foreground">{t('provider.cacheTtlHint')}</p>
           </section>
         )}
 
@@ -3230,14 +3225,14 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
               <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
                   <label className="text-sm font-medium">{t('provider.modelList')}</label>
-                  <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     {t('provider.modelCount', {
                       total: provider.models.length,
                       enabled: enabledModelCount
                     })}
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 self-start rounded-full border bg-background px-2 py-1 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-1.5 self-start rounded-full border bg-background px-2 py-1 text-xs text-muted-foreground">
                   <span className="font-medium text-foreground">{filteredModels.length}</span>
                   <span>/</span>
                   <span>{provider.models.length}</span>
@@ -3261,7 +3256,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 rounded-full px-3 text-[11px]"
+                        className="h-8 rounded-full px-3 text-xs"
                         disabled={!hasDisabledModels}
                         onClick={() => handleSetAllModelsEnabled(true)}
                       >
@@ -3270,7 +3265,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-8 rounded-full px-3 text-[11px]"
+                        className="h-8 rounded-full px-3 text-xs"
                         disabled={!hasEnabledModels}
                         onClick={() => handleSetAllModelsEnabled(false)}
                       >
@@ -3281,7 +3276,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                   <Button
                     variant="outline"
                     size="sm"
-                    className="h-8 gap-1 rounded-full px-3 text-[11px]"
+                    className="h-8 gap-1 rounded-full px-3 text-xs"
                     disabled={fetchingModels}
                     onClick={handleFetchModels}
                   >
@@ -3393,11 +3388,11 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                       <div className="flex-1 min-w-0 space-y-1">
                         <div className="flex items-center gap-2">
                           <p className="text-sm font-medium truncate">{model.name}</p>
-                          <span className="truncate rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="truncate rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                             {model.id}
                           </span>
                         </div>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground/70">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/70">
                           {model.contextLength && (
                             <span className="rounded-full bg-muted/45 px-2 py-0.5">
                               {t('provider.modelMetaContext', {
@@ -3458,7 +3453,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                                       <Icon className="size-3" />
                                     </span>
                                   </TooltipTrigger>
-                                  <TooltipContent side="top" className="text-[11px]">
+                                  <TooltipContent side="top" className="text-xs">
                                     {label}
                                   </TooltipContent>
                                 </Tooltip>
@@ -3478,7 +3473,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                               <Pencil className="size-3.5" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="text-[11px]">
+                          <TooltipContent side="top" className="text-xs">
                             {t('provider.editModel')}
                           </TooltipContent>
                         </Tooltip>
@@ -3496,7 +3491,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                               <Brain className="size-3.5" />
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="text-[11px]">
+                          <TooltipContent side="top" className="text-xs">
                             {model.supportsThinking
                               ? t('provider.editThinkConfig')
                               : t('provider.configThinkSupport')}
@@ -3701,7 +3696,7 @@ export function ModelManagementPanel(): React.JSX.Element {
               }
             ].map((item) => (
               <div key={item.label} className="rounded-xl border bg-background px-3 py-2">
-                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">
                   {item.label}
                 </div>
                 <div className="mt-1 text-lg font-semibold leading-none">{item.value}</div>
@@ -3760,7 +3755,7 @@ export function ModelManagementPanel(): React.JSX.Element {
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div className="flex items-center justify-between gap-3 border-b bg-background/95 px-5 py-2">
           <div className="truncate text-xs font-medium">{t('provider.modelManagementList')}</div>
-          <div className="shrink-0 text-[11px] text-muted-foreground">
+          <div className="shrink-0 text-xs text-muted-foreground">
             {t('provider.modelManagementShowing', {
               shown: filteredModels.length,
               total: managedModels.length
@@ -3868,15 +3863,15 @@ export function ModelManagementPanel(): React.JSX.Element {
                       <div className="flex min-w-0 items-center gap-2">
                         <p className="truncate text-sm font-medium">{model.name}</p>
                         {!model.enabled && (
-                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                             {t('provider.disabled')}
                           </span>
                         )}
-                        <span className="truncate font-mono text-[10px] text-muted-foreground/50">
+                        <span className="truncate font-mono text-xs text-muted-foreground/50">
                           {model.id}
                         </span>
                       </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-muted-foreground/60">
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/60">
                         {providerSources.length > 0 ? (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -3905,7 +3900,7 @@ export function ModelManagementPanel(): React.JSX.Element {
                                 )}
                               </span>
                             </TooltipTrigger>
-                            <TooltipContent side="top" className="text-[11px]">
+                            <TooltipContent side="top" className="text-xs">
                               <div className="flex max-w-64 flex-col gap-1">
                                 {providerSources.map((source) => (
                                   <div key={source.key} className="flex items-center gap-1.5">
@@ -3989,7 +3984,7 @@ export function ModelManagementPanel(): React.JSX.Element {
                                     <Icon className="size-3" />
                                   </span>
                                 </TooltipTrigger>
-                                <TooltipContent side="top" className="text-[11px]">
+                                <TooltipContent side="top" className="text-xs">
                                   {label}
                                 </TooltipContent>
                               </Tooltip>
@@ -4008,7 +4003,7 @@ export function ModelManagementPanel(): React.JSX.Element {
                           <Pencil className="size-3.5" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="text-[11px]">
+                      <TooltipContent side="top" className="text-xs">
                         {t('provider.editModel')}
                       </TooltipContent>
                     </Tooltip>
@@ -4026,7 +4021,7 @@ export function ModelManagementPanel(): React.JSX.Element {
                           <Brain className="size-3.5" />
                         </button>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="text-[11px]">
+                      <TooltipContent side="top" className="text-xs">
                         {model.supportsThinking
                           ? t('provider.editThinkConfig')
                           : t('provider.configThinkSupport')}
@@ -4220,7 +4215,7 @@ function ThinkingConfigDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="settings-dialog max-w-md">
         <DialogHeader>
           <DialogTitle>{t('provider.configThinkSupport')}</DialogTitle>
           <DialogDescription>
@@ -4237,9 +4232,7 @@ function ThinkingConfigDialog({
             <>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t('provider.thinkBodyParams')}</label>
-                <p className="text-[11px] text-muted-foreground">
-                  {t('provider.thinkBodyParamsHint')}
-                </p>
+                <p className="text-xs text-muted-foreground">{t('provider.thinkBodyParamsHint')}</p>
                 <textarea
                   value={bodyParamsJson}
                   onChange={(e) => {
@@ -4254,7 +4247,7 @@ function ThinkingConfigDialog({
                 <label className="text-sm font-medium">
                   {t('provider.thinkDisabledBodyParams')}
                 </label>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t('provider.thinkDisabledBodyParamsHint')}
                 </p>
                 <textarea
@@ -4267,11 +4260,11 @@ function ThinkingConfigDialog({
                   spellCheck={false}
                   placeholder={t('provider.leaveEmpty')}
                 />
-                {jsonError && <p className="text-[11px] text-destructive">{jsonError}</p>}
+                {jsonError && <p className="text-xs text-destructive">{jsonError}</p>}
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t('provider.reasoningEffortLevels')}</label>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t('provider.reasoningEffortLevelsHint')}
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -4299,7 +4292,7 @@ function ThinkingConfigDialog({
                   <label className="text-sm font-medium">
                     {t('provider.defaultReasoningEffort')}
                   </label>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {t('provider.defaultReasoningEffortHint')}
                   </p>
                   <Select
@@ -4323,7 +4316,7 @@ function ThinkingConfigDialog({
               )}
               <div className="space-y-2">
                 <label className="text-sm font-medium">{t('provider.forceTemperature')}</label>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {t('provider.forceTemperatureHint')}
                 </p>
                 <Input
@@ -4366,6 +4359,28 @@ export function ProviderPanel(): React.JSX.Element {
   )
   const [searchQuery, setSearchQuery] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [credentialVaultUnavailable, setCredentialVaultUnavailable] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void ipcClient
+      .invoke('provider:mirror-snapshot')
+      .then((snapshot) => {
+        if (active) {
+          setCredentialVaultUnavailable(
+            Boolean(
+              (snapshot as { credentialVaultUnavailable?: boolean })?.credentialVaultUnavailable
+            )
+          )
+        }
+      })
+      .catch(() => {
+        if (active) setCredentialVaultUnavailable(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const resolvedSelectedId =
     selectedId && providers.some((provider) => provider.id === selectedId)
@@ -4439,7 +4454,7 @@ export function ProviderPanel(): React.JSX.Element {
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate text-xs font-medium">{provider.name}</span>
-          <span className="mt-0.5 block truncate text-[10px] text-muted-foreground/70">
+          <span className="mt-0.5 block truncate text-xs text-muted-foreground/70">
             {t('provider.providerModelSummary', {
               enabled: enabledModelCount,
               total: provider.models.length
@@ -4461,7 +4476,7 @@ export function ProviderPanel(): React.JSX.Element {
     return (
       <ContextMenu key={provider.id}>
         <ContextMenuTrigger asChild>{item}</ContextMenuTrigger>
-        <ContextMenuContent className="w-44">
+        <ContextMenuContent className="settings-menu w-44">
           <ContextMenuItem
             className="gap-2 text-xs text-destructive focus:text-destructive"
             disabled={Boolean(provider.builtinId)}
@@ -4476,11 +4491,28 @@ export function ProviderPanel(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden bg-background">
+    <div className="provider-settings-container flex h-full flex-col overflow-hidden bg-background">
+      {credentialVaultUnavailable && (
+        <div
+          role="alert"
+          className="flex items-start gap-2 border-b border-destructive/30 bg-destructive/10 px-4 py-3 text-sm"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-destructive" />
+          <div>
+            <p className="font-medium">{t('provider.credentialVaultUnavailable.title')}</p>
+            <p className="mt-1 text-muted-foreground">
+              {t('provider.credentialVaultUnavailable.description')}
+            </p>
+          </div>
+        </div>
+      )}
       <ProviderHealthPanel />
-      <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div
+        className="provider-settings-panels flex min-h-0 flex-1 overflow-hidden"
+        inert={credentialVaultUnavailable}
+      >
         {/* Left: Provider list */}
-        <div className="flex w-60 shrink-0 flex-col border-r bg-muted/10">
+        <div className="provider-settings-list flex shrink-0 flex-col bg-muted/10">
           {/* Search + Add */}
           <div className="flex items-center gap-1.5 border-b p-2.5">
             <div className="relative flex-1">
@@ -4508,7 +4540,7 @@ export function ProviderPanel(): React.JSX.Element {
             <div className="pb-20">
               {enabledProviders.length > 0 && (
                 <div className="px-2 pb-1 pt-1">
-                  <p className="px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/55">
+                  <p className="px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/55">
                     {t('provider.enabled')}
                   </p>
                   {enabledProviders.map((p) => renderProviderListItem(p, false))}
@@ -4517,7 +4549,7 @@ export function ProviderPanel(): React.JSX.Element {
 
               {disabledProviders.length > 0 && (
                 <div className="px-2 pb-1 pt-3">
-                  <p className="px-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/55">
+                  <p className="px-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/55">
                     {t('provider.disabled')}
                   </p>
                   {disabledProviders.map((p) => renderProviderListItem(p, true))}

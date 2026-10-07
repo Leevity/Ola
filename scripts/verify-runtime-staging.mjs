@@ -1,5 +1,10 @@
 import { access, lstat, readdir, realpath, stat } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
+import { createRequire } from 'node:module'
+import { isLegacyRuntimeArtifactPath } from './legacy-runtime-artifact-patterns.mjs'
+import { packagedCodegraphGrammarNames } from './stage-codegraph-grammars.mjs'
+
+const asar = createRequire(import.meta.url)('@electron/asar')
 
 const args = process.argv.slice(2)
 const platform = args.find((arg) => arg.startsWith('--platform='))?.slice('--platform='.length)
@@ -18,13 +23,30 @@ const resourceRoot =
 const appUnpacked = join(resourceRoot, 'app.asar.unpacked')
 const required = [
   executable,
+  join(resourceRoot, 'app.asar'),
   join(appUnpacked, 'out', 'main', 'business-worker.mjs'),
-  join(appUnpacked, 'out', 'main', 'graph-store-worker.mjs')
+  join(appUnpacked, 'out', 'main', 'graph-store-worker.mjs'),
+  join(appUnpacked, 'node_modules', 'web-tree-sitter', 'tree-sitter.wasm'),
+  ...packagedCodegraphGrammarNames.map((grammar) =>
+    join(appUnpacked, 'resources', 'codegraph', 'grammars', `tree-sitter-${grammar}.wasm`)
+  )
 ]
 for (const path of required) {
   await access(path)
   const info = await stat(path)
   if (!info.isFile() && !info.isDirectory()) throw new Error(`Invalid staging artifact: ${path}`)
+}
+
+const archiveEntries = asar.listPackage(join(resourceRoot, 'app.asar'))
+const sourceMaps = archiveEntries.filter((path) => path.toLowerCase().endsWith('.map'))
+if (sourceMaps.length > 0) {
+  throw new Error(`Production staging contains source maps: ${sourceMaps.slice(0, 5).join(', ')}`)
+}
+const legacyArtifacts = archiveEntries.filter(isLegacyRuntimeArtifactPath)
+if (legacyArtifacts.length > 0) {
+  throw new Error(
+    `Production staging contains legacy runtime artifacts in app.asar: ${legacyArtifacts.slice(0, 5).join(', ')}`
+  )
 }
 
 const forbiddenLegacyWorkerPaths = [join(appUnpacked, 'resources', 'native-worker')]

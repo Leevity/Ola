@@ -30,9 +30,15 @@ export const TERMINAL_STATUSES: ReadonlySet<RunStatus> = new Set([
 export interface RunSpec {
   runId: string
   taskId: string
+  /** Optional business TaskItem that explicitly initiated this run. */
+  businessTaskId?: string
+  /** Main-captured label retained when the linked business task later changes. */
+  businessTaskTitle?: string
   requestId: string
   traceId: string
   sessionId: string
+  /** Main-captured project ownership for durable result grouping. */
+  projectId?: string
   /** Existing chat message receiving this run's projected output. */
   assistantMessageId?: string
   /** Main-validated channel target for the narrowly scoped plugin tools. */
@@ -104,7 +110,7 @@ export interface RunEvent {
   data: unknown
   timestamp: number
 }
-export type RuntimeInteractionKind = 'question' | 'tool-approval' | 'plan-approval'
+export type RuntimeInteractionKind = 'question' | 'tool-approval' | 'plan-approval' | 'browser-tool'
 export interface PendingRuntimeInteraction {
   runId: string
   workspaceId: string
@@ -134,6 +140,21 @@ function optionalText(value: unknown, maximum: number): string | undefined {
     !value.trim() ||
     value.length > maximum ||
     Array.from(value).some((character) => character.charCodeAt(0) < 32)
+  )
+    throw new RuntimeError('INVALID_RUN')
+  return value
+}
+
+function optionalMultilineText(value: unknown, maximum: number): string | undefined {
+  if (value === undefined) return undefined
+  if (
+    typeof value !== 'string' ||
+    !value.trim() ||
+    value.length > maximum ||
+    Array.from(value).some((character) => {
+      const code = character.charCodeAt(0)
+      return code < 32 && code !== 9 && code !== 10 && code !== 13
+    })
   )
     throw new RuntimeError('INVALID_RUN')
   return value
@@ -288,7 +309,7 @@ function parseRunModelOptions(input: unknown): ModelOptions | undefined {
   const bodyOverrides = parsePublicBodyOverrides(value.bodyOverrides)
   const omitBodyKeys = parseOmitBodyKeys(value.omitBodyKeys)
   const result: ModelOptions = {
-    ...(optionalText(value.systemPrompt, 128 * 1024)
+    ...(optionalMultilineText(value.systemPrompt, 128 * 1024)
       ? { systemPrompt: value.systemPrompt as string }
       : {}),
     ...(boundedNumber(value.maxTokens, 1, 2_000_000)
@@ -329,9 +350,12 @@ export function parseRunSpec(input: unknown): RunSpec {
   const allowed = [
     'runId',
     'taskId',
+    'businessTaskId',
+    'businessTaskTitle',
     'requestId',
     'traceId',
     'sessionId',
+    'projectId',
     'assistantMessageId',
     'channelContext',
     'teamContext',
@@ -373,6 +397,10 @@ export function parseRunSpec(input: unknown): RunSpec {
       throw new RuntimeError('INVALID_RUN')
   }
   const assistantMessageId = optionalText(value.assistantMessageId, 256)
+  const projectId = optionalText(value.projectId, 256)
+  const businessTaskId = optionalText(value.businessTaskId, 256)
+  const businessTaskTitle = optionalText(value.businessTaskTitle, 512)
+  if (businessTaskTitle && !businessTaskId) throw new RuntimeError('INVALID_RUN')
   let channelContext: RunSpec['channelContext']
   if (value.channelContext !== undefined) {
     if (
@@ -534,9 +562,12 @@ export function parseRunSpec(input: unknown): RunSpec {
   return {
     runId: value.runId as string,
     taskId: value.taskId as string,
+    ...(businessTaskId ? { businessTaskId } : {}),
+    ...(businessTaskTitle ? { businessTaskTitle } : {}),
     requestId: value.requestId as string,
     traceId: value.traceId as string,
     sessionId: value.sessionId as string,
+    ...(projectId ? { projectId } : {}),
     ...(assistantMessageId ? { assistantMessageId } : {}),
     ...(channelContext ? { channelContext } : {}),
     ...(teamContext ? { teamContext } : {}),

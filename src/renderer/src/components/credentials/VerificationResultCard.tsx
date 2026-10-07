@@ -34,7 +34,7 @@ export function VerificationResultCard({ result, compact = false }: Props): Reac
     return (
       <div
         className={`flex items-start gap-2 rounded-md border border-emerald-300/60 bg-emerald-50/60 px-3 ${
-          compact ? 'py-1.5 text-[11px]' : 'py-2 text-xs'
+          compact ? 'py-1.5 text-xs' : 'py-2 text-xs'
         } text-emerald-900 dark:border-emerald-700/40 dark:bg-emerald-900/20 dark:text-emerald-100`}
       >
         <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
@@ -50,7 +50,7 @@ export function VerificationResultCard({ result, compact = false }: Props): Reac
     return (
       <div
         className={`flex items-start gap-2 rounded-md border border-amber-300/60 bg-amber-50/60 px-3 ${
-          compact ? 'py-1.5 text-[11px]' : 'py-2 text-xs'
+          compact ? 'py-1.5 text-xs' : 'py-2 text-xs'
         } text-amber-900 dark:border-amber-700/40 dark:bg-amber-900/20 dark:text-amber-100`}
       >
         <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
@@ -69,7 +69,7 @@ export function VerificationResultCard({ result, compact = false }: Props): Reac
   return (
     <div
       className={`flex items-start gap-2 rounded-md border border-rose-300/60 bg-rose-50/60 px-3 ${
-        compact ? 'py-1.5 text-[11px]' : 'py-2 text-xs'
+        compact ? 'py-1.5 text-xs' : 'py-2 text-xs'
       } text-rose-900 dark:border-rose-700/40 dark:bg-rose-900/20 dark:text-rose-100`}
     >
       <XCircle className="mt-0.5 size-3.5 shrink-0" />

@@ -104,7 +104,7 @@ export function SkillsMarketPanel(): React.JSX.Element {
           onClick={() => setActiveTab('installed')}
         >
           {t('skillsmarket.installedTab')}
-          <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1.5 text-[11px]">
+          <Badge variant="secondary" className="h-5 min-w-5 justify-center px-1.5 text-xs">
             {skills.length}
           </Badge>
         </button>
@@ -154,7 +154,7 @@ export function SkillsMarketPanel(): React.JSX.Element {
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="size-4 shrink-0 text-emerald-500" />
                       <p className="truncate text-sm font-medium">{skill.name}</p>
-                      <Badge variant="outline" className="shrink-0 text-[11px]">
+                      <Badge variant="outline" className="shrink-0 text-xs">
                         {t('skillsmarket.installedBadge')}
                       </Badge>
                     </div>

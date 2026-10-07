@@ -1,6 +1,7 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { tryCreateTestSymlink } from './symlink-fixture'
 import { describe, expect, it } from 'vitest'
 import {
   deleteLocalPath,
@@ -106,9 +107,9 @@ describe('local file service', () => {
         mkdir(join(root, 'visible-directory')),
         writeFile(join(root, '.gitignore'), 'ignored-by-gitignore\n*.ignored\n!not-a-negation\n'),
         writeFile(join(root, 'hidden.ignored'), ''),
-        writeFile(join(root, 'visible.txt'), ''),
-        symlink(join(root, 'visible.txt'), join(root, 'visible-link'))
+        writeFile(join(root, 'visible.txt'), '')
       ])
+      await tryCreateTestSymlink(join(root, 'visible.txt'), join(root, 'visible-link'))
 
       const listed = await listLocalDirectory({
         path: root,

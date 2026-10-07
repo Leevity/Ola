@@ -11,6 +11,9 @@ import {
   type CommandMutationResult
 } from '../user-content/command-catalog'
 
+let e2eManageListFailed = false
+let e2eManageReadFailed = false
+
 export function registerCommandsHandlers(): void {
   const catalog = new CommandCatalog({
     userDirectory: join(olaDataRoot(), 'commands'),
@@ -41,12 +44,30 @@ export function registerCommandsHandlers(): void {
   })
 
   registerMessagePackHandler<undefined, CommandManageItem[]>('commands:manage-list', async () => {
+    if (
+      !e2eManageListFailed &&
+      process.env.OLA_E2E_COMMANDS_MANAGE_LIST_FAIL_ONCE === '1' &&
+      process.env.OLA_E2E_DATA_ROOT !== undefined
+    ) {
+      olaDataRoot()
+      e2eManageListFailed = true
+      throw new Error('injected command list failure')
+    }
     return await catalog.manageList()
   })
 
   registerMessagePackHandler<{ path: string }, CommandManageReadResult>(
     'commands:manage-read',
     async (args) => {
+      if (
+        !e2eManageReadFailed &&
+        process.env.OLA_E2E_COMMANDS_MANAGE_READ_FAIL_ONCE === '1' &&
+        process.env.OLA_E2E_DATA_ROOT !== undefined
+      ) {
+        olaDataRoot()
+        e2eManageReadFailed = true
+        throw new Error('injected command detail failure')
+      }
       return await catalog.manageRead(args.path)
     }
   )

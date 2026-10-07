@@ -91,7 +91,7 @@ async function memoryWorkspaceForSession(
       throw new Error('A session is required for team memory')
     return 'local-personal'
   }
-  const session = await getSession(sessionId)
+  const session = await getSession(sessionId, requested)
   if (!session) throw new Error('Memory source session not found')
   if (requested && requested !== session.workspace_id)
     throw new Error('Memory source session belongs to another workspace')

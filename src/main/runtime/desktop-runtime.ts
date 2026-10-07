@@ -18,6 +18,9 @@ import {
   createLegacyGlobTool,
   createLegacyGrepTool,
   createLegacyListDirectoryTool,
+  createLegacyMonitorTool,
+  createLegacyNotebookEditTool,
+  createLegacyPowerShellTool,
   createLegacyReadTool,
   createLegacyWriteTool
 } from '../../runtime/tools/workspace-tools'
@@ -41,6 +44,14 @@ import { createDesktopNotificationTool } from './desktop-notification-runtime-to
 import { createTaskRuntimeTools } from './task-runtime-tools'
 import { createGoalRuntimeTools } from './goal-runtime-tools'
 import { createSubAgentRuntimeTool } from './sub-agent-runtime-tool'
+import { AgentCatalog } from '../user-content/agent-catalog'
+import { olaDataRoot } from '../lib/ola-data-root'
+import { getBundledResourceDirCandidates } from '../resources/bundled-resources'
+import { createSkillRuntimeTool } from './skill-runtime-tool'
+import { createCronRuntimeTools } from './cron-runtime-tools'
+import { createMemoryRuntimeTools } from './memory-runtime-tools'
+import { createBrowserRuntimeTools } from './browser-runtime-tools'
+import { createVideoRuntimeTool } from './video-runtime-tool'
 import { createImageRuntimeTool } from './image-runtime-tool'
 import { createTeamRuntimeTools } from './team-runtime-tools'
 import { createPlanRuntimeTools } from './plan-runtime-tools'
@@ -76,7 +87,11 @@ import { onRemoteAccountCleared, onWorkspaceDirectoryChanged } from '../remote/a
 import { resolveManagedResourceTarget } from './managed-resource-resolver'
 import { OfflineWorkspaceExpiryMonitor } from './offline-workspace-expiry-monitor'
 import { realpath, stat } from 'node:fs/promises'
-import { isAbsolute } from 'node:path'
+import { isAbsolute, join } from 'node:path'
+import { createHash } from 'node:crypto'
+import { businessWriteCanary } from '../db/business-write-canary'
+import { assertScenarioToolPolicy, type ScenarioSessionPolicy } from './scenario-tool-policy'
+import type { ScenarioPolicy } from '../../shared/scenario-policy'
 import {
   clearDesktopRuntimeConnection,
   desktopRuntimeDescriptorPath,
@@ -106,6 +121,14 @@ async function approvedLocalWorkingDirectory(run: RunSpec): Promise<string> {
   if (!(await stat(directory)).isDirectory())
     throw new RuntimeError('WORKING_DIRECTORY_UNAVAILABLE')
   return directory
+}
+
+async function enforceScenarioToolPolicy(run: RunSpec): Promise<ScenarioPolicy | null> {
+  const writer = businessWriteCanary()
+  if (!writer) throw new RuntimeError('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+  const session = await writer.session<ScenarioSessionPolicy>(run.sessionId, run.workspaceId)
+  await assertScenarioToolPolicy(run, session)
+  return session?.scenario_policy ?? null
 }
 
 /**
@@ -139,6 +162,7 @@ export class DesktopRuntime {
         )
           throw new RuntimeError('WORKSPACE_FORBIDDEN')
         if (run.environmentId !== 'local') throw new RuntimeError('MODEL_UNAVAILABLE')
+        await enforceScenarioToolPolicy(run)
         if (run.modelSource.kind !== 'local') {
           if (!(await loadManagedWorkspaceIds()).has(run.workspaceId))
             throw new RuntimeError('MODEL_UNAVAILABLE')
@@ -149,9 +173,11 @@ export class DesktopRuntime {
           run.modelSource.modelId
         )
         if (!resolved) throw new RuntimeError('MODEL_UNAVAILABLE')
-        if (
-          !(await resolveMainProviderSecret(run.modelSource.providerId, resolved.provider.apiKey))
+        const apiKey = await resolveMainProviderSecret(
+          run.modelSource.providerId,
+          resolved.provider.apiKey
         )
+        if (!apiKey && resolved.provider.requiresApiKey !== false)
           throw new RuntimeError('MODEL_UNAVAILABLE')
       }
       const local = new LocalModelTransport(async (run) => {
@@ -213,48 +239,73 @@ export class DesktopRuntime {
             : managed.request(run, target, request, signal)
       }
       const adapter = new ProtocolAdapter(transport)
+      const agentCatalog = new AgentCatalog({
+        userDirectory: join(olaDataRoot(), 'agents'),
+        bundledDirectoryCandidates: getBundledResourceDirCandidates('agents')
+      })
       const tools = async (run: RunSpec): Promise<ToolExecutor> => {
-        const extensionTools = await createExtensionRuntimeTools(
-          getExtensionService(),
-          run.extensionIds
-        )
-        const mcpTools = (() => {
-          try {
-            const manager = getActiveMcpManager()
-            return createMcpRuntimeTools(manager, manager.getConnectedServerIds())
-          } catch {
-            return []
-          }
-        })()
+        const scenarioPolicy = await enforceScenarioToolPolicy(run)
+        const skillTool = scenarioPolicy ? null : await createSkillRuntimeTool()
+        const subAgents = scenarioPolicy ? [] : await agentCatalog.list()
+        const extensionTools = scenarioPolicy
+          ? []
+          : await createExtensionRuntimeTools(getExtensionService(), run.extensionIds)
+        const mcpTools = scenarioPolicy
+          ? []
+          : (() => {
+              try {
+                const manager = getActiveMcpManager()
+                return createMcpRuntimeTools(manager, manager.getConnectedServerIds(), (context) =>
+                  join(
+                    dataDirectory,
+                    'mcp-results',
+                    createHash('sha256').update(context.run.workspaceId).digest('hex')
+                  )
+                )
+              } catch {
+                return []
+              }
+            })()
         // A text-only run receives no filesystem capability unless its explicit
         // local root has been validated by Main for this exact run. Declarative
         // extensions are independent Main-owned capabilities and are selected
         // only from the run's project activation snapshot.
-        const localTools = run.sshConnectionId
-          ? Promise.resolve(createSshRuntimeTools(run.sshConnectionId))
-          : run.workingDirectory
-            ? (() => {
-                return approvedLocalWorkingDirectory(run).then((root) => [
-                  createLocalReadFileTool(root),
-                  createLocalListDirectoryTool(root),
-                  createLocalFindFilesTool(root),
-                  createLocalGlobFilesTool(root),
-                  createLocalGitStatusTool(root),
-                  createLocalCreateFileTool(root),
-                  createLocalWriteFileTool(root),
-                  createLocalShellCommandTool(root),
-                  // Existing Agent/Cron prompts use these protocol names. Their
-                  // implementations delegate to the same confined TS primitives.
-                  createLegacyReadTool(root),
-                  createLegacyListDirectoryTool(root),
-                  createLegacyGlobTool(root),
-                  createLegacyGrepTool(root),
-                  createLegacyBashTool(root),
-                  createLegacyWriteTool(root),
-                  createLegacyEditTool(root)
-                ])
-              })()
-            : Promise.resolve([])
+        const localTools =
+          scenarioPolicy === 'materials-no-tools'
+            ? Promise.resolve([])
+            : run.sshConnectionId
+              ? Promise.resolve(
+                  createSshRuntimeTools(
+                    run.sshConnectionId,
+                    scenarioPolicy === 'ssh-read-only' ? run.workingDirectory : undefined
+                  )
+                )
+              : run.workingDirectory
+                ? (() => {
+                    return approvedLocalWorkingDirectory(run).then((root) => [
+                      createLocalReadFileTool(root),
+                      createLocalListDirectoryTool(root),
+                      createLocalFindFilesTool(root),
+                      createLocalGlobFilesTool(root),
+                      createLocalGitStatusTool(root),
+                      createLocalCreateFileTool(root),
+                      createLocalWriteFileTool(root),
+                      createLocalShellCommandTool(root),
+                      // Existing Agent/Cron prompts use these protocol names. Their
+                      // implementations delegate to the same confined TS primitives.
+                      createLegacyReadTool(root),
+                      createLegacyListDirectoryTool(root),
+                      createLegacyGlobTool(root),
+                      createLegacyGrepTool(root),
+                      createLegacyBashTool(root),
+                      createLegacyMonitorTool(root),
+                      createLegacyWriteTool(root),
+                      createLegacyEditTool(root),
+                      createLegacyNotebookEditTool(root),
+                      ...(process.platform === 'win32' ? [createLegacyPowerShellTool(root)] : [])
+                    ])
+                  })()
+                : Promise.resolve([])
         return new ToolExecutor(
           selectExplicitTools(
             [
@@ -265,13 +316,18 @@ export class DesktopRuntime {
               createDesktopNotificationTool(showSystemNotification),
               ...createTaskRuntimeTools(),
               ...createGoalRuntimeTools(),
-              createSubAgentRuntimeTool(),
-              createSubAgentRuntimeTool('Agent'),
+              createSubAgentRuntimeTool('Task', subAgents),
+              createSubAgentRuntimeTool('Agent', subAgents),
+              ...(skillTool ? [skillTool] : []),
+              ...createCronRuntimeTools(),
+              ...createMemoryRuntimeTools(),
+              ...createBrowserRuntimeTools(),
               createAskUserRuntimeTool(),
               createWidgetRuntimeTool(),
               ...(run.translationContext ? createTranslationRuntimeTools() : []),
               createPromptOptimizerRuntimeTool(),
               createImageRuntimeTool(),
+              createVideoRuntimeTool(),
               ...createTeamRuntimeTools(),
               ...createPlanRuntimeTools(),
               ...createChannelReadRuntimeTools(),
@@ -388,6 +444,14 @@ export class DesktopRuntime {
     } finally {
       await service?.stop()
     }
+  }
+
+  async recordExternalArtifact(
+    spec: import('../../shared/runtime/contracts').RunSpec,
+    artifact: { path: string; mediaType: string }
+  ): Promise<void> {
+    if (!this.service) throw new RuntimeError('RUNTIME_DISCONNECTED')
+    await this.service.recordExternalArtifact(spec, artifact)
   }
 
   /** Routes Main-owned requests without exposing the socket endpoint or token. */

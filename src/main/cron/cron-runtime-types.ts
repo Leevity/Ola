@@ -28,5 +28,8 @@ export interface CronAgentRunOptions {
   maxIterations?: number
   pluginId?: string | null
   pluginChatId?: string | null
+  /** Executes with read-only workspace tools and suppresses all delivery actions. */
+  trialRun?: boolean
+  runKind?: 'scheduled' | 'manual' | 'trial'
   getScheduledState?: () => boolean
 }

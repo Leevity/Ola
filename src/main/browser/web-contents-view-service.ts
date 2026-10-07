@@ -4,6 +4,7 @@ import {
   type BrowserTabOwnership
 } from '../../runtime/host/browser-ownership'
 import { RuntimeError } from '../../shared/runtime/contracts'
+import { browserPartitionForWorkspace } from '../../shared/browser-plugin'
 
 export interface WebContentsViewTabInput {
   tabId: string
@@ -85,6 +86,12 @@ export class WebContentsViewBrowserService {
     const tabId = required(input.tabId, 'tab_id')
     const workspaceId = required(input.workspaceId, 'workspace_id')
     const profileId = required(input.profileId, 'profile_id')
+    if (
+      input.partition !== undefined &&
+      input.partition !== browserPartitionForWorkspace(workspaceId)
+    ) {
+      throw new RuntimeError('BROWSER_PARTITION_NOT_ALLOWED')
+    }
     const host = webContents.fromId(input.hostWebContentsId)
     const window = host ? BrowserWindow.fromWebContents(host) : null
     if (!host || !window || window.isDestroyed()) {

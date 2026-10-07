@@ -69,7 +69,9 @@ async function sha256File(path: string): Promise<string> {
 }
 
 async function syncHandoverFile(path: string): Promise<void> {
-  const handle = await open(path, 'r')
+  // Windows requires a writable handle for FlushFileBuffers, including files
+  // that we only need to flush after a completed copy or backup.
+  const handle = await open(path, process.platform === 'win32' ? 'r+' : 'r')
   try {
     await handle.sync()
   } finally {
@@ -790,8 +792,9 @@ export async function createLegacyDatabaseHandoverSnapshot(input: {
     if (!backupStat.isFile() || backupStat.size <= 0)
       throw new RuntimeError('LEGACY_DATABASE_BACKUP_FAILED')
     await copyFile(backupPath, rollbackPath, fsConstants.COPYFILE_EXCL)
-    await chmod(rollbackPath, 0o400)
     await syncHandoverFile(rollbackPath)
+    await chmod(rollbackPath, 0o400)
+    if (process.platform !== 'win32') await syncHandoverFile(rollbackPath)
     const rollbackStat = await stat(rollbackPath)
     if (!rollbackStat.isFile() || rollbackStat.size !== backupStat.size)
       throw new RuntimeError('LEGACY_DATABASE_ROLLBACK_FAILED')
@@ -881,23 +884,23 @@ export async function verifyLegacyRollbackBaseline(input: {
 }): Promise<LegacyDatabaseHandoverSnapshot> {
   const snapshot = await readHandoverManifest(input.manifestPath)
   const rollbackPath = snapshot.rollbackPath
-  const rollbackStat = await lstat(rollbackPath).catch(() => null)
+  const rollbackStat = await lstat(rollbackPath, { bigint: true }).catch(() => null)
   if (!rollbackStat?.isFile() || rollbackStat.isSymbolicLink())
     throw new RuntimeError('LEGACY_DATABASE_ROLLBACK_UNAVAILABLE')
-  const sourceStat = await stat(snapshot.sourcePath).catch(() => null)
-  const backupStat = await lstat(snapshot.backupPath).catch(() => null)
+  const sourceStat = await stat(snapshot.sourcePath, { bigint: true }).catch(() => null)
+  const backupStat = await lstat(snapshot.backupPath, { bigint: true }).catch(() => null)
   if (
-    rollbackStat.ino > 0 &&
+    rollbackStat.ino > 0n &&
     ((backupStat && rollbackStat.dev === backupStat.dev && rollbackStat.ino === backupStat.ino) ||
       (sourceStat && rollbackStat.dev === sourceStat.dev && rollbackStat.ino === sourceStat.ino))
   )
     throw new RuntimeError('LEGACY_DATABASE_ROLLBACK_INSECURE')
-  const rollbackWritable = (rollbackStat.mode & 0o222) !== 0
-  const rollbackShared = (rollbackStat.mode & 0o377) !== 0
+  const rollbackWritable = (rollbackStat.mode & 0o222n) !== 0n
+  const rollbackShared = (rollbackStat.mode & 0o377n) !== 0n
   if (process.platform === 'win32' ? rollbackWritable : rollbackShared)
     throw new RuntimeError('LEGACY_DATABASE_ROLLBACK_INSECURE')
   if (
-    rollbackStat.size !== snapshot.rollbackSize ||
+    rollbackStat.size !== BigInt(snapshot.rollbackSize) ||
     (await sha256File(rollbackPath)) !== snapshot.rollbackSha256
   )
     throw new RuntimeError('LEGACY_DATABASE_ROLLBACK_MISMATCH')
@@ -915,21 +918,34 @@ export async function verifyLegacyDatabaseHandoverSnapshot(input: {
 }): Promise<LegacyDatabaseHandoverSnapshot> {
   const snapshot = await readHandoverManifest(input.manifestPath)
   const backupPath = snapshot.backupPath
-  const backupStat = await lstat(backupPath).catch(() => null)
+  const backupStat = await lstat(backupPath, { bigint: true }).catch(() => null)
   if (backupStat?.isSymbolicLink()) throw new RuntimeError('LEGACY_DATABASE_BACKUP_INSECURE')
-  if (!backupStat?.isFile() || backupStat.size <= 0)
+  if (!backupStat?.isFile() || backupStat.size <= 0n)
     throw new RuntimeError('LEGACY_DATABASE_BACKUP_UNAVAILABLE')
   const sourceRealPath = await realpath(snapshot.sourcePath).catch(() => null)
   if (sourceRealPath && sourceRealPath === (await realpath(backupPath)))
     throw new RuntimeError('LEGACY_DATABASE_BACKUP_INSECURE')
-  if ((backupStat.mode & 0o077) !== 0) throw new RuntimeError('LEGACY_DATABASE_BACKUP_INSECURE')
+  const sourceStat = await stat(snapshot.sourcePath, { bigint: true }).catch(() => null)
+  if (
+    sourceStat &&
+    backupStat.ino > 0n &&
+    backupStat.dev === sourceStat.dev &&
+    backupStat.ino === sourceStat.ino
+  )
+    throw new RuntimeError('LEGACY_DATABASE_BACKUP_INSECURE')
+  if (process.platform !== 'win32' && (backupStat.mode & 0o077n) !== 0n)
+    throw new RuntimeError('LEGACY_DATABASE_BACKUP_INSECURE')
   await verifyLegacyRollbackBaseline(input)
   const contract = await verifyLegacyBusinessDatabaseContract({ sourcePath: backupPath })
   // Handover may add TS-owned compatibility/archive tables after the initial
   // snapshot (notably the preserved Native Project Wiki archive). They must
   // not be mistaken for a post-cutover legacy schema drift.
   const legacyTables = contract.tables.filter(
-    (table) => !table.startsWith('ola_ts_') && !table.startsWith('ola_native_wiki_')
+    (table) =>
+      !table.startsWith('ola_ts_') &&
+      !table.startsWith('ola_native_wiki_') &&
+      table !== 'ola_pending_session_queues' &&
+      table !== 'cron_run_deliveries'
   )
   if (
     contract.userVersion !== snapshot.userVersion ||

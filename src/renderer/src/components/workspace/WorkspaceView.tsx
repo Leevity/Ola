@@ -9,12 +9,14 @@ import { FileTreePanel } from '@renderer/components/cowork/FileTreePanel'
 import { PreviewPanel } from '@renderer/components/layout/PreviewPanel'
 import { ProjectTerminalDock } from '@renderer/components/terminal/ProjectTerminalDock'
 import { SourceControlPanel } from '@renderer/components/scm/SourceControlPanel'
+import {
+  DEFAULT_PROJECT_WORKSPACE_LEFT_WIDTH,
+  MIN_PROJECT_WORKSPACE_LEFT_WIDTH,
+  getMaxProjectWorkspaceLeftWidth,
+  getProjectTerminalDockLayout
+} from '@renderer/lib/workbench/project-terminal-dock-layout'
 
 type WorkspaceLeftView = 'explorer' | 'scm'
-
-const MIN_LEFT_WIDTH = 220
-const MAX_LEFT_WIDTH = 520
-const DEFAULT_LEFT_WIDTH = 300
 
 function ActivityButton({
   active,
@@ -46,11 +48,13 @@ function ActivityButton({
 export function WorkspaceView(): React.JSX.Element {
   const { t } = useTranslation(['layout', 'common'])
   const [leftView, setLeftView] = React.useState<WorkspaceLeftView>('explorer')
-  const [leftWidth, setLeftWidth] = React.useState(DEFAULT_LEFT_WIDTH)
+  const [leftWidth, setLeftWidth] = React.useState(DEFAULT_PROJECT_WORKSPACE_LEFT_WIDTH)
+  const [workspaceWidth, setWorkspaceWidth] = React.useState(0)
   const [isDragging, setIsDragging] = React.useState(false)
+  const workspaceRef = React.useRef<HTMLDivElement>(null)
   const draggingRef = React.useRef(false)
   const startXRef = React.useRef(0)
-  const startWidthRef = React.useRef(DEFAULT_LEFT_WIDTH)
+  const startWidthRef = React.useRef(DEFAULT_PROJECT_WORKSPACE_LEFT_WIDTH)
 
   const setMode = useUIStore((s) => s.setMode)
   const setBottomTerminalDockOpen = useUIStore((s) => s.setBottomTerminalDockOpen)
@@ -80,14 +84,40 @@ export function WorkspaceView(): React.JSX.Element {
       ? Boolean(s.bottomTerminalDockOpenByProjectId[sessionView.projectId])
       : false
   )
+  const terminalDockArea = useUIStore((s) =>
+    sessionView.projectId
+      ? (s.terminalDockAreaByProjectId[sessionView.projectId] ?? 'bottom')
+      : 'bottom'
+  )
+  const dockLayout = getProjectTerminalDockLayout({
+    workspaceWidth,
+    leftWidth,
+    terminalOpen,
+    preferredArea: terminalDockArea
+  })
+
+  React.useEffect(() => {
+    const element = workspaceRef.current
+    if (!element) return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (width !== undefined) setWorkspaceWidth(width)
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
 
   React.useEffect(() => {
     if (!isDragging) return
     const onMove = (event: MouseEvent): void => {
       if (!draggingRef.current) return
       const delta = event.clientX - startXRef.current
+      const maxWidth = getMaxProjectWorkspaceLeftWidth(workspaceWidth, dockLayout.effectiveArea)
       setLeftWidth(
-        Math.min(MAX_LEFT_WIDTH, Math.max(MIN_LEFT_WIDTH, startWidthRef.current + delta))
+        Math.min(
+          maxWidth,
+          Math.max(MIN_PROJECT_WORKSPACE_LEFT_WIDTH, startWidthRef.current + delta)
+        )
       )
     }
     const onUp = (): void => {
@@ -100,13 +130,13 @@ export function WorkspaceView(): React.JSX.Element {
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
     }
-  }, [isDragging])
+  }, [dockLayout.effectiveArea, isDragging, workspaceWidth])
 
   const startResize = (event: React.MouseEvent): void => {
     event.preventDefault()
     draggingRef.current = true
     startXRef.current = event.clientX
-    startWidthRef.current = leftWidth
+    startWidthRef.current = dockLayout.effectiveLeftWidth
     setIsDragging(true)
   }
 
@@ -120,7 +150,7 @@ export function WorkspaceView(): React.JSX.Element {
   }
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-background">
+    <div ref={workspaceRef} className="flex flex-1 overflow-hidden bg-background">
       <div className="flex w-10 shrink-0 flex-col items-center border-r border-border/50 py-1">
         <ActivityButton
           active={leftView === 'explorer'}
@@ -154,7 +184,7 @@ export function WorkspaceView(): React.JSX.Element {
 
       <div
         className="flex shrink-0 flex-col overflow-hidden border-r border-border/50"
-        style={{ width: leftWidth }}
+        style={{ width: dockLayout.effectiveLeftWidth }}
       >
         {leftView === 'explorer' ? (
           sessionView.workingFolder ? (
@@ -181,17 +211,48 @@ export function WorkspaceView(): React.JSX.Element {
         onMouseDown={startResize}
       />
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 flex-1 overflow-hidden">
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 flex-1 overflow-hidden',
+          dockLayout.effectiveArea === 'right' ? 'flex-row' : 'flex-col'
+        )}
+      >
+        <div
+          className={cn(
+            'min-h-0 min-w-0 flex-1 overflow-hidden',
+            dockLayout.effectiveArea === 'right' && 'min-w-[220px]'
+          )}
+        >
           <PreviewPanel embedded showTabStrip />
+          {terminalOpen && dockLayout.effectiveArea === 'bottom' && sessionView.projectId ? (
+            <div className="min-h-0 shrink-0 border-t border-border/50">
+              <ProjectTerminalDock
+                projectId={sessionView.projectId}
+                projectName={sessionView.projectName}
+                workingFolder={sessionView.workingFolder ?? null}
+                sshConnectionId={sessionView.sshConnectionId}
+                dockArea="bottom"
+                canMove
+                moveDisabledReason={
+                  !dockLayout.canMoveRight
+                    ? t('layout:terminalDock.rightDockNeedsSpace', {
+                        defaultValue: 'Expand the workspace to move the terminal to the right.'
+                      })
+                    : undefined
+                }
+              />
+            </div>
+          ) : null}
         </div>
-        {terminalOpen && sessionView.projectId ? (
-          <div className="min-h-0 shrink-0 border-t border-border/50">
+        {terminalOpen && dockLayout.effectiveArea === 'right' && sessionView.projectId ? (
+          <div className="min-h-0 w-[38%] min-w-[180px] max-w-[520px] shrink-0 border-l border-border/50">
             <ProjectTerminalDock
               projectId={sessionView.projectId}
               projectName={sessionView.projectName}
               workingFolder={sessionView.workingFolder ?? null}
               sshConnectionId={sessionView.sshConnectionId}
+              dockArea="right"
+              canMove
             />
           </div>
         ) : null}

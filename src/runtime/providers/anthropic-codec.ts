@@ -33,13 +33,25 @@ function messages(
     if (message.role === 'tool') {
       for (const value of message.results) {
         if (!pending.delete(value.id)) throw new RuntimeError('ORPHAN_TOOL_RESULT')
+        const output =
+          typeof value.output === 'string' ? value.output : (JSON.stringify(value.output) ?? 'null')
+        const imageContent = (value.images ?? []).map((image) => {
+          const source = runtimeImageSource(image, workspaceId)
+          if (!source.startsWith('data:')) throw new RuntimeError('INVALID_RUNTIME_IMAGE')
+          const separator = source.indexOf(',')
+          return {
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: image.mimeType,
+              data: source.slice(separator + 1)
+            }
+          }
+        })
         blocks.push({
           type: 'tool_result',
           tool_use_id: value.id,
-          content:
-            typeof value.output === 'string'
-              ? value.output
-              : (JSON.stringify(value.output) ?? 'null'),
+          content: imageContent.length ? [{ type: 'text', text: output }, ...imageContent] : output,
           ...(value.isError ? { is_error: true } : {})
         })
       }

@@ -1,4 +1,5 @@
 import { app, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 import type {
   SyncConfig,
   SyncConflictResolution,
@@ -91,6 +92,7 @@ function registerWorkspaceSyncMessagePackHandler(
   ) => Promise<unknown>
 ): void {
   ipcMain.handle(toMessagePackChannel('sync:workspace-run'), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<{ workspaceId?: unknown; resolutions?: unknown }>(bytes)
     return encodeMessagePackPayload(await handler(args, event))
   })

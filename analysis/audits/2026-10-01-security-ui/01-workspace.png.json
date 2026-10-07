@@ -1,0 +1,10 @@
+{
+  "hash": "#/",
+  "width": 1280,
+  "height": 802,
+  "bodyWidth": 1280,
+  "bodyHeight": 802,
+  "buttons": 36,
+  "headings": ["从一个可完成的任务开始", "Command Palette"],
+  "text": "Ola\n切换工作空间\n本地个人空间\n工作\n日常工作、研究和办公\n新建对话\n搜索\n任务与自动化\n扩展功能\n远控\n项目\n1\nNew Project\n本地\n0\n对话\n0\n暂无对话\nO\n登录\n未登录\n新建对话\n\nOla 能帮你做什么？\n\n分析问题、整理信息、撰写文档和推进日常工作，直接告诉 Ola 你的目标即可。\n\nNew Project\nC:\\Users\\80663\\AppData\\Local\\Temp\\ola-security-ui-audit-hirCfQ\\projects\\New Project\n未配置 API Key，点击此处打开设置。\n描述你希望 Ola 构建、研究、操作或验证的任务...\n\n\n开始\nNew Project\n本地模式\n分析这件事的关键问题和下一步\n根据会议记录整理行动项\n帮我写一份 PPT 大纲\n从一个可完成的任务开始\n\n选择一条引导流程，完成后可继续自定义。\n\n本地项目协作\n\n在当前项目中规划修改、实施变更并验证结果。\n\n开始引导\n远程环境诊断\n\n通过 SSH 执行只读诊断，并整理可追溯的结果。\n\n请先选择 SSH 项目\n自动化与交付\n\n创建定时运行、测试通知投递，并查看运行结果。\n\n开始引导\nCommand Palette\n\nSearch for a command to run..."
+}

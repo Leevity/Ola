@@ -22,6 +22,14 @@ export async function ensureWindowWorkspaceRegistered(workspaceId: string): Prom
         throw new Error('WINDOW_WORKSPACE_UNAVAILABLE')
       if (pending?.promise === promise) registeredWorkspaceId = workspaceId
     })
+    .catch(async (error) => {
+      if (error instanceof Error && error.message.includes('WINDOW_WORKSPACE_SUPERSEDED')) {
+        if (registeredWorkspaceId === workspaceId) return
+        if (pending?.workspaceId === workspaceId && pending.promise !== promise)
+          return pending.promise
+      }
+      throw error
+    })
     .finally(() => {
       if (pending?.promise === promise) pending = null
     })

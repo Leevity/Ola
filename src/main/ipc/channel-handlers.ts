@@ -29,6 +29,7 @@ import {
 } from '../channels/channel-plugin-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 import { handleChannelAutoReply } from '../channels/auto-reply'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 import type {
   ChannelInstance,
   ChannelEvent,
@@ -109,7 +110,8 @@ function registerChannelMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown>
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     if (channel.startsWith('plugin:weixin:') || channel.startsWith('plugin:feishu:')) {
       const pluginArgs = args as { pluginId?: unknown; workspaceId?: unknown } | null

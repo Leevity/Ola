@@ -3,6 +3,7 @@ import * as https from 'https'
 import * as http from 'http'
 import { URL } from 'url'
 import { applyDefaultApiUserAgent } from '../lib/api-user-agent'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
@@ -72,7 +73,8 @@ function isTrustedApiIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 

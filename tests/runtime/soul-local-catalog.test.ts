@@ -82,11 +82,13 @@ describe('SoulLocalCatalog', () => {
   })
 
   it('supports an explicit Ola data root for the global Soul target', () => {
+    const homeDirectory = join(tmpdir(), 'home')
+    const olaDataRoot = join(tmpdir(), 'isolated-ola')
     const catalog = new SoulLocalCatalog({
-      homeDirectory: join('/tmp', 'home'),
-      olaDataRoot: join('/tmp', 'isolated-ola'),
+      homeDirectory,
+      olaDataRoot,
       bundledDirectoryCandidates: []
     })
-    expect(catalog.targetPaths().global.path).toBe(join('/tmp', 'isolated-ola', 'SOUL.md'))
+    expect(catalog.targetPaths().global.path).toBe(join(olaDataRoot, 'SOUL.md'))
   })
 })

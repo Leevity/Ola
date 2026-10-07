@@ -1,6 +1,7 @@
-import { session } from 'electron'
+import { BrowserWindow, session } from 'electron'
 import { SettingsStore } from '../settings/settings-store'
 import { registerMessagePackHandler } from './messagepack-handler'
+import { safeSendMessagePackToAllWindows } from '../window-ipc'
 import {
   sanitizePermissionPolicy,
   toPermissionPolicySnapshot,
@@ -13,8 +14,110 @@ let hydratePromise: Promise<Record<string, unknown>> | null = null
 let pendingWrite: Promise<unknown> | null = null
 const settingsStore = new SettingsStore()
 
+function enqueueSettingsMutation(operation: () => Promise<void>): Promise<void> {
+  const previous = pendingWrite ?? Promise.resolve()
+  const running = previous.catch(() => undefined).then(operation)
+  const tracked = running.finally(() => {
+    if (pendingWrite === tracked) pendingWrite = null
+  })
+  pendingWrite = tracked
+  return tracked
+}
+
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function broadcastSettingsChanged(key: string | null): void {
+  if (typeof BrowserWindow?.getAllWindows !== 'function') return
+  safeSendMessagePackToAllWindows('settings:changed', { key })
+}
+
+type PersistedStatePatch = {
+  set: Record<string, unknown>
+  remove: string[]
+  setPaths?: Array<{ path: string[]; value: unknown }>
+  removePaths?: string[][]
+  version?: number
+}
+
+function validatePersistedStateKey(key: string): void {
+  if (!key || key.length > 128 || ['__proto__', 'prototype', 'constructor'].includes(key))
+    throw new Error('INVALID_SETTINGS_STATE_KEY')
+}
+
+function validatePersistedStatePath(path: unknown): asserts path is string[] {
+  if (!Array.isArray(path) || path.length < 2 || path.length > 16)
+    throw new Error('INVALID_SETTINGS_STATE_PATH')
+  for (const key of path) {
+    if (typeof key !== 'string') throw new Error('INVALID_SETTINGS_STATE_PATH')
+    validatePersistedStateKey(key)
+  }
+}
+
+function applyNestedStateChange(
+  state: Record<string, unknown>,
+  path: string[],
+  value: unknown,
+  remove: boolean
+): void {
+  let current = state
+  for (const key of path.slice(0, -1)) {
+    const existing = current[key]
+    if (!isPlainRecord(existing)) {
+      if (remove) return
+      current[key] = {}
+    } else {
+      current[key] = { ...existing }
+    }
+    current = current[key] as Record<string, unknown>
+  }
+  const last = path[path.length - 1]
+  if (remove) delete current[last]
+  else current[last] = value
+}
+
+export async function mergePersistedSettingsState(patch: PersistedStatePatch): Promise<void> {
+  if (!isPlainRecord(patch?.set) || !Array.isArray(patch.remove))
+    throw new Error('INVALID_SETTINGS_STATE_PATCH')
+  if (patch.version !== undefined && (!Number.isSafeInteger(patch.version) || patch.version < 0))
+    throw new Error('INVALID_SETTINGS_STATE_VERSION')
+  for (const key of Object.keys(patch.set)) validatePersistedStateKey(key)
+  for (const key of patch.remove) {
+    if (typeof key !== 'string') throw new Error('INVALID_SETTINGS_STATE_KEY')
+    validatePersistedStateKey(key)
+  }
+  const setPaths = patch.setPaths ?? []
+  const removePaths = patch.removePaths ?? []
+  if (!Array.isArray(setPaths) || !Array.isArray(removePaths))
+    throw new Error('INVALID_SETTINGS_STATE_PATCH')
+  for (const entry of setPaths) {
+    if (!isPlainRecord(entry)) throw new Error('INVALID_SETTINGS_STATE_PATH')
+    validatePersistedStatePath(entry.path)
+  }
+  for (const path of removePaths) validatePersistedStatePath(path)
+  await enqueueSettingsMutation(async () => {
+    const current = await initializeSettingsCache()
+    const persisted = isPlainRecord(current['ola-settings']) ? current['ola-settings'] : {}
+    const previousState = isPlainRecord(persisted.state) ? persisted.state : {}
+    const state = { ...previousState, ...patch.set }
+    for (const key of patch.remove) delete state[key]
+    for (const entry of setPaths) applyNestedStateChange(state, entry.path, entry.value, false)
+    for (const path of removePaths) applyNestedStateChange(state, path, undefined, true)
+    const nextPersisted = {
+      ...persisted,
+      state,
+      version: Math.max(
+        typeof persisted.version === 'number' && Number.isSafeInteger(persisted.version)
+          ? persisted.version
+          : 29,
+        patch.version ?? 29
+      )
+    }
+    const result = await settingsStore.set('ola-settings', nextPersisted)
+    if (!result.success) throw new Error(result.error || 'Settings merge failed')
+    settingsCache = { ...current, 'ola-settings': nextPersisted }
+  })
 }
 
 export async function initializeSettingsCache(): Promise<Record<string, unknown>> {
@@ -126,10 +229,13 @@ export function readProviderRetryMaxAttempts(): number {
 }
 
 export async function flushSettingsSync(): Promise<void> {
-  if (!pendingWrite) return
-  await pendingWrite.catch((err) => {
-    console.error('[Settings] Pending native write failed:', err)
-  })
+  while (pendingWrite) {
+    const current = pendingWrite
+    await current.catch((err) => {
+      console.error('[Settings] Pending native write failed:', err)
+    })
+    if (pendingWrite === current) return
+  }
 }
 
 function normalizeProxyUrl(value: unknown): string {
@@ -150,32 +256,24 @@ async function applySystemProxy(proxyUrl: string): Promise<void> {
 }
 
 export async function setSettingsValue(key: string, value: unknown): Promise<void> {
-  const settings = await initializeSettingsCache()
-  if (value === undefined || value === null) {
-    delete settings[key]
-  } else {
-    settings[key] = value
-  }
-  settingsCache = settings
-
-  pendingWrite = settingsStore
-    .set(key, value)
-    .then((result) => {
-      if (!result.success) {
-        throw new Error(result.error || 'Settings set failed')
-      }
-    })
-    .finally(() => {
-      pendingWrite = null
-    })
-  await pendingWrite
+  await enqueueSettingsMutation(async () => {
+    const current = await initializeSettingsCache()
+    const next = { ...current }
+    if (value === undefined || value === null) delete next[key]
+    else next[key] = value
+    const result = await settingsStore.set(key, value)
+    if (!result.success) throw new Error(result.error || 'Settings set failed')
+    settingsCache = next
+  })
 }
 
 export async function writeSettingsValue(root: Record<string, unknown>): Promise<void> {
-  const result = await settingsStore.write(root)
-  if (!result.success) throw new Error(result.error)
-  settingsCache = root
-  settingsHydrated = true
+  await enqueueSettingsMutation(async () => {
+    const result = await settingsStore.write(root)
+    if (!result.success) throw new Error(result.error)
+    settingsCache = root
+    settingsHydrated = true
+  })
 }
 
 export function registerSettingsHandlers(): void {
@@ -188,6 +286,7 @@ export function registerSettingsHandlers(): void {
     async (root) => {
       try {
         await writeSettingsValue(root)
+        broadcastSettingsChanged(null)
         return { success: true }
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) }
@@ -201,8 +300,18 @@ export function registerSettingsHandlers(): void {
     return settings
   })
 
-  registerMessagePackHandler<{ key: string; value: unknown }>('settings:set', async (args) => {
-    await setSettingsValue(args.key, args.value)
+  registerMessagePackHandler<{
+    key: string
+    value?: unknown
+    patch?: PersistedStatePatch
+  }>('settings:set', async (args) => {
+    if (args.patch !== undefined) {
+      if (args.key !== 'ola-settings') throw new Error('INVALID_SETTINGS_STATE_PATCH_TARGET')
+      await mergePersistedSettingsState(args.patch)
+    } else {
+      await setSettingsValue(args.key, args.value)
+    }
+    broadcastSettingsChanged(args.key)
 
     if (args.key === 'systemProxyUrl') {
       await applySystemProxy(normalizeProxyUrl(args.value))
@@ -217,6 +326,7 @@ export function registerSettingsHandlers(): void {
     async ({ key }) => {
       try {
         await setSettingsValue(key, null)
+        broadcastSettingsChanged(key)
         return { success: true }
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) }

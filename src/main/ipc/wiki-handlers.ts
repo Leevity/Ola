@@ -12,6 +12,7 @@ import { requestCodeGraph } from './codegraph-handlers'
 import { getRegisteredWindowWorkspace } from '../window-ipc'
 import { authorizeChannelSessionWorkspace } from '../channels/channel-session-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 
 async function getSharedIndexedFiles(
   projectRoot: string
@@ -48,7 +49,8 @@ function isTrustedWikiIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 

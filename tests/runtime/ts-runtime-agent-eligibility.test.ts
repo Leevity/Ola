@@ -46,7 +46,7 @@ describe('TS runtime Execute eligibility', () => {
     [{ hasSsh: true }, 'SSH_NOT_MIGRATED'],
     [{ hasPlugin: true }, 'PLUGIN_NOT_MIGRATED'],
     [{ hasChannels: true }, 'CHANNELS_NOT_MIGRATED'],
-    [{ toolNames: ['BrowserNavigate'] }, 'TOOLS_NOT_MIGRATED'],
+    [{ toolNames: ['UnknownTool'] }, 'TOOLS_NOT_MIGRATED'],
     [{ workingDirectory: null }, 'TOOLS_NOT_MIGRATED'],
     [{ mode: 'acp' }, 'MODE_NOT_MIGRATED']
   ] as const)('keeps unsupported Execute capabilities on sidecar: %s', (patch, reason) => {
@@ -73,6 +73,7 @@ describe('TS runtime Execute eligibility', () => {
           'TaskUpdate',
           'TaskList',
           'Task',
+          'Skill',
           'Agent',
           'get_goal',
           'create_goal',
@@ -100,6 +101,126 @@ describe('TS runtime Execute eligibility', () => {
         toolNames: ['Read', 'ImageGenerate']
       })
     ).toMatchObject({ eligible: true })
+  })
+
+  it('allows workspace-scoped notebook edits only when a working directory is present', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({ ...baseline, toolNames: ['NotebookEdit'] })
+    ).toMatchObject({ eligible: true })
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        workingDirectory: null,
+        toolNames: ['NotebookEdit']
+      })
+    ).toEqual({ eligible: false, reason: 'TOOLS_NOT_MIGRATED' })
+  })
+
+  it('allows the Main-owned memory tools after their bounded read-only migration', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        toolNames: ['Read', 'MemoryList', 'MemoryRead', 'MemorySearch']
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
+  it('allows Browser tools through the persisted UI interaction bridge', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        toolNames: [
+          'BrowserNavigate',
+          'BrowserGetContent',
+          'BrowserScreenshot',
+          'BrowserSnapshot',
+          'BrowserClick',
+          'BrowserType',
+          'BrowserScroll'
+        ]
+      })
+    ).toMatchObject({ eligible: true })
+  })
+
+  it('accepts the full captured code-session tool snapshot with a trailing system reminder', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        messages: [
+          ...messages,
+          {
+            id: 'memory-reminder',
+            role: 'system',
+            content: '<system-reminder>[global-memory-update]</system-reminder>',
+            createdAt: 2
+          }
+        ],
+        toolNames: [
+          'MemoryRead',
+          'Read',
+          'Grep',
+          'Glob',
+          'LS',
+          'PowerShell',
+          'Bash',
+          'AskUserQuestion',
+          'BrowserClick',
+          'BrowserGetContent',
+          'BrowserNavigate',
+          'BrowserScreenshot',
+          'BrowserScroll',
+          'BrowserSnapshot',
+          'BrowserType',
+          'create_goal',
+          'CronAdd',
+          'CronCreate',
+          'CronDelete',
+          'CronList',
+          'CronRemove',
+          'CronUpdate',
+          'Edit',
+          'EnterPlanMode',
+          'ExitPlanMode',
+          'get_goal',
+          'MemoryList',
+          'MemorySearch',
+          'Monitor',
+          'NotebookEdit',
+          'Notify',
+          'Skill',
+          'Task',
+          'TaskCreate',
+          'TaskGet',
+          'TaskList',
+          'TaskUpdate',
+          'update_goal',
+          'visualize_show_widget',
+          'Write'
+        ]
+      })
+    ).toMatchObject({
+      eligible: true,
+      prompt: 'Inspect and update this project.',
+      history: [
+        {
+          role: 'system',
+          text: '<system-reminder>[global-memory-update]</system-reminder>'
+        }
+      ]
+    })
+  })
+
+  it('allows Main-owned PowerShell and Monitor only with a workspace root', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({ ...baseline, toolNames: ['PowerShell', 'Monitor'] })
+    ).toMatchObject({ eligible: true })
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        workingDirectory: null,
+        toolNames: ['PowerShell', 'Monitor']
+      })
+    ).toEqual({ eligible: false, reason: 'TOOLS_NOT_MIGRATED' })
   })
 
   it('allows an explicitly named Main-owned MCP tool through the TS runtime', () => {

@@ -105,6 +105,7 @@ export const IPC = {
   // Settings
   SETTINGS_GET: 'settings:get',
   SETTINGS_SET: 'settings:set',
+  SETTINGS_CHANGED: 'settings:changed',
   WEB_SEARCH_SECRET_STATUS: 'web:search-secret-status',
   WEB_SEARCH_SECRET_SET: 'web:search-secret-set',
   WEB_SEARCH_SECRET_DELETE: 'web:search-secret-delete',
@@ -225,11 +226,14 @@ export const IPC = {
   CRON_RUN_CREATE: 'cron:run:create',
   CRON_RUN_UPDATE: 'cron:run:update',
   CRON_RUN_DETAIL: 'cron:run-detail',
+  CRON_DELIVERY_RECONCILE: 'cron:delivery-reconcile',
+  CRON_DELIVERY_RETRY: 'cron:delivery-retry',
   CRON_RUN_MESSAGES_REPLACE: 'cron:run-messages:replace',
   CRON_RUN_LOG_APPEND: 'cron:run-log:append',
   CRON_FIRED: 'cron:fired',
   CRON_JOB_REMOVED: 'cron:job-removed',
   CRON_RUN_FINISHED: 'cron:run-finished',
+  CRON_SESSION_DELIVERED: 'cron:session-delivered',
   CRON_ABORT_RUN: 'cron:abort-run',
   CRON_RUN_STARTED: 'cron:run-started',
   CRON_RUN_PROGRESS: 'cron:run-progress',
@@ -282,6 +286,8 @@ export const IPC = {
   UPDATE_ERROR: 'update:error',
   CHAT_SESSION_UPDATED: 'chat:session-updated',
   CHAT_SESSION_DELETED: 'chat:session-deleted',
+  CHAT_PROJECT_UPDATED: 'chat:project-updated',
+  CHAT_PROJECT_DELETED: 'chat:project-deleted',
 
   // Skills
   SKILLS_LIST: 'skills:list',
@@ -505,6 +511,8 @@ export const IPC = {
   INPUT_DRAFT_FLUSH: 'input-draft:flush',
   INPUT_DRAFT_READ: 'input-draft:read',
   INPUT_DRAFT_WRITE: 'input-draft:write',
+  DB_PENDING_SESSION_QUEUE_GET: 'db:pending-session-queue:get',
+  DB_PENDING_SESSION_QUEUE_REPLACE: 'db:pending-session-queue:replace',
   MEDIA_STATUS: 'media:status',
   MEDIA_TASK_CANCEL: 'media:task-cancel',
   MEDIA_TASK_CREATE: 'media:task-create',
@@ -534,6 +542,7 @@ export const IPC = {
   PROVIDER_FALLBACK_RESOLVE: 'provider:fallback:resolve',
   PROVIDER_HEALTH: 'provider:health',
   PROVIDER_HEALTH_RESET: 'provider:health:reset',
+  PROVIDER_MIRROR_SNAPSHOT: 'provider:mirror-snapshot',
   SSH_CONFIG_CHANGED: 'ssh:config:changed',
   TS_RUNTIME_WORKSPACE_ACTIVITY: 'ts-runtime:workspace-activity',
   WIKI_EXPORT: 'wiki:export',
@@ -550,8 +559,11 @@ export const IPC = {
   FS_SEARCH_FILES: 'fs:search-files',
   DRAW_GRAPH_LIST: 'draw-graph:list',
   RUNTIME_APPROVAL_REQUEST_MSGPACK: 'runtime:approval-request:msgpack',
+  EXECUTION_RECORDS_LIST_MSGPACK: 'execution-records:list:msgpack',
+  EXECUTION_ARTIFACTS_LIST_MSGPACK: 'execution-artifacts:list:msgpack',
+  EXECUTION_ARTIFACTS_HIDE_MSGPACK: 'execution-artifacts:hide:msgpack',
   HOOKS_CANCEL: 'hooks:cancel',
-  WINDOW_WORKSPACE_SET: 'window:workspace:set',
+  WINDOW_WORKSPACE_SET: 'window:workspace:set'
 } as const
 
 export type IPCChannel = (typeof IPC)[keyof typeof IPC]
@@ -578,4 +590,12 @@ const ipcChannelSet = new Set<string>([
  */
 export function isKnownIpcChannel(channel: string): channel is IPCChannel {
   return ipcChannelSet.has(channel)
+}
+
+/** A MessagePack transport is allowed only for an already registered base channel. */
+export function isKnownIpcTransportChannel(channel: string): boolean {
+  if (isKnownIpcChannel(channel)) return true
+  if (!channel.endsWith(':msgpack')) return false
+  const base = channel.slice(0, -':msgpack'.length)
+  return !base.endsWith(':msgpack') && isKnownIpcChannel(base)
 }

@@ -1,0 +1,10 @@
+{
+  "hash": "#/settings/integrations/plugin",
+  "width": 1280,
+  "height": 802,
+  "bodyWidth": 1280,
+  "bodyHeight": 802,
+  "buttons": 34,
+  "headings": ["插件", "能力交付状态", "图片插件", "Command Palette"],
+  "text": "设置\n偏好与模型设置\n全局\n·\n已保存\n\n常用\n\n通用设置\n工作方式\n关于\n\n模型与账户\n\nAI 服务商\n模型管理\n模型配置\nOla 账户\n\n执行与安全\n\n权限管理\n系统设置\n桌面自动化\n凭据管理\n\n扩展与集成\n\n插件\n自定义插件\nMCP 服务器\n技能市场\n频道\n联网搜索\n项目智能\n\n数据与个性化\n\n个人资料\n全局人格与记忆\n\n高级\n\n迁移中心\n高级\nPowered by Ola\n插件\n\n在一个入口统一管理已安装能力、自定义 Extension、MCP、Skills、消息渠道、作用域、权限与健康状态。\n\n能力交付状态\n\n按实际交付阶段标记能力，确保展示状态与可用范围一致。\n\n交付状态\n本地 Agent 工作区\n正式可用\n远程 SSH 操作\n测试中\n消息渠道自动化\n测试中\n浏览器 Cookie 导入\n测试中\n媒体生成\n测试中\n统一执行审计\n测试中\n默认插件\n自定义扩展\n图片插件\n已启用\n浏览器插件\n已启用\nProduct Design\n已启用\n项目智能\n已禁用\n图片插件\n\n为 Agent 提供专用图片生成 Tool。\n\n启用插件\n\n启用并配置完成后，Agent 才会获得对应 Tool\n\n图片模型来源\n\n你可以复用全局绘图模型，或为该插件单独指定图片模型\n\n使用全局绘图模型\n全局绘图模型尚未配置，请先到“模型配置”里设置绘图模型。\n\nTool 状态\n\n只有在插件启用且模型有效时，图片 Tool 才会暴露给 Agent。\n\nImageGenerate\n\n插件已启用，但所需配置尚未完成。\n\n可用参数：prompt、count、reference_images、size、quality\n\nprompt\ncount\nreference_images\nsize\nquality\n\nTool 使用约束\n\n仅当你希望 Agent 直接生成图片时再启用。Tool 只接受 `prompt` 和 `count`，并使用当前配置的图片模型执行生成。\n\nCommand Palette\n\nSearch for a command to run..."
+}

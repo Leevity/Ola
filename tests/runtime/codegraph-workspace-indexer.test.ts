@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdir, mkdtemp, rm, symlink, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { tryCreateTestSymlink, skipWhenSymlinkUnavailable } from './symlink-fixture'
 import { WasmCodeGraphStore } from '../../src/runtime/codegraph/graph-store'
 import {
   indexWorkspaceWithWasm,
@@ -14,7 +15,7 @@ afterEach(async () => {
 })
 
 describe('TS CodeGraph workspace indexer', () => {
-  it('indexes supported source files and excludes generated, dependency and symlink paths', async () => {
+  it('indexes supported source files and excludes generated and dependency paths', async () => {
     const root = await mkdtemp(join(tmpdir(), 'ola-workspace-'))
     cleanup.push(() => rm(root, { recursive: true, force: true }))
     await mkdir(join(root, 'src'), { recursive: true })
@@ -22,7 +23,6 @@ describe('TS CodeGraph workspace indexer', () => {
     await writeFile(join(root, 'src', 'index.ts'), 'export function workspace() {}')
     await writeFile(join(root, 'node_modules', 'pkg', 'ignored.ts'), 'export function ignored() {}')
     await writeFile(join(root, 'README.md'), '# ignored')
-    await symlink(join(root, 'src', 'index.ts'), join(root, 'linked.ts'))
     const store = new WasmCodeGraphStore(join(root, 'graph.db'))
     cleanup.push(() => store.close())
     await expect(indexWorkspaceWithWasm({ root, store })).resolves.toMatchObject({ indexed: 1 })
@@ -40,6 +40,24 @@ describe('TS CodeGraph workspace indexer', () => {
     await unlink(join(root, 'src', 'index.ts'))
     await expect(indexWorkspaceWithWasm({ root, store })).resolves.toMatchObject({ removed: 1 })
     expect(await store.findSymbols('changed')).toEqual([])
+  })
+
+  it('does not follow symlinked source files', async ({ skip }) => {
+    const root = await mkdtemp(join(tmpdir(), 'ola-workspace-link-'))
+    cleanup.push(() => rm(root, { recursive: true, force: true }))
+    await mkdir(join(root, 'src'), { recursive: true })
+    await writeFile(join(root, 'src', 'index.ts'), 'export function workspace() {}')
+    const linked = await tryCreateTestSymlink(
+      join(root, 'src', 'index.ts'),
+      join(root, 'linked.ts')
+    )
+    skipWhenSymlinkUnavailable({ skip }, linked)
+    const store = new WasmCodeGraphStore(join(root, 'graph.db'))
+    cleanup.push(() => store.close())
+    await expect(indexWorkspaceWithWasm({ root, store })).resolves.toMatchObject({ indexed: 1 })
+    expect(await store.findSymbols('workspace')).toEqual([
+      expect.objectContaining({ path: 'src/index.ts' })
+    ])
   })
 
   it('indexes Solidity and reports grammars that are deliberately unavailable', async () => {

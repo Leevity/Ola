@@ -9,6 +9,7 @@ import {
   type RunSnapshot,
   type PendingRuntimeInteraction
 } from '../../shared/runtime/contracts'
+import type { ExecutionPageKey } from '../../shared/execution-record'
 
 function journalWorkerUrl(): URL {
   // electron-vite clears out/main before every development rebuild. Its dynamic
@@ -58,6 +59,12 @@ export class RunJournal {
       this.worker.postMessage({ id, method, args })
     })
   }
+  recordExternalArtifact(
+    spec: RunSpec,
+    artifact: { path: string; mediaType: string }
+  ): Promise<void> {
+    return this.call('external-artifact', { spec, artifact })
+  }
   create(spec: RunSpec): Promise<{ run: RunRecord; created: boolean }> {
     return this.call('create', { spec })
   }
@@ -86,8 +93,50 @@ export class RunJournal {
       limit: Math.min(1000, Math.max(1, Math.trunc(limit)))
     })
   }
-  list(workspaceId: string, limit = 100): Promise<RunSummary[]> {
-    return this.call('list', { workspaceId, limit: Math.min(1000, Math.max(1, Math.trunc(limit))) })
+  list(
+    workspaceId: string,
+    limit = 100,
+    offset = 0,
+    attentionOnly = false,
+    anchor?: ExecutionPageKey,
+    after?: ExecutionPageKey
+  ): Promise<RunSummary[]> {
+    return this.call('list', {
+      workspaceId,
+      limit: Math.min(1000, Math.max(1, Math.trunc(limit))),
+      offset: Math.max(0, Math.trunc(offset)),
+      attentionOnly,
+      anchor,
+      after
+    })
+  }
+  artifacts(
+    workspaceId: string,
+    limit = 50,
+    offset = 0,
+    runId?: string
+  ): Promise<
+    Array<{
+      runId: string
+      seq: number
+      data: unknown
+      timestamp: number
+      sessionId: string
+      status: RunStatus
+      projectId: string | null
+      workingDirectory: string | null
+    }>
+  > {
+    return this.call('artifacts-list', {
+      workspaceId,
+      limit: Math.min(200, Math.max(1, Math.trunc(limit))),
+      offset: Math.max(0, Math.trunc(offset)),
+      runId
+    })
+  }
+  hideArtifact(workspaceId: string, runId: string, seq: number): Promise<{ hidden: true }> {
+    if (!Number.isSafeInteger(seq) || seq < 1) throw new RuntimeError('INVALID_ARTIFACT_ID')
+    return this.call('artifact-hide', { workspaceId, runId, seq })
   }
   active(): Promise<RunRecord[]> {
     return this.call('active')

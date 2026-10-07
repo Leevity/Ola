@@ -1,12 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 const electronState = vi.hoisted(() => ({ userData: '' }))
 
 vi.mock('electron', () => ({
-  app: { getPath: () => electronState.userData, isPackaged: false },
+  app: {
+    getPath: (name: string) =>
+      name === 'sessionData'
+        ? path.join(electronState.userData, 'session-data')
+        : electronState.userData,
+    isPackaged: false
+  },
   safeStorage: {
     isEncryptionAvailable: () => true,
     getSelectedStorageBackend: () => 'keychain',
@@ -21,6 +27,11 @@ let userData: string
 beforeAll(async () => {
   userData = await mkdtemp(path.join(tmpdir(), 'ola-offline-workspaces-'))
   electronState.userData = userData
+  await mkdir(path.join(userData, 'session-data'))
+  await writeFile(
+    path.join(userData, 'session-data', 'Local State'),
+    JSON.stringify({ os_crypt: { encrypted_key: 'test-key' } })
+  )
 })
 
 afterAll(async () => {

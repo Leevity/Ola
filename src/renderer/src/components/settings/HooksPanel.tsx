@@ -13,12 +13,12 @@ export function HooksPanel(): React.JSX.Element {
   const activeSession = useChatStore((state) =>
     state.sessions.find((session) => session.id === state.activeSessionId)
   )
-  const projectPath = activeSession?.workingFolder
+  const sessionId = activeSession?.id
   const { hooks, history, loading, error, refresh, trust, revoke } = useHooksStore()
 
   useEffect(() => {
-    void refresh(projectPath)
-  }, [projectPath, refresh])
+    void refresh(sessionId)
+  }, [sessionId, refresh])
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-6">
@@ -31,7 +31,7 @@ export function HooksPanel(): React.JSX.Element {
           variant="outline"
           size="sm"
           disabled={loading}
-          onClick={() => void refresh(projectPath)}
+          onClick={() => void refresh(sessionId)}
         >
           <RefreshCw className={`mr-2 size-4 ${loading ? 'animate-spin' : ''}`} />
           {t('hooks.refresh')}
@@ -100,13 +100,13 @@ export function HooksPanel(): React.JSX.Element {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => void revoke(hook.trustKey, projectPath)}
+                    onClick={() => void revoke(hook.trustKey, sessionId)}
                   >
                     <CheckCircle2 className="mr-2 size-4 text-emerald-500" />
                     {t('hooks.revoke')}
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => void trust(hook.trustKey, projectPath)}>
+                  <Button size="sm" onClick={() => void trust(hook.trustKey, sessionId)}>
                     <ShieldAlert className="mr-2 size-4" />
                     {t('hooks.reviewAndTrust')}
                   </Button>

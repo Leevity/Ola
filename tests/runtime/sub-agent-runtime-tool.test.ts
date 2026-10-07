@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createSubAgentRuntimeTool } from '../../src/main/runtime/sub-agent-runtime-tool'
 import type { RunSnapshot, RunSpec } from '../../src/shared/runtime/contracts'
 import type { ToolContext } from '../../src/runtime/tools/tool-executor'
+import type { AgentInfo } from '../../src/main/user-content/agent-catalog'
 
 const manifestPatches: unknown[] = []
 let teamTasks: Array<Record<string, unknown>> = []
@@ -109,6 +110,51 @@ describe('TS Task runtime tool', () => {
       status: 'completed',
       report: 'inspection report'
     })
+  })
+
+  it('uses the current custom agent snapshot for schema, prompt, tool scope and turn limit', async () => {
+    const agent: AgentInfo = {
+      name: 'reviewer',
+      description: 'Review files',
+      tools: ['Read'],
+      allowedTools: ['Read'],
+      disallowedTools: [],
+      maxTurns: 3,
+      maxIterations: 3,
+      systemPrompt: 'Review only the requested files.'
+    }
+    const tool = createSubAgentRuntimeTool('Task', [agent])
+    expect(
+      (tool.inputSchema as { properties: { subagent_type: { enum: string[] } } }).properties
+        .subagent_type.enum
+    ).toEqual(['reviewer', 'custom'])
+    let submitted: RunSpec | undefined
+    await tool.execute(
+      tool.validate({
+        description: 'inspect',
+        prompt: 'Inspect project',
+        subagent_type: 'reviewer'
+      }),
+      context({
+        runNested: async (input) => {
+          submitted = input as RunSpec
+          return snapshot('completed')
+        }
+      })
+    )
+    expect(submitted?.toolNames).toEqual(['Read'])
+    expect(submitted?.maxTurns).toBe(3)
+    expect(submitted?.modelOptions?.systemPrompt).toContain('Review only the requested files.')
+    await expect(
+      tool.execute(
+        tool.validate({
+          description: 'inspect',
+          prompt: 'Inspect project',
+          subagent_type: 'removed'
+        }),
+        context({ runNested: async () => snapshot('completed') })
+      )
+    ).rejects.toThrow('INVALID_TOOL_INPUT')
   })
 
   it('submits background work and rejects unattended sub-agent requests explicitly', async () => {

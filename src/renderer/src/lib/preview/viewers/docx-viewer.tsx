@@ -4,6 +4,7 @@ import { FileText } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
+import { openMarkdownHref } from './markdown-components'
 import type { ViewerProps } from '../viewer-registry'
 
 async function convertDocxToHtml(base64: string): Promise<string> {
@@ -115,6 +116,17 @@ export function DocxViewer({
       </div>
       <div
         className="prose prose-sm dark:prose-invert max-w-none"
+        onClick={(event) => {
+          const target = event.target
+          if (!(target instanceof Element)) return
+          const link = target.closest('a[href]')
+          if (!(link instanceof HTMLAnchorElement)) return
+          const url = new URL(link.href, window.location.href)
+          if (url.protocol === 'http:' || url.protocol === 'https:') {
+            event.preventDefault()
+            openMarkdownHref(url.href)
+          }
+        }}
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

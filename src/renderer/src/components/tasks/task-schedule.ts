@@ -24,7 +24,9 @@ export function startOfLocalDay(value: Date | number): Date {
 
 export function endOfLocalDay(value: Date | number): Date {
   const start = startOfLocalDay(value)
-  return new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1)
+  const nextDay = new Date(start)
+  nextDay.setDate(nextDay.getDate() + 1)
+  return new Date(nextDay.getTime() - 1)
 }
 
 export function dateKeyFromDate(date: Date): string {
@@ -135,7 +137,7 @@ function normalizeCronToken(token: string): string {
   return token.trim() === '?' ? '*' : token.trim()
 }
 
-function matchesCronField(field: string, value: number): boolean {
+function matchesCronField(field: string, value: number, min: number, max: number): boolean {
   const normalized = normalizeCronToken(field)
   if (normalized === '*') return true
 
@@ -149,7 +151,7 @@ function matchesCronField(field: string, value: number): boolean {
 
     if (base === '*') {
       if (!step) return true
-      if (value % step === 0) return true
+      if ((value - min) % step === 0) return true
       continue
     }
 
@@ -157,14 +159,14 @@ function matchesCronField(field: string, value: number): boolean {
     if (rangeMatch) {
       const start = Number.parseInt(rangeMatch[1], 10)
       const end = Number.parseInt(rangeMatch[2], 10)
-      if (value < start || value > end) continue
-      if (!step) return true
-      if ((value - start) % step === 0) return true
+      const size = max - min + 1
+      const span = start <= end ? end - start : (((end - start) % size) + size) % size
+      const offset = start <= end ? value - start : (((value - start) % size) + size) % size
+      if (offset >= 0 && offset <= span && (!step || offset % step === 0)) return true
       continue
     }
 
-    const exact = Number.parseInt(base, 10)
-    if (!Number.isNaN(exact) && exact === value) return true
+    if (/^\d+$/.test(base) && Number.parseInt(base, 10) === value) return true
   }
 
   return false
@@ -173,7 +175,7 @@ function matchesCronField(field: string, value: number): boolean {
 function expandCronFieldValues(field: string, min: number, max: number): number[] {
   const values: number[] = []
   for (let value = min; value <= max; value++) {
-    if (matchesCronField(field, value)) {
+    if (matchesCronField(field, value, min, max)) {
       values.push(value)
     }
   }
@@ -201,6 +203,121 @@ function getWeekdayIndex(label: string): number {
   return map[lower] ?? 0
 }
 
+const CRON_NICKNAMES: Record<string, string> = {
+  '@yearly': '0 0 1 1 *',
+  '@annually': '0 0 1 1 *',
+  '@monthly': '0 0 1 * *',
+  '@weekly': '0 0 * * 0',
+  '@daily': '0 0 * * *',
+  '@midnight': '0 0 * * *',
+  '@hourly': '0 * * * *'
+}
+
+const MONTH_NAMES = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december'
+]
+const WEEKDAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+function normalizeNamedCronField(field: string, names: readonly string[], first: number): string {
+  return field.replace(/[a-z]+/gi, (token) => {
+    const name = token.toLowerCase()
+    const index = names.findIndex((item) => item === name || item.slice(0, 3) === name)
+    if (index >= 0) return String(index + first)
+    if (name.endsWith('l')) {
+      const stem = name.slice(0, -1)
+      const lastIndex = names.findIndex((item) => item === stem || item.slice(0, 3) === stem)
+      if (lastIndex >= 0) return `${lastIndex + first}L`
+    }
+    return token
+  })
+}
+
+function lastDayOfMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate()
+}
+
+function nearestWeekday(year: number, month: number, target: number): number {
+  const last = lastDayOfMonth(year, month)
+  if (target < 1 || target > last) return -1
+  const weekday = new Date(Date.UTC(year, month - 1, target)).getUTCDay()
+  if (weekday === 6) return target === 1 ? target + 2 : target - 1
+  if (weekday === 0) return target === last ? target - 2 : target + 1
+  return target
+}
+
+function matchesCronDayOfMonth(field: string, year: number, month: number, day: number): boolean {
+  if (matchesCronField(field, day, 1, 31)) return true
+  for (const token of field.toUpperCase().split(',')) {
+    if (token === 'L' && day === lastDayOfMonth(year, month)) return true
+    const offset = token.match(/^L-(\d{1,2})$/)
+    if (offset && day === lastDayOfMonth(year, month) - Number(offset[1])) return true
+    const weekday = token.match(/^(\d{1,2}|L)W$/)
+    if (weekday) {
+      const target = weekday[1] === 'L' ? lastDayOfMonth(year, month) : Number(weekday[1])
+      if (day === nearestWeekday(year, month, target)) return true
+    }
+  }
+  return false
+}
+
+function matchesCronDayOfWeek(
+  field: string,
+  year: number,
+  month: number,
+  day: number,
+  weekday: number
+): boolean {
+  if (
+    matchesCronField(field, weekday, 0, 6) ||
+    (weekday === 0 && matchesCronField(field, 7, 0, 6))
+  ) {
+    return true
+  }
+  for (const token of field.toUpperCase().split(',')) {
+    const last = token.match(/^([0-7])L$/)
+    if (last && Number(last[1]) % 7 === weekday && day + 7 > lastDayOfMonth(year, month)) {
+      return true
+    }
+    const nth = token.match(/^([0-7])#([1-5])$/)
+    if (nth && Number(nth[1]) % 7 === weekday && Math.floor((day - 1) / 7) + 1 === Number(nth[2])) {
+      return true
+    }
+  }
+  return false
+}
+
+const zonedFormatterCache = new Map<string, Intl.DateTimeFormat>()
+
+function getZonedFormatter(timeZone: string): Intl.DateTimeFormat {
+  const cached = zonedFormatterCache.get(timeZone)
+  if (cached) return cached
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    second: 'numeric',
+    hour12: false,
+    hourCycle: 'h23',
+    weekday: 'short'
+  })
+  zonedFormatterCache.set(timeZone, formatter)
+  return formatter
+}
+
 function getZonedParts(
   timestamp: number,
   timeZone?: string
@@ -208,6 +325,7 @@ function getZonedParts(
   minute: number
   second: number
   hour: number
+  year: number
   day: number
   month: number
   weekday: number
@@ -218,29 +336,21 @@ function getZonedParts(
       second: date.getUTCSeconds(),
       minute: date.getUTCMinutes(),
       hour: date.getUTCHours(),
+      year: date.getUTCFullYear(),
       day: date.getUTCDate(),
       month: date.getUTCMonth() + 1,
       weekday: date.getUTCDay()
     }
   }
 
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    month: 'numeric',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    second: 'numeric',
-    hour12: false,
-    hourCycle: 'h23',
-    weekday: 'short'
-  }).formatToParts(date)
+  const parts = getZonedFormatter(timeZone).formatToParts(date)
 
   const byType = new Map(parts.map((part) => [part.type, part.value]))
   return {
     second: Number.parseInt(byType.get('second') ?? '0', 10),
     minute: Number.parseInt(byType.get('minute') ?? '0', 10),
     hour: Number.parseInt(byType.get('hour') ?? '0', 10),
+    year: Number.parseInt(byType.get('year') ?? '1970', 10),
     day: Number.parseInt(byType.get('day') ?? '1', 10),
     month: Number.parseInt(byType.get('month') ?? '1', 10),
     weekday: getWeekdayIndex(byType.get('weekday') ?? 'Sun')
@@ -255,7 +365,12 @@ function parseCronExpression(expr: string): {
   month: string
   dayOfWeek: string
 } | null {
-  const parts = expr.trim().split(/\s+/)
+  const normalized = CRON_NICKNAMES[expr.trim().toLowerCase()] ?? expr.trim()
+  const parts = normalized.split(/\s+/)
+  if (parts.length === 5 || parts.length === 6) {
+    parts[parts.length - 2] = normalizeNamedCronField(parts[parts.length - 2], MONTH_NAMES, 1)
+    parts[parts.length - 1] = normalizeNamedCronField(parts[parts.length - 1], WEEKDAY_NAMES, 0)
+  }
   if (parts.length === 5) {
     return {
       second: '0',
@@ -286,18 +401,56 @@ function matchesCronMinuteWindow(
 ): boolean {
   const zoned = getZonedParts(timestamp, timeZone)
   return (
-    matchesCronField(parsed.minute, zoned.minute) &&
-    matchesCronField(parsed.hour, zoned.hour) &&
-    matchesCronField(parsed.dayOfMonth, zoned.day) &&
-    matchesCronField(parsed.month, zoned.month) &&
-    matchesCronField(parsed.dayOfWeek, zoned.weekday)
+    matchesCronField(parsed.minute, zoned.minute, 0, 59) &&
+    matchesCronField(parsed.hour, zoned.hour, 0, 23) &&
+    matchesCronDayOfMonth(parsed.dayOfMonth, zoned.year, zoned.month, zoned.day) &&
+    matchesCronField(parsed.month, zoned.month, 1, 12) &&
+    matchesCronDayOfWeek(parsed.dayOfWeek, zoned.year, zoned.month, zoned.day, zoned.weekday)
   )
+}
+
+function cronDateMayMatchWindow(
+  parsed: NonNullable<ReturnType<typeof parseCronExpression>>,
+  dayStart: number,
+  dayEnd: number
+): boolean {
+  // Every IANA zone's calendar date for an instant is within one day of UTC.
+  // Use a wider bound so this can only skip impossible date fields.
+  const first = new Date(dayStart - 24 * 60 * MINUTE_MS)
+  const last = new Date(dayEnd + 24 * 60 * MINUTE_MS)
+  for (
+    let day = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate());
+    day <= last.getTime();
+    day += 24 * 60 * MINUTE_MS
+  ) {
+    const candidate = new Date(day)
+    if (
+      matchesCronDayOfMonth(
+        parsed.dayOfMonth,
+        candidate.getUTCFullYear(),
+        candidate.getUTCMonth() + 1,
+        candidate.getUTCDate()
+      ) &&
+      matchesCronField(parsed.month, candidate.getUTCMonth() + 1, 1, 12) &&
+      matchesCronDayOfWeek(
+        parsed.dayOfWeek,
+        candidate.getUTCFullYear(),
+        candidate.getUTCMonth() + 1,
+        candidate.getUTCDate(),
+        candidate.getUTCDay()
+      )
+    ) {
+      return true
+    }
+  }
+  return false
 }
 
 export function listPlannedTimesForDay(
   job: CronJobEntry,
   dayStart: number,
-  dayEnd: number
+  dayEnd: number,
+  limit = PLANNED_TIME_LIMIT
 ): number[] {
   if (job.deletedAt) return []
   const { schedule } = job
@@ -312,20 +465,19 @@ export function listPlannedTimesForDay(
     const every = schedule.every ?? null
     if (!every || every < 1000) return []
     const anchor = job.lastFiredAt ?? job.updatedAt ?? job.createdAt
-    let next = anchor <= dayStart ? dayStart : anchor
-    const offset = (next - anchor) % every
-    if (offset !== 0) next += every - offset
+    const steps = Math.max(1, Math.ceil((dayStart - anchor) / every))
+    const next = anchor + steps * every
     const result: number[] = []
     for (let current = next; current <= dayEnd; current += every) {
       if (current >= dayStart) result.push(current)
-      if (result.length >= PLANNED_TIME_LIMIT) break
+      if (result.length >= limit) break
     }
     return result
   }
 
   if (schedule.kind === 'cron' && schedule.expr) {
     const parsed = parseCronExpression(schedule.expr)
-    if (!parsed) return []
+    if (!parsed || !cronDateMayMatchWindow(parsed, dayStart, dayEnd)) return []
     const seconds = expandCronFieldValues(parsed.second, 0, 59)
     if (seconds.length === 0) return []
 
@@ -337,10 +489,10 @@ export function listPlannedTimesForDay(
           const plannedAt = current + second * 1000
           if (plannedAt < dayStart || plannedAt > dayEnd) continue
           result.push(plannedAt)
-          if (result.length >= PLANNED_TIME_LIMIT) break
+          if (result.length >= limit) break
         }
       }
-      if (result.length >= PLANNED_TIME_LIMIT) break
+      if (result.length >= limit) break
     }
     return result
   }

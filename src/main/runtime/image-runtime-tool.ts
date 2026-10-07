@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { RuntimeError } from '../../shared/runtime/contracts'
 import type { ToolContext, ToolDefinition } from '../../runtime/tools/tool-executor'
@@ -139,7 +139,9 @@ export function createImageRuntimeTool(): ToolDefinition {
     },
     effect: 'write',
     validate: validateInput,
-    resources: async (_input, context) => [`generated-images:${context.run.workspaceId}`],
+    resources: async (_input, context) => [
+      await realpath(ensureGeneratedImagesDirectory(olaDataRoot(), context.run.workspaceId))
+    ],
     execute: async (rawInput, context) => {
       const input = rawInput as ReturnType<typeof validateInput>
       const images = await requestImages(context, input)

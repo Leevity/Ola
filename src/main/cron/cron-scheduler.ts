@@ -3,6 +3,7 @@ import { nanoid } from 'nanoid'
 import { sendCronWorkspaceEvent } from './cron-workspace-events'
 import {
   createCronRun,
+  getCronJob,
   getCronRun,
   loadPersistedCronJobs,
   softDeleteCronJob,
@@ -11,8 +12,10 @@ import {
   type CronRunRecord
 } from '../db/cron-dao'
 import { runTsCronAgentInBackground } from './ts-cron-agent-background'
+import type { CronAgentRunOptions } from './cron-runtime-types'
 import { parseCronModelBinding } from '../../shared/runtime/cron-model-binding'
 import { quiesceCronWritesForHandover } from './cron-write-gate'
+import { deliverCronSessionResult, recoverCronSessionDeliveries } from './cron-session-delivery'
 
 export type { CronJobRecord, CronRunRecord }
 
@@ -82,7 +85,9 @@ function toRunApi(run: CronRunRecord): Record<string, unknown> {
     modelSourceSnapshot: run.model_source_snapshot,
     workingFolderSnapshot: run.working_folder_snapshot,
     deliveryModeSnapshot: run.delivery_mode_snapshot,
-    deliveryTargetSnapshot: run.delivery_target_snapshot
+    deliveryTargetSnapshot: run.delivery_target_snapshot,
+    runKind: run.run_kind ?? 'scheduled',
+    deliveryStatus: run.delivery_status ?? null
   }
 }
 
@@ -126,6 +131,16 @@ export async function recordSkippedCronRun(
         error: reason
       }
     })
+    if (job.delivery_mode === 'session') {
+      await deliverCronSessionResult({
+        runId,
+        workspaceId: job.workspace_id ?? 'local-personal',
+        targetSessionId: job.delivery_target || job.session_id || null,
+        content: reason
+      }).catch((error) =>
+        console.error('[CronDelivery] Failed to persist skipped session delivery', error)
+      )
+    }
     const run = await getCronRun(runId, job.workspace_id ?? 'local-personal')
     sendCronWorkspaceEvent(job.workspace_id ?? 'local-personal', 'cron:run-finished', {
       jobId: job.id,
@@ -135,6 +150,7 @@ export async function recordSkippedCronRun(
       jobName: job.name,
       sessionId: job.session_id,
       deliveryMode: job.delivery_mode,
+      runKind: 'scheduled' as const,
       deliveryTarget: job.delivery_target,
       error: reason,
       ...(run ? { run: toRunApi(run) } : {})
@@ -181,6 +197,20 @@ function sendToRenderer(workspaceId: string, channel: string, data: Record<strin
 
 async function onJobFired(job: CronJobRecord): Promise<void> {
   if (quiescingForHandover || workspaceSwitchPending) return
+  // A stopped timer can already have queued its callback when the user disables
+  // or edits a job. Re-read the authoritative row before creating a run so a
+  // stale scheduled callback cannot execute a disabled/deleted job.
+  const currentJob = await getCronJob(job.id, job.workspace_id ?? 'local-personal')
+  if (
+    !currentJob ||
+    currentJob.enabled !== 1 ||
+    currentJob.deleted_at ||
+    quiescingForHandover ||
+    workspaceSwitchPending
+  ) {
+    return
+  }
+  job = currentJob
   const firedAt = Date.now()
 
   // Concurrency guard — prevent firing if this job is already running or limit reached
@@ -204,6 +234,7 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
       sessionId: job.session_id,
       firedAt,
       deliveryMode: job.delivery_mode,
+      runKind: 'scheduled',
       deliveryTarget: job.delivery_target,
       maxIterations: job.max_iterations,
       pluginId: job.plugin_id,
@@ -218,7 +249,7 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
         `Cron model binding is invalid: ${error instanceof Error ? error.message : String(error)}`
       )
     }
-    const runOptions = {
+    const runOptions: CronAgentRunOptions = {
       jobId: job.id,
       name: job.name,
       sessionId: job.session_id,
@@ -232,6 +263,7 @@ async function onJobFired(job: CronJobRecord): Promise<void> {
       sshConnectionId: job.ssh_connection_id,
       firedAt,
       deliveryMode: job.delivery_mode,
+      runKind: 'scheduled',
       deliveryTarget: job.delivery_target,
       maxIterations: job.max_iterations,
       pluginId: job.plugin_id,
@@ -359,6 +391,9 @@ export function cancelJob(id: string): boolean {
 export async function loadPersistedJobs(): Promise<void> {
   try {
     const rows = await loadPersistedCronJobs()
+    await recoverCronSessionDeliveries().catch((error) =>
+      console.error('[CronDelivery] Failed to scan interrupted session deliveries', error)
+    )
     let loaded = 0
     for (const row of rows) {
       if (scheduleJob(row)) {

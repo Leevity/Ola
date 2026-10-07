@@ -4,6 +4,8 @@ import { encodeToolError } from '@renderer/lib/tools/tool-result-format'
 import type { ExtensionInstance, ExtensionToolDefinition } from '../../../../shared/extension-types'
 import { useExtensionStore } from '@renderer/stores/extension-store'
 import { useChatStore } from '@renderer/stores/chat-store'
+import { refreshExtensionWorkbenchContributions } from './extension-workbench'
+import type { ToolDefinition } from '@renderer/lib/api/types'
 
 const EXTENSION_TOOL_PREFIX = 'extension__'
 let registeredExtensionToolNames: string[] = []
@@ -77,6 +79,23 @@ function createExtensionToolHandler(
   }
 }
 
+/** Build the request schema from the target session's project, not the foreground project. */
+export function withRequestExtensionToolDefinitions(
+  definitions: ToolDefinition[],
+  projectId: string | null
+): ToolDefinition[] {
+  const activeExtensions = useExtensionStore.getState().getActiveExtensions(projectId)
+  const extensionDefinitions = activeExtensions.flatMap((extension) =>
+    extension.manifest.tools
+      .filter((tool) => tool.kind === 'http')
+      .map((tool) => createExtensionToolHandler(extension, tool).definition)
+  )
+  return [
+    ...definitions.filter((definition) => !definition.name.startsWith(EXTENSION_TOOL_PREFIX)),
+    ...extensionDefinitions
+  ]
+}
+
 export function unregisterExtensionTools(): void {
   for (const name of registeredExtensionToolNames) {
     const extensionId = name.split('__')[1]
@@ -114,6 +133,7 @@ export async function refreshExtensionTools(): Promise<void> {
       }
     }
     registeredExtensionToolNames = names
+    await refreshExtensionWorkbenchContributions()
   })().finally(() => {
     refreshPromise = null
   })

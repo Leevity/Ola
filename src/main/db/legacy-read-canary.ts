@@ -137,10 +137,21 @@ export async function canaryListCronRuns(args: {
   start?: number
   end?: number
   limit?: number
+  offset?: number
+  attentionOnly?: boolean
+  anchor?: { at: number; id: string }
+  after?: { at: number; id: string }
 }): Promise<CronRunRecord[] | undefined> {
   if (!cronRunReadsEnabled() || !args.workspaceId?.trim()) return undefined
   return await canaryRead('cron runs list', () =>
-    reader().cronRuns<CronRunRecord>(args.workspaceId!, args.limit ?? 200, 0)
+    reader().cronRuns<CronRunRecord>(
+      args.workspaceId!,
+      args.limit ?? 200,
+      args.offset ?? 0,
+      args.attentionOnly ?? false,
+      args.anchor,
+      args.after
+    )
   )
 }
 

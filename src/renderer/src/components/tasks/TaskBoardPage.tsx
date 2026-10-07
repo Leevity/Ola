@@ -7,11 +7,24 @@ import {
   LayoutDashboard,
   List,
   Loader2,
+  Plus,
+  Trash2,
   RefreshCw
 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
 import { cn } from '@renderer/lib/utils'
+import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
+import i18n from '@renderer/locales'
 import {
   readTaskBoardMetadata,
   useTaskStore,
@@ -21,27 +34,42 @@ import {
   type TaskStatus
 } from '@renderer/stores/task-store'
 import { useTaskBoardStore, type TaskBoardView } from '@renderer/stores/task-board-store'
+import { fromTaskDateInput } from '@renderer/lib/task-calendar-date'
+import {
+  isTerminalTaskStatus,
+  TASK_BOARD_STATUS_ORDER,
+  taskBoardStatusCounts
+} from '@renderer/lib/task-board-status'
+import { triggerBusinessTaskRun } from '@renderer/hooks/use-chat-actions'
+import { useChatStore } from '@renderer/stores/chat-store'
+import { useUIStore } from '@renderer/stores/ui-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 
-const STATUSES: Array<{ value: TaskStatus; label: string }> = [
-  { value: 'pending', label: 'Pending' },
-  { value: 'in_progress', label: 'In progress' },
-  { value: 'in_review', label: 'In review' },
-  { value: 'blocked', label: 'Blocked' },
-  { value: 'completed', label: 'Completed' }
-]
+const STATUS_FALLBACKS: Record<TaskStatus, string> = {
+  pending: 'Pending',
+  in_progress: 'In progress',
+  in_review: 'In review',
+  blocked: 'Blocked',
+  completed: 'Completed',
+  failed: 'Failed',
+  cancelled: 'Cancelled'
+}
+const STATUSES = TASK_BOARD_STATUS_ORDER.map((value) => ({
+  value,
+  label: STATUS_FALLBACKS[value]
+}))
 const PRIORITIES: TaskPriority[] = ['low', 'medium', 'high', 'urgent']
 
-function toDateInput(value: number | undefined): string {
-  return value ? new Date(value).toISOString().slice(0, 10) : ''
-}
-
-function fromDateInput(value: string): number | undefined {
-  const time = Date.parse(`${value}T00:00:00`)
-  return Number.isFinite(time) ? time : undefined
+function boardText(
+  key: string,
+  fallback: string,
+  options?: Record<string, string | number>
+): string {
+  return i18n.t(`layout:taskBoard.${key}`, { defaultValue: fallback, ...options })
 }
 
 function statusLabel(status: TaskStatus): string {
-  return STATUSES.find((item) => item.value === status)?.label ?? 'Pending'
+  return boardText(`status.${status}`, STATUS_FALLBACKS[status])
 }
 
 function priorityClass(priority: TaskPriority | undefined): string {
@@ -60,7 +88,7 @@ function TaskChip({ task, onSelect }: { task: TaskItem; onSelect: () => void }):
     <button
       type="button"
       onClick={onSelect}
-      className="w-full rounded-lg border bg-background p-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40"
+      className="w-full rounded-lg border bg-background p-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
     >
       <div className="line-clamp-2 text-sm font-medium">{task.subject}</div>
       <div className="mt-2 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
@@ -68,10 +96,14 @@ function TaskChip({ task, onSelect }: { task: TaskItem; onSelect: () => void }):
           <span
             className={cn('rounded border px-1.5 py-0.5 capitalize', priorityClass(meta.priority))}
           >
-            {meta.priority}
+            {boardText(`priority.${meta.priority}`, meta.priority)}
           </span>
         )}
-        {meta.dueAt && <span>Due {new Date(meta.dueAt).toLocaleDateString()}</span>}
+        {meta.dueAt && (
+          <span>
+            {boardText('due', 'Due')} {new Date(meta.dueAt).toLocaleDateString()}
+          </span>
+        )}
         {meta.tags?.slice(0, 2).map((tag) => (
           <span key={tag}>#{tag}</span>
         ))}
@@ -87,33 +119,42 @@ function Dashboard({
   tasks: TaskItem[]
   onSelect: (id: string) => void
 }): React.JSX.Element {
-  const completed = tasks.filter((task) => task.status === 'completed').length
-  const blocked = tasks.filter((task) => task.status === 'blocked').length
+  const statusCounts = taskBoardStatusCounts(tasks)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const nextWeek = new Date(today)
+  nextWeek.setDate(nextWeek.getDate() + 7)
   const dueSoon = tasks.filter((task) => {
     const dueAt = readTaskBoardMetadata(task.metadata).dueAt
     return (
       dueAt &&
-      dueAt >= Date.now() &&
-      dueAt < Date.now() + 7 * 86_400_000 &&
-      task.status !== 'completed'
+      dueAt >= today.getTime() &&
+      dueAt < nextWeek.getTime() &&
+      !isTerminalTaskStatus(task.status)
     )
   })
   return (
     <div className="space-y-5 overflow-auto p-5">
-      <div className="grid gap-3 sm:grid-cols-3">
-        {[
-          ['Total tasks', tasks.length, 'text-foreground'],
-          ['Completed', completed, 'text-emerald-600'],
-          ['Blocked', blocked, 'text-red-600']
-        ].map(([label, value, color]) => (
-          <div key={String(label)} className="rounded-xl border bg-background p-4 shadow-sm">
-            <div className="text-xs text-muted-foreground">{label}</div>
-            <div className={cn('mt-2 text-2xl font-semibold', String(color))}>{value}</div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border bg-background p-4 shadow-sm">
+          <div className="text-xs text-muted-foreground">
+            {boardText('totalTasks', 'Total tasks')}
+          </div>
+          <div className="mt-2 text-2xl font-semibold">{tasks.length}</div>
+        </div>
+        {STATUSES.map((status) => (
+          <div key={status.value} className="rounded-xl border bg-background p-4 shadow-sm">
+            <div className="text-xs text-muted-foreground">
+              {boardText(`status.${status.value}`, status.label)}
+            </div>
+            <div className="mt-2 text-2xl font-semibold">{statusCounts[status.value]}</div>
           </div>
         ))}
       </div>
       <section className="rounded-xl border bg-background p-4 shadow-sm">
-        <div className="mb-3 text-sm font-semibold">Due in the next 7 days</div>
+        <div className="mb-3 text-sm font-semibold">
+          {boardText('dueSoon', 'Due in the next 7 days')}
+        </div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
           {dueSoon.length ? (
             dueSoon.map((task) => (
@@ -121,7 +162,7 @@ function Dashboard({
             ))
           ) : (
             <div className="py-7 text-center text-sm text-muted-foreground">
-              No scheduled deadlines.
+              {boardText('noDeadlines', 'No scheduled deadlines.')}
             </div>
           )}
         </div>
@@ -140,38 +181,45 @@ function Kanban({
   move: (id: string, status: TaskStatus) => void
 }): React.JSX.Element {
   return (
-    <div className="grid min-w-[900px] grid-cols-5 gap-3 overflow-auto p-5">
-      {STATUSES.map((column) => (
-        <section key={column.value} className="flex min-h-0 flex-col rounded-xl border bg-muted/25">
-          <div className="border-b px-3 py-2 text-xs font-semibold">
-            {column.label}
-            <span className="ml-1 text-muted-foreground">
-              {tasks.filter((task) => task.status === column.value).length}
-            </span>
-          </div>
-          <div className="space-y-2 overflow-auto p-2">
-            {tasks
-              .filter((task) => task.status === column.value)
-              .map((task) => (
-                <div key={task.id} className="space-y-1">
-                  <TaskChip task={task} onSelect={() => onSelect(task.id)} />
-                  <select
-                    aria-label={`Move ${task.subject}`}
-                    className="w-full rounded border bg-background px-2 py-1 text-[11px]"
-                    value={task.status}
-                    onChange={(event) => move(task.id, event.target.value as TaskStatus)}
-                  >
-                    {STATUSES.map((status) => (
-                      <option key={status.value} value={status.value}>
-                        {status.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-          </div>
-        </section>
-      ))}
+    <div className="h-full w-full overflow-auto">
+      <div className="grid min-w-[1050px] grid-cols-7 gap-3 p-5">
+        {STATUSES.map((column) => (
+          <section
+            key={column.value}
+            className="flex min-h-0 flex-col rounded-xl border bg-muted/25"
+          >
+            <div className="border-b px-3 py-2 text-xs font-semibold">
+              {boardText(`status.${column.value}`, column.label)}
+              <span className="ml-1 text-muted-foreground">
+                {tasks.filter((task) => task.status === column.value).length}
+              </span>
+            </div>
+            <div className="space-y-2 overflow-auto p-2">
+              {tasks
+                .filter((task) => task.status === column.value)
+                .map((task) => (
+                  <div key={task.id} className="space-y-1">
+                    <TaskChip task={task} onSelect={() => onSelect(task.id)} />
+                    <select
+                      aria-label={boardText('moveTask', 'Move {{subject}}', {
+                        subject: task.subject
+                      })}
+                      className="w-full rounded border bg-background px-2 py-1 text-[11px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={task.status}
+                      onChange={(event) => move(task.id, event.target.value as TaskStatus)}
+                    >
+                      {STATUSES.map((status) => (
+                        <option key={status.value} value={status.value}>
+                          {boardText(`status.${status.value}`, status.label)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+            </div>
+          </section>
+        ))}
+      </div>
     </div>
   )
 }
@@ -187,10 +235,10 @@ function TaskList({
     <div className="overflow-auto p-5">
       <div className="min-w-[720px] overflow-hidden rounded-xl border bg-background">
         <div className="grid grid-cols-[minmax(220px,1fr)_130px_110px_140px] gap-3 border-b bg-muted/30 px-4 py-2 text-xs font-semibold text-muted-foreground">
-          <span>Task</span>
-          <span>Status</span>
-          <span>Priority</span>
-          <span>Due date</span>
+          <span>{boardText('task', 'Task')}</span>
+          <span>{boardText('statusLabel', 'Status')}</span>
+          <span>{boardText('priorityLabel', 'Priority')}</span>
+          <span>{boardText('dueDate', 'Due date')}</span>
         </div>
         {tasks.map((task) => {
           const meta = readTaskBoardMetadata(task.metadata)
@@ -199,11 +247,13 @@ function TaskList({
               key={task.id}
               type="button"
               onClick={() => onSelect(task.id)}
-              className="grid w-full grid-cols-[minmax(220px,1fr)_130px_110px_140px] gap-3 border-b px-4 py-3 text-left text-sm last:border-0 hover:bg-muted/40"
+              className="grid w-full grid-cols-[minmax(220px,1fr)_130px_110px_140px] gap-3 border-b px-4 py-3 text-left text-sm last:border-0 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <span className="truncate font-medium">{task.subject}</span>
               <span>{statusLabel(task.status)}</span>
-              <span className="capitalize">{meta.priority ?? 'medium'}</span>
+              <span className="capitalize">
+                {boardText(`priority.${meta.priority ?? 'medium'}`, meta.priority ?? 'medium')}
+              </span>
               <span>{meta.dueAt ? new Date(meta.dueAt).toLocaleDateString() : '—'}</span>
             </button>
           )
@@ -232,7 +282,7 @@ function Gantt({
     <div className="overflow-auto p-5">
       <div className="min-w-[760px] rounded-xl border bg-background p-4">
         <div className="mb-3 text-xs text-muted-foreground">
-          Three-week schedule (drag-free, edited from task details)
+          {boardText('threeWeekSchedule', 'Three-week schedule (edited from task details)')}
         </div>
         {scheduled.length ? (
           scheduled.map((task) => {
@@ -246,7 +296,7 @@ function Gantt({
                 key={task.id}
                 type="button"
                 onClick={() => onSelect(task.id)}
-                className="grid w-full grid-cols-[190px_1fr] items-center gap-3 py-2 text-left"
+                className="grid w-full grid-cols-[190px_1fr] items-center gap-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
               >
                 <span className="truncate text-sm font-medium">{task.subject}</span>
                 <span className="relative h-7 rounded bg-muted/50">
@@ -262,7 +312,10 @@ function Gantt({
           })
         ) : (
           <div className="py-10 text-center text-sm text-muted-foreground">
-            Add a start or due date in task details to place it on the schedule.
+            {boardText(
+              'noSchedule',
+              'Add a start or due date in task details to place it on the schedule.'
+            )}
           </div>
         )}
       </div>
@@ -271,18 +324,179 @@ function Gantt({
 }
 
 export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Element {
-  const { tasks, loading, view, selectedTaskId, load, setView, selectTask } = useTaskBoardStore()
+  useTranslation('layout')
+  const { tasks, loading, error, view, selectedTaskId, load, setView, selectTask } =
+    useTaskBoardStore()
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
+  const sessions = useChatStore((state) => state.sessions)
+  const activeSessionId = useChatStore((state) => state.activeSessionId)
+  const availableSessions = sessions.filter(
+    (session) => (session.workspaceId ?? 'local-personal') === workspaceId
+  )
   const task = tasks.find((item) => item.id === selectedTaskId) ?? null
+  const [createOpen, setCreateOpen] = React.useState(false)
+  const [createSessionId, setCreateSessionId] = React.useState('')
+  const [createSubject, setCreateSubject] = React.useState('')
+  const [createDescription, setCreateDescription] = React.useState('')
+  const [createSaving, setCreateSaving] = React.useState(false)
+  const [createError, setCreateError] = React.useState(false)
+  const [deleteOpen, setDeleteOpen] = React.useState(false)
+  const [deleteSaving, setDeleteSaving] = React.useState(false)
+  const [deleteError, setDeleteError] = React.useState(false)
+  const [detailSubject, setDetailSubject] = React.useState('')
+  const [detailTags, setDetailTags] = React.useState('')
+  const [detailSaveError, setDetailSaveError] = React.useState(false)
+  const [detailSaving, setDetailSaving] = React.useState(false)
+  const [failedUpdate, setFailedUpdate] = React.useState<{
+    taskId: string
+    patch: Partial<TaskItem>
+  } | null>(null)
+  React.useEffect(() => {
+    const selectedTask = useTaskBoardStore
+      .getState()
+      .tasks.find((item) => item.id === selectedTaskId)
+    setDetailSubject(selectedTask?.subject ?? '')
+    setDetailTags(readTaskBoardMetadata(selectedTask?.metadata).tags?.join(', ') ?? '')
+    setDetailSaveError(false)
+  }, [selectedTaskId])
+  const detailDraftChanged = Boolean(
+    task &&
+    (detailSubject !== task.subject ||
+      detailTags !== (readTaskBoardMetadata(task.metadata).tags?.join(', ') ?? ''))
+  )
+  const openCreate = (): void => {
+    setCreateSessionId(
+      availableSessions.some((session) => session.id === activeSessionId)
+        ? (activeSessionId ?? '')
+        : (availableSessions[0]?.id ?? '')
+    )
+    setCreateSubject('')
+    setCreateDescription('')
+    setCreateError(false)
+    setCreateOpen(true)
+  }
+  const createTask = async (): Promise<void> => {
+    if (createSaving || !createSubject.trim()) return
+    if (!availableSessions.some((session) => session.id === createSessionId)) {
+      setCreateError(true)
+      return
+    }
+    setCreateSaving(true)
+    setCreateError(false)
+    try {
+      const now = Date.now()
+      const created = await useTaskStore.getState().addTask({
+        id: crypto.randomUUID(),
+        sessionId: createSessionId,
+        subject: createSubject.trim(),
+        description: createDescription.trim() || createSubject.trim(),
+        status: 'pending',
+        owner: null,
+        blocks: [],
+        blockedBy: [],
+        createdAt: now,
+        updatedAt: now
+      })
+      setCreateOpen(false)
+      if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) {
+        await load()
+        selectTask(created.id)
+      }
+    } catch (error) {
+      setCreateError(true)
+      console.error('[TaskBoardPage] Failed to create task:', error)
+    } finally {
+      setCreateSaving(false)
+    }
+  }
+  const deleteTask = async (): Promise<void> => {
+    if (!task || deleteSaving) return
+    setDeleteSaving(true)
+    setDeleteError(false)
+    try {
+      if (!(await useTaskStore.getState().deleteTask(task.id))) throw new Error('TASK_NOT_FOUND')
+      setDeleteOpen(false)
+      selectTask(null)
+      if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId) await load()
+    } catch (error) {
+      setDeleteError(true)
+      console.error('[TaskBoardPage] Failed to delete task:', error)
+    } finally {
+      setDeleteSaving(false)
+    }
+  }
+  const saveDetailDraft = async (): Promise<void> => {
+    if (!task || detailSaving || !detailDraftChanged) return
+    setDetailSaving(true)
+    setDetailSaveError(false)
+    try {
+      const currentMetadata = readTaskBoardMetadata(task.metadata)
+      const updated = await useTaskStore.getState().updateTask(task.id, {
+        subject: detailSubject.trim() || task.subject,
+        metadata: withTaskBoardMetadata(task.metadata, {
+          tags: detailTags
+            .split(',')
+            .map((tag) => tag.trim())
+            .filter(Boolean),
+          priority: currentMetadata.priority,
+          startDate: currentMetadata.startDate,
+          dueDate: currentMetadata.dueDate
+        })
+      })
+      if (!updated) throw new Error('TASK_NOT_FOUND')
+      useTaskBoardStore.setState((state) => ({
+        tasks: state.tasks.map((item) => (item.id === task.id ? updated : item))
+      }))
+      setDetailSubject(updated.subject)
+      setDetailTags(readTaskBoardMetadata(updated.metadata).tags?.join(', ') ?? '')
+    } catch (error) {
+      setDetailSaveError(true)
+      console.error('[TaskBoardPage] Failed to save task details:', error)
+    } finally {
+      setDetailSaving(false)
+    }
+  }
+  const runTask = (item: TaskItem): void => {
+    if (!item.sessionId) return
+    const prompt = boardText('runPrompt', 'Work on this task: {{subject}}\n\n{{description}}', {
+      subject: item.subject,
+      description: item.description
+    })
+    useChatStore.getState().setActiveSession(item.sessionId)
+    useUIStore.getState().navigateToSession(item.sessionId)
+    void triggerBusinessTaskRun(prompt, item.sessionId, item.id).catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : String(error))
+    })
+  }
   React.useEffect(() => {
     void load()
   }, [load])
-  const update = React.useCallback((id: string, patch: Partial<TaskItem>) => {
-    const updated = useTaskStore.getState().updateTask(id, patch)
-    if (!updated) return
-    useTaskBoardStore.setState((state) => ({
-      tasks: state.tasks.map((item) => (item.id === id ? updated : item))
-    }))
+  const commitUpdate = React.useCallback(async (id: string, patch: Partial<TaskItem>) => {
+    try {
+      const updated = await useTaskStore.getState().updateTask(id, patch)
+      if (!updated) return
+      useTaskBoardStore.setState((state) => ({
+        tasks: state.tasks.map((item) => (item.id === id ? updated : item))
+      }))
+      setFailedUpdate((current) => (current?.taskId === id ? null : current))
+    } catch (error) {
+      setFailedUpdate({ taskId: id, patch })
+      toast.error(
+        error instanceof Error &&
+          (error.message.includes('BUSINESS_TASK_CONFLICT') ||
+            error.message.includes('BUSINESS_TASK_NOT_FOUND'))
+          ? boardText(
+              'conflictReloaded',
+              'This task changed elsewhere. The latest version was loaded.'
+            )
+          : boardText('saveFailed', 'Could not save this task. Please retry.')
+      )
+    }
   }, [])
+  const update = React.useCallback(
+    (id: string, patch: Partial<TaskItem>) => void commitUpdate(id, patch),
+    [commitUpdate]
+  )
   const updateBoard = React.useCallback(
     (id: string, patch: Parameters<typeof withTaskBoardMetadata>[1]) => {
       const current = tasks.find((item) => item.id === id)
@@ -291,17 +505,29 @@ export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Ele
     [tasks, update]
   )
   const views: Array<{ value: TaskBoardView; label: string; icon: React.ReactNode }> = [
-    { value: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="size-4" /> },
-    { value: 'kanban', label: 'Kanban', icon: <Columns3 className="size-4" /> },
-    { value: 'list', label: 'List', icon: <List className="size-4" /> },
-    { value: 'gantt', label: 'Gantt', icon: <CalendarRange className="size-4" /> }
+    {
+      value: 'dashboard',
+      label: boardText('views.dashboard', 'Dashboard'),
+      icon: <LayoutDashboard className="size-4" />
+    },
+    {
+      value: 'kanban',
+      label: boardText('views.kanban', 'Kanban'),
+      icon: <Columns3 className="size-4" />
+    },
+    { value: 'list', label: boardText('views.list', 'List'), icon: <List className="size-4" /> },
+    {
+      value: 'gantt',
+      label: boardText('views.gantt', 'Gantt'),
+      icon: <CalendarRange className="size-4" />
+    }
   ]
   return (
     <div className="flex h-full min-w-0 flex-col bg-muted/10">
       <header className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-3">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft className="mr-1 size-4" />
-          Schedule
+          {boardText('schedule', 'Schedule')}
         </Button>
         <div className="mx-1 h-5 border-l" />
         {views.map((item) => (
@@ -316,18 +542,44 @@ export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Ele
           </Button>
         ))}
         <div className="flex-1" />
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="mr-1 size-4" />
+          {boardText('createTask', 'New task')}
+        </Button>
         <Button
           variant="ghost"
           size="icon"
           onClick={() => void load()}
-          aria-label="Refresh task board"
+          aria-label={boardText('refresh', 'Refresh task board')}
         >
           {loading ? <Loader2 className="size-4 animate-spin" /> : <RefreshCw className="size-4" />}
         </Button>
       </header>
-      <div className="flex min-h-0 flex-1">
-        {' '}
-        <main className="min-w-0 flex-1 overflow-hidden">
+      {failedUpdate && (
+        <div
+          role="alert"
+          className="flex items-center justify-between gap-3 border-b border-destructive/30 bg-destructive/5 px-4 py-2 text-sm"
+        >
+          <span>{boardText('saveFailed', 'Could not save this task. Please retry.')}</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void commitUpdate(failedUpdate.taskId, failedUpdate.patch)}
+          >
+            {boardText('retry', 'Retry')}
+          </Button>
+        </div>
+      )}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <main className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          {error && (
+            <div role="alert" className="m-4 rounded-md border border-destructive/40 p-3 text-sm">
+              <span>{boardText('loadFailed', 'Failed to load tasks. Please retry.')}</span>
+              <Button variant="outline" size="sm" className="ml-3" onClick={() => void load()}>
+                {boardText('retry', 'Retry')}
+              </Button>
+            </div>
+          )}
           {view === 'dashboard' ? (
             <Dashboard tasks={tasks} onSelect={selectTask} />
           ) : view === 'kanban' ? (
@@ -343,40 +595,40 @@ export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Ele
           )}
         </main>
         {task && (
-          <aside className="w-80 shrink-0 overflow-auto border-l bg-background p-4">
+          <aside className="max-h-[45%] w-full shrink-0 overflow-auto border-t bg-background p-4 lg:max-h-none lg:w-80 lg:border-t-0 lg:border-l">
             <div className="mb-4 flex items-center justify-between">
-              <div className="text-sm font-semibold">Task details</div>
+              <div className="text-sm font-semibold">{boardText('details', 'Task details')}</div>
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => selectTask(null)}
-                aria-label="Close task details"
+                aria-label={boardText('closeDetails', 'Close task details')}
               >
                 ×
               </Button>
             </div>
             <div className="space-y-4">
               <Input
-                defaultValue={task.subject}
-                onBlur={(event) =>
-                  update(task.id, { subject: event.target.value.trim() || task.subject })
-                }
+                aria-label={boardText('task', 'Task')}
+                value={detailSubject}
+                onChange={(event) => setDetailSubject(event.target.value)}
               />
               <select
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                aria-label={boardText('statusLabel', 'Status')}
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 value={task.status}
                 onChange={(event) => update(task.id, { status: event.target.value as TaskStatus })}
               >
                 {STATUSES.map((status) => (
                   <option key={status.value} value={status.value}>
-                    {status.label}
+                    {boardText(`status.${status.value}`, status.label)}
                   </option>
                 ))}
               </select>
               <label className="block text-xs text-muted-foreground">
-                Priority
+                {boardText('priorityLabel', 'Priority')}
                 <select
-                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground"
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={readTaskBoardMetadata(task.metadata).priority ?? 'medium'}
                   onChange={(event) =>
                     updateBoard(task.id, { priority: event.target.value as TaskPriority })
@@ -384,45 +636,48 @@ export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Ele
                 >
                   {PRIORITIES.map((priority) => (
                     <option key={priority} value={priority}>
-                      {priority}
+                      {boardText(`priority.${priority}`, priority)}
                     </option>
                   ))}
                 </select>
               </label>
               <label className="block text-xs text-muted-foreground">
-                Tags (comma separated)
+                {boardText('tags', 'Tags (comma separated)')}
                 <Input
                   className="mt-1"
-                  defaultValue={readTaskBoardMetadata(task.metadata).tags?.join(', ') ?? ''}
-                  onBlur={(event) =>
+                  value={detailTags}
+                  onChange={(event) => setDetailTags(event.target.value)}
+                />
+              </label>
+              <label className="block text-xs text-muted-foreground">
+                {boardText('startDate', 'Start date')}
+                <Input
+                  className="mt-1"
+                  type="date"
+                  value={readTaskBoardMetadata(task.metadata).startDate ?? ''}
+                  onChange={(event) =>
                     updateBoard(task.id, {
-                      tags: event.target.value
-                        .split(',')
-                        .map((tag) => tag.trim())
-                        .filter(Boolean)
+                      startDate:
+                        fromTaskDateInput(event.target.value) !== undefined
+                          ? event.target.value
+                          : undefined
                     })
                   }
                 />
               </label>
               <label className="block text-xs text-muted-foreground">
-                Start date
+                {boardText('dueDate', 'Due date')}
                 <Input
                   className="mt-1"
                   type="date"
-                  value={toDateInput(readTaskBoardMetadata(task.metadata).startAt)}
+                  value={readTaskBoardMetadata(task.metadata).dueDate ?? ''}
                   onChange={(event) =>
-                    updateBoard(task.id, { startAt: fromDateInput(event.target.value) })
-                  }
-                />
-              </label>
-              <label className="block text-xs text-muted-foreground">
-                Due date
-                <Input
-                  className="mt-1"
-                  type="date"
-                  value={toDateInput(readTaskBoardMetadata(task.metadata).dueAt)}
-                  onChange={(event) =>
-                    updateBoard(task.id, { dueAt: fromDateInput(event.target.value) })
+                    updateBoard(task.id, {
+                      dueDate:
+                        fromTaskDateInput(event.target.value) !== undefined
+                          ? event.target.value
+                          : undefined
+                    })
                   }
                 />
               </label>
@@ -433,12 +688,143 @@ export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Ele
               )}
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <CheckCircle2 className="size-3.5" />
-                Session-linked task
+                {boardText('sessionLinked', 'Session-linked task')}
               </div>
+              {task.sessionId && (
+                <Button variant="outline" size="sm" onClick={() => runTask(task)}>
+                  {boardText('runTask', 'Run in session')}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive"
+                onClick={() => {
+                  setDeleteError(false)
+                  setDeleteOpen(true)
+                }}
+              >
+                <Trash2 className="mr-1 size-4" />
+                {boardText('deleteTask', 'Delete task')}
+              </Button>
+              {(detailDraftChanged || detailSaveError) && (
+                <div className="space-y-2" aria-live="polite">
+                  {detailSaveError && (
+                    <p role="alert" className="text-xs text-destructive">
+                      {boardText(
+                        'detailSaveFailed',
+                        'Could not save these changes. Your edits are still here; retry when ready.'
+                      )}
+                    </p>
+                  )}
+                  <Button
+                    variant="default"
+                    size="sm"
+                    disabled={detailSaving}
+                    onClick={() => void saveDetailDraft()}
+                  >
+                    {detailSaving
+                      ? boardText('saving', 'Saving…')
+                      : detailSaveError
+                        ? boardText('retrySave', 'Retry save')
+                        : boardText('saveChanges', 'Save changes')}
+                  </Button>
+                </div>
+              )}
             </div>
           </aside>
         )}
       </div>
+      <Dialog open={createOpen} onOpenChange={(open) => !createSaving && setCreateOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{boardText('createTask', 'New task')}</DialogTitle>
+            <DialogDescription>
+              {boardText('createHint', 'Choose a session and enter a task title.')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {availableSessions.length ? (
+              <label className="block text-sm">
+                {boardText('session', 'Session')}
+                <select
+                  className="mt-1 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                  value={createSessionId}
+                  onChange={(event) => setCreateSessionId(event.target.value)}
+                >
+                  {availableSessions.map((session) => (
+                    <option key={session.id} value={session.id}>
+                      {session.title || session.id}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <p role="alert" className="text-sm text-muted-foreground">
+                {boardText('noSession', 'Create a session in this workspace first.')}
+              </p>
+            )}
+            <label className="block text-sm">
+              {boardText('taskTitle', 'Task title')}
+              <Input
+                className="mt-1"
+                value={createSubject}
+                onChange={(event) => setCreateSubject(event.target.value)}
+                maxLength={500}
+              />
+            </label>
+            <label className="block text-sm">
+              {boardText('description', 'Description')}
+              <textarea
+                className="mt-1 min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                value={createDescription}
+                onChange={(event) => setCreateDescription(event.target.value)}
+              />
+            </label>
+            {createError && (
+              <p role="alert" className="text-sm text-destructive">
+                {boardText('createFailed', 'Could not create this task. Your draft is still here.')}
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={createSaving} onClick={() => setCreateOpen(false)}>
+              {boardText('cancel', 'Cancel')}
+            </Button>
+            <Button
+              disabled={createSaving || !createSubject.trim() || !createSessionId}
+              onClick={() => void createTask()}
+            >
+              {createSaving ? boardText('saving', 'Saving…') : boardText('createTask', 'New task')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={deleteOpen} onOpenChange={(open) => !deleteSaving && setDeleteOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{boardText('deleteTask', 'Delete task')}</DialogTitle>
+            <DialogDescription>
+              {boardText('deleteConfirm', 'Delete this task? This action cannot be undone.')}
+            </DialogDescription>
+          </DialogHeader>
+          {deleteError && (
+            <p role="alert" className="text-sm text-destructive">
+              {boardText('deleteFailed', 'Could not delete this task. Please retry.')}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={deleteSaving} onClick={() => setDeleteOpen(false)}>
+              {boardText('cancel', 'Cancel')}
+            </Button>
+            <Button variant="destructive" disabled={deleteSaving} onClick={() => void deleteTask()}>
+              {deleteSaving
+                ? boardText('saving', 'Saving…')
+                : boardText('deleteTask', 'Delete task')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

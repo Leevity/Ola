@@ -38,6 +38,7 @@ import {
 import { getRegisteredWindowWorkspace } from '../window-ipc'
 import { authorizeChannelSessionWorkspace } from '../channels/channel-session-workspace'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
+import { isTrustedRendererIpcEvent } from '../renderer-security'
 
 const MAX_REPLAY_STEPS = 1000
 let activeReplayToken: symbol | null = null
@@ -80,7 +81,8 @@ function isTrustedDesktopFlowIpcSender(event: IpcMainInvokeEvent): boolean {
     ownerWindow !== null &&
     !ownerWindow.isDestroyed() &&
     ownerWindow.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+    event.senderFrame === event.sender.mainFrame &&
+    isTrustedRendererIpcEvent(event)
   )
 }
 
@@ -146,7 +148,8 @@ function requiresLegacyFlowReview(flow: DesktopFlow): boolean {
 
 async function confirmDesktopReplay(
   event: IpcMainInvokeEvent,
-  flow: DesktopFlow
+  flow: DesktopFlow,
+  locale?: string
 ): Promise<boolean> {
   // Risk metadata is supplied with the flow and cannot authorize desktop input by itself.
   const controlSteps = flow.steps.filter(
@@ -157,15 +160,20 @@ async function confirmDesktopReplay(
   if (controlSteps.length === 0) return true
   const owner = BrowserWindow.fromWebContents(event.sender)
   const digest = createHash('sha256').update(JSON.stringify(flow)).digest('hex').slice(0, 12)
+  const isChinese = typeof locale === 'string' && /^zh(?:-|$)/i.test(locale)
   const options: MessageBoxOptions = {
     type: 'warning',
-    buttons: ['Cancel', 'Run desktop steps'],
+    buttons: isChinese ? ['取消', '运行桌面操作'] : ['Cancel', 'Run desktop steps'],
     defaultId: 0,
     cancelId: 0,
     noLink: true,
-    title: 'Confirm desktop automation',
-    message: `Run ${controlSteps.length} desktop control step(s)?`,
-    detail: `Flow: ${flow.name}\nIntegrity ID: ${digest}\nThe flow may type text or control another application.`
+    title: isChinese ? '确认桌面自动化' : 'Confirm desktop automation',
+    message: isChinese
+      ? `运行 ${controlSteps.length} 个桌面控制步骤？`
+      : `Run ${controlSteps.length} desktop control step(s)?`,
+    detail: isChinese
+      ? `流程：${flow.name}\n完整性标识：${digest}\n此流程可能输入文本或控制其他应用。`
+      : `Flow: ${flow.name}\nIntegrity ID: ${digest}\nThe flow may type text or control another application.`
   }
   const result = owner
     ? await dialog.showMessageBox(owner, options)
@@ -225,7 +233,25 @@ export function registerDesktopFlowHandlers(): void {
   ipcMain.handle('desktop-recorder:stop', async (event, args?: { workspaceId?: string }) => {
     const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
     assertRecordingOwner(event, workspaceId)
-    return stopDesktopFlowRecording()
+    const flow = getActiveDesktopFlow()
+    if (!flow) return null
+    const mutationKey = flowMutationKey(workspaceId, flow.id)
+    if (pendingFlowSaves.has(mutationKey)) throw new Error('DESKTOP_FLOW_MUTATION_ACTIVE')
+    pendingFlowSaves.add(mutationKey)
+    const wasPaused = getDesktopFlowRecordingStatus().paused
+    setDesktopFlowRecordingPaused(true)
+    try {
+      const safeFlow = redactDesktopFlowCapturedText(flow)
+      await persistDesktopFlow(safeFlow, workspaceId)
+      await authorizeDesktopFlowWorkspace(event, workspaceId)
+      stopDesktopFlowRecording()
+      return safeFlow
+    } catch (error) {
+      setDesktopFlowRecordingPaused(wasPaused)
+      throw error
+    } finally {
+      pendingFlowSaves.delete(mutationKey)
+    }
   })
   ipcMain.handle('desktop-recorder:current', async (event, args?: { workspaceId?: string }) => {
     let workspaceId: string
@@ -354,7 +380,12 @@ export function registerDesktopFlowHandlers(): void {
     'desktop-flow:replay',
     async (
       event,
-      args: { flow: DesktopFlow; workspaceId?: string; verifyScreenshots?: boolean }
+      args: {
+        flow: DesktopFlow
+        workspaceId?: string
+        locale?: string
+        verifyScreenshots?: boolean
+      }
     ): Promise<DesktopFlowReplayResult> => {
       const workspaceId = await authorizeDesktopFlowWorkspace(event, args?.workspaceId)
       const flow = args?.flow
@@ -371,7 +402,7 @@ export function registerDesktopFlowHandlers(): void {
             'This flow contains typing steps that cannot be safely replayed. Re-record without typing before replaying it.'
         }
       }
-      if (!(await confirmDesktopReplay(event, flow))) {
+      if (!(await confirmDesktopReplay(event, flow, args?.locale))) {
         return { success: false, error: 'Desktop flow was not approved by the user.' }
       }
       await authorizeDesktopFlowWorkspace(event, workspaceId)

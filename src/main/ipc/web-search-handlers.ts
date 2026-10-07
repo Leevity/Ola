@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 import { WebFetchService, type WebFetchRequest } from '../web/web-fetch-service'
 import { WebSearchService } from '../web/web-search-service'
 import { getWebSearchSecretStore } from '../web/web-search-secret-store'
@@ -52,7 +53,8 @@ function registerWebMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown>
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args))
   })

@@ -14,6 +14,7 @@ import {
 import { anthropicCodec } from '../../src/runtime/providers/anthropic-codec'
 import { responsesCodec } from '../../src/runtime/providers/responses-codec'
 import { geminiCodec } from '../../src/runtime/providers/gemini-codec'
+import { chatCodec } from '../../src/runtime/providers/chat-codec'
 import { readServerEvents } from '../../src/runtime/providers/stream'
 
 const input = (): ModelInput => ({
@@ -88,6 +89,48 @@ const anthropicFrames = [
 ]
 
 describe('protocol replay and terminal integrity', () => {
+  it('forwards Browser screenshot tool images as multimodal model context', () => {
+    const target: ModelTarget = { protocol: 'anthropic', model: 'm' }
+    const screenshotInput: ModelInput = {
+      ...input(),
+      messages: [
+        {
+          role: 'assistant',
+          text: '',
+          toolCalls: [{ id: 'shot', name: 'BrowserScreenshot', input: {} }]
+        },
+        {
+          role: 'tool',
+          results: [
+            {
+              id: 'shot',
+              name: 'BrowserScreenshot',
+              output: '640x480 screenshot',
+              images: [{ mimeType: 'image/png', data: 'cG5n' }]
+            }
+          ]
+        }
+      ]
+    }
+    const anthropic = anthropicCodec.encode(screenshotInput, target)
+    const anthropicMessages = anthropic.body.messages as Array<{
+      content: Array<Record<string, unknown>>
+    }>
+    expect(anthropicMessages[1].content[0]).toMatchObject({
+      type: 'tool_result',
+      content: [{ type: 'text', text: '640x480 screenshot' }, { type: 'image' }]
+    })
+    const chat = chatCodec.encode(screenshotInput, target)
+    const chatMessages = chat.body.messages as Array<{ role: string; content: unknown }>
+    const imageMessage = chatMessages.find((message) => message.role === 'user')
+    expect(imageMessage?.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'image_url' })])
+    )
+    const responses = responsesCodec.encode(screenshotInput, target)
+    expect(JSON.stringify(responses.body)).toContain('input_image')
+    const gemini = geminiCodec.encode(screenshotInput, target)
+    expect(JSON.stringify(gemini.body)).toContain('inlineData')
+  })
   it('replays Anthropic signed thinking and tool results without exposing host credentials', async () => {
     const target: ModelTarget = { protocol: 'anthropic', model: 'm' }
     const events = await collect(anthropicCodec.decode(wire(anthropicFrames), input(), target))

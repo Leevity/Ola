@@ -185,9 +185,7 @@ export function WebSearchPanel(): React.JSX.Element {
                   <SelectItem key={option.value} value={option.value} className="text-xs">
                     <div className="flex flex-col">
                       <span className="font-medium">{option.label}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {option.description}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{option.description}</span>
                     </div>
                   </SelectItem>
                 ))}
@@ -272,7 +270,7 @@ export function WebSearchPanel(): React.JSX.Element {
                 <button
                   key={v}
                   onClick={() => settings.updateSettings({ webSearchTimeout: v })}
-                  className={`rounded px-1.5 py-0.5 text-[10px] transition-colors ${settings.webSearchTimeout === v ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
+                  className={`rounded px-1.5 py-0.5 text-xs transition-colors ${settings.webSearchTimeout === v ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'}`}
                 >
                   {v >= 1000 ? `${Math.round(v / 1000)}s` : v}
                 </button>

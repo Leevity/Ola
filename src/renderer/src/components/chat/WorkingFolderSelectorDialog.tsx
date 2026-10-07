@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { useSshStore } from '@renderer/stores/ssh-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { cn } from '@renderer/lib/utils'
@@ -34,19 +35,19 @@ type PendingSelection =
   | { kind: 'local'; folderPath: string }
   | { kind: 'ssh'; folderPath: string; connectionId: string }
 
-function sanitizeProjectName(rawName: string): string {
+function sanitizeProjectName(rawName: string, fallbackName: string): string {
   const cleaned = rawName
     .replace(/[<>:"/\\|?*]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-  return cleaned || 'New Project'
+  return cleaned || fallbackName
 }
 
 function deriveProjectNameFromFolder(folderPath: string, fallbackName: string): string {
   const normalized = folderPath.trim().replace(/[\\/]+$/, '')
   const parts = normalized.split(/[\\/]/).filter(Boolean)
   const name = parts[parts.length - 1]
-  return name ? sanitizeProjectName(name) : fallbackName
+  return name ? sanitizeProjectName(name, fallbackName) : fallbackName
 }
 
 interface WorkingFolderSelectorDialogProps {
@@ -159,7 +160,7 @@ export function WorkingFolderSelectorDialog({
     projectDefaultDirectoryMode === 'custom' && projectDefaultDirectory.trim()
       ? projectDefaultDirectory.trim()
       : lastProjectDirectory.trim()
-  const suggestedProjectName = projectName?.trim() || 'New Project'
+  const suggestedProjectName = projectName?.trim() || tLayout('sidebar.newProject')
   const showLocalSection = activeSection === 'local'
   const showSshSection = activeSection === 'ssh'
   const displayedProjectName = pendingSelection
@@ -425,7 +426,8 @@ export function WorkingFolderSelectorDialog({
                       }))
                     }
                     onKeyDown={(event) => {
-                      if (event.key === 'Enter') void handleSelectSshFolder(conn.id)
+                      if (event.key === 'Enter' && !isImeCommitKey(event))
+                        void handleSelectSshFolder(conn.id)
                     }}
                     placeholder={t('input.sshDirectoryPlaceholder', {
                       defaultValue: '/home/user/project'

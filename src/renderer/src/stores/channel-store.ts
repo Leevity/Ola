@@ -15,9 +15,13 @@ import { IPC } from '@renderer/lib/ipc/channels'
 
 interface ChannelStore {
   channels: PluginInstance[]
+  channelsLoaded: boolean
+  channelsLoadError: string | null
   providers: PluginProviderDescriptor[]
   selectedChannelId: string | null
   channelStatuses: Record<string, 'running' | 'stopped' | 'error'>
+  channelStatusCheckErrors: Record<string, boolean>
+  channelStatusCheckedAt: number | null
 
   // Per-project activation (toggled via + menu)
   activeChannelIdsByProject: Record<string, string[]>
@@ -193,9 +197,13 @@ export function initChannelEventListener(): void {
 
 export const useChannelStore = create<ChannelStore>((set, get) => ({
   channels: [],
+  channelsLoaded: false,
+  channelsLoadError: null,
   providers: [],
   selectedChannelId: null,
   channelStatuses: {},
+  channelStatusCheckErrors: {},
+  channelStatusCheckedAt: null,
   activeChannelIdsByProject: {},
   channelSessions: {},
 
@@ -212,6 +220,7 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
 
   loadChannels: async () => {
     const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    set({ channelsLoaded: false, channelsLoadError: null })
     try {
       const plugins = (await ipcClient.invoke(IPC.PLUGIN_LIST, { workspaceId })) as PluginInstance[]
       if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
@@ -220,11 +229,15 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         `[ChannelStore] Loaded ${arr.length} plugins:`,
         arr.map((p) => `${p.type}(${p.id})`)
       )
-      set({ channels: arr })
+      set({ channels: arr, channelsLoaded: true, channelsLoadError: null })
     } catch (err) {
       if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
       console.error('[ChannelStore] Failed to load plugins:', err)
-      set({ channels: [] })
+      set({
+        channels: [],
+        channelsLoaded: true,
+        channelsLoadError: err instanceof Error ? err.message : String(err)
+      })
     }
   },
 
@@ -411,10 +424,17 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
         workspaceId: channel.workspaceId ?? 'local-personal'
       })) as 'running' | 'stopped' | 'error'
       set((s) => ({
-        channelStatuses: { ...s.channelStatuses, [id]: status }
+        channelStatuses: { ...s.channelStatuses, [id]: status },
+        channelStatusCheckErrors: Object.fromEntries(
+          Object.entries(s.channelStatusCheckErrors).filter(([channelId]) => channelId !== id)
+        ),
+        channelStatusCheckedAt: Date.now()
       }))
     } catch {
-      // ignore
+      set((s) => ({
+        channelStatusCheckErrors: { ...s.channelStatusCheckErrors, [id]: true },
+        channelStatusCheckedAt: Date.now()
+      }))
     }
   },
 
@@ -477,7 +497,11 @@ export const useChannelStore = create<ChannelStore>((set, get) => ({
   resetForWorkspace: () =>
     set({
       channels: [],
+      channelsLoaded: false,
+      channelsLoadError: null,
       channelStatuses: {},
+      channelStatusCheckErrors: {},
+      channelStatusCheckedAt: null,
       selectedChannelId: null,
       activeChannelIdsByProject: {},
       channelSessions: {}

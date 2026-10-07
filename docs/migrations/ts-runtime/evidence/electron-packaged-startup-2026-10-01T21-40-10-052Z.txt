@@ -1,0 +1,19 @@
+
+[Browser] Browser profile reuse enabled, but no supported profile was found
+[RemoteAuth] protocol arguments: ["C:\\tmp\\ola-validation-installed-win-x64-20261002\\Ola.exe","--no-sandbox","--disable-gpu","--remote-debugging-port=9413","--user-data-dir=C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-skejfM\\electron-user-data"]
+
+
+DevTools listening on ws://127.0.0.1:9413/devtools/browser/41525a7e-ef95-491c-b07e-6eb9a73e0d98
+[Main] Unhandled rejection: Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@electron-toolkit/utils' imported from C:\tmp\ola-validation-installed-win-x64-20261002\resources\app.asar\out\main\index.js
+    at Object.getPackageJSONURL (node:internal/modules/package_json_reader:301:9)
+    at packageResolve (node:internal/modules/esm/resolve:780:81)
+    at moduleResolve (node:internal/modules/esm/resolve:871:18)
+    at defaultResolve (node:internal/modules/esm/resolve:1004:11)
+    at #cachedDefaultResolve (node:internal/modules/esm/loader:701:20)
+    at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:721:38)
+    at ModuleLoader.resolveSync (node:internal/modules/esm/loader:759:56)
+    at #resolve (node:internal/modules/esm/loader:683:17)
+    at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:603:35)
+    at node:internal/modules/esm/loader:632:32 {
+  code: 'ERR_MODULE_NOT_FOUND'
+}

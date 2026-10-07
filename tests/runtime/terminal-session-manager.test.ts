@@ -38,10 +38,9 @@ describe('TerminalSessionManager', () => {
     expect(created.workspaceId).toBe('team-test')
     expect(event.seq).toBeGreaterThan(0)
     await new Promise((resolve) => setTimeout(resolve, 50))
-    await expect(manager.get(created.id)).toMatchObject({
-      id: created.id,
-      buffer: [expect.objectContaining({ data: expect.stringContaining('OLA_TERMINAL_MARKER') })]
-    })
+    const snapshot = manager.get(created.id)
+    expect(snapshot?.id).toBe(created.id)
+    expect(snapshot?.buffer.map((chunk) => chunk.data).join('')).toContain('OLA_TERMINAL_MARKER')
     manager.killAll()
   })
 

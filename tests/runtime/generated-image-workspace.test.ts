@@ -1,5 +1,5 @@
 import { afterEach, expect, it } from 'vitest'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -9,6 +9,7 @@ import {
   validateGeneratedImageRunId
 } from '../../src/main/lib/generated-image-path'
 import { authorizeGeneratedImageWorkspace } from '../../src/main/ipc/generated-image-workspace'
+import { skipWhenSymlinkUnavailable, tryCreateTestSymlink } from './symlink-fixture'
 
 const cleanup: string[] = []
 
@@ -29,7 +30,7 @@ it('puts all new image output under the Ola root while separating managed spaces
   expect(teamA).not.toContain('team-a')
 })
 
-it('rejects other workspace and symlinked GIF source images', async () => {
+it('rejects other workspace and symlinked GIF source images', async ({ skip }) => {
   const directory = await mkdtemp(join(tmpdir(), 'ola-image-scope-'))
   cleanup.push(directory)
   const teamDir = join(directory, 'team')
@@ -40,36 +41,39 @@ it('rejects other workspace and symlinked GIF source images', async () => {
   const foreign = join(otherDir, 'foreign.png')
   await writeFile(own, 'own')
   await writeFile(foreign, 'foreign')
-  await symlink(foreign, join(teamDir, 'linked.png'))
+  const linked = await tryCreateTestSymlink(foreign, join(teamDir, 'linked.png'))
   expect(() => assertGeneratedImageSourcePath('team-a', teamDir, own)).not.toThrow()
   expect(() => assertGeneratedImageSourcePath('team-a', teamDir, foreign)).toThrow(
     'outside this workspace'
   )
+  skipWhenSymlinkUnavailable({ skip }, linked)
   expect(() =>
     assertGeneratedImageSourcePath('team-a', teamDir, join(teamDir, 'linked.png'))
   ).toThrow('outside this workspace')
   expect(() => assertGeneratedImageSourcePath('local-personal', teamDir, foreign)).not.toThrow()
 })
 
-it('rejects a symlinked managed workspace output directory', async () => {
+it('rejects a symlinked managed workspace output directory', async ({ skip }) => {
   const directory = await mkdtemp(join(tmpdir(), 'ola-image-output-'))
   cleanup.push(directory)
   const olaRoot = join(directory, '.ola')
   const outside = join(directory, 'outside')
   await mkdir(olaRoot)
   await mkdir(outside)
-  await symlink(outside, join(olaRoot, 'workspaces'))
+  const linked = await tryCreateTestSymlink(outside, join(olaRoot, 'workspaces'), 'dir')
+  skipWhenSymlinkUnavailable({ skip }, linked)
   expect(() => ensureGeneratedImagesDirectory(olaRoot, 'team-a')).toThrow('not a regular directory')
 })
 
-it('rejects a symlinked personal output directory', async () => {
+it('rejects a symlinked personal output directory', async ({ skip }) => {
   const directory = await mkdtemp(join(tmpdir(), 'ola-personal-image-output-'))
   cleanup.push(directory)
   const olaRoot = join(directory, '.ola')
   const outside = join(directory, 'outside')
   await mkdir(olaRoot)
   await mkdir(outside)
-  await symlink(outside, join(olaRoot, 'generated-images'))
+  const linked = await tryCreateTestSymlink(outside, join(olaRoot, 'generated-images'), 'dir')
+  skipWhenSymlinkUnavailable({ skip }, linked)
   expect(() => ensureGeneratedImagesDirectory(olaRoot, 'local-personal')).toThrow(
     'not a regular directory'
   )

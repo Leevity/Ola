@@ -57,6 +57,11 @@ export async function refreshSubAgentTools(taskProfile: TaskProfile = 'work'): P
   registeredTaskProfile = taskProfile
 }
 
+/** Build the Task schema for one request without mutating the shared registry. */
+export function createRequestTaskToolDefinition(taskProfile: TaskProfile) {
+  return createTaskTool(getProviderConfig, taskProfile).definition
+}
+
 export async function registerSubAgents(taskProfile: TaskProfile = 'work'): Promise<void> {
   await refreshSubAgentTools(taskProfile)
 }

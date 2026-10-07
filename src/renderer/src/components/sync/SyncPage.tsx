@@ -452,7 +452,9 @@ export function SyncPage(): React.JSX.Element {
               })}
             </p>
           </div>
-          <Badge variant={statusVariant(status?.status)}>{status?.status ?? 'idle'}</Badge>
+          <Badge variant={statusVariant(status?.status)}>
+            {t(`sync.status.state.${status?.status ?? 'idle'}`)}
+          </Badge>
         </header>
 
         <section className="rounded-lg border border-border/70 bg-background p-4">

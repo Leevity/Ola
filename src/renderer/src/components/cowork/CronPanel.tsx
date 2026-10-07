@@ -1,4 +1,6 @@
 import * as React from 'react'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import {
   Clock,
   Play,
@@ -40,19 +42,25 @@ import {
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import {
+  endOfLocalDay,
+  listPlannedTimesForDay,
+  startOfLocalDay
+} from '@renderer/components/tasks/task-schedule'
 import { toast } from 'sonner'
+import { resolveIntlLocale } from '@renderer/lib/i18n-language'
 
 const MONO_FONT = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace'
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function formatRelative(ts: number | null): string {
+function formatRelative(ts: number | null, t: TFunction, language: string): string {
   if (!ts) return '—'
   const diff = Date.now() - ts
-  if (diff < 60_000) return 'just now'
-  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} minutes ago`
-  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)} hours ago`
-  return new Date(ts).toLocaleString()
+  if (diff < 60_000) return t('cronPanel.justNow')
+  if (diff < 3_600_000) return t('cronPanel.minutesAgo', { count: Math.floor(diff / 60_000) })
+  if (diff < 86_400_000) return t('cronPanel.hoursAgo', { count: Math.floor(diff / 3_600_000) })
+  return new Date(ts).toLocaleString(resolveIntlLocale(language))
 }
 
 function formatInterval(ms: number): string {
@@ -90,12 +98,14 @@ function ElapsedTimer({ startedAt }: { startedAt: number }): React.JSX.Element {
   )
 }
 
-function scheduleLabel(schedule: CronSchedule): string {
+function scheduleLabel(schedule: CronSchedule, t: TFunction, language: string): string {
   switch (schedule.kind) {
     case 'at':
-      return schedule.at ? new Date(schedule.at).toLocaleString() : '—'
+      return schedule.at ? new Date(schedule.at).toLocaleString(resolveIntlLocale(language)) : '—'
     case 'every':
-      return schedule.every ? `Every ${formatInterval(schedule.every)}` : '—'
+      return schedule.every
+        ? t('cronPanel.every', { interval: formatInterval(schedule.every) })
+        : '—'
     case 'cron':
       return schedule.expr ?? '—'
   }
@@ -112,14 +122,17 @@ function ScheduleIcon({ kind }: { kind: CronSchedule['kind'] }): React.JSX.Eleme
   }
 }
 
-function scheduleKindBadge(kind: CronSchedule['kind']): React.JSX.Element {
-  const labels = { at: 'Once', every: 'Interval', cron: 'Cron' }
+function scheduleKindBadge(kind: CronSchedule['kind'], t: TFunction): React.JSX.Element {
   const colors = {
     at: 'bg-amber-500/10 text-amber-400',
     every: 'bg-cyan-500/10 text-cyan-400',
     cron: 'bg-violet-500/10 text-violet-400'
   }
-  return <span className={cn('rounded px-1 py-px text-[8px]', colors[kind])}>{labels[kind]}</span>
+  return (
+    <span className={cn('rounded px-1 py-px text-[11px]', colors[kind])}>
+      {t(`cronPanel.scheduleKind.${kind}`)}
+    </span>
+  )
 }
 
 // ── Agent Log Panel ──────────────────────────────────────────────
@@ -127,6 +140,7 @@ function scheduleKindBadge(kind: CronSchedule['kind']): React.JSX.Element {
 const EMPTY_LOGS: CronAgentLogEntry[] = []
 
 function AgentLogPanel({ jobId }: { jobId: string }): React.JSX.Element | null {
+  const { i18n } = useTranslation('cowork')
   const logs = useCronStore((s) => s.agentLogs[jobId] ?? EMPTY_LOGS)
   const scrollRef = React.useRef<HTMLDivElement>(null)
 
@@ -165,7 +179,7 @@ function AgentLogPanel({ jobId }: { jobId: string }): React.JSX.Element | null {
               className="text-muted-foreground/40 shrink-0 tabular-nums"
               style={{ fontFamily: MONO_FONT }}
             >
-              {new Date(entry.timestamp).toLocaleTimeString()}
+              {new Date(entry.timestamp).toLocaleTimeString(resolveIntlLocale(i18n.language))}
             </span>
             <span
               className={cn(
@@ -193,10 +207,11 @@ function CronJobCard({
 }: {
   job: CronJobEntry
   runs: CronRunEntry[]
-  onToggle: (id: string, enabled: boolean) => void
-  onRemove: (id: string) => void
-  onRunNow: (id: string) => void
+  onToggle: (id: string, enabled: boolean) => Promise<void>
+  onRemove: (id: string) => Promise<void>
+  onRunNow: (id: string) => Promise<void>
 }): React.JSX.Element {
+  const { t, i18n } = useTranslation('cowork')
   const [expanded, setExpanded] = React.useState(false)
   const [runNowLoading, setRunNowLoading] = React.useState(false)
   const [confirmDelete, setConfirmDelete] = React.useState(false)
@@ -221,13 +236,13 @@ function CronJobCard({
       .then((result) => {
         const payload = result as { success?: boolean; error?: string }
         if (payload?.success) {
-          toast.info('Agent execution aborted')
+          toast.info(t('cronPanel.aborted'))
         } else {
-          toast.error(payload?.error ?? 'Failed to abort Agent execution')
+          toast.error(payload?.error ?? t('cronPanel.abortFailed'))
         }
       })
       .catch((err) => {
-        toast.error(err instanceof Error ? err.message : 'Failed to abort Agent execution')
+        toast.error(err instanceof Error ? err.message : t('cronPanel.abortFailed'))
       })
   }
 
@@ -280,7 +295,7 @@ function CronJobCard({
             <p className="text-[12px] font-medium text-foreground/90 truncate leading-snug flex-1 min-w-0">
               {job.name || job.prompt.slice(0, 60)}
             </p>
-            {scheduleKindBadge(job.schedule.kind)}
+            {scheduleKindBadge(job.schedule.kind, t)}
           </div>
 
           {/* Row 2: Schedule detail */}
@@ -290,11 +305,11 @@ function CronJobCard({
               className="text-[10px] font-mono text-blue-400/70 shrink-0"
               style={{ fontFamily: MONO_FONT }}
             >
-              {scheduleLabel(job.schedule)}
+              {scheduleLabel(job.schedule, t, i18n.language)}
             </span>
             {job.deleteAfterRun && (
               <span className="rounded bg-amber-500/10 px-1 py-px text-[8px] text-amber-400">
-                auto-delete
+                {t('cronPanel.autoDelete')}
               </span>
             )}
             {job.schedule.tz && job.schedule.tz !== 'UTC' && (
@@ -311,6 +326,11 @@ function CronJobCard({
 
           {/* Row 4: Metadata */}
           <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {job.enabled && !job.scheduled && !job.executing && (
+              <span className="text-[11px] font-medium text-amber-400">
+                {t('cronPanel.notScheduled')}
+              </span>
+            )}
             {job.agentId && job.agentId !== 'CronAgent' && (
               <span className="rounded bg-violet-500/10 px-1 py-px text-[8px] text-violet-400 flex items-center gap-0.5">
                 <Bot className="size-2" />
@@ -319,13 +339,19 @@ function CronJobCard({
             )}
             {job.deliveryMode !== 'desktop' && (
               <span className="text-[9px] text-muted-foreground/40">
-                Delivery: {job.deliveryMode}
+                {t(`cronPanel.deliveryMode.${job.deliveryMode}`, {
+                  defaultValue: job.deliveryMode
+                })}
               </span>
             )}
-            <span className="text-[9px] text-muted-foreground/40">Fired {job.fireCount} times</span>
+            <span className="text-[11px] text-muted-foreground/60">
+              {t('cronPanel.firedCount', { count: job.fireCount })}
+            </span>
             {job.lastFiredAt && (
               <span className="text-[9px] text-muted-foreground/40">
-                Last: {formatRelative(job.lastFiredAt)}
+                {t('cronPanel.lastFired', {
+                  time: formatRelative(job.lastFiredAt, t, i18n.language)
+                })}
               </span>
             )}
           </div>
@@ -334,7 +360,7 @@ function CronJobCard({
           {job.executing && (
             <div className="flex items-center gap-2 mt-1.5 text-[10px]">
               <Loader2 className="size-3 text-blue-400 animate-spin shrink-0" />
-              <span className="text-blue-400/80 font-medium">Running</span>
+              <span className="text-blue-400/80 font-medium">{t('cronPanel.running')}</span>
               {job.executionStartedAt && <ElapsedTimer startedAt={job.executionStartedAt} />}
               {job.executionProgress && (
                 <>
@@ -343,7 +369,7 @@ function CronJobCard({
                     className="text-muted-foreground/60 tabular-nums"
                     style={{ fontFamily: MONO_FONT }}
                   >
-                    {job.executionProgress.toolCalls} tool calls
+                    {t('cronPanel.toolCalls', { count: job.executionProgress.toolCalls })}
                   </span>
                   {job.executionProgress.currentStep && (
                     <>
@@ -366,7 +392,7 @@ function CronJobCard({
               variant="ghost"
               size="icon"
               className="size-6 text-amber-400 hover:text-destructive"
-              title="Abort Agent"
+              title={t('cronPanel.abort')}
               onClick={handleAbortAgent}
             >
               <StopCircle className="size-3" />
@@ -378,7 +404,7 @@ function CronJobCard({
               variant="ghost"
               size="icon"
               className="size-6 text-muted-foreground hover:text-green-400"
-              title="Run now"
+              title={t('cronPanel.runNow')}
               disabled={runNowLoading}
               onClick={handleRunNow}
             >
@@ -399,7 +425,7 @@ function CronJobCard({
                 ? 'text-muted-foreground hover:text-amber-400'
                 : 'text-muted-foreground hover:text-green-400'
             )}
-            title={job.enabled ? 'Pause' : 'Enable'}
+            title={job.enabled ? t('cronPanel.pause') : t('cronPanel.enable')}
             onClick={() => onToggle(job.id, !job.enabled)}
           >
             {job.enabled ? <Square className="size-3" /> : <Play className="size-3 fill-current" />}
@@ -414,7 +440,7 @@ function CronJobCard({
                 ? 'text-destructive animate-pulse'
                 : 'text-muted-foreground hover:text-destructive'
             )}
-            title={confirmDelete ? 'Click again to confirm delete' : 'Delete task'}
+            title={confirmDelete ? t('cronPanel.confirmDelete') : t('cronPanel.delete')}
             onClick={() => {
               if (confirmDelete) {
                 onRemove(job.id)
@@ -432,7 +458,7 @@ function CronJobCard({
             variant="ghost"
             size="icon"
             className="size-6 text-muted-foreground/50 hover:text-foreground"
-            title="Execution history / Agent logs"
+            title={t('cronPanel.executionHistory')}
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
@@ -451,7 +477,7 @@ function CronJobCard({
             <div className="border-t px-3 py-2 space-y-1.5">
               <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider flex items-center gap-1">
                 <History className="size-2.5" />
-                Recent executions
+                {t('cronPanel.recentExecutions')}
               </p>
               {jobRuns.map((run) => (
                 <RunHistoryItem key={run.id} run={run} />
@@ -467,6 +493,7 @@ function CronJobCard({
 // ── Run History Item (with expandable output) ─────────────────────
 
 function RunHistoryItem({ run }: { run: CronRunEntry }): React.JSX.Element {
+  const { t, i18n } = useTranslation('cowork')
   const [showOutput, setShowOutput] = React.useState(false)
   const duration = run.finishedAt ? run.finishedAt - run.startedAt : null
 
@@ -491,7 +518,7 @@ function RunHistoryItem({ run }: { run: CronRunEntry }): React.JSX.Element {
           className="text-muted-foreground/50 shrink-0 tabular-nums"
           style={{ fontFamily: MONO_FONT }}
         >
-          {new Date(run.startedAt).toLocaleTimeString()}
+          {new Date(run.startedAt).toLocaleTimeString(resolveIntlLocale(i18n.language))}
         </span>
         {duration != null && (
           <span className="text-muted-foreground/40 shrink-0" style={{ fontFamily: MONO_FONT }}>
@@ -502,8 +529,22 @@ function RunHistoryItem({ run }: { run: CronRunEntry }): React.JSX.Element {
           className="text-muted-foreground/60 shrink-0 tabular-nums"
           style={{ fontFamily: MONO_FONT }}
         >
-          {run.toolCallCount} tools
+          {t('cronPanel.toolCalls', { count: run.toolCallCount })}
         </span>
+        {run.deliveryStatus && (
+          <span
+            className={cn(
+              'shrink-0',
+              run.deliveryStatus === 'failed'
+                ? 'text-destructive'
+                : run.deliveryStatus === 'unknown'
+                  ? 'text-amber-400'
+                  : 'text-muted-foreground/60'
+            )}
+          >
+            {t(`cronPanel.deliveryStatus.${run.deliveryStatus}`)}
+          </span>
+        )}
         {run.error ? (
           <span className="text-destructive/70 truncate flex-1">{run.error.slice(0, 80)}</span>
         ) : run.outputSummary ? (
@@ -512,7 +553,7 @@ function RunHistoryItem({ run }: { run: CronRunEntry }): React.JSX.Element {
           </span>
         ) : (
           <span className="text-muted-foreground/40 flex-1">
-            {run.status === 'running' ? 'Running...' : run.status}
+            {t(`cronPanel.runStatus.${run.status}`)}
           </span>
         )}
         {(run.outputSummary || run.error) && (
@@ -536,13 +577,15 @@ function RunHistoryItem({ run }: { run: CronRunEntry }): React.JSX.Element {
 // ── Empty state ───────────────────────────────────────────────────
 
 function EmptyState(): React.JSX.Element {
+  const { t } = useTranslation('cowork')
   return (
     <div className="flex flex-col items-center justify-center py-12 text-center">
       <Clock className="mb-3 size-8 text-muted-foreground/30" />
-      <p className="text-sm text-muted-foreground">No scheduled tasks</p>
+      <p className="text-sm text-muted-foreground">{t('cronPanel.empty')}</p>
       <p className="mt-1 text-xs text-muted-foreground/50 max-w-[200px]">
-        Have AI use the <span className="font-mono text-blue-400/70">CronAdd</span> tool to create
-        scheduled tasks
+        {t('cronPanel.emptyHintPrefix')}
+        <span className="font-mono text-blue-400/70">CronAdd</span>
+        {t('cronPanel.emptyHintSuffix')}
       </p>
     </div>
   )
@@ -552,81 +595,10 @@ function EmptyState(): React.JSX.Element {
 
 // ── Calendar helpers ──────────────────────────────────────────────
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-
-/** Check if a single cron field matches a value */
-function matchesCronField(field: string, value: number): boolean {
-  if (field === '*') return true
-  for (const part of field.split(',')) {
-    const stepMatch = part.match(/^(.+)\/(\d+)$/)
-    const step = stepMatch ? parseInt(stepMatch[2], 10) : 0
-    const range = stepMatch ? stepMatch[1] : part
-
-    if (range === '*') {
-      if (step > 0 && value % step === 0) return true
-      if (!step) return true
-      continue
-    }
-
-    const dashMatch = range.match(/^(\d+)-(\d+)$/)
-    if (dashMatch) {
-      const lo = parseInt(dashMatch[1], 10)
-      const hi = parseInt(dashMatch[2], 10)
-      if (step > 0) {
-        for (let v = lo; v <= hi; v += step) {
-          if (v === value) return true
-        }
-      } else {
-        if (value >= lo && value <= hi) return true
-      }
-      continue
-    }
-
-    const num = parseInt(range, 10)
-    if (!isNaN(num) && num === value) return true
-  }
-  return false
-}
-
-/** Check if a cron job runs on a given date */
 function jobRunsOnDate(job: CronJobEntry, date: Date): boolean {
-  if (!job.enabled) return false
-  const { schedule } = job
-
-  if (schedule.kind === 'at') {
-    if (!schedule.at) return false
-    const at = new Date(schedule.at)
-    return (
-      at.getFullYear() === date.getFullYear() &&
-      at.getMonth() === date.getMonth() &&
-      at.getDate() === date.getDate()
-    )
-  }
-
-  if (schedule.kind === 'every') {
-    // Interval jobs run every day (from creation onwards)
-    const created = new Date(job.createdAt)
-    created.setHours(0, 0, 0, 0)
-    const target = new Date(date)
-    target.setHours(0, 0, 0, 0)
-    return target >= created
-  }
-
-  if (schedule.kind === 'cron' && schedule.expr) {
-    const parts = schedule.expr.trim().split(/\s+/)
-    if (parts.length < 5) return false
-    // fields: minute hour day-of-month month day-of-week
-    const dom = parts[2] // 1-31
-    const month = parts[3] // 1-12
-    const dow = parts[4] // 0-6 (0=Sun)
-    return (
-      matchesCronField(dom, date.getDate()) &&
-      matchesCronField(month, date.getMonth() + 1) &&
-      matchesCronField(dow, date.getDay())
-    )
-  }
-
-  return false
+  if (!job.enabled || !job.scheduled) return false
+  const start = startOfLocalDay(date)
+  return listPlannedTimesForDay(job, start.getTime(), endOfLocalDay(date).getTime(), 1).length > 0
 }
 
 /** Generate calendar grid dates for a month (42 cells = 6 rows × 7 cols) */
@@ -660,10 +632,11 @@ function CronCalendarView({
 }: {
   jobs: CronJobEntry[]
   runs: CronRunEntry[]
-  onToggle: (id: string, enabled: boolean) => void
-  onRemove: (id: string) => void
-  onRunNow: (id: string) => void
+  onToggle: (id: string, enabled: boolean) => Promise<void>
+  onRemove: (id: string) => Promise<void>
+  onRunNow: (id: string) => Promise<void>
 }): React.JSX.Element {
+  const { t, i18n } = useTranslation('cowork')
   const today = new Date()
   const [year, setYear] = React.useState(today.getFullYear())
   const [month, setMonth] = React.useState(today.getMonth())
@@ -735,9 +708,12 @@ function CronCalendarView({
 
       {/* Weekday headers */}
       <div className="grid grid-cols-7 gap-0">
-        {WEEKDAY_LABELS.map((label) => (
-          <div key={label} className="text-center text-[9px] text-muted-foreground/50 py-1">
-            {label}
+        {Array.from({ length: 7 }, (_, day) => (
+          <div key={day} className="text-center text-[11px] text-muted-foreground/60 py-1">
+            {new Intl.DateTimeFormat(resolveIntlLocale(i18n.language), {
+              weekday: 'short',
+              timeZone: 'UTC'
+            }).format(new Date(Date.UTC(2024, 0, 7 + day)))}
           </div>
         ))}
       </div>
@@ -791,16 +767,18 @@ function CronCalendarView({
           <div className="space-y-1.5">
             <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1">
               <CalendarDays className="size-3" />
-              {selectedDate.toLocaleDateString(undefined, {
+              {selectedDate.toLocaleDateString(resolveIntlLocale(i18n.language), {
                 month: 'long',
                 day: 'numeric',
                 weekday: 'short'
               })}
-              <span className="text-muted-foreground/40">· {selectedJobs.length} tasks</span>
+              <span className="text-muted-foreground/60">
+                · {t('cronPanel.selectedTaskCount', { count: selectedJobs.length })}
+              </span>
             </p>
             {selectedJobs.length === 0 && (
               <p className="text-[10px] text-muted-foreground/40 py-4 text-center">
-                No scheduled tasks for this day
+                {t('cronPanel.noTasksOnDate')}
               </p>
             )}
             {selectedJobs.map((job) => (
@@ -822,16 +800,20 @@ function CronCalendarView({
 
 // ── Cron History View ──────────────────────────────────────────────
 
-function formatDate(ts: number): string {
+function formatDate(ts: number, t: TFunction, language: string): string {
   const d = new Date(ts)
   const now = new Date()
   const isToday = d.toDateString() === now.toDateString()
   const yesterday = new Date(now)
   yesterday.setDate(yesterday.getDate() - 1)
   const isYesterday = d.toDateString() === yesterday.toDateString()
-  if (isToday) return 'Today'
-  if (isYesterday) return 'Yesterday'
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', weekday: 'short' })
+  if (isToday) return t('cronPanel.today')
+  if (isYesterday) return t('cronPanel.yesterday')
+  return d.toLocaleDateString(resolveIntlLocale(language), {
+    month: 'short',
+    day: 'numeric',
+    weekday: 'short'
+  })
 }
 
 function HistoryRunCard({
@@ -841,6 +823,7 @@ function HistoryRunCard({
   run: CronRunEntry
   jobName: string
 }): React.JSX.Element {
+  const { t, i18n } = useTranslation('cowork')
   const [expanded, setExpanded] = React.useState(false)
   const duration = run.finishedAt ? run.finishedAt - run.startedAt : null
   const hasContent = !!(run.outputSummary || run.error)
@@ -848,27 +831,27 @@ function HistoryRunCard({
   const statusConfig = {
     success: {
       icon: <CheckCircle2 className="size-3.5 text-green-500" />,
-      label: 'Success',
+      label: t('cronPanel.runStatus.success'),
       color: 'text-green-500'
     },
     error: {
       icon: <XCircle className="size-3.5 text-destructive" />,
-      label: 'Failed',
+      label: t('cronPanel.runStatus.error'),
       color: 'text-destructive'
     },
     aborted: {
       icon: <StopCircle className="size-3.5 text-amber-400" />,
-      label: 'Aborted',
+      label: t('cronPanel.runStatus.aborted'),
       color: 'text-amber-400'
     },
     running: {
       icon: <Loader2 className="size-3.5 text-blue-400 animate-spin" />,
-      label: 'Running',
+      label: t('cronPanel.runStatus.running'),
       color: 'text-blue-400'
     },
     skipped: {
       icon: <Clock className="size-3.5 text-muted-foreground" />,
-      label: 'Skipped',
+      label: t('cronPanel.runStatus.skipped'),
       color: 'text-muted-foreground'
     }
   }
@@ -894,11 +877,25 @@ function HistoryRunCard({
               {jobName}
             </span>
             <span className={cn('text-[9px] font-medium shrink-0', cfg.color)}>{cfg.label}</span>
+            {run.deliveryStatus && (
+              <span
+                className={cn(
+                  'text-[11px] font-medium shrink-0',
+                  run.deliveryStatus === 'failed'
+                    ? 'text-destructive'
+                    : run.deliveryStatus === 'unknown'
+                      ? 'text-amber-400'
+                      : 'text-muted-foreground/60'
+                )}
+              >
+                {t(`cronPanel.deliveryStatus.${run.deliveryStatus}`)}
+              </span>
+            )}
           </div>
           {/* Row 2: Time + duration + tool calls */}
           <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
             <span className="tabular-nums" style={{ fontFamily: MONO_FONT }}>
-              {new Date(run.startedAt).toLocaleTimeString()}
+              {new Date(run.startedAt).toLocaleTimeString(resolveIntlLocale(i18n.language))}
             </span>
             {duration != null && (
               <span className="tabular-nums" style={{ fontFamily: MONO_FONT }}>
@@ -906,7 +903,7 @@ function HistoryRunCard({
               </span>
             )}
             <span className="tabular-nums" style={{ fontFamily: MONO_FONT }}>
-              {run.toolCallCount} tools
+              {t('cronPanel.toolCalls', { count: run.toolCallCount })}
             </span>
           </div>
           {/* Row 3: Preview of output/error */}
@@ -929,7 +926,7 @@ function HistoryRunCard({
           {run.error && (
             <div className="space-y-1">
               <p className="text-[9px] text-destructive/60 uppercase tracking-wider font-medium">
-                Error message
+                {t('cronPanel.errorMessage')}
               </p>
               <pre
                 className="text-[10px] text-destructive/70 whitespace-pre-wrap break-words leading-relaxed max-h-[300px] overflow-y-auto"
@@ -942,7 +939,7 @@ function HistoryRunCard({
           {run.outputSummary && (
             <div className={cn('space-y-1', run.error && 'mt-2')}>
               <p className="text-[9px] text-muted-foreground/50 uppercase tracking-wider font-medium">
-                Execution output
+                {t('cronPanel.executionOutput')}
               </p>
               <pre
                 className="text-[10px] text-muted-foreground/60 whitespace-pre-wrap break-words leading-relaxed max-h-[400px] overflow-y-auto"
@@ -954,10 +951,10 @@ function HistoryRunCard({
           )}
           <div className="mt-2 flex items-center gap-3 text-[9px] text-muted-foreground/40">
             <span>
-              Run ID: <span style={{ fontFamily: MONO_FONT }}>{run.id}</span>
+              {t('cronPanel.runId')}: <span style={{ fontFamily: MONO_FONT }}>{run.id}</span>
             </span>
             <span>
-              Job ID: <span style={{ fontFamily: MONO_FONT }}>{run.jobId}</span>
+              {t('cronPanel.jobId')}: <span style={{ fontFamily: MONO_FONT }}>{run.jobId}</span>
             </span>
           </div>
         </div>
@@ -973,6 +970,7 @@ function CronHistoryView({
   jobs: CronJobEntry[]
   runs: CronRunEntry[]
 }): React.JSX.Element {
+  const { t, i18n } = useTranslation('cowork')
   const loadRuns = useCronStore((s) => s.loadRuns)
   const [filterJobId, setFilterJobId] = React.useState<string | null>(null)
   const [loading, setLoading] = React.useState(false)
@@ -980,8 +978,8 @@ function CronHistoryView({
 
   React.useEffect(() => {
     setLoading(true)
-    loadRuns(filterJobId ?? undefined).finally(() => setLoading(false))
-  }, [filterJobId, loadRuns])
+    loadRuns().finally(() => setLoading(false))
+  }, [loadRuns])
 
   const jobName = (id: string): string => {
     const found = jobs.find((j) => j.id === id)
@@ -995,7 +993,7 @@ function CronHistoryView({
     const groups: { date: string; runs: CronRunEntry[] }[] = []
     let currentDate = ''
     for (const run of filteredRuns) {
-      const date = formatDate(run.startedAt)
+      const date = formatDate(run.startedAt, t, i18n.language)
       if (date !== currentDate) {
         currentDate = date
         groups.push({ date, runs: [] })
@@ -1003,7 +1001,7 @@ function CronHistoryView({
       groups[groups.length - 1].runs.push(run)
     }
     return groups
-  }, [filteredRuns])
+  }, [filteredRuns, t, i18n.language])
 
   // Stats
   const stats = React.useMemo(() => {
@@ -1029,15 +1027,25 @@ function CronHistoryView({
           onClick={() => setShowFilter((v) => !v)}
         >
           <ListFilter className="size-3" />
-          Filter
+          {t('cronPanel.filter')}
         </button>
         {loading && <Loader2 className="size-3 text-muted-foreground animate-spin" />}
         <div className="flex-1" />
         <div className="flex items-center gap-2 text-[9px] text-muted-foreground/50">
-          <span className="text-green-500/70">{stats.success} success</span>
-          {stats.errors > 0 && <span className="text-destructive/70">{stats.errors} failed</span>}
-          <span>Total {stats.total}</span>
-          {stats.avgDuration > 0 && <span>Avg {formatDuration(stats.avgDuration)}</span>}
+          <span className="text-green-500/70">
+            {t('cronPanel.successCount', { count: stats.success })}
+          </span>
+          {stats.errors > 0 && (
+            <span className="text-destructive/70">
+              {t('cronPanel.failureCount', { count: stats.errors })}
+            </span>
+          )}
+          <span>{t('cronPanel.totalCount', { count: stats.total })}</span>
+          {stats.avgDuration > 0 && (
+            <span>
+              {t('cronPanel.averageDuration', { duration: formatDuration(stats.avgDuration) })}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1053,7 +1061,7 @@ function CronHistoryView({
             )}
             onClick={() => setFilterJobId(null)}
           >
-            All
+            {t('cronPanel.all')}
           </button>
           {jobs.map((j) => (
             <button
@@ -1076,11 +1084,9 @@ function CronHistoryView({
       {filteredRuns.length === 0 && !loading && (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <FileText className="mb-3 size-8 text-muted-foreground/30" />
-          <p className="text-sm text-muted-foreground">No execution records</p>
+          <p className="text-sm text-muted-foreground">{t('cronPanel.noExecutionRecords')}</p>
           <p className="mt-1 text-xs text-muted-foreground/50">
-            {filterJobId
-              ? 'This task has no execution records yet'
-              : 'Scheduled task executions will appear here'}
+            {filterJobId ? t('cronPanel.noJobRecords') : t('cronPanel.recordsHint')}
           </p>
         </div>
       )}
@@ -1091,7 +1097,9 @@ function CronHistoryView({
           <div className="flex items-center gap-1.5 sticky top-0 bg-background/80 backdrop-blur-sm py-1 z-10">
             <Calendar className="size-3 text-muted-foreground/40" />
             <span className="text-[10px] font-medium text-muted-foreground/60">{group.date}</span>
-            <span className="text-[9px] text-muted-foreground/30">{group.runs.length} runs</span>
+            <span className="text-[11px] text-muted-foreground/50">
+              {t('cronPanel.runCount', { count: group.runs.length })}
+            </span>
           </div>
           <div className="space-y-1.5">
             {group.runs.map((run) => (
@@ -1109,6 +1117,7 @@ function CronHistoryView({
 type CronView = 'tasks' | 'history' | 'calendar'
 
 export function CronPanel(): React.JSX.Element {
+  const { t } = useTranslation('cowork')
   const jobs = useCronStore((s) => s.jobs)
   const runs = useCronStore((s) => s.runs)
   const loadJobs = useCronStore((s) => s.loadJobs)
@@ -1116,6 +1125,9 @@ export function CronPanel(): React.JSX.Element {
   const deleteJob = useCronStore((s) => s.deleteJob)
   const updateJob = useCronStore((s) => s.updateJob)
   const [refreshing, setRefreshing] = React.useState(false)
+  const pendingOperations = React.useRef(new Set<string>())
+  const jobsLoadError = useCronStore((s) => s.jobsLoadError)
+  const runsLoadError = useCronStore((s) => s.runsLoadError)
   const [view, setView] = React.useState<CronView>('tasks')
 
   const enabledJobs = jobs.filter((j) => j.enabled)
@@ -1125,56 +1137,89 @@ export function CronPanel(): React.JSX.Element {
     setRefreshing(true)
     try {
       await Promise.all([loadJobs(), loadRuns()])
+      const state = useCronStore.getState()
+      if (state.jobsLoadError || state.runsLoadError) toast.error(t('cronPanel.refreshFailed'))
     } finally {
       setRefreshing(false)
     }
   }
 
-  // Load runs when switching to history view
-  React.useEffect(() => {
-    if (view === 'history') {
-      loadRuns()
-    }
-  }, [view, loadRuns])
-
-  const handleToggle = async (id: string, enabled: boolean): Promise<void> => {
-    const result = (await ipcClient.invoke(IPC.CRON_TOGGLE, {
-      jobId: id,
-      enabled,
-      workspaceId: useWorkspaceStore.getState().activeWorkspaceId
-    })) as {
-      error?: string
-    }
-    if (result.error) {
-      toast.error('Operation failed', { description: result.error })
-      return
-    }
-    updateJob(id, { enabled, scheduled: enabled })
-    toast.success(enabled ? 'Scheduled task enabled' : 'Scheduled task paused')
-  }
-
-  const handleRemove = async (id: string): Promise<void> => {
-    const result = await deleteJob(id)
-    if (result.error) {
-      toast.error('Delete failed', { description: result.error })
-      return
-    }
-    toast.success('Scheduled task deleted')
-  }
-
-  const handleRunNow = async (id: string): Promise<void> => {
-    const result = (await ipcClient.invoke(IPC.CRON_RUN_NOW, {
-      jobId: id,
-      workspaceId: useWorkspaceStore.getState().activeWorkspaceId
-    })) as { error?: string }
-    if (result.error) {
-      toast.error('Execution failed', { description: result.error })
-      return
+  const operate = async (
+    id: string,
+    action: (workspaceId: string) => Promise<void>,
+    failureKey: string
+  ): Promise<void> => {
+    if (pendingOperations.current.has(id)) return
+    pendingOperations.current.add(id)
+    const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+    try {
+      await action(workspaceId)
+    } catch (cause) {
+      if (workspaceId === useWorkspaceStore.getState().activeWorkspaceId)
+        toast.error(t(failureKey), {
+          description: cause instanceof Error ? cause.message : undefined
+        })
+    } finally {
+      pendingOperations.current.delete(id)
     }
   }
+
+  const handleToggle = (id: string, enabled: boolean): Promise<void> =>
+    operate(
+      id,
+      async (workspaceId) => {
+        const result = (await ipcClient.invoke(IPC.CRON_TOGGLE, {
+          jobId: id,
+          enabled,
+          workspaceId
+        })) as { success?: boolean; error?: string } | null
+        if (result?.success !== true) throw new Error(result?.error ?? 'CRON_TOGGLE_FAILED')
+        if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
+        updateJob(id, { enabled })
+        await loadJobs()
+        toast.success(t(enabled ? 'cronPanel.enabled' : 'cronPanel.pauseSuccess'))
+      },
+      'cronPanel.operationFailed'
+    )
+
+  const handleRemove = (id: string): Promise<void> =>
+    operate(
+      id,
+      async (workspaceId) => {
+        const result = await deleteJob(id)
+        if (!result.success) throw new Error(result.error ?? 'CRON_DELETE_FAILED')
+        if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
+        toast.success(t('cronPanel.deleted'))
+      },
+      'cronPanel.deleteFailed'
+    )
+
+  const handleRunNow = (id: string): Promise<void> =>
+    operate(
+      id,
+      async (workspaceId) => {
+        const result = (await ipcClient.invoke(IPC.CRON_RUN_NOW, {
+          jobId: id,
+          workspaceId
+        })) as { success?: boolean; error?: string } | null
+        if (result?.success !== true) throw new Error(result?.error ?? 'CRON_RUN_FAILED')
+        if (workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
+        toast.success(t('cronPanel.runRequested'))
+        await Promise.all([loadJobs(), loadRuns()])
+      },
+      'cronPanel.executionFailed'
+    )
 
   return (
     <div className="space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+      {(jobsLoadError || runsLoadError) && (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/30 p-3 text-sm text-destructive"
+        >
+          {t('cronPanel.refreshFailed')}
+        </p>
+      )}
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1">
@@ -1189,7 +1234,7 @@ export function CronPanel(): React.JSX.Element {
             onClick={() => setView('tasks')}
           >
             <Clock className="size-3" />
-            Tasks
+            {t('cronPanel.views.tasks')}
             {jobs.length > 0 && (
               <span className="text-[9px] text-muted-foreground/60 ml-0.5">{jobs.length}</span>
             )}
@@ -1204,7 +1249,7 @@ export function CronPanel(): React.JSX.Element {
             onClick={() => setView('history')}
           >
             <History className="size-3" />
-            History
+            {t('cronPanel.views.history')}
             {runs.length > 0 && (
               <span className="text-[9px] text-muted-foreground/60 ml-0.5">{runs.length}</span>
             )}
@@ -1219,21 +1264,21 @@ export function CronPanel(): React.JSX.Element {
             onClick={() => setView('calendar')}
           >
             <CalendarDays className="size-3" />
-            Calendar
+            {t('cronPanel.views.calendar')}
           </button>
         </div>
         <div className="flex items-center gap-1">
           {view === 'tasks' && enabledJobs.length > 0 && (
             <span className="text-[9px] text-green-500/70 flex items-center gap-0.5">
               <span className="size-1.5 rounded-full bg-green-500/70 inline-flex" />
-              {enabledJobs.length} running
+              {t('cronPanel.enabledCount', { count: enabledJobs.length })}
             </span>
           )}
           <Button
             variant="ghost"
             size="icon"
             className="size-6 text-muted-foreground hover:text-foreground"
-            title="Refresh"
+            title={t('cronPanel.refresh')}
             onClick={handleRefresh}
           >
             <RefreshCw className={cn('size-3', refreshing && 'animate-spin')} />
@@ -1269,7 +1314,7 @@ export function CronPanel(): React.JSX.Element {
               {enabledJobs.length > 0 && <Separator />}
               <div className="space-y-1">
                 <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wider px-1">
-                  Paused
+                  {t('cronPanel.paused')}
                 </p>
                 <div className="space-y-2">
                   {disabledJobs.map((job) => (
@@ -1291,13 +1336,13 @@ export function CronPanel(): React.JSX.Element {
           <div className="rounded-md bg-muted/30 px-3 py-2 text-[10px] text-muted-foreground/50 space-y-0.5">
             <p className="flex items-center gap-1">
               <Plus className="size-2.5" />
-              Have AI call <span className="font-mono text-blue-400/60 mx-0.5">CronAdd</span> to
-              create new tasks
+              {t('cronPanel.hintPrefix')}
+              <span className="font-mono text-blue-400/60 mx-0.5">CronAdd</span>
+              {t('cronPanel.hintSuffix')}
             </p>
             <p className="flex items-center gap-1">
               <AlertCircle className="size-2.5" />
-              Supports three scheduling modes: one-time (at), fixed interval (every), and Cron
-              expression
+              {t('cronPanel.scheduleModesHint')}
             </p>
           </div>
         </>

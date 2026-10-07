@@ -4,6 +4,10 @@ import { relative, resolve, sep } from 'node:path'
 import { getWasmGrammarStatus, type WasmCodeGraphLanguage } from './wasm-parser'
 import { WasmCodeGraphStore } from './graph-store'
 
+function toPortableRelativePath(root: string, path: string): string {
+  return relative(root, path).replaceAll('\\', '/')
+}
+
 const LANGUAGE_BY_EXTENSION: Readonly<Record<string, WasmCodeGraphLanguage>> = {
   '.ts': 'typescript',
   '.tsx': 'tsx',
@@ -91,7 +95,7 @@ export async function indexWorkspaceWithWasm(input: {
     } catch (error) {
       scanComplete = false
       errors.push({
-        path: relative(root, directory),
+        path: toPortableRelativePath(root, directory),
         error: error instanceof Error ? error.message : 'READ_DIRECTORY_FAILED'
       })
       return
@@ -116,7 +120,7 @@ export async function indexWorkspaceWithWasm(input: {
       if (!language) {
         if (declaredLanguage) {
           unsupported.push({
-            path: relative(root, path),
+            path: toPortableRelativePath(root, path),
             language: declaredLanguage,
             error: `CODEGRAPH_GRAMMAR_UNAVAILABLE:${declaredLanguage}`
           })
@@ -124,7 +128,7 @@ export async function indexWorkspaceWithWasm(input: {
         skipped++
         continue
       }
-      const relativePath = relative(root, path)
+      const relativePath = toPortableRelativePath(root, path)
       if (!relativePath || relativePath.startsWith(`..${sep}`)) {
         skipped++
         continue

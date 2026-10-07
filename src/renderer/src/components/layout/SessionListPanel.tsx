@@ -165,11 +165,14 @@ const WEEK_MS = 7 * DAY_MS
 const TWO_WEEKS_MS = 14 * DAY_MS
 const MONTH_MS = 30 * DAY_MS
 
-function deriveProjectNameFromFolder(folderPath?: string | null): string {
+function deriveProjectNameFromFolder(
+  folderPath: string | null | undefined,
+  fallbackName: string
+): string {
   const normalized = folderPath?.trim().replace(/[\\/]+$/, '')
-  if (!normalized) return 'New Project'
+  if (!normalized) return fallbackName
   const parts = normalized.split(/[\\/]/).filter(Boolean)
-  return parts[parts.length - 1] || 'New Project'
+  return parts[parts.length - 1] || fallbackName
 }
 
 export function SessionListPanel(): React.JSX.Element {
@@ -528,7 +531,7 @@ export function SessionListPanel(): React.JSX.Element {
     ? projects.find((project) => project.id === folderPickerProjectId)
     : undefined
 
-  const confirmDelete = useCallback(() => {
+  const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return
     const session = getSessionSnapshot(deleteTarget.id)
     if (!session) {
@@ -545,9 +548,12 @@ export function SessionListPanel(): React.JSX.Element {
     if (hasRunning) {
       abortSession(session.id)
     }
-    clearPendingSessionMessages(session.id)
     const snapshot = createRestorableSessionSnapshot(session)
-    deleteSession(session.id)
+    if (!(await deleteSession(session.id))) {
+      toast.error(t('sidebar_toast.deleteFailed'))
+      return
+    }
+    clearPendingSessionMessages(session.id)
     setDeleteTarget(null)
     toast.success(t('sidebar_toast.sessionDeleted'), {
       action: {
@@ -581,15 +587,19 @@ export function SessionListPanel(): React.JSX.Element {
 
   const handleCreateProjectWithDirectory = useCallback(
     async (workingFolder: string, sshConnectionId: string | null): Promise<void> => {
-      const id = await createProject({
-        name: deriveProjectNameFromFolder(workingFolder),
-        workingFolder,
-        sshConnectionId: sshConnectionId ?? undefined
-      })
-      setActiveProject(id)
-      setFolderPickerTarget(null)
-      useUIStore.getState().navigateToHome()
-      toast.success(t('sidebar_toast.projectCreated', { defaultValue: 'Project created' }))
+      try {
+        const id = await createProject({
+          name: deriveProjectNameFromFolder(workingFolder, t('sidebar.newProject')),
+          workingFolder,
+          sshConnectionId: sshConnectionId ?? undefined
+        })
+        setActiveProject(id)
+        setFolderPickerTarget(null)
+        useUIStore.getState().navigateToHome()
+        toast.success(t('sidebar_toast.projectCreated', { defaultValue: 'Project created' }))
+      } catch {
+        toast.error(t('sidebar_toast.projectCreateFailed'))
+      }
     },
     [createProject, setActiveProject, t]
   )
@@ -660,7 +670,7 @@ export function SessionListPanel(): React.JSX.Element {
     return `${providerId}:${modelId}`
   }, [])
 
-  const confirmRename = useCallback((): void => {
+  const confirmRename = useCallback(async (): Promise<void> => {
     if (!renameDialog) return
     const nextName = renameValue.trim()
     if (!nextName) return
@@ -668,8 +678,13 @@ export function SessionListPanel(): React.JSX.Element {
     const current = renameDialog.currentName.trim()
     if (nextName !== current) {
       if (renameDialog.type === 'project') {
-        renameProject(renameDialog.id, nextName)
-        toast.success(t('sidebar_toast.projectRenamed', { defaultValue: 'Project renamed' }))
+        try {
+          await renameProject(renameDialog.id, nextName)
+          toast.success(t('sidebar_toast.projectRenamed'))
+        } catch {
+          toast.error(t('sidebar_toast.projectRenameFailed'))
+          return
+        }
       } else {
         updateSessionTitle(renameDialog.id, nextName)
         toast.success(t('sidebar_toast.sessionRenamed', { defaultValue: 'Session renamed' }))
@@ -733,10 +748,15 @@ export function SessionListPanel(): React.JSX.Element {
 
     for (const sessionId of relatedSessionIds) {
       abortSession(sessionId)
-      clearPendingSessionMessages(sessionId)
     }
 
-    await deleteProject(projectDeleteTarget.id)
+    try {
+      await deleteProject(projectDeleteTarget.id)
+    } catch {
+      toast.error(t('sidebar_toast.projectDeleteFailed'))
+      return
+    }
+    for (const sessionId of relatedSessionIds) clearPendingSessionMessages(sessionId)
     setCollapsedProjectIds((prev) => {
       if (!prev.has(projectDeleteTarget.id)) return prev
       const next = new Set(prev)
@@ -1259,8 +1279,8 @@ export function SessionListPanel(): React.JSX.Element {
             </ContextMenuItem>
             <ContextMenuSeparator />
             <ContextMenuItem
-              onClick={() => {
-                clearSessionMessages(session.id)
+              onClick={async () => {
+                if (!(await clearSessionMessages(session.id))) return
                 clearPendingSessionMessages(session.id)
                 toast.success(t('sidebar_toast.messagesCleared'))
               }}
@@ -1348,14 +1368,19 @@ export function SessionListPanel(): React.JSX.Element {
             }
             const snapshot = getSessionSnapshot(session.id)
             if (!snapshot) return
-            clearPendingSessionMessages(snapshot.id)
-            deleteSession(snapshot.id)
-            toast.success(t('sidebar_toast.sessionDeleted'), {
-              action: {
-                label: t('action.undo', { ns: 'common' }),
-                onClick: () => useChatStore.getState().restoreSession(snapshot)
-              },
-              duration: 5000
+            void deleteSession(snapshot.id).then((deleted) => {
+              if (!deleted) {
+                toast.error(t('sidebar_toast.deleteFailed'))
+                return
+              }
+              clearPendingSessionMessages(snapshot.id)
+              toast.success(t('sidebar_toast.sessionDeleted'), {
+                action: {
+                  label: t('action.undo', { ns: 'common' }),
+                  onClick: () => useChatStore.getState().restoreSession(snapshot)
+                },
+                duration: 5000
+              })
             })
           }}
         >
@@ -1431,13 +1456,13 @@ export function SessionListPanel(): React.JSX.Element {
           <ContextMenuContent className="w-48">
             <ContextMenuItem
               disabled={!canManageProject}
-              onClick={() => {
-                togglePinProject(group.project.id)
-                toast.success(
-                  group.project.pinned
-                    ? t('sidebar_toast.projectUnpinned', { defaultValue: 'Project unpinned' })
-                    : t('sidebar_toast.projectPinned', { defaultValue: 'Project pinned' })
-                )
+              onClick={async () => {
+                if (await togglePinProject(group.project.id))
+                  toast.success(
+                    group.project.pinned
+                      ? t('sidebar_toast.projectUnpinned', { defaultValue: 'Project unpinned' })
+                      : t('sidebar_toast.projectPinned', { defaultValue: 'Project pinned' })
+                  )
               }}
             >
               {group.project.pinned ? <PinOff className="size-4" /> : <Pin className="size-4" />}
@@ -1862,15 +1887,16 @@ export function SessionListPanel(): React.JSX.Element {
             return
           }
           if (!folderPickerProjectId) return
-          updateProjectDirectory(folderPickerProjectId, {
+          const saved = await updateProjectDirectory(folderPickerProjectId, {
             workingFolder: folderPath,
             sshConnectionId: null
           })
-          toast.success(
-            t('sidebar_toast.projectWorkingFolderUpdated', {
-              defaultValue: 'Project working folder updated'
-            })
-          )
+          if (saved)
+            toast.success(
+              t('sidebar_toast.projectWorkingFolderUpdated', {
+                defaultValue: 'Project working folder updated'
+              })
+            )
         }}
         onSelectSshFolder={async (folderPath, connectionId) => {
           if (folderPickerTarget?.type === 'create') {
@@ -1878,15 +1904,16 @@ export function SessionListPanel(): React.JSX.Element {
             return
           }
           if (!folderPickerProjectId) return
-          updateProjectDirectory(folderPickerProjectId, {
+          const saved = await updateProjectDirectory(folderPickerProjectId, {
             workingFolder: folderPath,
             sshConnectionId: connectionId
           })
-          toast.success(
-            t('sidebar_toast.projectWorkingFolderUpdated', {
-              defaultValue: 'Project working folder updated'
-            })
-          )
+          if (saved)
+            toast.success(
+              t('sidebar_toast.projectWorkingFolderUpdated', {
+                defaultValue: 'Project working folder updated'
+              })
+            )
         }}
       />
 

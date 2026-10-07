@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { RunJournal } from '../../src/runtime/storage/run-journal'
 import { RunScheduler, type RunExecutor } from '../../src/runtime/scheduler/run-scheduler'
+import { createLocalShellCommandTool } from '../../src/runtime/tools/local-shell-command'
+import { ToolExecutor } from '../../src/runtime/tools/tool-executor'
 import { RuntimeError, type RunSpec } from '../../src/shared/runtime/contracts'
 
 const cleanup: Array<() => Promise<unknown>> = []
@@ -44,6 +46,99 @@ function gate() {
 }
 
 describe('durable scheduler', () => {
+  it('persists a verified shell output from a real tool execution', async () => {
+    const workspace = await mkdtemp(join(tmpdir(), 'ola-shell-journal-'))
+    cleanup.push(() => rm(workspace, { recursive: true, force: true }))
+    const tool = new ToolExecutor([createLocalShellCommandTool(workspace)], async () => true)
+    const { journal, scheduler } = await setup(async (run, context) => {
+      await tool.executeAll(
+        [
+          {
+            id: 'shell-output',
+            name: 'run_shell_command',
+            input: {
+              command:
+                process.platform === 'win32'
+                  ? 'echo ready>result.txt'
+                  : 'printf ready > result.txt',
+              outputFiles: ['result.txt']
+            }
+          }
+        ],
+        { run, signal: context.signal },
+        context.emit
+      )
+    })
+    await scheduler.submit(spec('shell-artifact-run'))
+    await expect
+      .poll(
+        async () => (await journal.snapshot('shell-artifact-run', 'local-personal'))?.run.status
+      )
+      .toBe('completed')
+    expect(await journal.artifacts('local-personal', 50, 0, 'shell-artifact-run')).toEqual([
+      expect.objectContaining({
+        runId: 'shell-artifact-run',
+        data: expect.objectContaining({
+          toolCallId: 'shell-output',
+          path: join(workspace, 'result.txt'),
+          operation: 'create'
+        })
+      })
+    ])
+  })
+
+  it('lists confirmed artifact events across completed runs within one workspace', async () => {
+    const { journal, scheduler } = await setup(async (_run, context) => {
+      await context.emit('artifact.registered', {
+        toolCallId: 'write-1',
+        kind: 'file',
+        path: '/workspace/report.md',
+        transport: 'local',
+        operation: 'create'
+      })
+    })
+    await scheduler.submit(spec('artifact-run'))
+    await expect
+      .poll(async () => (await journal.snapshot('artifact-run', 'local-personal'))?.run.status)
+      .toBe('completed')
+    expect(await journal.artifacts('local-personal')).toEqual([
+      expect.objectContaining({
+        runId: 'artifact-run',
+        sessionId: 'artifact-run',
+        status: 'completed',
+        data: expect.objectContaining({ path: '/workspace/report.md' })
+      })
+    ])
+    expect(await journal.artifacts('other-workspace')).toEqual([])
+    await scheduler.submit(spec('another-artifact-run'))
+    await expect
+      .poll(
+        async () => (await journal.snapshot('another-artifact-run', 'local-personal'))?.run.status
+      )
+      .toBe('completed')
+    expect(await journal.artifacts('local-personal', 50, 0, 'artifact-run')).toEqual([
+      expect.objectContaining({ runId: 'artifact-run' })
+    ])
+    expect(await journal.artifacts('local-personal', 50, 0, 'missing-run')).toEqual([])
+  })
+  it('persists an explicit business task link in run lists and snapshots', async () => {
+    const { journal, scheduler } = await setup(async () => undefined)
+    await scheduler.submit({
+      ...spec('linked-run', 'task-session'),
+      businessTaskId: 'business-task-1',
+      businessTaskTitle: 'Original task name'
+    })
+    await expect
+      .poll(async () => (await journal.snapshot('linked-run', 'local-personal'))?.run.status)
+      .toBe('completed')
+    expect(await journal.list('local-personal')).toEqual([
+      expect.objectContaining({
+        runId: 'linked-run',
+        businessTaskId: 'business-task-1',
+        businessTaskTitle: 'Original task name'
+      })
+    ])
+  })
   it('does not let a persisted session ID acquire a second workspace owner', async () => {
     const { journal, scheduler } = await setup(async () => undefined)
     await scheduler.submit(spec('personal-run', 'shared-session'))
@@ -252,6 +347,30 @@ describe('durable scheduler', () => {
       )
       .toBe(true)
   })
+  it('waits for all runs in a session to settle before session deletion can continue', async () => {
+    const { journal, scheduler } = await setup(async (_run, { signal }) => {
+      await new Promise<void>((resolve) => {
+        if (signal.aborted) resolve()
+        else signal.addEventListener('abort', () => resolve(), { once: true })
+      })
+    })
+    await scheduler.submit(spec('session-run-a', 'shared-session'))
+    await scheduler.submit(spec('session-run-b', 'shared-session'))
+    await scheduler.submit(spec('other-session-run', 'other-session'))
+
+    await scheduler.cancelSessionRuns('local-personal', 'shared-session')
+
+    expect((await journal.snapshot('session-run-a', 'local-personal'))?.run.status).toBe(
+      'cancelled'
+    )
+    expect((await journal.snapshot('session-run-b', 'local-personal'))?.run.status).toBe(
+      'cancelled'
+    )
+    expect((await journal.snapshot('other-session-run', 'local-personal'))?.run.status).toBe(
+      'running'
+    )
+    await scheduler.cancel('other-session-run', 'local-personal')
+  })
   it('records interruption rather than repeating effects after restart', async () => {
     const { journal } = await setup(async () => undefined)
     await journal.create(spec('unfinished'))
@@ -306,6 +425,37 @@ describe('durable scheduler', () => {
     expect((await journal.snapshot('interactive', 'local-personal'))?.pendingInteractions).toEqual(
       []
     )
+  })
+  it('persists a Browser UI interaction and resumes with the renderer result', async () => {
+    const received: unknown[] = []
+    const { journal, scheduler } = await setup(async (_run, context) => {
+      received.push(
+        await context.requestInteraction({
+          interactionId: 'browser-call-1',
+          kind: 'browser-tool',
+          payload: { sessionId: 'session-1', toolName: 'BrowserNavigate' },
+          version: '1'
+        })
+      )
+    })
+    await scheduler.submit({ ...spec('browser-interactive'), unattended: false })
+    await expect
+      .poll(
+        async () => (await journal.snapshot('browser-interactive', 'local-personal'))?.run.status
+      )
+      .toBe('waiting_interaction')
+    expect(
+      (await journal.snapshot('browser-interactive', 'local-personal'))?.pendingInteractions
+    ).toMatchObject([{ kind: 'browser-tool', interactionId: 'browser-call-1' }])
+    await scheduler.respondInteraction('browser-interactive', 'local-personal', 'browser-call-1', {
+      browserToolResult: { success: true }
+    })
+    await expect
+      .poll(
+        async () => (await journal.snapshot('browser-interactive', 'local-personal'))?.run.status
+      )
+      .toBe('completed')
+    expect(received).toEqual([{ browserToolResult: { success: true } }])
   })
   it('rejects a team approval after its offline authorization is revoked', async () => {
     const received: unknown[] = []

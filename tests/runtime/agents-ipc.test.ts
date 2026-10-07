@@ -18,6 +18,11 @@ vi.mock('electron', () => ({
     ) => state.handlers.set(channel, handler)
   }
 }))
+vi.mock('../../src/main/renderer-security', () => ({
+  isTrustedRendererIpcEvent: () => true,
+  assertTrustedRendererIpcEvent: () => undefined,
+  registerTrustedRendererUrl: () => undefined
+}))
 vi.mock('../../src/main/lib/ola-data-root', () => ({ olaDataRoot: () => state.root }))
 vi.mock('../../src/main/resources/bundled-resources', () => ({
   getBundledResourceDirCandidates: (name: string) => [join(state.bundled, name)]

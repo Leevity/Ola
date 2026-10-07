@@ -7,24 +7,15 @@ import htmlWorker from 'monaco-editor/esm/vs/language/html/html.worker?worker'
 import tsWorker from 'monaco-editor/esm/vs/language/typescript/ts.worker?worker'
 
 const RENDERER_GLOBALS_D_TS = `
-declare interface OlaIpcRenderer {
-  send: (channel: string, ...args: unknown[]) => void
-  invoke: <T = unknown>(channel: string, ...args: unknown[]) => Promise<T>
-  on: (channel: string, listener: (...args: unknown[]) => void) => () => void
-  once: (channel: string, listener: (...args: unknown[]) => void) => () => void
-  off: (channel: string, listener: (...args: unknown[]) => void) => void
-  removeListener: (channel: string, listener: (...args: unknown[]) => void) => void
-  removeAllListeners: (channel: string) => void
-}
-
-declare interface OlaElectronApi {
-  ipcRenderer: OlaIpcRenderer
+declare interface OlaDesktopApi {
+  platform: string
+  versions: { electron: string; chrome: string; node: string }
+  getPathForFile: (file: File) => string
 }
 
 declare global {
   interface Window {
-    electron: OlaElectronApi
-    api: unknown
+    ola: { desktop: OlaDesktopApi }
   }
 }
 

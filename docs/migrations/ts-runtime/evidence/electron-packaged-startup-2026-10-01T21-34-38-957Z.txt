@@ -1,0 +1,62 @@
+
+[Browser] Browser profile reuse enabled, but no supported profile was found
+[RemoteAuth] protocol arguments: ["C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\dist-staged-win-x64\\win-unpacked\\ola.exe","--no-sandbox","--disable-gpu","--remote-debugging-port=9409","--user-data-dir=C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-nu6ded\\electron-user-data"]
+[credentials] sanity tests passed
+[DB][TS] initialized {
+  dbPath: 'C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-nu6ded/data.db'
+}
+Checking for update
+[Updater] Checking for updates...
+[TS] settings startup ready
+[Main] Using system proxy settings
+[CrashLogger] Logs will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-nu6ded\logs
+[CrashLogger] Native crash dumps will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-nu6ded\crash-dumps
+[TS] legacy runtime global startup skipped; compatibility routes are lazy
+[TsRuntime] desktop host ready
+[TS] TypeScript runtime is authoritative; legacy executable startup is removed
+[Main] Renderer finished loading: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4
+}
+[CronScheduler] Loaded 0/0 persisted cron jobs
+[Pet] Installed built-in pet files: aniya (+13)
+[Pet] Installed built-in pet files: penguin (+13)
+
+
+DevTools listening on ws://127.0.0.1:9409/devtools/browser/0436d8b6-cdc3-4402-885b-1519c9d50dfe
+Error: Error: ENOENT: no such file or directory, open 'C:\Users\80663\Desktop\vibecoding\Ola\dist-staged-win-x64\win-unpacked\resources\app-update.yml'
+[Updater] Auto update failed: [Error: ENOENT: no such file or directory, open 'C:\Users\80663\Desktop\vibecoding\Ola\dist-staged-win-x64\win-unpacked\resources\app-update.yml'] {
+  errno: -4058,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: 'C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\dist-staged-win-x64\\win-unpacked\\resources\\app-update.yml'
+}
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4,
+  level: 1,
+  message: '🌐 i18next is maintained with support from Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙',
+  line: 1962,
+  sourceId: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/assets/theme-provider-L0K51zIK.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4,
+  level: 1,
+  message: '[PluginAutoReply] Listener initialized',
+  line: 247339,
+  sourceId: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/assets/App-BRAhu2Tj.js'
+}

@@ -9,6 +9,7 @@ import type { ExtensionInstance } from '../../../shared/extension-types'
 interface ExtensionStore {
   extensions: ExtensionInstance[]
   loaded: boolean
+  loadError: string | null
   activeExtensionIdsByProject: Record<string, string[]>
   loadExtensions: () => Promise<void>
   installFromFolder: (sourcePath: string) => Promise<{ success: boolean; error?: string }>
@@ -73,15 +74,21 @@ export const useExtensionStore = create<ExtensionStore>()(
     (set, get) => ({
       extensions: [],
       loaded: false,
+      loadError: null,
       activeExtensionIdsByProject: {},
 
       loadExtensions: async () => {
+        set({ loaded: false, loadError: null })
         try {
           const result = await ipcClient.invoke(IPC.EXTENSION_LIST)
-          set({ extensions: normalizeExtensions(result), loaded: true })
+          set({ extensions: normalizeExtensions(result), loaded: true, loadError: null })
         } catch (err) {
           console.error('[Extensions] Failed to load extensions:', err)
-          set({ extensions: [], loaded: true })
+          set({
+            extensions: [],
+            loaded: true,
+            loadError: err instanceof Error ? err.message : String(err)
+          })
         }
       },
 
@@ -135,7 +142,8 @@ export const useExtensionStore = create<ExtensionStore>()(
       },
 
       getActiveExtensionIds: (projectId) => {
-        const resolvedProjectId = projectId ?? useChatStore.getState().activeProjectId ?? null
+        const resolvedProjectId =
+          projectId === undefined ? useChatStore.getState().activeProjectId : projectId
         const { activeExtensionIdsByProject, extensions } = get()
         return resolveEffectiveActiveExtensionIds({
           projectId: resolvedProjectId,
@@ -152,7 +160,8 @@ export const useExtensionStore = create<ExtensionStore>()(
       },
 
       toggleActiveExtension: (id, projectId) => {
-        const resolvedProjectId = projectId ?? useChatStore.getState().activeProjectId ?? null
+        const resolvedProjectId =
+          projectId === undefined ? useChatStore.getState().activeProjectId : projectId
         const extension = get().extensions.find((item) => item.id === id)
         if (!extension?.enabled) return
 
@@ -172,7 +181,8 @@ export const useExtensionStore = create<ExtensionStore>()(
       },
 
       clearActiveExtensions: (projectId) => {
-        const resolvedProjectId = projectId ?? useChatStore.getState().activeProjectId ?? null
+        const resolvedProjectId =
+          projectId === undefined ? useChatStore.getState().activeProjectId : projectId
         set((state) => ({
           activeExtensionIdsByProject: {
             ...state.activeExtensionIdsByProject,

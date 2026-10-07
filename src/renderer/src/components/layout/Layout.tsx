@@ -20,10 +20,16 @@ import { UsagePage } from '@renderer/components/settings/UsagePage'
 import { PetStudioPage } from '@renderer/components/settings/PetStudioPage'
 import { AccountAuthPage } from '@renderer/components/account/AccountAuthPage'
 import { CommandPalette } from './CommandPalette'
-import { initializeWorkbenchRegistry } from '@renderer/lib/workbench'
+import {
+  initializeWorkbenchRegistry,
+  registerWorkbenchAction,
+  runWorkbenchAction
+} from '@renderer/lib/workbench'
 import { workspaceLayoutStorageKey } from '@renderer/lib/workbench/workspace-layout'
 import { SessionConversationPane } from './SessionConversationPane'
 import { SessionTabStrip } from './SessionTabStrip'
+import { WorkspaceTabStrip } from './WorkspaceTabStrip'
+import { ExtensionWorkbenchViewDialog } from './ExtensionWorkbenchViewDialog'
 import { WorkingFolderSheet } from './WorkingFolderSheet'
 import { ErrorBoundary } from '@renderer/components/error-boundary'
 import { useUIStore, type AppMode } from '@renderer/stores/ui-store'
@@ -31,7 +37,11 @@ import { useChatStore, type SessionMode } from '@renderer/stores/chat-store'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
-import { useChatActions } from '@renderer/hooks/use-chat-actions'
+import {
+  abortSession,
+  clearPendingSessionMessages,
+  useChatActions
+} from '@renderer/hooks/use-chat-actions'
 import { toast } from 'sonner'
 import {
   exportSessionMarkdownFromDb,
@@ -79,6 +89,7 @@ const TasksPage = lazy(async () => {
 })
 
 const MIN_MAIN_WORKSPACE_WIDTH_WITH_SIDEBAR = 720
+const MIN_VIEWPORT_WIDTH_WITH_SIDEBAR = 680
 const MULTI_RIGHT_PANEL_COLLAPSE_VIEWPORT = 1600
 
 function LazyPageFallback(): React.JSX.Element {
@@ -106,6 +117,8 @@ interface LayoutProps {
 export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.JSX.Element {
   const { t } = useTranslation('layout')
   const mode = useUIStore((s) => s.mode)
+  const activeSurface = useUIStore((s) => s.activeSurface)
+  const tasksPageOpen = activeSurface === 'tasks'
   const setMode = useUIStore((s) => s.setMode)
   const leftSidebarOpen = useUIStore((s) => s.leftSidebarOpen)
   const leftSidebarWidth = useUIStore((s) => s.leftSidebarWidth)
@@ -198,6 +211,232 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     uiStore.navigateToHome()
   }, [])
 
+  const handleImportSessions = useCallback((): void => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = '.json'
+    input.onchange = async () => {
+      const file = input.files?.[0]
+      if (!file) return
+      try {
+        const text = await file.text()
+        const data = JSON.parse(text)
+        const sessions = Array.isArray(data) ? data : [data]
+        const store = useChatStore.getState()
+        let imported = 0
+        for (const session of sessions) {
+          if (session && session.id && Array.isArray(session.messages)) {
+            const exists = store.sessions.some((existing) => existing.id === session.id)
+            if (!exists) {
+              store.restoreSession(session)
+              imported++
+            }
+          }
+        }
+        if (imported > 0) {
+          toast.success(t('layout.importedSessions', { count: imported }))
+        } else {
+          toast.info(t('layout.noNewSessions'))
+        }
+      } catch (err) {
+        toast.error(
+          t('layout.importFailed', { error: err instanceof Error ? err.message : String(err) })
+        )
+      }
+    }
+    input.click()
+  }, [t])
+
+  useEffect(() => {
+    const disposers = [
+      registerWorkbenchAction({
+        id: 'workspace.open-tasks',
+        title: t('commandPalette.openTasks', { defaultValue: 'Open tasks' }),
+        keywords: ['tasks', 'kanban', 'gantt'],
+        group: t('commandPalette.actions'),
+        run: () => useUIStore.getState().openTasksPage()
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.import-sessions',
+        title: t('commandPalette.importSessions'),
+        keywords: ['import', 'restore', 'backup', 'json'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+Shift+O',
+        run: handleImportSessions
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.toggle-auto-approve',
+        title: t('shortcuts.toggleAutoApprove', { ns: 'settings' }),
+        keywords: ['tools', 'approve', 'permission'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+Shift+A',
+        run: async () => {
+          const current = useSettingsStore.getState().autoApprove
+          if (!current) {
+            const confirmed = await confirm({ title: t('layout.autoApproveConfirm') })
+            if (!confirmed) return
+          }
+          useSettingsStore.getState().updateSettings({ autoApprove: !current })
+          toast.success(current ? t('layout.autoApproveOff') : t('layout.autoApproveOn'))
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.delete-all-sessions',
+        title: t('shortcuts.deleteAllSessions', { ns: 'settings' }),
+        keywords: ['delete', 'clear', 'all', 'sessions'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+Shift+Del',
+        enabledWhen: () => useChatStore.getState().sessions.length > 0,
+        run: async () => {
+          const store = useChatStore.getState()
+          const count = store.sessions.length
+          if (count === 0) return
+          const confirmed = await confirm({
+            title: t('layout.deleteAllConfirm', { count }),
+            variant: 'destructive'
+          })
+          if (!confirmed) return
+          store.clearAllSessions()
+          toast.success(t('layout.deletedSessions', { count }))
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.backup-sessions',
+        title: t('shortcuts.backupSessions', { ns: 'settings' }),
+        keywords: ['backup', 'export', 'json', 'sessions'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+Shift+S',
+        run: async () => {
+          const sessions = useChatStore.getState().sessions
+          if (sessions.length === 0) {
+            toast.error(t('layout.noSessionsToBackup'))
+            return
+          }
+          try {
+            const latestSessions = await Promise.all(sessions.map(exportSessionSnapshotFromDb))
+            const blob = new Blob([JSON.stringify(latestSessions, null, 2)], {
+              type: 'application/json'
+            })
+            const url = URL.createObjectURL(blob)
+            const anchor = document.createElement('a')
+            anchor.href = url
+            anchor.download = `ola-backup-${new Date().toISOString().slice(0, 10)}.json`
+            anchor.click()
+            URL.revokeObjectURL(url)
+            toast.success(t('layout.backedUpSessions', { count: latestSessions.length }))
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error))
+          }
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.new-chat',
+        title: t('commandPalette.newChat'),
+        keywords: ['new', 'chat', 'conversation'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+N',
+        run: handleCreateChatSession
+      }),
+      ...(
+        [
+          {
+            id: 'mode.switch-chat',
+            value: 'chat' as const,
+            shortcut: 'Ctrl+1',
+            title: 'switchToChat'
+          },
+          {
+            id: 'mode.switch-clarify',
+            value: 'clarify' as const,
+            shortcut: 'Ctrl+2',
+            title: 'switchToClarify'
+          },
+          {
+            id: 'mode.switch-execute',
+            value: 'execute' as const,
+            shortcut: 'Ctrl+3',
+            title: 'switchToExecute'
+          },
+          { id: 'mode.switch-acp', value: 'acp' as const, shortcut: 'Ctrl+4', title: 'switchToAcp' }
+        ] as const
+      ).map((item) =>
+        registerWorkbenchAction({
+          id: item.id,
+          title: t(`commandPalette.${item.title}`),
+          keywords: ['mode', item.value],
+          group: t('commandPalette.switchMode'),
+          shortcut: item.shortcut,
+          enabledWhen: () => useUIStore.getState().mode !== item.value,
+          run: () => handleModeChange(item.value)
+        })
+      ),
+      registerWorkbenchAction({
+        id: 'workspace.open-settings',
+        title: t('commandPalette.openSettings'),
+        keywords: ['settings', 'preferences'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+,',
+        run: () => useUIStore.getState().openSettingsPage()
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.show-shortcuts',
+        title: t('commandPalette.keyboardShortcuts'),
+        keywords: ['keyboard', 'shortcuts', 'help'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+/',
+        run: () => useUIStore.getState().setShortcutsOpen(true)
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.toggle-theme',
+        title: t('commandPalette.toggleTheme'),
+        keywords: ['theme', 'dark', 'light'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+Shift+D',
+        run: () => {
+          const next = resolvedTheme === 'dark' ? 'light' : 'dark'
+          useSettingsStore.getState().updateSettings({ theme: next })
+          ntSetTheme(next)
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.toggle-sidebar',
+        title: t('commandPalette.toggleSidebar'),
+        keywords: ['sidebar', 'navigation'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+B',
+        run: () => useUIStore.getState().toggleLeftSidebar()
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.toggle-right-panel',
+        title: t('shortcuts.toggleRightPanel', { ns: 'settings' }),
+        keywords: ['panel', 'preview', 'details'],
+        group: t('shortcuts.navigation', { ns: 'settings' }),
+        shortcut: 'Ctrl+Shift+B',
+        run: () => useUIStore.getState().toggleRightPanel()
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.open-command-palette',
+        title: t('commandPalette.title', { defaultValue: 'Command palette' }),
+        keywords: ['command', 'search', 'actions'],
+        group: t('commandPalette.actions'),
+        shortcut: 'Ctrl+K',
+        showInPalette: false,
+        run: () => {
+          const ui = useUIStore.getState()
+          ui.setCommandPaletteOpen(!ui.commandPaletteOpen)
+        }
+      })
+    ]
+    return () => disposers.forEach((dispose) => dispose())
+  }, [
+    handleCreateChatSession,
+    handleImportSessions,
+    handleModeChange,
+    ntSetTheme,
+    resolvedTheme,
+    t
+  ])
+
   useEffect(() => {
     void initBackgroundProcessTracking()
   }, [initBackgroundProcessTracking])
@@ -218,16 +457,20 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
       viewportWidth - rightSideWidth - (leftSidebarOpen ? leftSidebarWidth : 0)
     const rightSidePanelsNeedSpace =
       openRightSidePanelCount >= 2 && viewportWidth < MULTI_RIGHT_PANEL_COLLAPSE_VIEWPORT
+    const narrowViewport = viewportWidth < MIN_VIEWPORT_WIDTH_WITH_SIDEBAR
     const mainWorkspaceTooNarrow =
       openRightSidePanelCount > 0 &&
       widthLeftForMainWorkspace < MIN_MAIN_WORKSPACE_WIDTH_WITH_SIDEBAR
     const shouldCollapseSidebar =
-      chatView === 'session' &&
+      (chatView === 'session' || tasksPageOpen) &&
       leftSidebarOpen &&
-      (rightSidePanelsNeedSpace || mainWorkspaceTooNarrow)
+      (narrowViewport || rightSidePanelsNeedSpace || mainWorkspaceTooNarrow)
 
     if (!shouldCollapseSidebar) {
-      if (openRightSidePanelCount === 0 || viewportWidth >= MULTI_RIGHT_PANEL_COLLAPSE_VIEWPORT) {
+      if (
+        !narrowViewport &&
+        (openRightSidePanelCount === 0 || viewportWidth >= MULTI_RIGHT_PANEL_COLLAPSE_VIEWPORT)
+      ) {
         autoCollapsedSidebarForCrowdingRef.current = false
       }
       return
@@ -243,6 +486,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     rightPanelOpen,
     rightPanelWidth,
     setLeftSidebarOpen,
+    tasksPageOpen,
     viewportWidth,
     workingFolderPanelWidth,
     workingFolderSheetOpen
@@ -308,7 +552,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     }
   }, [activeSessionId])
 
-  const activeSurface = useUIStore((s) => s.activeSurface)
   const settingsPageOpen = activeSurface === 'settings'
   const usagePageOpen = activeSurface === 'usage'
   const petStudioPageOpen = activeSurface === 'petStudio'
@@ -321,8 +564,6 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   const resourcesPageOpen = activeSurface === 'resources'
   const drawPageOpen = activeSurface === 'draw'
   const translatePageOpen = activeSurface === 'translate'
-  const tasksPageOpen = activeSurface === 'tasks'
-  const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar)
   const splitSession = useChatStore((s) =>
     splitSessionId ? s.sessions.find((session) => session.id === splitSessionId) : null
   )
@@ -424,11 +665,254 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
     translatePageOpen
   ])
 
-  const getActiveSessionSnapshot = useCallback(
-    (): ReturnType<typeof useChatStore.getState>['sessions'][number] | undefined =>
-      useChatStore.getState().sessions.find((session) => session.id === activeSessionId),
-    [activeSessionId]
-  )
+  useEffect(() => {
+    const currentSessionId = (): string | null => useChatStore.getState().activeSessionId
+    const currentSession = () => {
+      const store = useChatStore.getState()
+      return store.sessions.find((session) => session.id === store.activeSessionId)
+    }
+    const group = t('commandPalette.currentSession')
+    const disposers = [
+      registerWorkbenchAction({
+        id: 'session.duplicate',
+        title: t('shortcuts.duplicateSession', { ns: 'settings' }),
+        keywords: ['duplicate', 'copy', 'session'],
+        group,
+        shortcut: 'Ctrl+D',
+        enabledWhen: () => Boolean(currentSession()),
+        run: () => {
+          const sessionId = currentSessionId()
+          if (!sessionId) return
+          useChatStore.getState().duplicateSession(sessionId)
+          toast.success(t('layout.sessionDuplicated'))
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'session.toggle-pin',
+        title: t('shortcuts.pinUnpinSession', { ns: 'settings' }),
+        keywords: ['pin', 'unpin', 'session'],
+        group,
+        shortcut: 'Ctrl+P',
+        enabledWhen: () => Boolean(currentSession()),
+        run: () => {
+          const session = currentSession()
+          if (!session) return
+          useChatStore.getState().togglePinSession(session.id)
+          toast.success(session.pinned ? t('layout.unpinned') : t('layout.pinned'))
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'session.clear-messages',
+        title: t('shortcuts.clearConversation', { ns: 'settings' }),
+        keywords: ['clear', 'messages', 'conversation'],
+        group,
+        shortcut: 'Ctrl+L',
+        enabledWhen: () => Boolean(currentSession()),
+        run: async () => {
+          const session = currentSession()
+          if (!session) return
+          if (session.messageCount > 0) {
+            const confirmed = await confirm({
+              title: t('layout.clearConfirm', { count: session.messageCount }),
+              variant: 'destructive'
+            })
+            if (!confirmed) return
+          }
+          if (!(await useChatStore.getState().clearSessionMessages(session.id))) return
+          if (session.messageCount > 0) toast.success(t('layout.conversationCleared'))
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'session.export-markdown',
+        title: t('commandPalette.exportCurrentChat'),
+        keywords: ['export', 'markdown', 'conversation'],
+        group,
+        shortcut: 'Ctrl+Shift+E',
+        enabledWhen: () => Boolean(currentSession()?.messageCount),
+        run: async () => {
+          const session = currentSession()
+          if (!session?.messageCount) return
+          try {
+            const markdown = await exportSessionMarkdownFromDb(session)
+            const filename =
+              session.title
+                .replace(/[^a-zA-Z0-9-_ ]/g, '')
+                .slice(0, 50)
+                .trim() || 'conversation'
+            const blob = new Blob([markdown], { type: 'text/markdown' })
+            const url = URL.createObjectURL(blob)
+            const anchor = document.createElement('a')
+            anchor.href = url
+            anchor.download = `${filename}.md`
+            anchor.click()
+            URL.revokeObjectURL(url)
+            toast.success(t('layout.exportedConversation'))
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error))
+          }
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'session.copy-markdown',
+        title: t('shortcuts.copyConversation', { ns: 'settings' }),
+        keywords: ['copy', 'markdown', 'clipboard', 'conversation'],
+        group,
+        shortcut: 'Ctrl+Shift+C',
+        enabledWhen: () => Boolean(currentSession()?.messageCount),
+        run: async () => {
+          const session = currentSession()
+          if (!session?.messageCount) return
+          try {
+            const markdown = await exportSessionMarkdownFromDb(session)
+            await navigator.clipboard.writeText(markdown)
+            toast.success(t('layout.conversationCopied'))
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : String(error))
+          }
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'session.delete-current',
+        title: t('commandPalette.deleteCurrentSession'),
+        keywords: ['delete', 'remove', 'session'],
+        group,
+        enabledWhen: () => {
+          const session = currentSession()
+          if (!session) return false
+          const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+          return (
+            useChatStore
+              .getState()
+              .sessions.filter((item) => (item.workspaceId ?? 'local-personal') === workspaceId)
+              .length > 1
+          )
+        },
+        run: async () => {
+          const sessionId = currentSessionId()
+          if (!sessionId) return
+          abortSession(sessionId)
+          if (!(await useChatStore.getState().deleteSession(sessionId))) {
+            toast.error(t('sidebar_toast.deleteFailed'))
+          } else {
+            clearPendingSessionMessages(sessionId)
+          }
+        }
+      }),
+      ...(
+        [
+          {
+            id: 'session.previous',
+            title: t('shortcuts.previousSession', { ns: 'settings' }),
+            shortcut: 'Ctrl+↑',
+            direction: -1 as const
+          },
+          {
+            id: 'session.next',
+            title: t('shortcuts.nextSession', { ns: 'settings' }),
+            shortcut: 'Ctrl+↓',
+            direction: 1 as const
+          }
+        ] as const
+      ).map((item) =>
+        registerWorkbenchAction({
+          id: item.id,
+          title: item.title,
+          keywords: ['navigate', 'switch', 'session'],
+          group: t('shortcuts.navigation', { ns: 'settings' }),
+          shortcut: item.shortcut,
+          enabledWhen: () => {
+            const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+            return (
+              useChatStore
+                .getState()
+                .sessions.filter(
+                  (session) => (session.workspaceId ?? 'local-personal') === workspaceId
+                ).length > 1
+            )
+          },
+          run: () => {
+            const store = useChatStore.getState()
+            const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
+            const sessions = store.sessions
+              .filter((session) => (session.workspaceId ?? 'local-personal') === workspaceId)
+              .sort((a, b) => {
+                if (a.pinned && !b.pinned) return -1
+                if (!a.pinned && b.pinned) return 1
+                return b.updatedAt - a.updatedAt
+              })
+            if (sessions.length < 2) return
+            const index = sessions.findIndex((session) => session.id === store.activeSessionId)
+            const nextIndex = (index + item.direction + sessions.length) % sessions.length
+            void openSessionOrFocusDetached(sessions[nextIndex].id)
+          }
+        })
+      ),
+      ...(
+        [
+          {
+            id: 'conversation.scroll-top',
+            title: t('shortcuts.scrollTop', { ns: 'settings' }),
+            key: 'Home',
+            shortcut: 'Ctrl+Home'
+          },
+          {
+            id: 'conversation.scroll-bottom',
+            title: t('shortcuts.scrollBottom', { ns: 'settings' }),
+            key: 'End',
+            shortcut: 'Ctrl+End'
+          }
+        ] as const
+      ).map((item) =>
+        registerWorkbenchAction({
+          id: item.id,
+          title: item.title,
+          keywords: ['scroll', 'conversation', 'messages'],
+          group: t('shortcuts.chatGroup', { ns: 'settings' }),
+          shortcut: item.shortcut,
+          run: () => {
+            const container = document.querySelector('.overflow-y-auto')
+            if (container) {
+              container.scrollTo({
+                top: item.key === 'Home' ? 0 : container.scrollHeight,
+                behavior: 'smooth'
+              })
+            }
+          }
+        })
+      ),
+      registerWorkbenchAction({
+        id: 'workspace.cycle-right-panel-tab',
+        title: t('shortcuts.cycleRightTab', { ns: 'settings' }),
+        keywords: ['panel', 'tab', 'cycle', 'right'],
+        group: t('shortcuts.navigation', { ns: 'settings' }),
+        shortcut: 'Ctrl+Shift+T',
+        run: () => {
+          const ui = useUIStore.getState()
+          if (!ui.rightPanelOpen) {
+            ui.setRightPanelOpen(true)
+            return
+          }
+          const tabs = ui.rightPanelTabs
+          if (tabs.length === 0) {
+            ui.setRightPanelOpen(true)
+            return
+          }
+          const index = tabs.findIndex((tab) => tab.id === ui.rightPanelActiveTabId)
+          const next = tabs[((index >= 0 ? index : 0) + 1) % tabs.length]
+          if (next) ui.setRightPanelActiveTab(next.id)
+        }
+      }),
+      registerWorkbenchAction({
+        id: 'conversation.stop-streaming',
+        title: t('shortcuts.stopStreaming', { ns: 'settings' }),
+        keywords: ['stop', 'cancel', 'generation'],
+        group: t('shortcuts.chatGroup', { ns: 'settings' }),
+        shortcut: 'Escape',
+        run: stopStreaming
+      })
+    ]
+    return () => disposers.forEach((dispose) => dispose())
+  }, [activeSessionId, stopStreaming, t])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -436,159 +920,104 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
       // Ctrl+Shift+N: New independent chat session
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'N' || e.key === 'n')) {
         e.preventDefault()
-        handleCreateChatSession()
+        runWorkbenchAction('workspace.new-chat')
+        return
+      }
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        runWorkbenchAction('workspace.open-command-palette')
         return
       }
       // Ctrl+1/2/3/4: Switch mode
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && ['1', '2', '3', '4'].includes(e.key)) {
         e.preventDefault()
-        const modeMap = { '1': 'chat', '2': 'clarify', '3': 'execute', '4': 'acp' } as const
-        handleModeChange(modeMap[e.key as '1' | '2' | '3' | '4'])
+        const modeActionId = {
+          '1': 'mode.switch-chat',
+          '2': 'mode.switch-clarify',
+          '3': 'mode.switch-execute',
+          '4': 'mode.switch-acp'
+        } as const
+        runWorkbenchAction(modeActionId[e.key as keyof typeof modeActionId])
       }
       // Ctrl+N: New independent chat session
       if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
         e.preventDefault()
-        handleCreateChatSession()
+        runWorkbenchAction('workspace.new-chat')
       }
       // Ctrl+,: Open settings
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault()
-        useUIStore.getState().openSettingsPage()
+        runWorkbenchAction('workspace.open-settings')
       }
       // Ctrl+B: Toggle left sidebar
       if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key === 'b') {
         e.preventDefault()
-        toggleLeftSidebar()
+        runWorkbenchAction('workspace.toggle-sidebar')
       }
       // Ctrl+Shift+B: Toggle right panel
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'B') {
         e.preventDefault()
-        useUIStore.getState().toggleRightPanel()
+        runWorkbenchAction('workspace.toggle-right-panel')
       }
       // Ctrl+L: Clear current conversation
       if ((e.metaKey || e.ctrlKey) && e.key === 'l') {
         e.preventDefault()
-        if (activeSessionId) {
-          const session = getActiveSessionSnapshot()
-          if (session && session.messageCount > 0) {
-            const ok = await confirm({
-              title: t('layout.clearConfirm', { count: session.messageCount }),
-              variant: 'destructive'
-            })
-            if (!ok) return
-          }
-          useChatStore.getState().clearSessionMessages(activeSessionId)
-          if (session && session.messageCount > 0) toast.success(t('layout.conversationCleared'))
-        }
+        runWorkbenchAction('session.clear-messages')
       }
       // Ctrl+D: Duplicate current session
       if ((e.metaKey || e.ctrlKey) && e.key === 'd') {
         e.preventDefault()
-        if (activeSessionId) {
-          useChatStore.getState().duplicateSession(activeSessionId)
-          toast.success(t('layout.sessionDuplicated'))
-        }
+        runWorkbenchAction('session.duplicate')
       }
       // Ctrl+P: Pin/unpin current session
       if ((e.metaKey || e.ctrlKey) && e.key === 'p') {
         e.preventDefault()
-        if (activeSessionId) {
-          const session = getActiveSessionSnapshot()
-          useChatStore.getState().togglePinSession(activeSessionId)
-          toast.success(session?.pinned ? t('layout.unpinned') : t('layout.pinned'))
-        }
+        runWorkbenchAction('session.toggle-pin')
       }
       // Ctrl+Up/Down: Navigate between sessions
       if ((e.metaKey || e.ctrlKey) && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
         e.preventDefault()
-        const store = useChatStore.getState()
-        const sorted = store.sessions.slice().sort((a, b) => {
-          if (a.pinned && !b.pinned) return -1
-          if (!a.pinned && b.pinned) return 1
-          return b.updatedAt - a.updatedAt
-        })
-        if (sorted.length < 2) return
-        const idx = sorted.findIndex((s) => s.id === store.activeSessionId)
-        const next =
-          e.key === 'ArrowDown'
-            ? (idx + 1) % sorted.length
-            : (idx - 1 + sorted.length) % sorted.length
-        void openSessionOrFocusDetached(sorted[next].id)
+        runWorkbenchAction(e.key === 'ArrowDown' ? 'session.next' : 'session.previous')
       }
       // Ctrl+Home/End: Scroll to top/bottom of messages
       if ((e.metaKey || e.ctrlKey) && (e.key === 'Home' || e.key === 'End')) {
         e.preventDefault()
-        const container = document.querySelector('.overflow-y-auto')
-        if (container) {
-          container.scrollTo({
-            top: e.key === 'Home' ? 0 : container.scrollHeight,
-            behavior: 'smooth'
-          })
-        }
+        runWorkbenchAction(
+          e.key === 'Home' ? 'conversation.scroll-top' : 'conversation.scroll-bottom'
+        )
       }
       // Escape: Stop streaming
       if (e.key === 'Escape' && streamingMessageId) {
         e.preventDefault()
-        stopStreaming()
+        runWorkbenchAction('conversation.stop-streaming')
       }
       // Ctrl+/: Keyboard shortcuts
       if ((e.metaKey || e.ctrlKey) && e.key === '/') {
         e.preventDefault()
-        useUIStore.getState().setShortcutsOpen(true)
+        runWorkbenchAction('workspace.show-shortcuts')
       }
       // Ctrl+Shift+C: Copy conversation as markdown
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
         e.preventDefault()
-        const session = useChatStore.getState().sessions.find((s) => s.id === activeSessionId)
-        if (session && session.messageCount > 0) {
-          navigator.clipboard.writeText(await exportSessionMarkdownFromDb(session))
-          toast.success(t('layout.conversationCopied'))
-        }
+        runWorkbenchAction('session.copy-markdown')
         return
       }
       // Ctrl+Shift+A: Toggle auto-approve tools
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
         e.preventDefault()
-        const current = useSettingsStore.getState().autoApprove
-        if (!current) {
-          const ok = await confirm({ title: t('layout.autoApproveConfirm') })
-          if (!ok) return
-        }
-        useSettingsStore.getState().updateSettings({ autoApprove: !current })
-        toast.success(current ? t('layout.autoApproveOff') : t('layout.autoApproveOn'))
+        runWorkbenchAction('workspace.toggle-auto-approve')
         return
       }
       // Ctrl+Shift+Delete: Clear all sessions
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Delete') {
         e.preventDefault()
-        const store = useChatStore.getState()
-        const count = store.sessions.length
-        if (count > 0) {
-          const ok = await confirm({
-            title: t('layout.deleteAllConfirm', { count }),
-            variant: 'destructive'
-          })
-          if (!ok) return
-          store.clearAllSessions()
-          toast.success(t('layout.deletedSessions', { count }))
-        }
+        runWorkbenchAction('workspace.delete-all-sessions')
+        return
       }
       // Ctrl+Shift+T: Cycle right panel tab forward
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'T' || e.key === 't')) {
         e.preventDefault()
-        const ui = useUIStore.getState()
-        if (!ui.rightPanelOpen) {
-          ui.setRightPanelOpen(true)
-          return
-        }
-        const tabs = ui.rightPanelTabs
-        if (tabs.length === 0) {
-          ui.setRightPanelOpen(true)
-          return
-        }
-        const idx = tabs.findIndex((tab) => tab.id === ui.rightPanelActiveTabId)
-        const next = tabs[((idx >= 0 ? idx : 0) + 1) % tabs.length]
-        if (next) ui.setRightPanelActiveTab(next.id)
+        runWorkbenchAction('workspace.cycle-right-panel-tab')
         return
       }
       // Ctrl+Shift+D: Toggle dark/light theme
@@ -596,106 +1025,31 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
         e.preventDefault()
         const current = resolvedTheme
         const next = current === 'dark' ? 'light' : 'dark'
-        useSettingsStore.getState().updateSettings({ theme: next })
-        ntSetTheme(next)
+        runWorkbenchAction('workspace.toggle-theme')
         toast.success(`${t('layout.theme')}: ${next}`)
         return
       }
       // Ctrl+Shift+O: Import sessions from JSON backup
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'O' || e.key === 'o')) {
         e.preventDefault()
-        const input = document.createElement('input')
-        input.type = 'file'
-        input.accept = '.json'
-        input.onchange = async () => {
-          const file = input.files?.[0]
-          if (!file) return
-          try {
-            const text = await file.text()
-            const data = JSON.parse(text)
-            const sessions = Array.isArray(data) ? data : [data]
-            const store = useChatStore.getState()
-            let imported = 0
-            for (const s of sessions) {
-              if (s && s.id && Array.isArray(s.messages)) {
-                const exists = store.sessions.some((e) => e.id === s.id)
-                if (!exists) {
-                  store.restoreSession(s)
-                  imported++
-                }
-              }
-            }
-            if (imported > 0) {
-              toast.success(t('layout.importedSessions', { count: imported }))
-            } else {
-              toast.info(t('layout.noNewSessions'))
-            }
-          } catch (err) {
-            toast.error(
-              t('layout.importFailed', { error: err instanceof Error ? err.message : String(err) })
-            )
-          }
-        }
-        input.click()
+        runWorkbenchAction('workspace.import-sessions')
         return
       }
       // Ctrl+Shift+S: Backup all sessions as JSON
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'S' || e.key === 's')) {
         e.preventDefault()
-        const allSessions = useChatStore.getState().sessions
-        if (allSessions.length === 0) {
-          toast.error(t('layout.noSessionsToBackup'))
-          return
-        }
-        const latestSessions = await Promise.all(allSessions.map(exportSessionSnapshotFromDb))
-        const json = JSON.stringify(latestSessions, null, 2)
-        const blob = new Blob([json], { type: 'application/json' })
-        const url = URL.createObjectURL(blob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = `ola-backup-${new Date().toISOString().slice(0, 10)}.json`
-        a.click()
-        URL.revokeObjectURL(url)
-        toast.success(t('layout.backedUpSessions', { count: latestSessions.length }))
+        runWorkbenchAction('workspace.backup-sessions')
         return
       }
       // Ctrl+Shift+E: Export current conversation
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'E') {
         e.preventDefault()
-        const session = useChatStore.getState().sessions.find((s) => s.id === activeSessionId)
-        if (session && session.messageCount > 0) {
-          const md = await exportSessionMarkdownFromDb(session)
-          const filename =
-            session.title
-              .replace(/[^a-zA-Z0-9-_ ]/g, '')
-              .slice(0, 50)
-              .trim() || 'conversation'
-          const blob = new Blob([md], { type: 'text/markdown' })
-          const url = URL.createObjectURL(blob)
-          const a = document.createElement('a')
-          a.href = url
-          a.download = `${filename}.md`
-          a.click()
-          URL.revokeObjectURL(url)
-          toast.success(t('layout.exportedConversation'))
-        }
+        runWorkbenchAction('session.export-markdown')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [
-    handleCreateChatSession,
-    mode,
-    toggleLeftSidebar,
-    activeSessionId,
-    ntSetTheme,
-    resolvedTheme,
-    stopStreaming,
-    streamingMessageId,
-    t,
-    getActiveSessionSnapshot,
-    handleModeChange
-  ])
+  }, [activeSessionId, resolvedTheme, streamingMessageId, t])
 
   const showEmbeddedSidebar =
     leftSidebarOpen && !settingsPageOpen && !usagePageOpen && !petStudioPageOpen
@@ -749,6 +1103,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
           insetForMacTrafficLights={!showEmbeddedSidebar}
         />
 
+        {activeSurface === 'workspace' && <WorkspaceTabStrip />}
         {activeSurface === 'workspace' && <SessionTabStrip />}
 
         <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -996,6 +1351,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
 
       <CommandPalette />
       <KeyboardShortcutsDialog />
+      <ExtensionWorkbenchViewDialog />
       <ConversationGuideDialog
         open={conversationGuideOpen}
         onOpenChange={setConversationGuideOpen}

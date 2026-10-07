@@ -226,3 +226,53 @@ CodeGraph 复核：`web-tree-sitter` 已升级至 `0.25.10`，与现有 `tree-si
 本轮六平台 staging 复核：当前 Windows x64/arm64、Linux x64/arm64、macOS x64/arm64 解包目录全部通过 `verify-runtime-staging.mjs`；对应 642/642/629/629/822/822 个文件均通过遗留 Worker/.NET 资产扫描。六个平台的原生安装、升级、启动和签名证据仍按验收规则保持开放。
 
 本轮签名政策与 macOS 验收更新：按用户明确要求，本轮 macOS/Windows 暂不要求签名证书，已登记签名豁免；在临时安装目录对 macOS x64/arm64 解包应用分别完成安装、替换升级和启动保持运行验证，并补入对应台账证据。Windows/Linux 原生安装、升级、启动及真实版本升级证据仍未具备，因此严格退出仍不能改写为 376/376。
+
+## 本轮追加验收（2026-10-02）
+
+重新执行 `npm run verify:electron-startup` 时发现旧页面 smoke 只检查 React root 与正文长度，会把 React 错误边界误判为页面正常。新增逐路由错误边界检查后，首次定位到 `#/settings/integrations/channel` 在渲染 `ChannelConfigPanelContent` 时触发 React #185。原因是组件将 `getWorkspaces()` 创建的新数组直接作为 Zustand selector 快照，导致订阅快照不稳定；现改为订阅稳定的 `olaWorkspaces` 并用 `useMemo` 合成本地工作区。
+
+修复后 `npm run build` 通过；`npm run verify:electron-startup` 对 24 个设置/全局页面路由逐页检查并通过，日志和截图分别为 `evidence/electron-startup-2026-10-02.txt`、`evidence/electron-startup-2026-10-02.png`。截图已人工复核，显示正常工作台首屏。P1、P10 保持“实现中”：此结果补充本机启动与页面路由证据，仍不替代全部业务流程、输入法、多窗口及跨平台人工验收。
+
+补充说明：验收复核发现旧 `electron-startup-2026-09-20.png` 本身也显示 React #185 错误页，因此它不能作为“正常首屏”的有效视觉证据；P1/P10 台账现只引用本轮逐路由检测通过后生成的 2026-10-02 截图和日志。历史记录保留用于说明当时脚本存在误判，不代表当前通过证据。
+
+本次路由巡检还发现开发态 SOUL 模板资源只按 `app.getAppPath()` 查找；Electron 以 `out/main` 为应用入口时，仓库根目录资源目录不在该候选下。开发态资源解析现在同时检查 `process.cwd()/resources/<name>`，修复后 Memory 页面加载无该资源错误，启动脚本也会拒绝未处理 Renderer 异常。验证：`npm run build`、`npm run verify:electron-startup`（24/24 路由，未发现 React 错误边界或非 Electron 内部 Renderer 异常）。
+
+补充验证结果：`npx vitest run tests/runtime/soul-local-catalog.test.ts tests/runtime/ipc-contract.test.ts --silent` 通过（2 个文件、10 个测试）；改用 `tmpdir()` 后 SOUL 目录用例在 Windows 通过。针对本轮改动文件运行 ESLint（关闭全仓 CRLF Prettier 警告规则）无错误，台账校验通过。严格退出门禁仍报告 10 项开放验收（P1、P10、P12、真实主站及六平台发布），所以本轮不将阶段标为完成。
+
+## 本轮功能页与交互验收扩展（2026-10-02）
+
+在 24 个设置/Usage/Pet Studio 页面路由 smoke 基础上，Electron 启动验收新增真实侧栏交互：打开任务中心、资源、绘图、技能、SOUL、同步 6 个功能面，并检查对应页面标题、有效内容及错误边界；同时从未登录菜单打开账户登录页并返回，再从真实历史对话中的用户消息菜单进入翻译页，检查源文已带入。脚本最后恢复工作台并保存首屏截图。结果：`npm run verify:electron-startup` 通过，24 路由 + 6 功能页 + 账户与翻译交互检查通过；启动及页面错误检测通过。该覆盖仍属于页面与入口级 smoke，不替代每个功能页的完整 CRUD、模型调用、输入法、多窗口和平台人工验收，P1/P10 保持“实现中”。
+
+截图复核发现前次截屏误把“已填入翻译页”toast 留在首页；启动脚本现等待该临时提示消失后再截屏，最新证据已人工复核为干净首页。启动日志同时发现旧 `desktop_flows` 表缺少 `workspace_id` 导致 `desktop-flow:list` 查询失败；业务库新增 schema v9 迁移，为旧表补充 workspace 列、将历史记录归入 `local-personal` 并建立索引。新增旧库迁移回归用例通过（业务 schema 测试文件 6/6）。修复后全量 `npm run build` 通过，Electron 启动验收通过且日志不再包含 `no such column` 或 `desktop-flow:list` handler 错误；`verify:ts-migration-ledger` 通过 376/376。`npm run typecheck:runtime` 仍报告工作区已有的其他类型问题（`findLastIndex` lib target 与新增 runtime 测试夹具类型），本轮未扩大修改这些无关部分。严格退出门禁仍有 10 项开放证据，P1/P10 保持“实现中”。
+
+本轮 runtime 类型与回归复核更正：将消息尾部用户轮次定位改为兼容当前 TS lib target 的反向索引循环，修正 Cron/Memory 运行时上下文及 Electron/Task 工具测试夹具，`npm run typecheck:runtime` 现通过；9 个相关测试文件中 7 个通过、2 个既有 Electron E2E 文件按环境条件跳过（31 个通过、2 个跳过）。受影响文件 ESLint 与 `git diff --check` 通过。完整 `npm run test:runtime` 暴露 80 个失败（253 文件：211 通过、2 跳过、40 失败），主要包括现有 IPC 测试使用不含 BrowserWindow/mainFrame 的 Electron mock、Windows 符号链接与 PTY 行为差异及若干其他契约断言；因此不能声称全量回归通过，需继续修正测试夹具并逐项确认产品行为。严格退出门禁继续保留开放状态。
+
+## 本轮跨平台与 IPC 回归修复（2026-10-02）
+
+业务 IPC 测试现使用授权成功的安全边界 mock，将工作区/业务授权断言与 Renderer 来源验证隔离；独立 `renderer-security`、同步授权与迁移授权测试仍运行真实主窗口及主 Frame 检查。20 个 IPC 测试文件、73 个用例通过。Agents IPC handler 现在等待目录初始化完成再读取/修改，消除启动时初始化竞态。CodeGraph 根路径校验改为显式拒绝 Windows 盘符根和 POSIX 根，避免 `C:\` 被当成普通项目目录后触发整盘索引；危险根路径测试由超时改为通过。另修正 Windows 路径、文件权限、PowerShell 输出/超时和终端多块输出的测试契约。
+
+全量 `npm run test:runtime` 最新结果：253 个测试文件中 236 个未失败、2 个跳过；961 个测试通过、6 个跳过、21 个失败。剩余失败主要受当前 Windows 环境禁止创建符号链接（EPERM）影响，另有若干 POSIX OpenSSH 路径预期仍待跨平台化，因此不能宣称全量回归通过。`npm run typecheck:runtime` 通过；IPC 专项 20/20 文件、73/73 用例通过；平台修复专项 7/7 文件、15/15 用例通过；`npm run build` 完成，最新版 `npm run verify:electron-startup` 通过 24 路由、6 个功能面、账户登录及翻译交互。迁移台账仍为 376/376，但严格退出门禁继续有 10 项开放证据，P1/P10/P12 和平台发布阶段保持开放。
+
+## 全量回归修复复核（2026-10-02）
+
+继续修复上述失败后，Git 仓库扫描现通过 `git rev-parse --show-toplevel` 确认候选目录自身为仓库根，避免 Windows 临时目录位于父仓库之下时将父仓库误报为扫描结果；迁移 handover 用例同步覆盖 schema v9；OpenCode 隔离配置测试改用专用 HOME 哨兵验证环境变量未展开，避免把临时文件路径元数据误判为 secret 泄漏。针对性回归 3 个测试文件、69 项通过、1 项因 Windows 符号链接限制跳过。
+
+最新全量 `npm run test:runtime` 通过：253 个测试文件中 251 个通过、2 个跳过；989 项测试中 976 项通过、13 项按环境/条件跳过，失败 0。`npm run typecheck:runtime`、迁移台账校验（376/376）、`npm run build` 和 `npm run verify:electron-startup` 均通过；Electron 启动 smoke 覆盖 24 个路由、6 个功能页、账户登录及翻译入口。改动文件 ESLint（关闭仓库 Windows CRLF 引发的 Prettier 行尾告警规则）无错误。全仓 `npm run lint` 未发现错误，但报告 132,836 条 CRLF/Prettier 告警，需在统一行尾策略后再作为干净的全仓 Lint 证据。
+
+严格 `npm run verify:ts-migration-exit` 仍正确失败并列出 10 项开放验收：P1、P10、P12、真实主站联调，以及 Windows x64/arm64、Linux x64/arm64、macOS x64/arm64 的原生安装/升级/启动证据。上述本机验证不能替代完整业务人工验收和真实发布环境验收，因此阶段状态与这些台账条目保持开放。
+
+## Electron 持久化与分离窗口 E2E（2026-10-02）
+
+将常规全量测试中默认跳过的 `pending-session-queue-electron` 与 `session-delete-electron` 两套 Electron E2E 显式启用。首次运行暴露 `session-delete-electron.test.ts` 对 Chrome DevTools `Runtime.evaluate` 结果少读取一层的问题，导致把已正常加载的 Renderer 误判成启动超时；修正响应类型和读取路径后，两套真实 Electron E2E 均通过（2/2）：中断发送重启后仍可恢复审阅，以及删除会话后分离会话窗口关闭。`npm run verify:legacy-artifacts` 检查 out 下 290 个解包文件，无遗留 Runtime Worker/Runtime 产物；源码中未发现 `.sln`、`.csproj`、C#/VB 源码或 .NET 项目清单。该本地证据补强 P1/P10/P12，但不替代完整功能页人工流程、真实主站三类联调证据或六平台原生安装/升级验收，严格退出项保持开放。
+
+## Windows x64 发布产物复核（2026-10-02）
+
+使用真实 Windows 主机尝试补齐 P12。直接从仓库根目录打包时 Electron Builder 的依赖扫描超过 Node 默认和 8 GB 堆上限；改用项目隔离 staging 打包后发现并修复 `package-release-staging.mjs` 在 Windows 上直接 spawn `npm` shim 失败、Builder CLI 参数多传命令名的问题。生产配置此前会把被 `.gitignore` 忽略的 `resources/native-worker` 旧 Worker 二进制带入安装包；在 `electron-builder.yml` 排除该目录后重新生成 Windows x64 NSIS/ZIP。`verify-runtime-staging.mjs` 通过，718 个解包文件的旧 Runtime Worker 扫描通过，包内 native-worker 路径不存在。NSIS 使用 `/CURRENTUSER` 在临时目录静默安装成功，退出码 0；不带该标志会弹出 Windows 提权提示，因此未自动授权。已安装应用启动测试进程仍存活，但未在 45 秒内出现 Renderer/DevTools 页面，故启动验收未通过、台账不登记 launch evidence；旧版本安装包缺失，upgrade evidence 仍开放。具体记录见 `evidence/windows-x64-2026-09-20.md`。严格退出门禁依旧保留 10 项开放验收。
+
+继续排查发现 release staging 删除了 `postinstall`，而 Builder 又配置 `npmRebuild: false`，使 `better-sqlite3` 以宿主 Node ABI 131 构建；目标 Electron 43.4.1 需要 ABI 148。现 staging 在安装依赖后显式执行项目原生模块重建脚本，并传入目标平台/架构。Main 入口探针进一步发现遗漏的 `omggif`、`@electron-toolkit/utils`、`mammoth` 动态依赖；staging 现在会从 Main bundle 自动收集外部 require/import 包名。修复后 Windows x64 NSIS 当前用户静默安装成功，安装版启动验收通过，主窗口可见、Renderer 根节点正常、正文 253 字符且无 Renderer 错误。构建产物检查 718 个文件，无旧 Worker。Windows x64 安装和启动证据已登记；升级仍缺真实旧版本安装包，六平台发布和真实主站证据继续开放。详情见 `evidence/windows-x64-2026-09-20.md`。
+
+## 全量 Runtime 回归复核（2026-10-03）
+
+schema v11 已加入 Cron 会话投递，旧库交接测试原先只预期到 v10，现已补齐精确迁移状态预期。旧库交接专项 64/64 通过；`npm run test:runtime -- --silent --reporter=dot` 全量结果为 257 个测试文件通过、2 个跳过，1042 项测试通过、13 项跳过。修改文件的 Prettier 检查和 ESLint 均通过。全仓 `npm run lint` 无错误、退出码为 0，但 Windows 检出中仍有 124834 条主要由 CRLF/Prettier 产生的警告；测试期间 `node-pty` 另输出 `AttachConsole failed`，未导致用例失败。`npm run verify:ts-migration-exit` 仍列出 10 项开放验收，本轮回归不改变 P1、P10、P12、真实主站或六平台状态。
+
+`npm run verify:ci-core` 首次在两个旧静态断言处中止：浏览器注册已移入 `src/shared/ipc/contract.ts`，WebView 的分区判断改为工作区精确匹配，弹窗拒绝移入 `src/main/renderer-security.ts`。更新校验脚本后，两项定向门禁及完整 `verify:ci-core` 均以退出码 0 完成；相关脚本 Prettier、ESLint 与 diff 检查通过。该结果只证明核心代码级门禁通过，P1/P10 的完整页面与交互验收仍开放。

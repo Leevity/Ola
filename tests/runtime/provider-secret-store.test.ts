@@ -56,4 +56,13 @@ describe('provider secret store', () => {
       'Invalid provider secret'
     )
   })
+
+  it('uses the committed auth bundle ahead of a stale legacy API key', async () => {
+    const store = new ProviderSecretStore(createBackend())
+    await store.set('provider-one', 'legacy-key')
+    await store.setAuthBundle('provider-one', JSON.stringify({ apiKey: 'current-key' }))
+    expect(await store.get('provider-one')).toBe('current-key')
+    await store.setAuthBundle('provider-one', '{}')
+    expect(await store.get('provider-one')).toBe('')
+  })
 })

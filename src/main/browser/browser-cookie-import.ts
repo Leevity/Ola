@@ -13,6 +13,8 @@ import {
 } from './browser-emulation'
 import type { ConcreteBrowserUserDataSource } from '../../shared/browser-plugin'
 import { canPersistSecrets } from '../credentials/secure-storage-policy'
+import { waitForSafeStorageKeyPersistence } from '../credentials/safe-storage-key-persistence'
+import { olaDataRoot } from '../lib/ola-data-root'
 import { decryptChromiumCbcCookie, decryptChromiumGcmCookie } from './chromium-cookie-crypto'
 
 const execFileAsync = promisify(execFile)
@@ -91,17 +93,20 @@ export async function exportBuiltInBrowserCookies(
         .encryptString(JSON.stringify({ schemaVersion: 1, workspaceId, exportedAt, cookies }))
         .toString('base64')
     }
+    await waitForSafeStorageKeyPersistence()
     const ownerWindow = BrowserWindow.fromWebContents(sender)
     const result =
-      ownerWindow && !ownerWindow.isDestroyed()
-        ? await dialog.showSaveDialog(ownerWindow, {
-            defaultPath: browserCookieArchiveFileName(workspaceId),
-            filters: [{ name: 'Ola encrypted browser cookies', extensions: ['ola-cookies'] }]
-          })
-        : await dialog.showSaveDialog({
-            defaultPath: browserCookieArchiveFileName(workspaceId),
-            filters: [{ name: 'Ola encrypted browser cookies', extensions: ['ola-cookies'] }]
-          })
+      process.env.OLA_E2E_DATA_ROOT === undefined
+        ? ownerWindow && !ownerWindow.isDestroyed()
+          ? await dialog.showSaveDialog(ownerWindow, {
+              defaultPath: browserCookieArchiveFileName(workspaceId),
+              filters: [{ name: 'Ola encrypted browser cookies', extensions: ['ola-cookies'] }]
+            })
+          : await dialog.showSaveDialog({
+              defaultPath: browserCookieArchiveFileName(workspaceId),
+              filters: [{ name: 'Ola encrypted browser cookies', extensions: ['ola-cookies'] }]
+            })
+        : { canceled: false, filePath: join(olaDataRoot(), 'cookie-export.ola-cookies') }
     if (result.canceled || !result.filePath)
       return { success: false, exported: 0, errorKind: 'cancelled' }
     await writeFile(result.filePath, JSON.stringify(archive), { encoding: 'utf8', mode: 0o600 })

@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   createLocalFindFilesTool,
   createLocalGlobFilesTool
 } from '../../src/runtime/tools/local-find-files'
+import { skipWhenSymlinkUnavailable, tryCreateTestSymlink } from './symlink-fixture'
 
 const cleanup: string[] = []
 afterEach(async () => {
@@ -13,7 +14,7 @@ afterEach(async () => {
 })
 
 describe('local find and glob tools', () => {
-  it('recursively finds bounded workspace files without traversing symlinks', async () => {
+  it('recursively finds bounded workspace files without traversing symlinks', async ({ skip }) => {
     const root = await mkdtemp(join(tmpdir(), 'ola-find-root-'))
     const outside = await mkdtemp(join(tmpdir(), 'ola-find-outside-'))
     cleanup.push(root, outside)
@@ -24,7 +25,8 @@ describe('local find and glob tools', () => {
       writeFile(join(root, 'node_modules', 'hidden.md'), ''),
       writeFile(join(outside, 'secret.md'), '')
     ])
-    await symlink(outside, join(root, 'escape'))
+    const linked = await tryCreateTestSymlink(outside, join(root, 'escape'), 'dir')
+    skipWhenSymlinkUnavailable({ skip }, linked)
 
     const tool = createLocalFindFilesTool(root)
     await expect(

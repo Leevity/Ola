@@ -4,6 +4,7 @@ import { Button } from '@renderer/components/ui/button'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { decodeStructuredToolResult } from '@renderer/lib/tools/tool-result-format'
 import type { ToolResultContent } from '@renderer/lib/api/types'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { VideoTask } from '../../../../shared/media-runtime'
 
 function parseTaskId(output: ToolResultContent): string | null {
@@ -25,12 +26,15 @@ export function VideoGenerationTaskCard({
   output: ToolResultContent
 }): React.JSX.Element | null {
   const { t } = useTranslation('layout')
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const taskId = React.useMemo(() => parseTaskId(output), [output])
   const [task, setTask] = React.useState<VideoTask | null>(null)
   const [cancelPending, setCancelPending] = React.useState(false)
   const [loadError, setLoadError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
+    setTask(null)
+    setLoadError(null)
     if (!taskId) return
     let disposed = false
     let timer: number | undefined
@@ -46,6 +50,7 @@ export function VideoGenerationTaskCard({
         }
       } catch (error) {
         if (disposed) return
+        setTask(null)
         setLoadError(error instanceof Error ? error.message : String(error))
         timer = window.setTimeout(() => void refresh(), 2500)
       }
@@ -55,7 +60,7 @@ export function VideoGenerationTaskCard({
       disposed = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [taskId])
+  }, [taskId, workspaceId])
 
   if (!taskId) return null
   const state = task?.state ?? 'queued'
@@ -63,7 +68,15 @@ export function VideoGenerationTaskCard({
   const cancel = async (): Promise<void> => {
     setCancelPending(true)
     try {
-      await ipcClient.invoke('media:task-cancel', { id: taskId })
+      const result = (await ipcClient.invoke('media:task-cancel', { id: taskId })) as {
+        success: boolean
+      }
+      if (!result.success)
+        throw new Error(
+          t('executionResults.mediaCancelUnavailable', {
+            defaultValue: 'The task cannot be cancelled in the current workspace or state.'
+          })
+        )
       const tasks = (await ipcClient.invoke('media:tasks-list')) as VideoTask[]
       setTask(tasks.find((item) => item.id === taskId) ?? null)
     } catch (error) {
@@ -92,9 +105,9 @@ export function VideoGenerationTaskCard({
           />
         </div>
       ) : null}
-      {task?.outputUrl && state === 'completed' ? (
+      {task?.previewUrl && task.workspaceId === workspaceId && state === 'completed' ? (
         <video className="max-h-80 w-full rounded bg-black" controls preload="metadata">
-          <source src={`ola-media://${task.id}`} />
+          <source src={task.previewUrl} />
         </video>
       ) : null}
       {loadError ? <div className="text-destructive">{loadError}</div> : null}

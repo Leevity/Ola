@@ -107,7 +107,7 @@ export function CredentialsPanel(): React.JSX.Element {
             <Button
               variant="outline"
               size="sm"
-              className="h-7 text-[11px]"
+              className="h-7 text-xs"
               onClick={handleOpenBrowser}
               data-testid="open-browser-button"
               title={t('browser.openTitle')}
@@ -178,7 +178,7 @@ export function CredentialsPanel(): React.JSX.Element {
           {isDev ? (
             <>
               <Separator />
-              <section className="space-y-2 rounded-md border border-dashed border-amber-300/60 bg-amber-50/30 px-3 py-2 text-[11px] dark:border-amber-700/40 dark:bg-amber-900/10">
+              <section className="space-y-2 rounded-md border border-dashed border-amber-300/60 bg-amber-50/30 px-3 py-2 text-xs dark:border-amber-700/40 dark:bg-amber-900/10">
                 <div className="flex items-center gap-1.5 text-amber-900 dark:text-amber-200">
                   <FlaskConical className="size-3.5" />
                   <span className="font-medium">{t('dev.title')}</span>
@@ -188,7 +188,7 @@ export function CredentialsPanel(): React.JSX.Element {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-[11px]"
+                    className="h-7 text-xs"
                     onClick={() => {
                       seedLoginRun({
                         id: `dev-${Date.now()}`,
@@ -205,7 +205,7 @@ export function CredentialsPanel(): React.JSX.Element {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-7 text-[11px]"
+                    className="h-7 text-xs"
                     onClick={() => {
                       clearLoginRun()
                       toast.info(t('dev.cleared'))
@@ -227,11 +227,11 @@ export function CredentialsPanel(): React.JSX.Element {
             <FlaskConical className="size-3.5 text-muted-foreground" />
             <span>{t('browser.title')}</span>
             {loginRun ? (
-              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300">
+              <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-xs text-emerald-700 dark:text-emerald-300">
                 run active
               </span>
             ) : (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                 idle
               </span>
             )}

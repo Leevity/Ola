@@ -42,6 +42,47 @@ describe('TS cron runtime submission', () => {
     expect(run.toolNames).toEqual([])
   })
 
+  it('keeps no-delivery mode when a stale channel binding remains', () => {
+    const run = createTsCronRunSpec(
+      {
+        jobId: 'job-no-delivery',
+        prompt: 'report',
+        modelSource: { kind: 'local', providerId: 'provider-1', modelId: 'model-1' },
+        deliveryMode: 'none',
+        pluginId: 'feishu-1',
+        pluginChatId: 'chat-1'
+      },
+      'run-no-delivery'
+    )
+    expect(run.toolNames).toEqual([])
+    expect(run).not.toHaveProperty('channelContext')
+    expect(run.prompt).toContain('Do not send a desktop notification')
+    expect(run.prompt).not.toContain('PluginSendMessage exactly once')
+  })
+
+  it('runs Cron trials with read-only tools and no channel or delivery context', () => {
+    const run = createTsCronRunSpec(
+      {
+        jobId: 'job-trial',
+        prompt: '检查项目并总结需要做的改动',
+        modelSource: { kind: 'local', providerId: 'provider-1', modelId: 'model-1' },
+        workspaceId: 'team-a',
+        workingFolder: '/tmp/project',
+        pluginId: 'feishu-1',
+        pluginChatId: 'chat-1',
+        deliveryMode: 'none',
+        trialRun: true
+      },
+      'run-trial'
+    )
+
+    expect(run.toolNames).toEqual(['Read', 'LS', 'Glob', 'Grep'])
+    expect(run).not.toHaveProperty('channelContext')
+    expect(run.prompt).toContain('Do not change files')
+    expect(run.prompt).toContain('do not deliver the result externally')
+    expect(run.prompt).toContain('检查项目并总结需要做的改动')
+  })
+
   it('binds unattended SSH work to the explicit connection and remote tool set', () => {
     const run = createTsCronRunSpec(
       {
@@ -81,6 +122,26 @@ describe('TS cron runtime submission', () => {
       unattended: true
     })
     expect(run.prompt).toContain('PluginSendMessage exactly once')
+  })
+
+  it('reserves session delivery for the application even when a channel binding is present', () => {
+    const run = createTsCronRunSpec(
+      {
+        jobId: 'job-session',
+        prompt: '汇报状态',
+        modelSource: { kind: 'local', providerId: 'provider-1', modelId: 'model-1' },
+        workspaceId: 'local-personal',
+        deliveryMode: 'session',
+        deliveryTarget: 'session-1',
+        pluginId: 'feishu-1',
+        pluginChatId: 'chat-1'
+      },
+      'run-session'
+    )
+    expect(run.toolNames).toEqual([])
+    expect(run).not.toHaveProperty('channelContext')
+    expect(run.prompt).toContain('application will save it to the target session')
+    expect(run.prompt).toContain('do not call Notify')
   })
 
   it('projects a custom Main-owned agent definition into the TS run', () => {

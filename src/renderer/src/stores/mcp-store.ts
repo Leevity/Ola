@@ -14,6 +14,10 @@ import { IPC } from '@renderer/lib/ipc/channels'
 
 interface McpStore {
   servers: McpServerConfig[]
+  serversLoaded: boolean
+  serversLoadError: string | null
+  serverStatusCheckedAt: number | null
+  serverStatusCheckError: string | null
   serverStatuses: Record<string, McpServerStatus>
   serverTools: Record<string, McpTool[]>
   serverResources: Record<string, McpResource[]>
@@ -102,6 +106,10 @@ export function resolveEffectiveActiveMcpIds(params: {
 
 export const useMcpStore = create<McpStore>((set, get) => ({
   servers: [],
+  serversLoaded: false,
+  serversLoadError: null,
+  serverStatusCheckedAt: null,
+  serverStatusCheckError: null,
   serverStatuses: {},
   serverTools: {},
   serverResources: {},
@@ -111,11 +119,16 @@ export const useMcpStore = create<McpStore>((set, get) => ({
   selectedServerId: null,
 
   loadServers: async () => {
+    set({ serversLoaded: false, serversLoadError: null })
     try {
       const servers = (await ipcClient.invoke(IPC.MCP_LIST)) as McpServerConfig[]
-      set({ servers: Array.isArray(servers) ? servers : [] })
-    } catch {
-      set({ servers: [] })
+      set({ servers: Array.isArray(servers) ? servers : [], serversLoaded: true })
+    } catch (error) {
+      set({
+        servers: [],
+        serversLoaded: true,
+        serversLoadError: error instanceof Error ? error.message : String(error)
+      })
     }
   },
 
@@ -218,9 +231,10 @@ export const useMcpStore = create<McpStore>((set, get) => ({
   },
 
   refreshAllServers: async () => {
+    set({ serverStatusCheckedAt: null, serverStatusCheckError: null })
     try {
       const allInfo = (await ipcClient.invoke(IPC.MCP_ALL_SERVERS_INFO)) as McpServerInfo[]
-      if (!Array.isArray(allInfo)) return
+      if (!Array.isArray(allInfo)) throw new Error('INVALID_MCP_STATUS_RESPONSE')
       const statuses: Record<string, McpServerStatus> = {}
       const tools: Record<string, McpTool[]> = {}
       const resources: Record<string, McpResource[]> = {}
@@ -239,10 +253,16 @@ export const useMcpStore = create<McpStore>((set, get) => ({
         serverTools: tools,
         serverResources: resources,
         serverPrompts: prompts,
-        serverErrors: errors
+        serverErrors: errors,
+        serverStatusCheckedAt: Date.now(),
+        serverStatusCheckError: null
       })
-    } catch {
-      // ignore
+    } catch (error) {
+      set({
+        serverStatuses: {},
+        serverStatusCheckedAt: null,
+        serverStatusCheckError: error instanceof Error ? error.message : String(error)
+      })
     }
   },
 

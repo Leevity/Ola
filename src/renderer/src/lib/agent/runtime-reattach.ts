@@ -19,6 +19,7 @@ import {
   respondTsRuntimeInteraction
 } from '../ipc/ts-runtime-bridge'
 import { normalizeRuntimeApprovalRequest } from '../ipc/runtime-approval-protocol'
+import { resolveTsRuntimeBrowserInteraction } from '../ipc/browser-runtime-interaction'
 import { useSettingsStore } from '../../stores/settings-store'
 import { ensureWindowWorkspaceRegistered } from '../window-workspace-registration'
 import {
@@ -93,6 +94,10 @@ async function resolveTsReattachInteraction(
   interaction: import('../../../../shared/runtime/contracts').PendingRuntimeInteraction,
   sessionId: string
 ): Promise<void> {
+  if (interaction.kind === 'browser-tool') {
+    await resolveTsRuntimeBrowserInteraction(interaction, sessionId)
+    return
+  }
   // Interactions survive the renderer that created the run. Recreate the same
   // approval request here so reopening a window cannot leave a persisted run
   // waiting forever for a response that only the previous window could send.

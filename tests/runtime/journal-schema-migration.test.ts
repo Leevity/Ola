@@ -33,6 +33,55 @@ function version(path: string): number {
 }
 
 describe('runtime journal schema migrations', () => {
+  it('pages run summaries in stable journal order', async () => {
+    const path = await pathFor('journal-run-pages')
+    const journal = new RunJournal(path)
+    journals.push(journal)
+    for (const index of [1, 2, 3]) {
+      await journal.create({
+        runId: `run-${index}`,
+        taskId: `task-${index}`,
+        requestId: `request-${index}`,
+        traceId: `trace-${index}`,
+        sessionId: 'session',
+        workspaceId: 'local-personal',
+        environmentId: 'local',
+        modelSource: { kind: 'local', providerId: 'local', modelId: 'model' },
+        prompt: 'test',
+        unattended: false
+      })
+    }
+    const first = await journal.list('local-personal', 2, 0)
+    const second = await journal.list('local-personal', 2, 2)
+    expect(first).toHaveLength(2)
+    expect(second).toHaveLength(1)
+    expect(new Set([...first, ...second].map((run) => run.runId))).toEqual(
+      new Set(['run-1', 'run-2', 'run-3'])
+    )
+    expect(await journal.list('other-workspace', 2, 0)).toEqual([])
+    const anchor = { at: first[0].createdAt, id: first[0].runId }
+    const after = { at: first[1].createdAt, id: first[1].runId }
+    await journal.create({
+      runId: 'run-4',
+      taskId: 'task-4',
+      requestId: 'request-4',
+      traceId: 'trace-4',
+      sessionId: 'session',
+      workspaceId: 'local-personal',
+      environmentId: 'local',
+      modelSource: { kind: 'local', providerId: 'local', modelId: 'model' },
+      prompt: 'later',
+      unattended: false
+    })
+    expect(
+      (await journal.list('local-personal', 2, 0, false, anchor, after)).map((run) => run.runId)
+    ).toEqual(second.map((run) => run.runId))
+    await journal.transition('run-2', 'local-personal', ['queued'], 'failed')
+    expect((await journal.list('local-personal', 2, 0, true)).map((run) => run.runId)).toEqual([
+      'run-2'
+    ])
+  })
+
   it('upgrades a v1 journal transactionally without replacing existing run data', async () => {
     const path = await pathFor('journal-v1')
     const database = new DatabaseSync(path)
@@ -59,7 +108,7 @@ describe('runtime journal schema migrations', () => {
     const journal = new RunJournal(path)
     journals.push(journal)
     expect((await journal.snapshot('legacy-run', 'local-personal'))?.run.status).toBe('completed')
-    expect(version(path)).toBe(3)
+    expect(version(path)).toBe(6)
 
     const check = new DatabaseSync(path, { readOnly: true })
     try {
@@ -72,6 +121,25 @@ describe('runtime journal schema migrations', () => {
         check
           .prepare(
             "SELECT name FROM sqlite_master WHERE type='index' AND name='runs_session_workspace'"
+          )
+          .get()
+      ).toBeTruthy()
+      expect(
+        check
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='events_artifacts_recent'"
+          )
+          .get()
+      ).toBeTruthy()
+      expect(
+        check
+          .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='hidden_artifacts'")
+          .get()
+      ).toBeTruthy()
+      expect(
+        check
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='runs_workspace_created_id'"
           )
           .get()
       ).toBeTruthy()

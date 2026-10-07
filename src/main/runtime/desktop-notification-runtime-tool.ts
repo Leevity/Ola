@@ -1,7 +1,11 @@
 import { RuntimeError } from '../../shared/runtime/contracts'
 import type { ToolDefinition } from '../../runtime/tools/tool-executor'
+import { trackCronDelivery } from '../cron/cron-delivery-tracking'
 
-export type DesktopNotificationDelivery = (title: string, body: string) => void
+export type DesktopNotificationDelivery = (
+  title: string,
+  body: string
+) => Promise<'shown' | 'failed' | 'unknown'>
 
 type NotifyInput = { title: string; body: string; type?: string; duration?: number }
 
@@ -55,10 +59,13 @@ export function createDesktopNotificationTool(
     effect: 'write',
     validate: input,
     resources: async () => ['desktop-notification'],
-    execute: async (value) => {
-      const notification = value as NotifyInput
-      deliver(notification.title, notification.body)
-      return { success: true, title: notification.title, body: notification.body.slice(0, 200) }
-    }
+    execute: async (value, context) =>
+      trackCronDelivery(context, 'desktop', async () => {
+        const notification = value as NotifyInput
+        const status = await deliver(notification.title, notification.body)
+        if (status === 'failed') return { success: false, error: 'NOTIFICATION_FAILED' }
+        if (status === 'unknown') return { status: 'unknown' }
+        return { success: true, title: notification.title, body: notification.body.slice(0, 200) }
+      })
   }
 }

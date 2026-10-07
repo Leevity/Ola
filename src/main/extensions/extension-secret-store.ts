@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { safeStorage } from 'electron'
+import { waitForSafeStorageKeyPersistence } from '../credentials/safe-storage-key-persistence'
 import type { ExtensionSecretStore } from './extension-service'
 import { normalizeExtensionId } from './extension-paths'
 
@@ -11,6 +12,7 @@ export interface ExtensionSecretCryptography {
   available(): boolean
   encrypt(value: string): Buffer
   decrypt(value: Buffer): string
+  readyForCommit?(): Promise<void>
 }
 
 export interface LegacyExtensionSecretSource {
@@ -23,28 +25,22 @@ function secretConfigKey(extensionId: string, key: string): string {
 }
 
 function parseRoot(value: string): SecretRoot {
-  try {
-    const parsed: unknown = JSON.parse(value)
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-    return Object.fromEntries(
-      Object.entries(parsed as Record<string, unknown>).flatMap(([id, values]) =>
-        values && typeof values === 'object' && !Array.isArray(values)
-          ? [
-              [
-                id,
-                Object.fromEntries(
-                  Object.entries(values as Record<string, unknown>).flatMap(([key, item]) =>
-                    typeof item === 'string' ? [[key, item]] : []
-                  )
-                )
-              ]
-            ]
-          : []
-      )
-    )
-  } catch {
-    return {}
+  const parsed: unknown = JSON.parse(value)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid encrypted secret store')
   }
+  return Object.fromEntries(
+    Object.entries(parsed as Record<string, unknown>).map(([id, values]) => {
+      if (!values || typeof values !== 'object' || Array.isArray(values)) {
+        throw new Error('Invalid encrypted secret store')
+      }
+      const entries = Object.entries(values as Record<string, unknown>).map(([key, item]) => {
+        if (typeof item !== 'string') throw new Error('Invalid encrypted secret store')
+        return [key, item] as const
+      })
+      return [id, Object.fromEntries(entries)] as const
+    })
+  )
 }
 
 function getSafeStorageCryptography(): ExtensionSecretCryptography {
@@ -60,7 +56,8 @@ function getSafeStorageCryptography(): ExtensionSecretCryptography {
       }
     },
     encrypt: (value) => safeStorage.encryptString(value),
-    decrypt: (value) => safeStorage.decryptString(value)
+    decrypt: (value) => safeStorage.decryptString(value),
+    readyForCommit: waitForSafeStorageKeyPersistence
   }
 }
 
@@ -79,6 +76,10 @@ export class EncryptedExtensionSecretStore implements ExtensionSecretStore {
     private readonly cryptography: ExtensionSecretCryptography = getSafeStorageCryptography(),
     private readonly legacy?: LegacyExtensionSecretSource
   ) {}
+
+  isPersistent(): boolean {
+    return this.cryptography.available()
+  }
 
   async get(extensionId: string, key: string): Promise<string> {
     const id = normalizeExtensionId(extensionId)
@@ -111,15 +112,16 @@ export class EncryptedExtensionSecretStore implements ExtensionSecretStore {
   private async read(): Promise<SecretRoot> {
     if (this.memory) return structuredClone(this.memory)
     if (!this.cryptography.available()) {
-      this.memory = {}
+      // Startup can query the store before Electron unlocks the platform key.
+      // Do not cache an empty snapshot or later reads would hide the encrypted file.
       return {}
     }
     try {
       const decoded = this.cryptography.decrypt(await readFile(this.path))
       this.memory = parseRoot(decoded)
     } catch (error) {
-      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) this.memory = {}
-      else this.memory = {}
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error
+      this.memory = {}
     }
     return structuredClone(this.memory)
   }
@@ -128,12 +130,17 @@ export class EncryptedExtensionSecretStore implements ExtensionSecretStore {
     const result = this.tail.then(async () => {
       const root = await this.read()
       change(root)
-      this.memory = root
-      if (!this.cryptography.available()) return
+      if (!this.cryptography.available()) {
+        this.memory = root
+        return
+      }
+      const encrypted = this.cryptography.encrypt(JSON.stringify(root))
+      await this.cryptography.readyForCommit?.()
       await mkdir(dirname(this.path), { recursive: true, mode: 0o700 })
       const temporary = join(dirname(this.path), '.' + randomUUID() + '.extensions-secrets.bin')
-      await writeFile(temporary, this.cryptography.encrypt(JSON.stringify(root)), { mode: 0o600 })
+      await writeFile(temporary, encrypted, { mode: 0o600 })
       await rename(temporary, this.path)
+      this.memory = root
     })
     this.tail = result.catch(() => undefined)
     return result

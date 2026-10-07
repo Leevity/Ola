@@ -40,6 +40,7 @@ import {
   type SettingsNavigationTarget,
   type SettingsPageId
 } from '@renderer/components/settings/settings-registry'
+import type { ExtensionWorkbenchViewDefinition } from '../../../shared/extension-types'
 
 export type AppMode = 'chat' | 'clarify' | 'execute' | 'acp'
 export type LegacyAppMode = 'cowork' | 'code'
@@ -396,6 +397,8 @@ interface UIStore {
   setWorkingFolderPanelWidth: (width: number) => void
   bottomTerminalDockOpenByProjectId: Record<string, boolean>
   setBottomTerminalDockOpen: (projectId: string, open: boolean) => void
+  terminalDockAreaByProjectId: Record<string, 'bottom' | 'right'>
+  setTerminalDockArea: (projectId: string, area: 'bottom' | 'right') => void
   toggleBottomTerminalDock: (projectId: string) => void
   isBottomTerminalDockOpen: (projectId?: string | null) => boolean
   bottomTerminalDockHeight: number
@@ -469,6 +472,19 @@ interface UIStore {
   closeTasksPage: () => void
   shortcutsOpen: boolean
   setShortcutsOpen: (open: boolean) => void
+  commandPaletteOpen: boolean
+  setCommandPaletteOpen: (open: boolean) => void
+  extensionWorkbenchView: {
+    extensionId: string
+    extensionName: string
+    view: ExtensionWorkbenchViewDefinition
+  } | null
+  openExtensionWorkbenchView: (
+    extensionId: string,
+    extensionName: string,
+    view: ExtensionWorkbenchViewDefinition
+  ) => void
+  closeExtensionWorkbenchView: () => void
   changelogDialogOpen: boolean
   setChangelogDialogOpen: (open: boolean) => void
   conversationGuideOpen: boolean
@@ -1173,12 +1189,20 @@ export const useUIStore = create<UIStore>()(
       setWorkingFolderPanelWidth: (width) =>
         set({ workingFolderPanelWidth: clampWorkingFolderPanelWidth(width) }),
       bottomTerminalDockOpenByProjectId: {},
+      terminalDockAreaByProjectId: {},
       bottomTerminalDockHeight: BOTTOM_TERMINAL_DOCK_DEFAULT_HEIGHT,
       setBottomTerminalDockOpen: (projectId, open) =>
         set((state) => ({
           bottomTerminalDockOpenByProjectId: {
             ...state.bottomTerminalDockOpenByProjectId,
             [projectId]: open
+          }
+        })),
+      setTerminalDockArea: (projectId, area) =>
+        set((state) => ({
+          terminalDockAreaByProjectId: {
+            ...state.terminalDockAreaByProjectId,
+            [projectId]: area
           }
         })),
       toggleBottomTerminalDock: (projectId) =>
@@ -1588,6 +1612,12 @@ export const useUIStore = create<UIStore>()(
       },
       shortcutsOpen: false,
       setShortcutsOpen: (open) => set({ shortcutsOpen: open }),
+      commandPaletteOpen: false,
+      setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
+      extensionWorkbenchView: null,
+      openExtensionWorkbenchView: (extensionId, extensionName, view) =>
+        set({ extensionWorkbenchView: { extensionId, extensionName, view } }),
+      closeExtensionWorkbenchView: () => set({ extensionWorkbenchView: null }),
       changelogDialogOpen: false,
       setChangelogDialogOpen: (open) => set({ changelogDialogOpen: open }),
       conversationGuideOpen: false,
@@ -2253,6 +2283,7 @@ export const useUIStore = create<UIStore>()(
         agentFilesChangeSource: state.agentFilesChangeSource,
         remoteWorkspaceSection: state.remoteWorkspaceSection,
         bottomTerminalDockOpenByProjectId: state.bottomTerminalDockOpenByProjectId,
+        terminalDockAreaByProjectId: state.terminalDockAreaByProjectId,
         bottomTerminalDockHeight: clampBottomTerminalDockHeight(state.bottomTerminalDockHeight)
       }),
       merge: (persisted, current) => {
@@ -2314,7 +2345,16 @@ export const useUIStore = create<UIStore>()(
           ),
           bottomTerminalDockHeight: clampBottomTerminalDockHeight(
             state.bottomTerminalDockHeight ?? current.bottomTerminalDockHeight
-          )
+          ),
+          terminalDockAreaByProjectId:
+            state.terminalDockAreaByProjectId &&
+            typeof state.terminalDockAreaByProjectId === 'object'
+              ? Object.fromEntries(
+                  Object.entries(state.terminalDockAreaByProjectId).filter(
+                    ([, area]) => area === 'bottom' || area === 'right'
+                  )
+                )
+              : current.terminalDockAreaByProjectId
         }
       }
     }

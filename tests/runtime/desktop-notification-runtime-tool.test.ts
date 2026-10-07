@@ -3,7 +3,7 @@ import { createDesktopNotificationTool } from '../../src/main/runtime/desktop-no
 
 describe('desktop notification runtime tool', () => {
   it('keeps Electron delivery in a Main adapter and bounds model input', async () => {
-    const deliver = vi.fn()
+    const deliver = vi.fn().mockResolvedValue('shown')
     const tool = createDesktopNotificationTool(deliver)
     const value = tool.validate({ title: ' Done ', body: ' Completed ', duration: 5_000 })
     await expect(
@@ -18,5 +18,17 @@ describe('desktop notification runtime tool', () => {
     expect(() => tool.validate({ title: 'x', body: 'y', extra: true })).toThrow(
       'INVALID_TOOL_INPUT'
     )
+  })
+
+  it.each([
+    ['failed', { success: false, error: 'NOTIFICATION_FAILED' }],
+    ['unknown', { status: 'unknown' }]
+  ] as const)('does not claim a %s notification was sent', async (outcome, expected) => {
+    const tool = createDesktopNotificationTool(vi.fn().mockResolvedValue(outcome))
+    await expect(
+      tool.execute(tool.validate({ title: 'Result', body: 'Details' }), {
+        signal: new AbortController().signal
+      } as never)
+    ).resolves.toEqual(expected)
   })
 })

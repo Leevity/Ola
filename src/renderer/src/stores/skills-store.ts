@@ -31,6 +31,15 @@ export interface ScanResult {
 }
 
 export type SkillsTab = 'market' | 'installed'
+export type SkillsMarketError = 'network' | 'auth' | 'server' | 'unknown'
+
+function classifyMarketError(error: unknown): SkillsMarketError {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/\b(?:401|403)\b/.test(message)) return 'auth'
+  if (/\b5\d\d\b/.test(message)) return 'server'
+  if (/fetch failed|network|ENOTFOUND|ECONN|ETIMEDOUT/i.test(message)) return 'network'
+  return 'unknown'
+}
 
 export interface MarketSkillInfo {
   id: string
@@ -50,6 +59,8 @@ export interface MarketSkillInfo {
 interface SkillsStore {
   skills: SkillInfo[]
   loading: boolean
+  loaded: boolean
+  loadError: string | null
   selectedSkill: string | null
   skillContent: string | null
   skillFiles: ScanFileInfo[]
@@ -60,6 +71,7 @@ interface SkillsStore {
   marketSkills: MarketSkillInfo[]
   marketTotal: number
   marketLoading: boolean
+  marketError: SkillsMarketError | null
   marketQuery: string
   marketOffset: number
 
@@ -113,6 +125,8 @@ interface SkillsStore {
 export const useSkillsStore = create<SkillsStore>((set, get) => ({
   skills: [],
   loading: false,
+  loaded: false,
+  loadError: null,
   selectedSkill: null,
   skillContent: null,
   skillFiles: [],
@@ -123,6 +137,7 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
   marketSkills: [],
   marketTotal: 0,
   marketLoading: false,
+  marketError: null,
   marketQuery: '',
   marketOffset: 0,
 
@@ -140,12 +155,16 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
   agentReviewPassed: null,
 
   loadSkills: async () => {
-    set({ loading: true })
+    set({ loading: true, loaded: false, loadError: null })
     try {
       const result = (await ipcClient.invoke('skills:list')) as SkillInfo[]
-      set({ skills: Array.isArray(result) ? result : [] })
-    } catch {
-      set({ skills: [] })
+      set({ skills: Array.isArray(result) ? result : [], loaded: true, loadError: null })
+    } catch (error) {
+      set({
+        skills: [],
+        loaded: true,
+        loadError: error instanceof Error ? error.message : String(error)
+      })
     } finally {
       set({ loading: false })
     }
@@ -250,7 +269,7 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
   loadMarketSkills: async (query, reset) => {
     const q = query ?? get().marketQuery
     const offset = reset ? 0 : get().marketOffset
-    set({ marketLoading: true, marketQuery: q })
+    set({ marketLoading: true, marketError: null, marketQuery: q })
     try {
       const { useSettingsStore } = await import('@renderer/stores/settings-store')
       const { skillsMarketApiKey } = useSettingsStore.getState()
@@ -268,10 +287,14 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
         marketSkills:
           reset || offset === 0 ? result.skills : [...get().marketSkills, ...result.skills],
         marketTotal: result.total,
-        marketOffset: (reset ? 0 : offset) + result.skills.length
+        marketOffset: (reset ? 0 : offset) + result.skills.length,
+        marketError: null
       })
-    } catch {
-      if (reset || offset === 0) set({ marketSkills: [], marketTotal: 0 })
+    } catch (error) {
+      set({
+        ...(reset || offset === 0 ? { marketSkills: [], marketTotal: 0 } : {}),
+        marketError: classifyMarketError(error)
+      })
     } finally {
       set({ marketLoading: false })
     }

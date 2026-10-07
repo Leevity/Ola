@@ -16,9 +16,7 @@ import type {
   ToolResultContent,
   UnifiedMessage,
   ContentBlock,
-
-  MessageRequestModelMeta,
-
+  MessageRequestModelMeta
 } from '../lib/api/types'
 import { ipcStorage } from '../lib/ipc/ipc-storage'
 import { ipcClient } from '../lib/ipc/ipc-client'

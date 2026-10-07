@@ -198,7 +198,7 @@ function renderTokenValue(value: number, locale: string, showRaw = false): React
   return (
     <span title={`${raw} Token`} className="inline-flex flex-col tabular-nums leading-tight">
       <span>{compact}</span>
-      {shouldShowRaw ? <span className="text-[11px] text-muted-foreground">{raw}</span> : null}
+      {shouldShowRaw ? <span className="text-xs text-muted-foreground">{raw}</span> : null}
     </span>
   )
 }
@@ -265,14 +265,14 @@ function ChartCard({
         <div className="space-y-2">
           <Badge
             variant="outline"
-            className="border-border/50 bg-muted/10 px-2 py-0.5 text-[10px] text-muted-foreground"
+            className="border-border/50 bg-muted/10 px-2 py-0.5 text-xs text-muted-foreground"
           >
             {badge}
           </Badge>
           <h3 className="text-sm font-semibold">{title}</h3>
         </div>
         <div className="text-right">
-          <div className="text-[11px] text-muted-foreground">{summaryLabel}</div>
+          <div className="text-xs text-muted-foreground">{summaryLabel}</div>
           <div className="mt-1 text-base font-semibold tabular-nums">{summaryValue}</div>
         </div>
       </div>
@@ -328,7 +328,7 @@ function AnalyticsTooltip({
 
   return (
     <div className="min-w-44 rounded-xl border border-border/60 bg-background/95 px-3 py-2 shadow-2xl backdrop-blur-sm">
-      <div className="text-[11px] text-muted-foreground">{String(label ?? '')}</div>
+      <div className="text-xs text-muted-foreground">{String(label ?? '')}</div>
       <div className="mt-2 space-y-1.5">
         {payload.map((entry) => {
           const key = String(entry.dataKey ?? '')

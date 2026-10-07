@@ -31,23 +31,22 @@ function formatTime(value: number | null): string {
 }
 
 function statusMeta(status: ExecutionRecord['status']): {
-  label: string
   className: string
   icon: typeof CheckCircle2
 } {
   if (status === 'completed') {
-    return { label: 'Completed', className: 'text-emerald-600', icon: CheckCircle2 }
+    return { className: 'text-emerald-600', icon: CheckCircle2 }
   }
   if (status === 'failed' || status === 'interrupted') {
-    return { label: 'Failed', className: 'text-destructive', icon: XCircle }
+    return { className: 'text-destructive', icon: XCircle }
   }
   if (status === 'cancelled') {
-    return { label: 'Cancelled', className: 'text-muted-foreground', icon: XCircle }
+    return { className: 'text-muted-foreground', icon: XCircle }
   }
   if (status === 'running') {
-    return { label: 'Running', className: 'text-blue-600', icon: Loader2 }
+    return { className: 'text-blue-600', icon: Loader2 }
   }
-  return { label: 'Pending', className: 'text-amber-600', icon: Clock3 }
+  return { className: 'text-amber-600', icon: Clock3 }
 }
 
 export function ExecutionRecordsPanel(): React.JSX.Element {
@@ -73,7 +72,7 @@ export function ExecutionRecordsPanel(): React.JSX.Element {
     try {
       const nextRecords = await listExecutionRecords(workspaceId)
       if (currentRequest !== requestId.current) return
-      setRecords(nextRecords)
+      setRecords(nextRecords.records)
     } catch (cause) {
       if (currentRequest !== requestId.current) return
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -183,10 +182,12 @@ export function ExecutionRecordsPanel(): React.JSX.Element {
                         {record.title}
                       </button>
                       <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
-                        {record.source === 'cron' ? 'Cron' : 'Chat'}
+                        {t(`executionCenter.source.${record.source}`)}
                       </Badge>
                     </div>
-                    <p className={cn('mt-0.5 text-[11px]', meta.className)}>{meta.label}</p>
+                    <p className={cn('mt-0.5 text-[11px]', meta.className)}>
+                      {t(`executionCenter.status.${record.status}`)}
+                    </p>
                     <p className="mt-1 text-[10px] text-muted-foreground">
                       {formatTime(record.startedAt)}
                     </p>

@@ -3,6 +3,8 @@ import { join } from 'node:path'
 import type {
   ExtensionComponentDefinition,
   ExtensionConfigFieldSchema,
+  ExtensionWorkbenchCommandDefinition,
+  ExtensionWorkbenchViewDefinition,
   ExtensionHttpDefinition,
   ExtensionManifest,
   ExtensionRendererDefinition,
@@ -72,6 +74,20 @@ function httpDefinition(toolName: string, value: unknown): ExtensionHttpDefiniti
   return result
 }
 
+function artifactDefinition(value: unknown): ExtensionToolDefinition['artifact'] {
+  if (value === undefined) return undefined
+  const item = object(value)
+  const urlPointer = text(item?.urlPointer)
+  const titlePointer = optionalText(item?.titlePointer)
+  const validPointer = (pointer: string): boolean =>
+    pointer.length <= 256 && pointer.startsWith('/') && !pointer.includes('#')
+  if (item?.kind !== 'link' || !validPointer(urlPointer))
+    throw new Error('invalid extension artifact link declaration')
+  if (titlePointer && !validPointer(titlePointer))
+    throw new Error('invalid extension artifact link declaration')
+  return { kind: 'link', urlPointer, ...(titlePointer ? { titlePointer } : {}) }
+}
+
 function tools(value: unknown): ExtensionToolDefinition[] {
   if (!Array.isArray(value)) throw new Error('extension must define at least one tool')
   const seen = new Set<string>()
@@ -96,6 +112,10 @@ function tools(value: unknown): ExtensionToolDefinition[] {
             })()
     }
     if (typeof item.readOnly === 'boolean') definition.readOnly = item.readOnly
+    if (item.artifact !== undefined) {
+      if (definition.kind !== 'http') throw new Error(`tool "${name}" artifacts require HTTP`)
+      definition.artifact = artifactDefinition(item.artifact)
+    }
     if (definition.kind === 'js') {
       const handler = text(item.handler)
       if (!handler) throw new Error(`js tool "${name}" requires handler`)
@@ -151,6 +171,61 @@ function components(value: unknown): ExtensionComponentDefinition[] | undefined 
   return result.length ? result : undefined
 }
 
+function views(value: unknown): ExtensionWorkbenchViewDefinition[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<string>()
+  const result = value.flatMap((candidate) => {
+    const item = object(candidate)
+    const name = text(item?.name)
+    const entry = text(item?.entry)
+    const title = text(item?.title)
+    if (!TOOL_NAME.test(name) || !entry || !title || title.length > 128) return []
+    if (seen.has(name)) throw new Error(`duplicate workbench view name: ${name}`)
+    if (
+      entry.startsWith('/') ||
+      entry.includes('\\') ||
+      entry.split('/').includes('..') ||
+      !/^[A-Za-z0-9_./-]+\.html?$/i.test(entry)
+    )
+      throw new Error(`invalid workbench view entry: ${entry}`)
+    seen.add(name)
+    const view: ExtensionWorkbenchViewDefinition = { name, title, entry }
+    const description = optionalText(item?.description)
+    if (description) view.description = description
+    return [view]
+  })
+  return result.length ? result : undefined
+}
+
+function commands(
+  value: unknown,
+  knownViews: ReadonlySet<string>
+): ExtensionWorkbenchCommandDefinition[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const seen = new Set<string>()
+  const result = value.flatMap((candidate) => {
+    const item = object(candidate)
+    const name = text(item?.name)
+    const title = text(item?.title)
+    const view = text(item?.view)
+    if (!TOOL_NAME.test(name) || !title || title.length > 128 || !view) return []
+    if (seen.has(name)) throw new Error(`duplicate workbench command name: ${name}`)
+    if (!knownViews.has(view)) throw new Error(`command "${name}" references an unknown view`)
+    seen.add(name)
+    const command: ExtensionWorkbenchCommandDefinition = { name, title, view }
+    const description = optionalText(item?.description)
+    if (description) command.description = description
+    if (Array.isArray(item?.keywords)) {
+      command.keywords = item.keywords
+        .filter((keyword): keyword is string => typeof keyword === 'string')
+        .map((keyword) => keyword.trim().slice(0, 80))
+        .filter(Boolean)
+    }
+    return [command]
+  })
+  return result.length ? result : undefined
+}
+
 /** Parses and normalizes the version-1 manifest accepted by the legacy Worker. */
 export function parseExtensionManifest(value: unknown, expectedId?: unknown): ExtensionManifest {
   const root = object(value)
@@ -173,12 +248,19 @@ export function parseExtensionManifest(value: unknown, expectedId?: unknown): Ex
   const network = networkPermissions(root.permissions)
   const manifestRenderers = renderers(root.renderers)
   const manifestComponents = components(root.components)
+  const manifestViews = views(root.views)
+  const manifestCommands = commands(
+    root.commands,
+    new Set(manifestViews?.map((view) => view.name) ?? [])
+  )
   if (description) manifest.description = description
   if (entry) manifest.entry = entry
   if (fields.length) manifest.configSchema = fields
   if (network) manifest.permissions = { network }
   if (manifestRenderers) manifest.renderers = manifestRenderers
   if (manifestComponents) manifest.components = manifestComponents
+  if (manifestViews) manifest.views = manifestViews
+  if (manifestCommands) manifest.commands = manifestCommands
   return manifest
 }
 

@@ -17,10 +17,7 @@ export class TypedIpcClient {
     return this.client.invoke(channel, payload) as Promise<T>
   }
 
-  invoke<C extends IPCChannel>(
-    channel: C,
-    ...args: unknown[]
-  ): Promise<IpcResponseOf<C>> {
+  invoke<C extends IPCChannel>(channel: C, ...args: unknown[]): Promise<IpcResponseOf<C>> {
     return this.client.invoke(channel, ...args) as Promise<IpcResponseOf<C>>
   }
 

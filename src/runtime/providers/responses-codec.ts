@@ -18,8 +18,8 @@ export const responsesCodec: ModelCodec = {
   encode(input, target) {
     const options = target.options ?? {}
     const history = input.messages.flatMap((message): unknown[] => {
-      if (message.role === 'tool')
-        return message.results.map((result) => ({
+      if (message.role === 'tool') {
+        const outputs = message.results.map((result) => ({
           type: 'function_call_output',
           call_id: result.id,
           output:
@@ -27,6 +27,20 @@ export const responsesCodec: ModelCodec = {
               ? result.output
               : (JSON.stringify(result.output) ?? 'null')
         }))
+        const images = message.results.flatMap((result) =>
+          (result.images ?? []).map((image) => ({
+            role: 'user',
+            content: [
+              {
+                type: 'input_text',
+                text: `Image returned by ${result.name}: ${String(result.output)}`
+              },
+              { type: 'input_image', image_url: runtimeImageSource(image, input.run.workspaceId) }
+            ]
+          }))
+        )
+        return [...outputs, ...images]
+      }
       if (message.role === 'assistant') {
         if (message.replay?.protocol === 'openai-responses') return message.replay.items
         return [

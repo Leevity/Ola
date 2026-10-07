@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 import assert from 'node:assert/strict'
 import { build } from 'esbuild'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -9,7 +9,13 @@ import { pathToFileURL } from 'node:url'
 const dir = await mkdtemp(path.join(tmpdir(), 'ola-bridge-'))
 const originalFetch = globalThis.fetch
 try {
-  globalThis.olaBridgeFixture = { dir }
+  const sessionData = path.join(dir, 'session-data')
+  await mkdir(sessionData)
+  await writeFile(
+    path.join(sessionData, 'Local State'),
+    JSON.stringify({ os_crypt: { encrypted_key: 'test-key' } })
+  )
+  globalThis.olaBridgeFixture = { dir, sessionData }
   const result = await build({
     stdin: {
       contents: `export { invokeRemoteAccount } from './src/main/remote/account-client';
@@ -35,7 +41,7 @@ try {
           builder.onLoad({ filter: /.*/, namespace: 'fixture' }, (args) => ({
             contents:
               args.path === 'electron'
-                ? `export const app = { isPackaged: false, getPath: () => globalThis.olaBridgeFixture.dir };
+                ? `export const app = { isPackaged: false, getPath: (name) => name === 'sessionData' ? globalThis.olaBridgeFixture.sessionData : globalThis.olaBridgeFixture.dir };
           export const safeStorage = { isEncryptionAvailable: () => true, encryptString: (s) => Buffer.from(s), decryptString: (s) => s.toString() };
           export const shell = { openExternal: async () => {} };`
                 : args.path.endsWith('mesh-node')

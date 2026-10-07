@@ -25,41 +25,50 @@ import {
   unregisterVideoGenerationTool
 } from './video-generation-tool'
 
-let _allToolsRegistered = false
+let staticToolsRegistered = false
+let dynamicToolsReady = false
+let registrationPromise: Promise<void> | null = null
 
-export async function registerAllTools(): Promise<void> {
-  if (_allToolsRegistered) return
-  _allToolsRegistered = true
+export function registerAllTools(): Promise<void> {
+  if (!staticToolsRegistered) {
+    registerTaskTools()
+    registerFsTools()
+    registerSearchTools()
+    // Note: WebSearchTool is NOT registered here — it's registered/unregistered dynamically
+    // based on the webSearchEnabled setting (see web-search-tool.ts)
+    registerBashTools()
+    registerWidgetTools()
+    registerAskUserTools()
+    registerPlanTools()
+    registerCronTools()
+    registerNotifyTool()
+    registerGoalTools()
+    registerMemoryTools()
+    updateCanvasToolRegistration(useSettingsStore.getState().advancedDrawEnabled)
+    updateVideoGenerationToolRegistration(useSettingsStore.getState().videoGenerationEnabled)
 
-  registerTaskTools()
-  registerFsTools()
-  registerSearchTools()
-  // Note: WebSearchTool is NOT registered here — it's registered/unregistered dynamically
-  // based on the webSearchEnabled setting (see web-search-tool.ts)
-  registerBashTools()
-  registerWidgetTools()
-  registerAskUserTools()
-  registerPlanTools()
-  registerCronTools()
-  registerNotifyTool()
-  registerGoalTools()
-  registerMemoryTools()
-  updateCanvasToolRegistration(useSettingsStore.getState().advancedDrawEnabled)
-  updateVideoGenerationToolRegistration(useSettingsStore.getState().videoGenerationEnabled)
+    // These tools must remain available when a user-editable catalog fails to load.
+    registerCodeCompatibleTools()
+    registerTeamTools()
+    staticToolsRegistered = true
+  }
+
+  if (dynamicToolsReady) return Promise.resolve()
+  if (registrationPromise) return registrationPromise
 
   // Skills and SubAgents are user-editable catalogs; load them once here and
   // refresh them again before every request via ensureRequestToolCatalogFresh().
-  await refreshDynamicToolCatalog()
-
-  // Code-agent-compatible aliases and tool shells layer over the existing
-  // Ola implementations.
-  registerCodeCompatibleTools()
-
-  // Agent Team tools
-  registerTeamTools()
+  registrationPromise = refreshDynamicToolCatalog()
+    .then(() => {
+      dynamicToolsReady = true
+    })
+    .finally(() => {
+      registrationPromise = null
+    })
 
   // Plugin tools are registered/unregistered dynamically via channel-store toggle
   // They are NOT registered here — see plugin-tools.ts registerPluginTools/unregisterPluginTools
+  return registrationPromise
 }
 
 export function updateWebSearchToolRegistration(enabled: boolean): void {

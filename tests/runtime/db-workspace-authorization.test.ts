@@ -22,4 +22,13 @@ describe('database IPC workspace authorization', () => {
       'db-workspace-unavailable'
     )
   })
+
+  it('binds the requested workspace to the window registration', async () => {
+    const available = vi.fn(async () => new Set(['team-a', 'team-b']))
+    await expect(authorizeDbWorkspace('team-a', available, 'team-a')).resolves.toBe('team-a')
+    await expect(authorizeDbWorkspace('team-b', available, 'team-a')).rejects.toThrow(
+      'db-workspace-window-mismatch'
+    )
+    expect(available).toHaveBeenCalledOnce()
+  })
 })

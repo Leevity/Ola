@@ -1,5 +1,6 @@
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { encodeMessagePackPayload, toMessagePackChannel } from '../shared/messagepack/binary-ipc'
+import { isTrustedRendererIpcEvent } from './renderer-security'
 
 const windowWorkspaces = new WeakMap<
   BrowserWindow,
@@ -17,7 +18,8 @@ export function getTrustedWorkspaceRegistrationWindow(
     win.isDestroyed() ||
     win.webContents.isDestroyed() ||
     win.webContents !== event.sender ||
-    event.senderFrame !== event.sender.mainFrame
+    event.senderFrame !== event.sender.mainFrame ||
+    !isTrustedRendererIpcEvent(event)
   )
     return null
   return win
@@ -33,7 +35,9 @@ function invalidateWindowWorkspace(win: BrowserWindow): number {
 function bindWindowWorkspaceLifecycle(win: BrowserWindow): void {
   if (workspaceLifecycleBound.has(win)) return
   workspaceLifecycleBound.add(win)
-  win.webContents.on('did-start-loading', () => invalidateWindowWorkspace(win))
+  win.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) invalidateWindowWorkspace(win)
+  })
   win.on('closed', () => invalidateWindowWorkspace(win))
 }
 

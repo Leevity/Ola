@@ -18,6 +18,8 @@ const SECRET_KEY_PATTERN =
 const SECRET_VALUE_PATTERN = /\b(bearer\s+\S+|sk-[a-z0-9_-]{12,}|gh[pousr]_[a-z0-9]{12,})\b/gi
 
 export interface FinalOutcomeInput {
+  sessionId: string
+  workspaceId: string
   goal: string
   taskProfile?: TaskProfile
   loopEndReason: LoopEndReason
@@ -70,18 +72,13 @@ export function resolveFinalOutcomeStatus(
 
 function collectArtifacts(toolCalls: ToolCallState[]): FinalOutcomeArtifact[] {
   const artifacts = new Map<string, FinalOutcomeArtifact>()
-  const pathKeys = ['path', 'file_path', 'filePath', 'output_path', 'outputPath', 'target']
+  const confirmedFileTools = new Set(['Write', 'Edit', 'create_text_file', 'write_text_file'])
   for (const toolCall of toolCalls) {
-    for (const key of pathKeys) {
-      const value = toolCall.input[key]
-      if (typeof value !== 'string' || !value.trim()) continue
-      const path = redactText(value.trim())
-      artifacts.set(path, { label: path.split(/[\\/]/).pop() || path, path, kind: 'file' })
-    }
-    for (const match of toolOutputText(toolCall).matchAll(/https?:\/\/[^\s)\]}]+/g)) {
-      const url = match[0]
-      artifacts.set(url, { label: url, path: url, kind: 'url' })
-    }
+    if (toolCall.status !== 'completed' || !confirmedFileTools.has(toolCall.name)) continue
+    const value = toolCall.input.file_path ?? toolCall.input.path
+    if (typeof value !== 'string' || !value.trim()) continue
+    const path = redactText(value.trim())
+    artifacts.set(path, { label: path.split(/[\\/]/).pop() || path, path, kind: 'file' })
   }
   return [...artifacts.values()].slice(0, 20)
 }
@@ -262,8 +259,8 @@ async function runSummaryAttempt(
   if (binding && (await isTsRuntimeAvailable())) {
     let tsResponse = ''
     for await (const event of streamTsRuntimeTextTurn({
-      workspaceId: binding.workspaceId,
-      sessionId: `final-outcome:${nanoid()}`,
+      workspaceId: input.workspaceId,
+      sessionId: input.sessionId,
       modelSource: binding.modelSource,
       modelOptions: {
         systemPrompt,
@@ -271,6 +268,7 @@ async function runSummaryAttempt(
         thinking: { type: 'disabled' }
       },
       prompt: message.content as string,
+      maxTurns: 1,
       signal: input.signal
     })) {
       if (input.signal?.aborted) return null

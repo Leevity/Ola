@@ -13,6 +13,8 @@
 import { useEffect } from 'react'
 import { nanoid } from 'nanoid'
 import { toolRegistry } from '@renderer/lib/agent/tool-registry'
+import { createRequestTaskToolDefinition } from '@renderer/lib/agent/sub-agents/builtin'
+import { createRequestToolDefinitionSnapshot } from '@renderer/lib/agent/task-profile-tool-definitions'
 import {
   buildSystemPrompt,
   resolvePromptEnvironmentContext
@@ -689,12 +691,15 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     registerPluginTools()
   }
 
-  await ensureRequestToolCatalogFresh()
-
   // ── Build tools (same as main agent's cowork branch) ──
   const settings = useSettingsStore.getState()
   const allToolDefs = filterTeamToolDefinitions(
-    toolRegistry.getStableDefinitions(),
+    await createRequestToolDefinitionSnapshot({
+      taskProfile: session.taskProfile ?? 'work',
+      refreshCatalog: ensureRequestToolCatalogFresh,
+      getDefinitions: () => toolRegistry.getStableDefinitions(),
+      getTaskDefinition: createRequestTaskToolDefinition
+    }),
     settings.teamToolsEnabled
   )
   let userPrompt = settings.systemPrompt || ''
@@ -1401,6 +1406,8 @@ async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
     useAgentStore.getState().setSessionStatus(sessionId, 'summarizing')
     const fastProvider = useProviderStore.getState().getFastProviderConfig()
     const outcome = await generateFinalOutcome({
+      sessionId,
+      workspaceId: task.workspaceId,
       goal: effectiveContent,
       loopEndReason: resolvedLoopEndReason,
       toolCalls: [...runToolCalls.values()],

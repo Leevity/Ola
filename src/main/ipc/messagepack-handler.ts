@@ -4,12 +4,14 @@ import {
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 
 export function registerMessagePackHandler<TArgs, TResult = unknown>(
   channel: string,
   handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<TResult> | TResult
 ): void {
   ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args, event))
   })

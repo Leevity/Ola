@@ -1,4 +1,5 @@
 import { canPersistSecrets } from '../credentials/secure-storage-policy'
+import { waitForSafeStorageKeyPersistence } from '../credentials/safe-storage-key-persistence'
 import { app, safeStorage } from 'electron'
 import { mkdir, readFile, rename, writeFile } from 'fs/promises'
 import { createHash, generateKeyPairSync, randomUUID } from 'crypto'
@@ -71,6 +72,7 @@ export async function loadDesktopMeshIdentity(): Promise<DesktopMeshIdentity> {
   }
   await mkdir(app.getPath('userData'), { recursive: true })
   const encrypted = safeStorage.encryptString(JSON.stringify(identity))
+  await waitForSafeStorageKeyPersistence()
   const target = identityPath()
   const temporary = `${target}.${randomUUID()}.tmp`
   await writeFile(temporary, encrypted, { mode: 0o600 })

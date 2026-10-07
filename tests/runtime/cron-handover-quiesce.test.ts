@@ -8,6 +8,7 @@ vi.mock('../../src/main/window-ipc', () => ({
 }))
 vi.mock('../../src/main/db/cron-dao', () => ({
   createCronRun: vi.fn(),
+  getCronJob: vi.fn(),
   getCronRun: vi.fn(),
   loadPersistedCronJobs: vi.fn(),
   softDeleteCronJob: vi.fn(),
@@ -26,9 +27,32 @@ import {
   quiesceCronSchedulerForHandover,
   scheduleJob
 } from '../../src/main/cron/cron-scheduler'
+import { getCronJob } from '../../src/main/db/cron-dao'
+import { runTsCronAgentInBackground } from '../../src/main/cron/ts-cron-agent-background'
 import { guardedCronWrite } from '../../src/main/cron/cron-write-gate'
 
 describe('Cron handover quiescence', () => {
+  it('does not execute a queued scheduled callback after the job is disabled', async () => {
+    vi.useFakeTimers()
+    const job = {
+      id: 'disabled-race-job',
+      workspace_id: 'local-personal',
+      enabled: 1,
+      deleted_at: null,
+      schedule_kind: 'at',
+      schedule_at: Date.now() + 100
+    } as CronJobRecord
+    vi.mocked(getCronJob).mockResolvedValue({ ...job, enabled: 0 })
+
+    expect(scheduleJob(job)).toBe(true)
+    await vi.advanceTimersByTimeAsync(100)
+    await Promise.resolve()
+
+    expect(getCronJob).toHaveBeenCalledWith(job.id, 'local-personal')
+    expect(runTsCronAgentInBackground).not.toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
   it('stops future fires but refuses handover until active runs settle', async () => {
     const job = {
       id: 'handover-job',

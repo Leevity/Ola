@@ -37,6 +37,7 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useDrawGraphStore } from '@renderer/stores/draw-graph-store'
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { getSessionInputDraftKey, useInputDraftStore } from '@renderer/stores/input-draft-store'
 import { useUIStore } from '@renderer/stores/ui-store'
@@ -82,6 +83,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
   const [future, setFuture] = useState<Snapshot[]>([])
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
   const [videoCapabilities, setVideoCapabilities] = useState<VideoProviderCapability[]>([])
+  const workspaceId = useWorkspaceStore((state) => state.activeWorkspaceId)
   const [videoTasks, setVideoTasks] = useState<Map<string, VideoTask>>(new Map())
   const [maskNodeId, setMaskNodeId] = useState<string | null>(null)
   const [maskStrokes, setMaskStrokes] = useState<MaskStroke[]>([])
@@ -122,22 +124,30 @@ export function DrawGraphCanvas(): React.JSX.Element {
 
   const refreshVideoTasks = useCallback(async (): Promise<void> => {
     const items = (await ipcClient.invoke('media:tasks-list')) as VideoTask[]
+    if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
     setVideoTasks(new Map(items.map((task) => [task.id, task])))
-  }, [])
+  }, [workspaceId])
 
   useEffect(() => {
+    setVideoTasks(new Map())
     if (!videoGenerationEnabled) {
       setVideoCapabilities([])
       return
     }
-    void ipcClient.invoke('media:status').then((value) => {
-      const status = value as MediaRuntimeStatus
-      setVideoCapabilities(status.capabilities)
-    })
-    void refreshVideoTasks()
-    const timer = window.setInterval(() => void refreshVideoTasks(), 3000)
+    void ipcClient
+      .invoke('media:status')
+      .then((value) => {
+        const status = value as MediaRuntimeStatus
+        if (useWorkspaceStore.getState().activeWorkspaceId !== workspaceId) return
+        setVideoCapabilities(status.capabilities)
+      })
+      .catch(() => {
+        if (useWorkspaceStore.getState().activeWorkspaceId === workspaceId) setVideoCapabilities([])
+      })
+    void refreshVideoTasks().catch(() => setVideoTasks(new Map()))
+    const timer = window.setInterval(() => void refreshVideoTasks().catch(() => undefined), 3000)
     return () => window.clearInterval(timer)
-  }, [refreshVideoTasks, videoGenerationEnabled])
+  }, [refreshVideoTasks, videoGenerationEnabled, workspaceId])
 
   const openProject = (id: string): void => {
     loaded.current = false
@@ -785,7 +795,7 @@ export function DrawGraphCanvas(): React.JSX.Element {
         if (!node.video?.taskId) return node
         const task = videoTasks.get(node.video.taskId)
         if (!task) return node
-        const outputUrl = task.outputUrl ? `ola-media://${task.id}` : undefined
+        const outputUrl = task.previewUrl
         if (
           node.status === task.state &&
           node.error === task.error &&

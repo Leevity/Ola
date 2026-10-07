@@ -1,4 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+vi.mock('../../src/main/renderer-security', () => ({
+  assertTrustedRendererIpcEvent: () => undefined,
+  isTrustedRendererIpcEvent: () => true,
+  registerTrustedRendererUrl: () => undefined
+}))
 import { decode, encode } from '@msgpack/msgpack'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'

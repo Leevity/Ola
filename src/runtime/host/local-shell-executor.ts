@@ -25,8 +25,13 @@ export async function executeLocalShell(input: {
     (process.platform === 'win32'
       ? process.env.ComSpec || 'cmd.exe'
       : process.env.SHELL || '/bin/sh')
-  const args =
-    process.platform === 'win32' ? ['/d', '/s', '/c', input.command] : ['-lc', input.command]
+  const isPowerShell =
+    process.platform === 'win32' && input.shell?.toLowerCase().endsWith('powershell.exe') === true
+  const args = isPowerShell
+    ? ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', input.command]
+    : process.platform === 'win32'
+      ? ['/d', '/s', '/c', input.command]
+      : ['-lc', input.command]
   return await new Promise((resolve) => {
     let stdout = '',
       stderr = '',

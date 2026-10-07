@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { normalizeSshConfigDocument } from '../../src/main/ssh/ssh-config-json'
 import { buildSshExportPayload, writeSshExportFile } from '../../src/main/ssh/ssh-export'
+import { skipWhenSymlinkUnavailable, tryCreateTestSymlink } from './symlink-fixture'
 
 const directories: string[] = []
 
@@ -49,13 +50,14 @@ describe('TS SSH export', () => {
     if (process.platform !== 'win32') expect((await stat(target)).mode & 0o777).toBe(0o600)
   })
 
-  it('refuses symlink targets without changing their referents', async () => {
+  it('refuses symlink targets without changing their referents', async ({ skip }) => {
     const directory = await mkdtemp(join(tmpdir(), 'ola-ssh-export-'))
     directories.push(directory)
     const referent = join(directory, 'existing.json')
     const target = join(directory, 'link.json')
     await writeFile(referent, 'original')
-    await symlink(referent, target)
+    const linked = await tryCreateTestSymlink(referent, target)
+    skipWhenSymlinkUnavailable({ skip }, linked)
     await expect(writeSshExportFile(target, config)).rejects.toThrow('SSH_EXPORT_UNSAFE_FILE')
     expect(await readFile(referent, 'utf8')).toBe('original')
   })

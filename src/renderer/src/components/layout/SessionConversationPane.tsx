@@ -1,5 +1,6 @@
 ﻿import { useCallback, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+import { useEffect } from 'react'
 import {
   Check,
   ClipboardCopy,
@@ -39,6 +40,7 @@ import { ImageEditDialog } from '@renderer/components/chat/ImageEditDialog'
 import { InputArea } from '@renderer/components/chat/InputArea'
 import { ProjectTerminalDock } from '@renderer/components/terminal/ProjectTerminalDock'
 import { WorkingFolderSelectorDialog } from '@renderer/components/chat/WorkingFolderSelectorDialog'
+import { getProjectTerminalDockLayout } from '@renderer/lib/workbench/project-terminal-dock-layout'
 import { RuntimeStatusPanel } from './RuntimeStatusPanel'
 import {
   abortSession,
@@ -114,6 +116,11 @@ export function SessionConversationPane({
       ? Boolean(state.bottomTerminalDockOpenByProjectId[sessionView.projectId])
       : false
   )
+  const preferredTerminalDockArea = useUIStore((state) =>
+    sessionView.projectId
+      ? (state.terminalDockAreaByProjectId[sessionView.projectId] ?? 'bottom')
+      : 'bottom'
+  )
   const conversationPanelFullWidth = useUIStore((state) => state.conversationPanelFullWidth)
   const setConversationPanelFullWidth = useUIStore((state) => state.setConversationPanelFullWidth)
   const animationsEnabled = useSettingsStore((state) => state.animationsEnabled)
@@ -133,6 +140,7 @@ export function SessionConversationPane({
   const clearSessionMessages = useChatStore((state) => state.clearSessionMessages)
   const deleteSession = useChatStore((state) => state.deleteSession)
   const paneRef = useRef<HTMLDivElement | null>(null)
+  const [terminalLayoutWidth, setTerminalLayoutWidth] = useState(0)
   const [copiedAll, setCopiedAll] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [folderDialogOpen, setFolderDialogOpen] = useState(false)
@@ -142,49 +150,78 @@ export function SessionConversationPane({
   const [compressionPreview, setCompressionPreview] = useState<ContextCompressionPreview | null>(
     null
   )
+  const compressionPreviewRequestRef = useRef(0)
+  const compressionPreviewPendingRef = useRef(false)
+  const compressionApplyPendingRef = useRef(false)
   const [renameDialogOpen, setRenameDialogOpen] = useState(false)
   const [renameValue, setRenameValue] = useState('')
 
+  useEffect(() => {
+    compressionPreviewRequestRef.current += 1
+    compressionPreviewPendingRef.current = false
+    setCompressionPreviewOpen(false)
+    setCompressionPreviewLoading(false)
+    setCompressionPreview(null)
+  }, [resolvedSessionId])
+
   const handleRequestContextCompression = useCallback(
     async (messageId: string) => {
+      if (compressionPreviewPendingRef.current || compressionApplyPendingRef.current) return
+      compressionPreviewPendingRef.current = true
+      const requestId = ++compressionPreviewRequestRef.current
       setCompressionPreviewOpen(true)
       setCompressionPreviewLoading(true)
       setCompressionPreview(null)
       try {
         const preview = await previewContextCompressionAt(messageId)
-        if (!preview) {
-          toast.error('无法生成上下文摘要')
+        if (requestId !== compressionPreviewRequestRef.current) return
+        if (!preview || preview.sessionId !== resolvedSessionId) {
+          toast.error(t('agent:contextCompression.previewFailed'))
           setCompressionPreviewOpen(false)
           return
         }
         setCompressionPreview(preview)
       } catch (error) {
+        if (requestId !== compressionPreviewRequestRef.current) return
         console.error('[SessionConversationPane] Context compression preview failed', error)
-        toast.error('无法生成上下文摘要')
+        toast.error(t('agent:contextCompression.previewFailed'))
         setCompressionPreviewOpen(false)
       } finally {
-        setCompressionPreviewLoading(false)
+        if (requestId === compressionPreviewRequestRef.current) {
+          compressionPreviewPendingRef.current = false
+          setCompressionPreviewLoading(false)
+        }
       }
     },
-    [previewContextCompressionAt]
+    [previewContextCompressionAt, resolvedSessionId, t]
   )
 
   const handleApplyContextCompressionPreview = useCallback(async () => {
-    if (!compressionPreview) return
+    if (!compressionPreview || compressionApplyPendingRef.current) return
+    compressionApplyPendingRef.current = true
+    const requestId = compressionPreviewRequestRef.current
     setCompressionPreviewApplying(true)
     try {
       const result = await applyContextCompressionPreview(compressionPreview)
+      if (requestId !== compressionPreviewRequestRef.current) return
       if (result === 'compressed') {
         setCompressionPreviewOpen(false)
         setCompressionPreview(null)
-        toast.success('已整理上下文')
+        toast.success(t('agent:contextCompression.previewApplied'))
+      } else if (result === 'blocked') {
+        toast.error(t('agent:contextCompression.previewExpired'))
       } else {
-        toast.error('无法应用上下文摘要')
+        toast.error(t('agent:contextCompression.previewApplyFailed'))
       }
+    } catch (error) {
+      if (requestId !== compressionPreviewRequestRef.current) return
+      console.error('[SessionConversationPane] Context compression apply failed', error)
+      toast.error(t('agent:contextCompression.previewApplyFailed'))
     } finally {
+      compressionApplyPendingRef.current = false
       setCompressionPreviewApplying(false)
     }
-  }, [applyContextCompressionPreview, compressionPreview])
+  }, [applyContextCompressionPreview, compressionPreview, t])
 
   const compactSessionHeader = sessionView.messageCount === 0
   const hasProjectFolderAction = Boolean(sessionView.projectId && sessionView.workingFolder)
@@ -196,12 +233,29 @@ export function SessionConversationPane({
     terminalDockOpen &&
     (sessionView.workingFolder || sessionView.sshConnectionId)
   )
+  const terminalDockLayout = getProjectTerminalDockLayout({
+    workspaceWidth: terminalLayoutWidth,
+    leftWidth: 0,
+    terminalOpen: showTerminalDock,
+    preferredArea: preferredTerminalDockArea
+  })
+
+  useEffect(() => {
+    const pane = paneRef.current
+    if (!pane) return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (typeof width === 'number') setTerminalLayoutWidth(width)
+    })
+    observer.observe(pane)
+    return () => observer.disconnect()
+  }, [])
 
   const updateSessionProjectDirectory = useCallback(
     async (patch: Partial<{ workingFolder: string | null; sshConnectionId: string | null }>) => {
       const projectId = sessionView.projectId
       if (!projectId) return
-      useChatStore.getState().updateProjectDirectory(projectId, patch)
+      await useChatStore.getState().updateProjectDirectory(projectId, patch)
     },
     [sessionView.projectId]
   )
@@ -281,7 +335,7 @@ export function SessionConversationPane({
       variant: 'destructive'
     })
     if (!confirmed) return
-    clearSessionMessages(resolvedSessionId)
+    if (!(await clearSessionMessages(resolvedSessionId))) return
     toast.success(t('layout.conversationCleared'))
   }, [clearSessionMessages, resolvedSessionId, sessionView.messageCount, t])
 
@@ -295,8 +349,8 @@ export function SessionConversationPane({
     })
     if (!confirmed) return
     abortSession(resolvedSessionId)
-    clearPendingSessionMessages(resolvedSessionId)
-    deleteSession(resolvedSessionId)
+    if (await deleteSession(resolvedSessionId)) clearPendingSessionMessages(resolvedSessionId)
+    else toast.error(t('sidebar_toast.deleteFailed'))
   }, [deleteSession, resolvedSessionId, sessionView.title, t])
 
   const conversationRoot = useMemo(() => resolvedSessionId ?? 'empty', [resolvedSessionId])
@@ -311,7 +365,10 @@ export function SessionConversationPane({
   }
 
   return (
-    <div ref={paneRef} className="relative flex min-w-0 flex-1 flex-col bg-background">
+    <div
+      ref={paneRef}
+      className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background"
+    >
       <RuntimeStatusPanel sessionId={resolvedSessionId} />
       <div
         className={cn(
@@ -473,6 +530,7 @@ export function SessionConversationPane({
                     variant="ghost"
                     size="icon"
                     className="size-7 rounded-md text-muted-foreground/80 hover:text-foreground"
+                    aria-label={t('layout.moreActions', { defaultValue: 'Conversation actions' })}
                   >
                     <MoreHorizontal className="size-4" />
                   </Button>
@@ -554,78 +612,120 @@ export function SessionConversationPane({
         </div>
       </div>
 
-      <div key={conversationRoot} className="flex min-h-0 flex-1 flex-col">
-        <MessageList
-          sessionId={resolvedSessionId}
-          fullWidth={conversationPanelFullWidth}
-          onRetry={retryLastMessage}
-          onContinue={continueLastToolExecution}
-          onEditUserMessage={editAndResend}
-          onDeleteMessage={deleteMessage}
-          onRequestContextCompression={handleRequestContextCompression}
-          onCancelRequestRetry={stopStreaming}
-        />
-        <ContextCompressionPreviewDialog
-          open={compressionPreviewOpen}
-          preview={compressionPreview}
-          loading={compressionPreviewLoading}
-          applying={compressionPreviewApplying}
-          onOpenChange={(open) => {
-            if (!open && !compressionPreviewApplying) {
-              setCompressionPreviewOpen(false)
-              setCompressionPreview(null)
-            }
-          }}
-          onConfirm={() => void handleApplyContextCompressionPreview()}
-        />
-        <InputArea
-          sessionId={resolvedSessionId}
-          onSend={(text, images, options) =>
-            sendMessage(text, images, undefined, resolvedSessionId, undefined, undefined, {
-              ...options,
-              clearCompletedTasksOnTurnStart: true
-            })
-          }
-          onStop={stopStreaming}
-          onSelectFolder={sessionView.projectId ? () => setFolderDialogOpen(true) : undefined}
-          workingFolder={sessionView.workingFolder}
-          hideWorkingFolderIndicator
-          onCompressContext={manualCompressContext}
-          isStreaming={isStreaming}
-          fullWidth={conversationPanelFullWidth}
-        />
-        {animationsEnabled ? (
-          <AnimatePresence initial={false}>
-            {showTerminalDock ? (
-              <motion.div
-                key={`terminal-dock-${sessionView.projectId}`}
-                initial={{ height: 0, opacity: 0, y: 12 }}
-                animate={{ height: 'auto', opacity: 1, y: 0 }}
-                exit={{ height: 0, opacity: 0, y: 12 }}
-                transition={{
-                  height: TERMINAL_DOCK_TRANSITION,
-                  y: TERMINAL_DOCK_TRANSITION,
-                  opacity: { duration: 0.16, ease: 'easeOut' }
-                }}
-                className="min-h-0 overflow-hidden"
-                style={{ willChange: 'height, opacity, transform' }}
-              >
-                <ProjectTerminalDock
-                  projectId={sessionView.projectId!}
-                  projectName={sessionView.projectName}
-                  workingFolder={sessionView.workingFolder ?? null}
-                  sshConnectionId={sessionView.sshConnectionId}
-                />
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-        ) : showTerminalDock ? (
-          <ProjectTerminalDock
-            projectId={sessionView.projectId!}
-            projectName={sessionView.projectName}
-            workingFolder={sessionView.workingFolder ?? null}
-            sshConnectionId={sessionView.sshConnectionId}
+      <div
+        data-terminal-dock-area={terminalDockLayout.effectiveArea}
+        className={`flex min-h-0 flex-1 ${terminalDockLayout.effectiveArea === 'right' ? 'flex-row' : 'flex-col'}`}
+      >
+        <div
+          key={conversationRoot}
+          className={cn(
+            'flex min-h-0 min-w-0 flex-1 flex-col',
+            terminalDockLayout.effectiveArea === 'right' && 'min-w-[220px]'
+          )}
+        >
+          <MessageList
+            sessionId={resolvedSessionId}
+            fullWidth={conversationPanelFullWidth}
+            onRetry={retryLastMessage}
+            onContinue={continueLastToolExecution}
+            onEditUserMessage={editAndResend}
+            onDeleteMessage={deleteMessage}
+            onRequestContextCompression={handleRequestContextCompression}
+            onCancelRequestRetry={stopStreaming}
           />
+          <ContextCompressionPreviewDialog
+            open={compressionPreviewOpen}
+            preview={compressionPreview}
+            loading={compressionPreviewLoading}
+            applying={compressionPreviewApplying}
+            onOpenChange={(open) => {
+              if (!open && !compressionPreviewLoading && !compressionPreviewApplying) {
+                compressionPreviewRequestRef.current += 1
+                setCompressionPreviewOpen(false)
+                setCompressionPreview(null)
+              }
+            }}
+            onConfirm={() => void handleApplyContextCompressionPreview()}
+          />
+          <InputArea
+            sessionId={resolvedSessionId}
+            onSend={(text, images, options) =>
+              sendMessage(text, images, undefined, resolvedSessionId, undefined, undefined, {
+                ...options,
+                clearCompletedTasksOnTurnStart: true
+              })
+            }
+            onStop={stopStreaming}
+            onSelectFolder={sessionView.projectId ? () => setFolderDialogOpen(true) : undefined}
+            workingFolder={sessionView.workingFolder}
+            hideWorkingFolderIndicator
+            onCompressContext={manualCompressContext}
+            isStreaming={isStreaming}
+            fullWidth={conversationPanelFullWidth}
+          />
+          {terminalDockLayout.effectiveArea === 'bottom' && animationsEnabled ? (
+            <AnimatePresence initial={false}>
+              {showTerminalDock ? (
+                <motion.div
+                  key={`terminal-dock-${sessionView.projectId}`}
+                  initial={{ height: 0, opacity: 0, y: 12 }}
+                  animate={{ height: 'auto', opacity: 1, y: 0 }}
+                  exit={{ height: 0, opacity: 0, y: 12 }}
+                  transition={{
+                    height: TERMINAL_DOCK_TRANSITION,
+                    y: TERMINAL_DOCK_TRANSITION,
+                    opacity: { duration: 0.16, ease: 'easeOut' }
+                  }}
+                  className="min-h-0 overflow-hidden"
+                  style={{ willChange: 'height, opacity, transform' }}
+                >
+                  <ProjectTerminalDock
+                    projectId={sessionView.projectId!}
+                    projectName={sessionView.projectName}
+                    workingFolder={sessionView.workingFolder ?? null}
+                    sshConnectionId={sessionView.sshConnectionId}
+                    dockArea="bottom"
+                    canMove
+                    moveDisabledReason={
+                      !terminalDockLayout.canMoveRight
+                        ? t('terminalDock.rightDockNeedsSpace', {
+                            defaultValue: 'Expand the workspace to move the terminal to the right.'
+                          })
+                        : undefined
+                    }
+                  />
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
+          ) : terminalDockLayout.effectiveArea === 'bottom' && showTerminalDock ? (
+            <ProjectTerminalDock
+              projectId={sessionView.projectId!}
+              projectName={sessionView.projectName}
+              workingFolder={sessionView.workingFolder ?? null}
+              sshConnectionId={sessionView.sshConnectionId}
+              dockArea="bottom"
+              canMove
+              moveDisabledReason={
+                !terminalDockLayout.canMoveRight
+                  ? t('terminalDock.rightDockNeedsSpace', {
+                      defaultValue: 'Expand the workspace to move the terminal to the right.'
+                    })
+                  : undefined
+              }
+            />
+          ) : null}
+        </div>
+        {terminalDockLayout.effectiveArea === 'right' && showTerminalDock ? (
+          <div className="min-h-0 w-[38%] min-w-[180px] max-w-[520px] shrink-0 border-l border-border/50">
+            <ProjectTerminalDock
+              projectId={sessionView.projectId!}
+              projectName={sessionView.projectName}
+              workingFolder={sessionView.workingFolder ?? null}
+              sshConnectionId={sessionView.sshConnectionId}
+              dockArea="right"
+              canMove
+            />
+          </div>
         ) : null}
       </div>
 

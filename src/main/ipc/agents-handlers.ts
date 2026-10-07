@@ -15,29 +15,34 @@ export function registerAgentsHandlers(): void {
     userDirectory: join(olaDataRoot(), 'agents'),
     bundledDirectoryCandidates: getBundledResourceDirCandidates('agents')
   })
-  void catalog.ensure().then((result) => {
+  const ready = catalog.ensure().then((result) => {
     if (!result.success)
       console.warn(`[Agents] Failed to initialize user agent directory: ${result.error}`)
+    return result
   })
 
   registerMessagePackHandler<undefined, AgentInfo[]>('agents:list', async () => {
+    await ready
     return await catalog.list()
   })
 
   registerMessagePackHandler<{ name: string }, AgentInfo | { error: string }>(
     'agents:load',
     async (args) => {
+      await ready
       return await catalog.load(args.name)
     }
   )
 
   registerMessagePackHandler<undefined, AgentManageItem[]>('agents:manage-list', async () => {
+    await ready
     return await catalog.manageList()
   })
 
   registerMessagePackHandler<{ path: string }, AgentManageReadResult>(
     'agents:manage-read',
     async (args) => {
+      await ready
       return await catalog.manageRead(args.path)
     }
   )
@@ -45,6 +50,7 @@ export function registerAgentsHandlers(): void {
   registerMessagePackHandler<{ path: string; content: string }, AgentMutationResult>(
     'agents:manage-save',
     async (args) => {
+      await ready
       return await catalog.manageSave(args)
     }
   )

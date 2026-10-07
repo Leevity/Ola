@@ -79,7 +79,7 @@ export function createLocalCreateFileTool(
         await handle.writeFile(request.content, { encoding: 'utf8', signal: context.signal })
         await handle.sync()
         return {
-          path: relative(await realpath(await root(context)), target),
+          path: relative(await realpath(await root(context)), target).replaceAll('\\', '/'),
           bytes: Buffer.byteLength(request.content)
         }
       } catch (error) {

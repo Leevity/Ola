@@ -12,6 +12,7 @@ import {
   browserPartitionForWorkspace,
   isBrowserUserDataReuseEnabled,
   normalizeBrowserUserDataSource,
+  usesDefaultBrowserSession,
   type BrowserUserDataSource,
   type ConcreteBrowserUserDataSource
 } from '../../shared/browser-plugin'
@@ -287,13 +288,13 @@ export function resolveBrowserSessionStorageMode(
   return cachedStorageMode
 }
 
-export function shouldUseDefaultBrowserSession(): boolean {
+export function shouldUseDefaultBrowserSession(workspaceId = 'local-personal'): boolean {
   const mode = cachedStorageMode ?? resolveBrowserSessionStorageMode(app.getPath('userData'))
-  return mode.reuseEnabled
+  return usesDefaultBrowserSession(workspaceId, mode.reuseEnabled)
 }
 
 export function getBuiltInBrowserSession(workspaceId = 'local-personal'): Session {
-  return shouldUseDefaultBrowserSession()
+  return shouldUseDefaultBrowserSession(workspaceId)
     ? session.defaultSession
     : session.fromPartition(browserPartitionForWorkspace(workspaceId))
 }

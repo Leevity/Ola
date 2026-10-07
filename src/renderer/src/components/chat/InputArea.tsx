@@ -35,6 +35,7 @@ import {
   type LucideIcon
 } from 'lucide-react'
 import { Button } from '@renderer/components/ui/button'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -152,6 +153,7 @@ import {
   clearPendingSessionMessages,
   dispatchNextQueuedMessageForSession,
   getPendingSessionMessages,
+  hydratePendingSessionQueue,
   isPendingSessionDispatchPaused,
   quotePendingSessionMessageIntoConversation,
   removePendingSessionMessage,
@@ -284,15 +286,13 @@ function ContextRing({
   const strokeColor =
     pct > 80 ? 'stroke-red-500' : pct > 50 ? 'stroke-amber-500' : 'stroke-emerald-500'
   const canCompress = Boolean(onCompressContext) && !isCompressing
-  const handleDoubleClick = (event: React.MouseEvent<HTMLButtonElement>): void => {
-    event.preventDefault()
-    event.stopPropagation()
+  const handleClick = (): void => {
     if (!canCompress) return
     onCompressContext?.()
   }
 
   // SVG circular progress
-  const size = 26
+  const size = 32
   const strokeWidth = 2.5
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
@@ -304,20 +304,18 @@ function ContextRing({
         <button
           type="button"
           aria-disabled={!canCompress}
-          aria-label={t('input.doubleClickCompressContext', {
-            defaultValue: 'Double-click to compress context'
-          })}
+          aria-label={t('input.clickCompressContext')}
           className={cn(
             'flex items-center justify-center rounded-full outline-none focus-visible:ring-1 focus-visible:ring-ring',
             canCompress ? 'cursor-pointer' : 'cursor-default',
             isCompressing && 'opacity-70'
           )}
-          onDoubleClick={handleDoubleClick}
+          onClick={handleClick}
           onMouseDown={(event) => {
             event.preventDefault()
           }}
         >
-          <div className="relative flex size-[26px] shrink-0 items-center justify-center">
+          <div className="relative flex size-8 shrink-0 items-center justify-center">
             <svg width={size} height={size} className="-rotate-90">
               <circle
                 cx={size / 2}
@@ -339,7 +337,7 @@ function ContextRing({
                 strokeLinecap="round"
               />
             </svg>
-            <span className="absolute text-[7px] font-medium text-muted-foreground tabular-nums select-none">
+            <span className="absolute text-[10px] font-medium text-muted-foreground tabular-nums select-none">
               {pct.toFixed(0)}%
             </span>
           </div>
@@ -364,9 +362,7 @@ function ContextRing({
             <p className="text-muted-foreground">
               {isCompressing
                 ? t('input.compressingContext', { defaultValue: 'Compressing context...' })
-                : t('input.doubleClickCompressContext', {
-                    defaultValue: 'Double-click to compress context'
-                  })}
+                : t('input.clickCompressContext')}
             </p>
           )}
         </div>
@@ -1576,6 +1572,7 @@ export function InputArea({
   const rootRef = React.useRef<HTMLDivElement>(null)
   const draftSaveTimerRef = React.useRef<ReturnType<typeof setTimeout>>(undefined)
   const contextCompressionStatusTimerRef = React.useRef<ReturnType<typeof setTimeout>>(undefined)
+  const contextCompressionPendingRef = React.useRef(false)
   const [inputHeight, setInputHeight] = React.useState<number | null>(() =>
     isSessionComposer ? defaultSessionInputHeight : null
   )
@@ -1592,6 +1589,7 @@ export function InputArea({
   const textRef = React.useRef(text)
   const documentRef = React.useRef(documentNodes)
   const selectedFilesRef = React.useRef(selectedFiles)
+  const compositionEndedAtRef = React.useRef(0)
   const isContextCompressing = contextCompressionStatus === 'compressing'
 
   latestDraftRef.current = {
@@ -2013,6 +2011,10 @@ export function InputArea({
     getQueuedMessagesSnapshot,
     () => EMPTY_QUEUED_MESSAGES
   )
+  React.useEffect(() => {
+    if (activeSessionId && targetSession?.id === activeSessionId)
+      void hydratePendingSessionQueue(activeSessionId)
+  }, [activeSessionId, targetSession?.id])
   const isQueueDispatchPaused = React.useSyncExternalStore(
     subscribePendingSessionMessages,
     () =>
@@ -2913,6 +2915,7 @@ export function InputArea({
     const needsPrefix =
       selection.start === selection.end &&
       selection.start > 0 &&
+      text.trim().length > 0 &&
       !/\s$/.test(text.slice(0, selection.start)) &&
       pendingPlainText.length > 0 &&
       !/^\s/.test(pendingPlainText)
@@ -3341,7 +3344,7 @@ export function InputArea({
 
   const handleKeyDown = React.useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>): void => {
-      if (e.nativeEvent.isComposing || isOptimizing) return
+      if (isImeCommitKey(e, compositionEndedAtRef.current) || isOptimizing) return
 
       if (fileMenuOpen) {
         if (!e.altKey && !e.ctrlKey && !e.metaKey && e.key === 'ArrowDown') {
@@ -3659,8 +3662,9 @@ export function InputArea({
   }, [])
 
   const handleCompressContext = React.useCallback(() => {
-    if (!onCompressContext || isContextCompressing) return
+    if (!onCompressContext || contextCompressionPendingRef.current) return
 
+    contextCompressionPendingRef.current = true
     clearTimeout(contextCompressionStatusTimerRef.current)
     setContextCompressionStatus('compressing')
     void Promise.resolve()
@@ -3673,11 +3677,12 @@ export function InputArea({
         setContextCompressionStatus('failed')
       })
       .finally(() => {
+        contextCompressionPendingRef.current = false
         contextCompressionStatusTimerRef.current = setTimeout(() => {
           setContextCompressionStatus('idle')
         }, 3200)
       })
-  }, [isContextCompressing, onCompressContext])
+  }, [onCompressContext])
 
   const contextCompressionStatusLabel = React.useMemo(() => {
     switch (contextCompressionStatus) {
@@ -3848,7 +3853,7 @@ export function InputArea({
             'mb-2 overflow-hidden rounded-lg border border-border/50 bg-muted/20 shadow-sm backdrop-blur'
           )}
         >
-          <div className="max-h-40 overflow-y-auto py-1">
+          <div className="pending-session-queue-list max-h-40 overflow-y-auto py-1">
             {queuedMessages.map((msg, index) => {
               const isEditing = editingQueueItemId === msg.id
               const summaryText = summarizeQueuedMessage(msg.text)
@@ -3858,6 +3863,10 @@ export function InputArea({
                 commandLabel ||
                 t('input.queueImageOnly', { defaultValue: '[Images only]' })
               const quoteLabel = t('input.queueQuote', { defaultValue: 'Quote' })
+              const resumeLabel =
+                msg.recoveryState === 'needs_review'
+                  ? t('input.queueRetry', { defaultValue: 'Retry' })
+                  : t('input.queueResume', { defaultValue: 'Resume' })
 
               return (
                 <div
@@ -3963,6 +3972,11 @@ export function InputArea({
                     </div>
                   ) : (
                     <>
+                      {msg.recoveryState === 'needs_review' ? (
+                        <span className="shrink-0 rounded border border-amber-500/30 px-1.5 py-0.5 text-[10px] text-amber-700 dark:text-amber-300">
+                          {t('input.queueNeedsReview', { defaultValue: 'Check before retry' })}
+                        </span>
+                      ) : null}
                       <CornerDownRight className="size-3 shrink-0 text-muted-foreground/65" />
                       <button
                         type="button"
@@ -3995,13 +4009,11 @@ export function InputArea({
                             size="sm"
                             className="h-7 rounded-md px-2 text-[10px] text-muted-foreground hover:bg-muted/70 hover:text-foreground"
                             onClick={resumeQueuedMessages}
-                            title={t('input.queueResume', { defaultValue: 'Resume' })}
-                            aria-label={t('input.queueResume', { defaultValue: 'Resume' })}
+                            title={resumeLabel}
+                            aria-label={resumeLabel}
                           >
                             <Send className="size-3" />
-                            <span className="hidden sm:inline">
-                              {t('input.queueResume', { defaultValue: 'Resume' })}
-                            </span>
+                            <span className="hidden sm:inline">{resumeLabel}</span>
                           </Button>
                         ) : null}
                         <Button
@@ -4044,7 +4056,7 @@ export function InputArea({
                             {isQueueDispatchPaused ? (
                               <DropdownMenuItem onSelect={resumeQueuedMessages}>
                                 <Send className="size-3.5" />
-                                {t('input.queueResume', { defaultValue: 'Resume' })}
+                                {resumeLabel}
                               </DropdownMenuItem>
                             ) : null}
                             <DropdownMenuItem onSelect={() => quoteQueuedMessage(msg.id)}>
@@ -4106,7 +4118,10 @@ export function InputArea({
     <div
       ref={rootRef}
       data-tour="composer"
-      className={cn('px-4 py-3', attachedFooter ? 'pb-0' : 'pb-4')}
+      className={cn(
+        'pending-session-composer-root max-h-[50vh] shrink-0 overflow-y-auto px-4 py-3',
+        attachedFooter ? 'pb-0' : 'pb-4'
+      )}
     >
       {/* API key warning */}
       {!hasApiKey && (
@@ -4446,8 +4461,12 @@ export function InputArea({
                 onBlur={handleRecommendationBlur}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
-                onCompositionStart={handleRecommendationCompositionStart}
+                onCompositionStart={() => {
+                  compositionEndedAtRef.current = Number.POSITIVE_INFINITY
+                  handleRecommendationCompositionStart()
+                }}
                 onCompositionEnd={() => {
+                  compositionEndedAtRef.current = performance.now()
                   handleRecommendationCompositionEnd()
                 }}
                 onReferencePreview={handlePreviewFile}
@@ -4778,9 +4797,9 @@ export function InputArea({
                         <AlertDialogAction
                           variant="destructive"
                           size="sm"
-                          onClick={() => {
+                          onClick={async () => {
                             if (!activeSessionId) return
-                            clearSessionMessages(activeSessionId)
+                            if (!(await clearSessionMessages(activeSessionId))) return
                             clearPendingSessionMessages(activeSessionId)
                           }}
                         >

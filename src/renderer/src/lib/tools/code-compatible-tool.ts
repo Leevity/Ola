@@ -76,7 +76,7 @@ const monitorHandler: ToolHandler = {
 }
 
 export function registerCodeCompatibleTools(): void {
-  if (window.electron.process.platform === 'win32') {
+  if (window.ola.desktop.platform === 'win32') {
     toolRegistry.register(powerShellHandler)
   }
   toolRegistry.register(monitorHandler)

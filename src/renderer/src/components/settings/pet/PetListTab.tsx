@@ -155,7 +155,7 @@ export function PetListTab({ onPetChanged }: PetListTabProps = {}): React.JSX.El
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="text-sm font-medium">{t('panel.desktop')}</p>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                 {t('list.desktopCount', { count: enabledCount, total: PET_DESKTOP_LIMIT })}
               </span>
             </div>
@@ -345,17 +345,17 @@ function PetCard({
                 {pet.name}
               </button>
               {pet.isDefault ? (
-                <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
+                <span className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-600">
                   {t('list.defaultBadge')}
                 </span>
               ) : null}
               {archived ? (
-                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                   {t('list.archived')}
                 </span>
               ) : null}
             </div>
-            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
               <span>{t('list.levelLine', { level })}</span>
               <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
               <span className={pet.enabled ? 'text-emerald-600' : undefined}>
@@ -454,7 +454,7 @@ function PetCard({
           <Button
             variant="outline"
             size="sm"
-            className="h-7 w-full px-2 text-[11px]"
+            className="h-7 w-full px-2 text-xs"
             onClick={() => {
               if (grantExpToPet(pet.id, poolExp)) {
                 toast.success(t('list.pool.assignedExp', { name: pet.name }))
@@ -482,7 +482,7 @@ function StatLine({
   suffix?: string
 }): React.JSX.Element {
   return (
-    <div className="flex items-center gap-2 text-[11px]">
+    <div className="flex items-center gap-2 text-xs">
       <span className="w-8 shrink-0 text-muted-foreground">{label}</span>
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
         <div
@@ -492,7 +492,7 @@ function StatLine({
       </div>
       <span
         className={`shrink-0 text-right tabular-nums text-foreground ${
-          suffix ? 'w-32 text-[10px] text-muted-foreground' : 'w-7'
+          suffix ? 'w-32 text-xs text-muted-foreground' : 'w-7'
         }`}
       >
         {suffix ?? Math.round(value)}
@@ -512,10 +512,10 @@ function StatTile({
 }): React.JSX.Element {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className="mt-1 flex items-baseline gap-1">
         <span className="text-base font-semibold tabular-nums">{value}</span>
-        <span className="text-[10px] text-muted-foreground">{unit}</span>
+        <span className="text-xs text-muted-foreground">{unit}</span>
       </p>
     </div>
   )
@@ -535,7 +535,7 @@ function DeleteConfirmDialog({
   const { t } = useTranslation('pet')
   return (
     <Dialog open={pet !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="settings-dialog max-w-sm">
         <DialogHeader>
           <DialogTitle>{t('list.delete.title')}</DialogTitle>
           <DialogDescription>{t('list.delete.desc', { name: pet?.name ?? '' })}</DialogDescription>
@@ -771,7 +771,7 @@ function NewPetDialog({ open, onOpenChange, onCreate }: NewPetDialogProps): Reac
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="settings-dialog max-w-md">
         <DialogHeader>
           <DialogTitle>{t('list.newPetTitle')}</DialogTitle>
           <DialogDescription>{t('list.newPetDesc')}</DialogDescription>
@@ -817,7 +817,7 @@ function NewPetDialog({ open, onOpenChange, onCreate }: NewPetDialogProps): Reac
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-6 px-2 text-[11px]"
+                  className="h-6 px-2 text-xs"
                   disabled={busy || optimizing || (!name.trim() && !description.trim())}
                   onClick={() => void handleOptimizeClaim()}
                 >
@@ -878,7 +878,7 @@ function NewPetDialog({ open, onOpenChange, onCreate }: NewPetDialogProps): Reac
                 {referenceImageName ? (
                   <button
                     type="button"
-                    className="flex min-w-0 items-center gap-1 rounded bg-background/70 px-2 py-1 text-[10px] text-muted-foreground"
+                    className="flex min-w-0 items-center gap-1 rounded bg-background/70 px-2 py-1 text-xs text-muted-foreground"
                     onClick={() => {
                       setReferenceImagePath(null)
                       setReferenceImageName(null)
@@ -894,14 +894,14 @@ function NewPetDialog({ open, onOpenChange, onCreate }: NewPetDialogProps): Reac
           ) : null}
           <section className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
             <p className="text-xs font-medium">{t('list.claim.standardTitle')}</p>
-            <p className="text-[10px] leading-relaxed text-muted-foreground">
+            <p className="text-xs leading-relaxed text-muted-foreground">
               {t('list.claim.standardDesc', { maxLevel: PET_MAX_LEVEL })}
             </p>
             <div className="flex flex-wrap gap-1">
               {PET_LEVELS.filter((rule) => rule.unlocks.length > 0).map((rule) => (
                 <span
                   key={rule.level}
-                  className="rounded bg-background/70 px-2 py-0.5 text-[10px] text-muted-foreground"
+                  className="rounded bg-background/70 px-2 py-0.5 text-xs text-muted-foreground"
                 >
                   Lv.{rule.level} · {rule.requiredGrowth} XP
                 </span>
@@ -913,7 +913,7 @@ function NewPetDialog({ open, onOpenChange, onCreate }: NewPetDialogProps): Reac
                 .map((pose) => (
                   <span
                     key={pose.key}
-                    className="rounded border border-border/60 px-2 py-0.5 text-[10px] text-muted-foreground"
+                    className="rounded border border-border/60 px-2 py-0.5 text-xs text-muted-foreground"
                   >
                     {t(`poses.${pose.key}`)} Lv.{pose.unlockLevel}
                   </span>

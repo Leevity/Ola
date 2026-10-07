@@ -134,7 +134,7 @@ export function CredentialForm({
           <h3 className="text-sm font-semibold">
             {isEditing ? t('edit.title', { domain: editingDomain ?? domain }) : t('add.title')}
           </h3>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {isEditing ? t('edit.help') : t('add.passwordHelp')}
           </p>
         </div>
@@ -143,7 +143,7 @@ export function CredentialForm({
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 text-[11px]"
+            className="h-7 text-xs"
             onClick={onCancelEdit}
           >
             {t('edit.cancel')}

@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  FlaskConical,
   Loader2,
   Pencil,
   Play,
@@ -57,6 +58,9 @@ import {
 } from './task-schedule'
 import { RunTranscriptThread } from './RunTranscriptThread'
 import { TaskBoardPage } from './TaskBoardPage'
+import { ExecutionCenterPage } from './ExecutionCenterPage'
+import { ExecutionResultsPage } from './ExecutionResultsPage'
+import { useTaskBoardStore } from '@renderer/stores/task-board-store'
 
 type StatusFilter =
   | 'all'
@@ -412,7 +416,9 @@ export function TasksPage(): React.JSX.Element {
   const [editorMode, setEditorMode] = React.useState<'create' | 'edit'>('create')
   const [editorForm, setEditorForm] = React.useState<JobEditorFormState>(() => buildEditorState())
   const [submitting, setSubmitting] = React.useState(false)
-  const [surface, setSurface] = React.useState<'schedule' | 'board'>('schedule')
+  const [surface, setSurface] = React.useState<
+    'schedule' | 'board' | 'runs' | 'attention' | 'results'
+  >('schedule')
 
   const selectedDate = React.useMemo(() => {
     const [year, month, day] = selectedDateKey.split('-').map((value) => Number.parseInt(value, 10))
@@ -820,6 +826,28 @@ export function TasksPage(): React.JSX.Element {
     [refreshAll, t, workspaceId]
   )
 
+  const handleTrialRun = React.useCallback(
+    async (jobId: string) => {
+      const result = await ipcClient.invoke(IPC.CRON_RUN_NOW, {
+        jobId,
+        workspaceId,
+        trialRun: true
+      })
+      if (result && typeof result === 'object' && 'error' in (result as Record<string, unknown>)) {
+        toast.error(String((result as { error: string }).error))
+        return
+      }
+      toast.success(
+        t('tasksPage.toastTrialRunTriggered', {
+          defaultValue:
+            'Read-only trial run started; no delivery or workspace changes will be made.'
+        })
+      )
+      await refreshAll()
+    },
+    [refreshAll, t, workspaceId]
+  )
+
   const handleAbortRun = React.useCallback(
     async (jobId: string) => {
       const result = await ipcClient.invoke(IPC.CRON_ABORT_RUN, { jobId, workspaceId })
@@ -884,12 +912,28 @@ export function TasksPage(): React.JSX.Element {
   if (surface === 'board') {
     return <TaskBoardPage onBack={() => setSurface('schedule')} />
   }
+  if (surface === 'runs' || surface === 'attention') {
+    return (
+      <ExecutionCenterPage
+        view={surface === 'runs' ? 'all' : 'attention'}
+        onViewChange={(view) => setSurface(view === 'all' ? 'runs' : 'attention')}
+        onOpenTask={(taskId) => {
+          useTaskBoardStore.getState().selectTask(taskId)
+          setSurface('board')
+        }}
+        onBack={() => setSurface('schedule')}
+      />
+    )
+  }
+  if (surface === 'results') {
+    return <ExecutionResultsPage onBack={() => setSurface('schedule')} />
+  }
 
   return (
-    <div className="grid h-full min-w-0 grid-cols-[minmax(340px,380px)_minmax(0,1fr)] gap-4 bg-muted/10 p-4">
-      <div className="grid min-w-0 min-h-0 grid-rows-[360px_minmax(0,1fr)] gap-4">
+    <div className="grid h-full min-h-0 min-w-0 grid-cols-1 gap-4 overflow-y-auto bg-muted/10 p-4 xl:grid-cols-[minmax(340px,380px)_minmax(0,1fr)] xl:overflow-hidden">
+      <div className="grid min-h-[680px] min-w-0 grid-rows-[360px_minmax(0,1fr)] gap-4 xl:min-h-0">
         <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-sm">
-          <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3">
             <div>
               <div className="text-sm font-semibold text-foreground">
                 {t('tasksPage.calendarTitle', { defaultValue: 'Task Calendar' })}
@@ -900,14 +944,38 @@ export function TasksPage(): React.JSX.Element {
                 })}
               </div>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-1">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSurface('runs')}
+              >
+                {t('executionCenter.allRuns')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSurface('attention')}
+              >
+                {t('executionCenter.needsAttention')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs"
+                onClick={() => setSurface('results')}
+              >
+                {t('executionResults.title')}
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"
                 className="h-7 px-2 text-xs"
                 onClick={() => setSurface('board')}
               >
-                {t('tasksPage.boardButton', { defaultValue: 'Board' })}
+                {t('tasksPage.boardButton')}
               </Button>
               <Button size="sm" className="h-7 px-2 text-xs" onClick={openCreateDialog}>
                 <Plus className="mr-1 size-3.5" />
@@ -917,13 +985,25 @@ export function TasksPage(): React.JSX.Element {
           </div>
           <div className="flex items-center justify-between px-4 pb-2">
             <div className="flex items-center gap-1">
-              <Button size="icon" variant="ghost" className="size-7" onClick={goPrevMonth}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                onClick={goPrevMonth}
+                aria-label={t('tasksPage.previousMonth')}
+              >
                 <ChevronLeft className="size-4" />
               </Button>
               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={goToday}>
                 {monthTitle}
               </Button>
-              <Button size="icon" variant="ghost" className="size-7" onClick={goNextMonth}>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-7"
+                onClick={goNextMonth}
+                aria-label={t('tasksPage.nextMonth')}
+              >
                 <ChevronRight className="size-4" />
               </Button>
             </div>
@@ -947,8 +1027,18 @@ export function TasksPage(): React.JSX.Element {
                 <button
                   key={key}
                   type="button"
+                  aria-label={t('tasksPage.calendarDayLabel', {
+                    date: date.toLocaleDateString(locale, {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      weekday: 'long'
+                    }),
+                    count
+                  })}
+                  aria-pressed={active}
                   className={cn(
-                    'relative flex min-h-[38px] flex-col items-start rounded-lg border px-2 py-1 text-left transition-colors',
+                    'relative flex min-h-[38px] flex-col items-start rounded-lg border px-2 py-1 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                     active
                       ? 'border-primary/40 bg-primary/10 text-primary'
                       : 'border-transparent hover:bg-muted/60',
@@ -979,6 +1069,7 @@ export function TasksPage(): React.JSX.Element {
             </div>
             <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <select
+                aria-label={t('tasksPage.statusFilterLabel')}
                 className={INPUT_CLASS}
                 value={statusFilter}
                 onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
@@ -997,6 +1088,7 @@ export function TasksPage(): React.JSX.Element {
                 </option>
               </select>
               <select
+                aria-label={t('tasksPage.sessionFilterLabel')}
                 className={INPUT_CLASS}
                 value={sessionFilter}
                 onChange={(event) => setSessionFilter(event.target.value)}
@@ -1011,6 +1103,7 @@ export function TasksPage(): React.JSX.Element {
                 ))}
               </select>
               <Input
+                aria-label={t('tasksPage.workingDirectoryFilterLabel')}
                 className="h-8 text-xs"
                 value={workingFolderFilter}
                 onChange={(event) => setWorkingFolderFilter(event.target.value)}
@@ -1117,7 +1210,7 @@ export function TasksPage(): React.JSX.Element {
         </section>
       </div>
 
-      <section className="flex min-w-0 min-h-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-sm">
+      <section className="flex min-h-[320px] min-w-0 flex-col overflow-hidden rounded-2xl border border-border/60 bg-background shadow-sm xl:min-h-0">
         {selectedItem ? (
           <>
             <div className="border-b border-border/60 px-4 py-3">
@@ -1135,6 +1228,11 @@ export function TasksPage(): React.JSX.Element {
                     >
                       {getStatusLabel(selectedStatus, t, selectedItem.job)}
                     </span>
+                    {runDetail?.run.runKind === 'trial' && (
+                      <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:text-sky-300">
+                        {t('tasksPage.trialRun', { defaultValue: 'Trial run' })}
+                      </span>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
                     <div>
@@ -1163,9 +1261,23 @@ export function TasksPage(): React.JSX.Element {
                     </div>
                   </div>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="flex max-w-full shrink-0 flex-wrap items-center justify-end gap-1">
                   {selectedJob && !selectedJob.deletedAt && (
                     <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8 text-xs"
+                        disabled={selectedJob.executing}
+                        title={t('tasksPage.trialRunDescription', {
+                          defaultValue:
+                            'Runs with read-only tools. It will not change files or send notifications/messages.'
+                        })}
+                        onClick={() => void handleTrialRun(selectedJob.id)}
+                      >
+                        <FlaskConical className="mr-1 size-3.5" />
+                        {t('tasksPage.trialRun', { defaultValue: 'Trial run' })}
+                      </Button>
                       <Button
                         size="sm"
                         variant="outline"
@@ -1592,6 +1704,13 @@ export function TasksPage(): React.JSX.Element {
                     setEditorForm((state) => ({ ...state, at: event.target.value }))
                   }
                 />
+                <p className="text-xs leading-4 text-muted-foreground">
+                  {t('tasksPage.scheduleOnceTimezoneAndMissed', {
+                    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time',
+                    defaultValue:
+                      'Uses {{timezone}}. If the app is closed when this time passes, the task is skipped when Ola starts again.'
+                  })}
+                </p>
               </div>
             )}
 
@@ -1609,6 +1728,12 @@ export function TasksPage(): React.JSX.Element {
                     setEditorForm((state) => ({ ...state, everyMinutes: event.target.value }))
                   }
                 />
+                <p className="text-xs leading-4 text-muted-foreground">
+                  {t('tasksPage.scheduleIntervalMissed', {
+                    defaultValue:
+                      'Intervals are elapsed time. Missed intervals are not replayed while Ola is closed or the device is asleep.'
+                  })}
+                </p>
               </div>
             )}
 
@@ -1642,6 +1767,20 @@ export function TasksPage(): React.JSX.Element {
                 </div>
               </div>
             )}
+            {editorForm.scheduleKind === 'cron' && (
+              <p className="text-xs leading-4 text-muted-foreground">
+                {t('tasksPage.scheduleCronTimezoneAndMissed', {
+                  defaultValue:
+                    'Uses the selected IANA timezone. Missed occurrences are not replayed; Ola waits for the next matching time.'
+                })}
+              </p>
+            )}
+            <p className="text-xs leading-4 text-muted-foreground">
+              {t('tasksPage.scheduleDisabledAndRunNow', {
+                defaultValue:
+                  'Disabling stops future scheduled runs. Run now is a separate manual action and remains available.'
+              })}
+            </p>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">

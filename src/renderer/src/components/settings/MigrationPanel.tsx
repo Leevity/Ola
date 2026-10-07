@@ -160,7 +160,8 @@ export function MigrationPanel(): React.JSX.Element {
     } catch (error) {
       toast.error(
         t('migration.businessHandoverFailed', {
-          defaultValue: `Business handover failed: ${error instanceof Error ? error.message : String(error)}`
+          defaultValue: 'Business handover failed: {{error}}',
+          error: error instanceof Error ? error.message : String(error)
         })
       )
     } finally {
@@ -326,7 +327,7 @@ export function MigrationPanel(): React.JSX.Element {
         {businessHandover &&
           !businessHandover.promoted &&
           (businessHandover.runtimeAvailable === false || businessHandover.enabled === false) && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('migration.businessHandoverUnavailable', {
                 defaultValue:
                   'Promotion is unavailable until the TS runtime is ready and the handover safety flag is enabled.'
@@ -337,7 +338,7 @@ export function MigrationPanel(): React.JSX.Element {
           !businessHandover.promoted &&
           businessHandover.handoverReady === false &&
           businessHandover.handoverBlocker && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               {t('migration.businessHandoverPreflight', {
                 defaultValue: 'Preflight check: {{reason}}',
                 reason: describeBusinessHandoverBlocker(businessHandover.handoverBlocker, t)
@@ -345,7 +346,7 @@ export function MigrationPanel(): React.JSX.Element {
             </p>
           )}
         {businessHandover && !businessHandover.promoted && businessHandover.handoverWarning && (
-          <p className="text-[11px] text-amber-700 dark:text-amber-300">
+          <p className="text-xs text-amber-700 dark:text-amber-300">
             {t('migration.businessHandoverWarning', {
               defaultValue:
                 'Existing Native Project Wiki records will be preserved in the TS-owned archive during handover.'
@@ -353,13 +354,13 @@ export function MigrationPanel(): React.JSX.Element {
           </p>
         )}
         {businessHandover?.backupPath && (
-          <p className="break-all text-[11px] text-muted-foreground">
+          <p className="break-all text-xs text-muted-foreground">
             {t('migration.businessHandoverBackup', { defaultValue: 'Rollback snapshot' })}:{' '}
             {businessHandover.backupPath}
           </p>
         )}
         {businessHandover?.manifestPath && (
-          <p className="break-all text-[11px] text-muted-foreground">
+          <p className="break-all text-xs text-muted-foreground">
             {t('migration.businessHandoverManifest', { defaultValue: 'Handover manifest' })}:{' '}
             {businessHandover.manifestPath}
           </p>
@@ -483,9 +484,7 @@ export function MigrationPanel(): React.JSX.Element {
                         {item.sourceLabel} → {item.targetLabel}
                       </p>
                       {item.targetPath ? (
-                        <p className="text-[11px] text-muted-foreground break-all">
-                          {item.targetPath}
-                        </p>
+                        <p className="text-xs text-muted-foreground break-all">{item.targetPath}</p>
                       ) : null}
                     </div>
 
@@ -516,7 +515,7 @@ export function MigrationPanel(): React.JSX.Element {
                           key={`${item.id}-${detail.label}`}
                           className="rounded-md border border-border/50 bg-muted/20 px-3 py-2"
                         >
-                          <p className="text-[11px] text-muted-foreground">{detail.label}</p>
+                          <p className="text-xs text-muted-foreground">{detail.label}</p>
                           <p className="mt-1 text-xs break-all">{detail.value}</p>
                         </div>
                       ))}
@@ -612,7 +611,7 @@ export function MigrationPanel(): React.JSX.Element {
                       <p className="mt-1 text-xs text-muted-foreground">{item.message}</p>
                     ) : null}
                     {item.targetPath ? (
-                      <p className="mt-1 break-all text-[11px] text-muted-foreground">
+                      <p className="mt-1 break-all text-xs text-muted-foreground">
                         {item.targetPath}
                       </p>
                     ) : null}

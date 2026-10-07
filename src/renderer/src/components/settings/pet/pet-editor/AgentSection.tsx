@@ -213,7 +213,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             <SelectContent>
               {chatModelGroups.map((group) => (
                 <SelectGroup key={group.provider.id}>
-                  <SelectLabel className="text-[11px] font-normal text-muted-foreground">
+                  <SelectLabel className="text-xs font-normal text-muted-foreground">
                     {group.provider.name}
                   </SelectLabel>
                   {group.models.map((model) => (
@@ -238,14 +238,14 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
           <Button
             size="sm"
             variant="ghost"
-            className="h-6 text-[10px]"
+            className="h-6 text-xs"
             onClick={() => setPromptDraft('')}
           >
             <RotateCcw className="mr-1 size-3" />
             {t('agent.resetPrompt')}
           </Button>
         </div>
-        <p className="text-[10px] text-muted-foreground">{t('agent.promptHint')}</p>
+        <p className="text-xs text-muted-foreground">{t('agent.promptHint')}</p>
         <Textarea
           rows={6}
           value={promptDraft}
@@ -270,14 +270,14 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             ))}
           </SelectContent>
         </Select>
-        <p className="text-[10px] text-muted-foreground">{t('agent.projectHint')}</p>
+        <p className="text-xs text-muted-foreground">{t('agent.projectHint')}</p>
       </section>
 
       <section className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium">{t('agent.proactive')}</p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">{t('agent.proactiveDesc')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t('agent.proactiveDesc')}</p>
           </div>
           <Switch checked={proactiveDraft} onCheckedChange={setProactiveDraft} />
         </div>
@@ -318,7 +318,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             />
           </div>
         </div>
-        <p className="text-[10px] text-muted-foreground">{t('agent.proactiveHint')}</p>
+        <p className="text-xs text-muted-foreground">{t('agent.proactiveHint')}</p>
       </section>
 
       <section className="space-y-3 rounded-lg border border-border/60 bg-muted/30 p-4">
@@ -328,13 +328,13 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
               <Volume2 className="size-4 text-violet-400" />
               {t('agent.voice')}
             </p>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">{t('agent.voiceDesc')}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{t('agent.voiceDesc')}</p>
           </div>
           <Switch checked={voiceEnabledDraft} onCheckedChange={setVoiceEnabledDraft} />
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
-            <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceModel')}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{t('agent.voiceModel')}</p>
             {voiceModelGroups.length === 0 ? (
               <p className="rounded-md border border-dashed border-border/70 px-3 py-2 text-xs text-muted-foreground">
                 {t('agent.noVoiceModels')}
@@ -347,7 +347,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
                 <SelectContent>
                   {voiceModelGroups.map((group) => (
                     <SelectGroup key={group.provider.id}>
-                      <SelectLabel className="text-[11px] font-normal text-muted-foreground">
+                      <SelectLabel className="text-xs font-normal text-muted-foreground">
                         {group.provider.name}
                       </SelectLabel>
                       {group.models.map((model) => (
@@ -366,7 +366,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             )}
           </div>
           <div>
-            <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceName')}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{t('agent.voiceName')}</p>
             <Select
               value={voiceCustom ? VOICE_CUSTOM : voiceDraft || VOICE_DEFAULT}
               onValueChange={(v) => {
@@ -403,7 +403,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
         </div>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <div>
-            <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceMode')}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{t('agent.voiceMode')}</p>
             <Select
               value={voiceModeDraft}
               onValueChange={(v) => setVoiceModeDraft(v as PetVoiceMode)}
@@ -425,7 +425,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             </Select>
           </div>
           <div>
-            <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceTag')}</p>
+            <p className="mb-1 text-xs text-muted-foreground">{t('agent.voiceTag')}</p>
             <Input
               value={voiceTagDraft}
               onChange={(e) => setVoiceTagDraft(e.target.value)}
@@ -435,7 +435,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
           </div>
         </div>
         <div>
-          <p className="mb-1 text-[10px] text-muted-foreground">{t('agent.voiceInstruction')}</p>
+          <p className="mb-1 text-xs text-muted-foreground">{t('agent.voiceInstruction')}</p>
           <Input
             value={voiceInstructionDraft}
             onChange={(e) => setVoiceInstructionDraft(e.target.value)}
@@ -443,7 +443,7 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
             className="h-8 text-xs"
           />
         </div>
-        <p className="text-[10px] leading-relaxed text-muted-foreground">{t('agent.voiceHint')}</p>
+        <p className="text-xs leading-relaxed text-muted-foreground">{t('agent.voiceHint')}</p>
         <div className="flex justify-end">
           <Button
             size="sm"

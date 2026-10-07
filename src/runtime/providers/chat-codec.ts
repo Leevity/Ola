@@ -16,8 +16,8 @@ import {
 
 function messages(input: readonly AgentMessage[], workspaceId: string): unknown[] {
   return input.flatMap((message): unknown[] => {
-    if (message.role === 'tool')
-      return message.results.map((result) => ({
+    if (message.role === 'tool') {
+      const toolMessages = message.results.map((result) => ({
         role: 'tool',
         tool_call_id: result.id,
         content:
@@ -25,6 +25,17 @@ function messages(input: readonly AgentMessage[], workspaceId: string): unknown[
             ? result.output
             : (JSON.stringify(result.output) ?? 'null')
       }))
+      const imageMessages = message.results.flatMap((result) =>
+        (result.images ?? []).map((image) => ({
+          role: 'user',
+          content: [
+            { type: 'text', text: `Image returned by ${result.name}: ${String(result.output)}` },
+            { type: 'image_url', image_url: { url: runtimeImageSource(image, workspaceId) } }
+          ]
+        }))
+      )
+      return [...toolMessages, ...imageMessages]
+    }
     if (message.role === 'assistant')
       return [
         {

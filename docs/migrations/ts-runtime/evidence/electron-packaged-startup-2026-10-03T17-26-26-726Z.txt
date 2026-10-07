@@ -1,0 +1,58 @@
+
+[Browser] Browser profile reuse enabled, but no supported profile was found
+[RemoteAuth] protocol arguments: ["C:\\tmp\\ola-release-current-20261004hh\\Ola.exe","--no-sandbox","--disable-gpu","--remote-debugging-port=9465","--user-data-dir=C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-Z0yxkl\\electron-user-data"]
+[credentials] sanity tests passed
+[DB][TS] initialized {
+  dbPath: 'C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-Z0yxkl/data.db'
+}
+Checking for update
+[Updater] Checking for updates...
+[TS] settings startup ready
+Generated new staging user ID: ac747d38-9396-59c0-8be1-c6096829f4ad
+[Main] Using system proxy settings
+[CrashLogger] Logs will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-Z0yxkl\logs
+[CrashLogger] Native crash dumps will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-Z0yxkl\crash-dumps
+[TS] legacy runtime global startup skipped; compatibility routes are lazy
+[Main] Renderer finished loading: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/tmp/ola-release-current-20261004hh/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4
+}
+[TsRuntime] desktop host ready
+[TS] TypeScript runtime is authoritative; legacy executable startup is removed
+[CronScheduler] Loaded 0/0 persisted cron jobs
+[Pet] Installed built-in pet files: aniya (+13)
+[Pet] Installed built-in pet files: penguin (+13)
+Update for version 1.0.5 is not available (latest version: 1.0.5, downgrade is disallowed).
+[Updater] No update available (latest: 1.0.5)
+
+
+DevTools listening on ws://127.0.0.1:9465/devtools/browser/217d81a5-813e-443f-92cd-f93f7cee1c75
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/tmp/ola-release-current-20261004hh/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '🌐 i18next is maintained with support from Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙',
+  line: 1962,
+  sourceId: 'file:///C:/tmp/ola-release-current-20261004hh/resources/app.asar/out/renderer/assets/theme-provider-CbH2f3Xx.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/tmp/ola-release-current-20261004hh/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '[PluginAutoReply] Listener initialized',
+  line: 247811,
+  sourceId: 'file:///C:/tmp/ola-release-current-20261004hh/resources/app.asar/out/renderer/assets/App-D2mqMO3e.js'
+}

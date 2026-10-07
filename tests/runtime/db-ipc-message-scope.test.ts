@@ -2,6 +2,17 @@ import { beforeEach, expect, it, vi } from 'vitest'
 
 const state = vi.hoisted(() => ({
   handlers: new Map<string, (_event: unknown, bytes: Uint8Array) => Promise<unknown>>(),
+  window: {
+    isDestroyed: () => false,
+    webContents: {
+      isDestroyed: () => false,
+      getURL: () => 'app://ola/index.html',
+      mainFrame: { url: 'app://ola/index.html' },
+      on: vi.fn(),
+      send: vi.fn()
+    },
+    on: vi.fn()
+  },
   available: new Set(['team-a']),
   getSession: vi.fn(),
   listSessions: vi.fn(),
@@ -65,11 +76,18 @@ vi.mock('electron', () => ({
     handle: (channel: string, handler: (_event: unknown, bytes: Uint8Array) => Promise<unknown>) =>
       state.handlers.set(channel, handler)
   },
-  BrowserWindow: { getAllWindows: () => [] }
+  BrowserWindow: {
+    getAllWindows: () => [],
+    fromWebContents: () => state.window
+  }
 }))
 vi.mock('../../src/main/db/database', () => ({ initializeDatabase: async () => undefined }))
 vi.mock('../../src/main/remote/account-client', () => ({
   loadOfflineWorkspaceIds: async () => state.available
+}))
+vi.mock('../../src/main/renderer-security', () => ({
+  isTrustedRendererIpcEvent: () => true,
+  assertTrustedRendererIpcEvent: () => undefined
 }))
 vi.mock('../../src/main/db/sessions-dao', () => ({
   getSession: state.getSession,
@@ -150,6 +168,10 @@ vi.mock('../../src/main/db/draw-runs-dao', () => ({
 }))
 
 import { registerDbHandlers } from '../../src/main/ipc/db-handlers'
+import {
+  beginWindowWorkspaceRegistration,
+  registerWindowWorkspace
+} from '../../src/main/window-ipc'
 import {
   DB_MESSAGES_LIST_MSGPACK_CHANNEL,
   DB_MESSAGES_LIST_USER_MSGPACK_CHANNEL,
@@ -268,6 +290,8 @@ beforeEach(async () => {
   state.saveDrawRun.mockReset()
   state.deleteDrawRun.mockReset()
   state.clearDrawRuns.mockReset()
+  const registrationVersion = beginWindowWorkspaceRegistration(state.window as never)
+  registerWindowWorkspace(state.window as never, 'team-a', registrationVersion, false)
   await registerDbHandlers()
 })
 
@@ -464,7 +488,12 @@ it('routes message writes and lifecycle mutations through TS DAOs', async () => 
     workspaceId: 'team-a',
     patch: { content: 'updated' }
   })
-  await call(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, { sessionId: 'session-a', workspaceId: 'team-a' })
+  await call(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, {
+    sessionId: 'session-a',
+    workspaceId: 'team-a',
+    clearTasks: true,
+    updatedAt: 9
+  })
   await call(DB_MESSAGES_DELETE_MSGPACK_CHANNEL, {
     sessionId: 'session-a',
     messageId: 'message-a',
@@ -488,11 +517,51 @@ it('routes message writes and lifecycle mutations through TS DAOs', async () => 
   )
   expect(state.upsertMessage).toHaveBeenCalledWith(message)
   expect(state.updateMessage).toHaveBeenCalledWith('message-a', { content: 'updated' }, 'team-a')
-  expect(state.clearMessages).toHaveBeenCalledWith('session-a', 'team-a')
+  expect(state.clearMessages).toHaveBeenCalledWith('session-a', 'team-a', {
+    clearTasks: true,
+    updatedAt: 9
+  })
   expect(state.deleteMessage).toHaveBeenCalledWith('session-a', 'message-a', 'team-a')
   expect(state.replaceMessages).toHaveBeenCalledWith('session-a', [message], 'team-a')
   expect(state.truncateMessagesFrom).toHaveBeenCalledWith('session-a', 0, 'team-a')
   expect(state.getMessageCount).toHaveBeenCalledWith('session-a', 'team-a')
+})
+
+it('acknowledges a committed replacement even if its window notification fails', async () => {
+  state.getSession
+    .mockResolvedValueOnce({ id: 'session-a', workspace_id: 'team-a' })
+    .mockRejectedValueOnce(new Error('notification read failed'))
+  state.replaceMessages.mockResolvedValueOnce(1)
+  const warning = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+  try {
+    await expect(
+      call(DB_MESSAGES_REPLACE_MSGPACK_CHANNEL, {
+        sessionId: 'session-a',
+        workspaceId: 'team-a',
+        messages: []
+      })
+    ).resolves.toEqual({ success: true })
+    expect(state.replaceMessages).toHaveBeenCalledWith('session-a', [], 'team-a')
+    expect(warning).toHaveBeenCalledWith(
+      '[DB] Failed to broadcast committed message replacement',
+      expect.any(Error)
+    )
+  } finally {
+    warning.mockRestore()
+  }
+})
+
+it('rejects a replacement whose database write fails', async () => {
+  state.getSession.mockResolvedValueOnce({ id: 'session-a', workspace_id: 'team-a' })
+  state.replaceMessages.mockRejectedValueOnce(new Error('disk full'))
+  await expect(
+    call(DB_MESSAGES_REPLACE_MSGPACK_CHANNEL, {
+      sessionId: 'session-a',
+      workspaceId: 'team-a',
+      messages: []
+    })
+  ).rejects.toThrow('disk full')
+  expect(state.getSession).toHaveBeenCalledTimes(1)
 })
 
 it('routes Draw run persistence through the TS workspace-scoped DAO', async () => {
@@ -590,6 +659,7 @@ it('routes project, plan, and task lifecycle through workspace-scoped TS DAOs', 
   state.listAllTasks.mockResolvedValue([{ id: 'task-a', workspace_id: 'team-a' }])
   state.listTasksBySession.mockResolvedValue([{ id: 'task-a', session_id: 'session-a' }])
   state.getTask.mockResolvedValue({ id: 'task-a', workspace_id: 'team-a' })
+  state.listSessions.mockResolvedValue([])
 
   await call(DB_PROJECTS_LIST_MSGPACK_CHANNEL, { workspaceId: 'team-a' })
   await call(DB_PROJECTS_GET_MSGPACK_CHANNEL, { id: 'project-a', workspaceId: 'team-a' })
@@ -642,9 +712,14 @@ it('routes project, plan, and task lifecycle through workspace-scoped TS DAOs', 
   await call(DB_TASKS_UPDATE_MSGPACK_CHANNEL, {
     id: 'task-a',
     workspaceId: 'team-a',
+    expectedUpdatedAt: 1,
     patch: { subject: 'Updated' }
   })
-  await call(DB_TASKS_DELETE_MSGPACK_CHANNEL, { id: 'task-a', workspaceId: 'team-a' })
+  await call(DB_TASKS_DELETE_MSGPACK_CHANNEL, {
+    id: 'task-a',
+    workspaceId: 'team-a',
+    expectedUpdatedAt: 1
+  })
   await call(DB_TASKS_DELETE_BY_SESSION_MSGPACK_CHANNEL, {
     sessionId: 'session-a',
     workspaceId: 'team-a'
@@ -652,7 +727,7 @@ it('routes project, plan, and task lifecycle through workspace-scoped TS DAOs', 
 
   expect(state.listProjects).toHaveBeenCalledWith('team-a')
   expect(state.getProject).toHaveBeenCalledWith('project-a', 'team-a')
-  expect(state.ensureDefaultProject).toHaveBeenCalledWith('team-a')
+  expect(state.ensureDefaultProject).toHaveBeenCalledWith('team-a', undefined)
   expect(state.createProject).toHaveBeenCalledWith(
     expect.objectContaining({ workspaceId: 'team-a' })
   )
@@ -664,15 +739,16 @@ it('routes project, plan, and task lifecycle through workspace-scoped TS DAOs', 
   expect(state.deletePlan).toHaveBeenCalledWith('plan-a', 'team-a')
   expect(state.listTasksBySession).toHaveBeenCalledWith('session-a', 'team-a')
   expect(state.getTask).toHaveBeenCalledWith('task-a', 'team-a')
-  expect(state.updateTask).toHaveBeenCalledWith('task-a', 'team-a', { subject: 'Updated' })
-  expect(state.deleteTask).toHaveBeenCalledWith('task-a', 'team-a')
+  expect(state.updateTask).toHaveBeenCalledWith('task-a', 'team-a', { subject: 'Updated' }, 1)
+  expect(state.deleteTask).toHaveBeenCalledWith('task-a', 'team-a', 1)
   expect(state.deleteTasksBySession).toHaveBeenCalledWith('session-a', 'team-a')
 })
 
 function call(channel: string, input: unknown): Promise<unknown> {
   const handler = state.handlers.get(channel)
   if (!handler) throw new Error(`Missing IPC handler: ${channel}`)
-  return handler({}, encodeMessagePackPayload(input))
+  const sender = state.window.webContents
+  return handler({ sender, senderFrame: sender.mainFrame }, encodeMessagePackPayload(input))
 }
 
 it('rejects unscoped session and message reads before accessing storage', async () => {
@@ -751,6 +827,21 @@ it('blocks unscoped project and session mutations before native storage', async 
   expect(state.clearAllSessions).not.toHaveBeenCalled()
 })
 
+it('rejects task writes without a cached version before storage', async () => {
+  await expect(
+    call(DB_TASKS_UPDATE_MSGPACK_CHANNEL, {
+      id: 'task-a',
+      workspaceId: 'team-a',
+      patch: { subject: 'Stale' }
+    })
+  ).rejects.toThrow('TASK_VERSION_REQUIRED')
+  await expect(
+    call(DB_TASKS_DELETE_MSGPACK_CHANNEL, { id: 'task-a', workspaceId: 'team-a' })
+  ).rejects.toThrow('TASK_VERSION_REQUIRED')
+  expect(state.updateTask).not.toHaveBeenCalled()
+  expect(state.deleteTask).not.toHaveBeenCalled()
+})
+
 it('blocks writes to a team absent from the offline directory', async () => {
   state.available = new Set()
   await expect(
@@ -794,4 +885,22 @@ it('requires workspace ownership before plan and task creation', async () => {
   ).rejects.toThrow('session-workspace-mismatch')
   expect(state.createPlan).not.toHaveBeenCalled()
   expect(state.createTask).not.toHaveBeenCalled()
+})
+
+it('loads a newly created session within its authorized workspace before broadcasting it', async () => {
+  state.getSession.mockResolvedValue({ id: 'session-created', workspace_id: 'team-a' })
+
+  await call(DB_SESSIONS_CREATE_MSGPACK_CHANNEL, {
+    id: 'session-created',
+    title: 'Workspace-scoped session',
+    mode: 'chat',
+    createdAt: 1,
+    updatedAt: 1,
+    workspaceId: 'team-a'
+  })
+
+  expect(state.createSession).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'session-created', workspaceId: 'team-a' })
+  )
+  expect(state.getSession).toHaveBeenLastCalledWith('session-created', 'team-a')
 })

@@ -15,6 +15,7 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { Switch } from '@renderer/components/ui/switch'
 import { Separator } from '@renderer/components/ui/separator'
 import { Badge } from '@renderer/components/ui/badge'
@@ -28,6 +29,7 @@ import {
 import { useChannelStore } from '@renderer/stores/channel-store'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { LOCAL_PERSONAL_WORKSPACE } from '@renderer/lib/workspace-context'
 import {
   isProviderAvailableForModelSelection,
   useProviderStore
@@ -119,7 +121,8 @@ function ChannelConfigPanelContent({
   const projects = useChatStore((s) => s.projects)
   const activeProviderId = useProviderStore((s) => s.activeProviderId)
   const activeModelId = useProviderStore((s) => s.activeModelId)
-  const workspaces = useWorkspaceStore((s) => s.getWorkspaces())
+  const olaWorkspaces = useWorkspaceStore((s) => s.olaWorkspaces)
+  const workspaces = useMemo(() => [LOCAL_PERSONAL_WORKSPACE, ...olaWorkspaces], [olaWorkspaces])
   const resourcesByWorkspace = useWorkspaceStore((s) => s.resourcesByWorkspace)
   const enabledProviders = useMemo(
     () => providers.filter((p) => isProviderAvailableForModelSelection(p)),
@@ -135,6 +138,10 @@ function ChannelConfigPanelContent({
   }, [providers, activeProviderId, activeModelId])
 
   const [localName, setLocalName] = useState(plugin.name)
+  const displayName =
+    plugin.builtin && localName === descriptor?.displayName
+      ? t(`channel.builtin.${plugin.type}.name`, { defaultValue: localName })
+      : localName
   const [localConfig, setLocalConfig] = useState(plugin.config)
   const [localProviderId, setLocalProviderId] = useState(plugin.providerId ?? null)
   const [localModel, setLocalModel] = useState(plugin.model ?? '')
@@ -366,14 +373,14 @@ function ChannelConfigPanelContent({
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
       <div className="border-b border-border/60 px-6 py-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className="channel-config-header flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">
             <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-border/60 bg-muted/30">
               <ChannelIcon icon={descriptor?.icon ?? ''} className="size-6" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h3 className="truncate text-xl font-semibold text-foreground">{localName}</h3>
+                <h3 className="truncate text-xl font-semibold text-foreground">{displayName}</h3>
                 <Badge
                   variant={
                     status === 'running'
@@ -395,12 +402,16 @@ function ChannelConfigPanelContent({
                     : t('channel.disabled', 'Disabled')}
                 </Badge>
               </div>
-              <p className="mt-1 truncate text-sm text-muted-foreground">
-                {descriptor?.description ?? plugin.type}
+              <p className="mt-1 break-words text-sm text-muted-foreground">
+                {plugin.builtin
+                  ? t(`channel.builtin.${plugin.type}.description`, {
+                      defaultValue: descriptor?.description ?? plugin.type
+                    })
+                  : (descriptor?.description ?? plugin.type)}
               </p>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-3">
+          <div className="channel-config-header-controls flex shrink-0 items-center gap-3">
             <span className="text-xs text-muted-foreground">
               {t('channel.autoSaveHint', 'Auto-saved after changes')}
             </span>
@@ -418,7 +429,12 @@ function ChannelConfigPanelContent({
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <Badge variant="outline">
-            {t('channel.platform', 'Platform')} · {descriptor?.displayName ?? plugin.type}
+            {t('channel.platform', 'Platform')} ·{' '}
+            {plugin.builtin
+              ? t(`channel.builtin.${plugin.type}.name`, {
+                  defaultValue: descriptor?.displayName ?? plugin.type
+                })
+              : (descriptor?.displayName ?? plugin.type)}
           </Badge>
           {projectId && (
             <Badge variant={isBoundToCurrentProject ? 'secondary' : 'outline'}>
@@ -442,7 +458,7 @@ function ChannelConfigPanelContent({
           <div className="space-y-1.5">
             <div className="flex items-center gap-2">
               <label className="text-sm font-medium">{t('channel.botName', 'Channel Name')}</label>
-              <Badge variant="outline" className="px-1.5 text-[10px] font-mono">
+              <Badge variant="outline" className="px-1.5 text-xs font-mono">
                 name
               </Badge>
             </div>
@@ -471,7 +487,7 @@ function ChannelConfigPanelContent({
                     {t(field.label, field.key)}
                     {field.required && <span className="text-destructive ml-0.5">*</span>}
                   </label>
-                  <Badge variant="outline" className="px-1.5 text-[10px] font-mono">
+                  <Badge variant="outline" className="px-1.5 text-xs font-mono">
                     {field.key}
                   </Badge>
                 </div>
@@ -532,7 +548,10 @@ function ChannelConfigPanelContent({
                 <ChevronDown className="size-3 shrink-0 opacity-50" />
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-1 max-h-72 overflow-y-auto" align="start">
+            <PopoverContent
+              className="settings-menu w-64 p-1 max-h-72 overflow-y-auto"
+              align="start"
+            >
               {/* Default option */}
               <button
                 className={cn(
@@ -554,7 +573,7 @@ function ChannelConfigPanelContent({
                     {t('channel.modelDefault', 'Use global default')}
                   </span>
                   {globalDefaultModel && (
-                    <span className="text-[10px] text-muted-foreground/50 truncate w-full">
+                    <span className="text-xs text-muted-foreground/50 truncate w-full">
                       {globalDefaultModel.model.name}
                     </span>
                   )}
@@ -568,7 +587,7 @@ function ChannelConfigPanelContent({
                 if (models.length === 0) return null
                 return (
                   <div key={provider.id}>
-                    <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/50 px-2 py-1 uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/50 px-2 py-1 uppercase tracking-wider">
                       <ProviderIcon builtinId={provider.builtinId} size={12} />
                       {provider.name}
                     </div>
@@ -610,7 +629,7 @@ function ChannelConfigPanelContent({
               })}
               {managedResources.length > 0 && channelWorkspace && channelManagedKind && (
                 <div>
-                  <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground/50">
+                  <div className="flex items-center gap-1.5 px-2 py-1 text-xs uppercase tracking-wider text-muted-foreground/50">
                     {channelWorkspace.kind === 'ola-team'
                       ? t('channel.olaTeamModels', 'Ola team models')
                       : t('channel.olaPersonalModels', 'Ola personal models')}
@@ -651,7 +670,7 @@ function ChannelConfigPanelContent({
               )}
             </PopoverContent>
           </Popover>
-          <p className="text-[10px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             {t(
               'channel.modelHint',
               'Model used for auto-reply. Leave default to use the globally active model.'
@@ -837,7 +856,7 @@ function ChannelConfigPanelContent({
                         {localPerms.readablePathPrefixes.map((p) => (
                           <span
                             key={p}
-                            className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-[10px] font-mono"
+                            className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-mono"
                           >
                             {p}
                             <button
@@ -857,7 +876,7 @@ function ChannelConfigPanelContent({
                         value={newReadPath}
                         onChange={(e) => setNewReadPath(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleAddReadPath()
+                          if (e.key === 'Enter' && !isImeCommitKey(e)) handleAddReadPath()
                         }}
                       />
                       <Button
@@ -944,7 +963,7 @@ function ChannelConfigPanelContent({
                         ? t('channel.weixin.bound', 'Bound to official WeChat account')
                         : t('channel.weixin.unbound', 'Not bound to official WeChat account')}
                     </p>
-                    <p className="text-[10px] text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       {t(
                         'channel.weixin.bindingDesc',
                         'Scan QR code to obtain token and enable long-polling for message delivery.'
@@ -979,7 +998,7 @@ function ChannelConfigPanelContent({
                   </div>
                 </div>
                 {weixinLoginMessage && (
-                  <p className="text-[10px] text-muted-foreground">{weixinLoginMessage}</p>
+                  <p className="text-xs text-muted-foreground">{weixinLoginMessage}</p>
                 )}
                 {weixinQrUrl && (
                   <div className="space-y-2">
@@ -991,7 +1010,7 @@ function ChannelConfigPanelContent({
                       />
                     </div>
                     {weixinSessionKey && (
-                      <p className="text-[10px] text-muted-foreground font-mono break-all">
+                      <p className="text-xs text-muted-foreground font-mono break-all">
                         {t('channel.weixin.sessionLabel', 'Session')}: {weixinSessionKey}
                       </p>
                     )}
@@ -1098,6 +1117,7 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
   const updateChannel = useChannelStore((s) => s.updateChannel)
 
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeNarrowPane, setActiveNarrowPane] = useState<'list' | 'config'>('list')
 
   const handleSelectChannel = useCallback(
     async (channel: PluginInstance): Promise<void> => {
@@ -1105,6 +1125,7 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
         await updateChannel(channel.id, { projectId })
       }
       setSelectedChannel(channel.id)
+      setActiveNarrowPane('config')
     },
     [projectId, setSelectedChannel, updateChannel]
   )
@@ -1154,9 +1175,45 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
   const selectedChannel = filteredChannels.find((p) => p.id === selectedChannelId) ?? null
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)]">
-        <div className="flex min-h-0 flex-col border-r border-border/60 bg-muted/10">
+    <div className="channel-settings-container flex h-full min-h-0 flex-col">
+      <div
+        className="channel-settings-mobile-switch mb-3 shrink-0 gap-2"
+        role="group"
+        aria-label={t('channel.narrowPaneLabel')}
+      >
+        <button
+          type="button"
+          aria-pressed={activeNarrowPane === 'list'}
+          onClick={() => setActiveNarrowPane('list')}
+          className={cn(
+            'min-h-9 flex-1 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+            activeNarrowPane === 'list'
+              ? 'bg-accent text-accent-foreground'
+              : 'bg-muted/50 text-muted-foreground'
+          )}
+        >
+          {t('channel.narrowList')}
+        </button>
+        <button
+          type="button"
+          aria-pressed={activeNarrowPane === 'config'}
+          disabled={!selectedChannel}
+          onClick={() => setActiveNarrowPane('config')}
+          className={cn(
+            'min-h-9 flex-1 rounded-lg px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+            activeNarrowPane === 'config'
+              ? 'bg-accent text-accent-foreground'
+              : 'bg-muted/50 text-muted-foreground'
+          )}
+        >
+          {t('channel.narrowConfig')}
+        </button>
+      </div>
+      <div className="channel-settings-panels flex min-h-0 min-w-0 flex-1 overflow-hidden">
+        <div
+          className="channel-settings-list flex min-h-0 min-w-0 flex-col bg-muted/10"
+          data-mobile-active={activeNarrowPane === 'list'}
+        >
           <div className="border-b border-border/60 px-4 py-4">
             <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground/60">
               {t('channel.platforms', 'Platforms')}
@@ -1180,27 +1237,40 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
               if (categoryPlugins.length === 0) return null
               return (
                 <section key={category.labelKey} className="mb-4 last:mb-0">
-                  <p className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/50">
+                  <p className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground/50">
                     {t(category.labelKey, category.defaultLabel)}
                   </p>
                   <div className="space-y-1.5">
                     {categoryPlugins.map((p) => {
                       const status = channelStatuses[p.id] ?? 'stopped'
                       const descriptor = getDescriptor(p.type)
-                      const displayName = p.builtin ? (descriptor?.displayName ?? p.name) : p.name
+                      const displayName = p.builtin
+                        ? t(`channel.builtin.${p.type}.name`, {
+                            defaultValue: descriptor?.displayName ?? p.name
+                          })
+                        : p.name
                       const isSelected = selectedChannelId === p.id
                       const isBoundToProject = !!projectId && p.projectId === projectId
                       return (
                         <div
                           key={p.id}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={isSelected}
                           className={cn(
-                            'flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors',
+                            'flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             isSelected
                               ? 'bg-accent text-accent-foreground'
                               : 'hover:bg-muted/60 text-foreground/85',
                             !p.enabled && !isSelected && 'text-muted-foreground'
                           )}
                           onClick={() => void handleSelectChannel(p)}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return
+                            if (event.key !== 'Enter' && event.key !== ' ') return
+                            event.preventDefault()
+                            void handleSelectChannel(p)
+                          }}
                         >
                           <div className={cn('shrink-0', !p.enabled && 'opacity-40')}>
                             <ChannelIcon icon={descriptor?.icon ?? ''} className="size-5" />
@@ -1219,8 +1289,14 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
                                 )}
                               />
                             </div>
-                            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
-                              <span className="truncate">{descriptor?.description ?? p.type}</span>
+                            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="truncate">
+                                {p.builtin
+                                  ? t(`channel.builtin.${p.type}.description`, {
+                                      defaultValue: descriptor?.description ?? p.type
+                                    })
+                                  : (descriptor?.description ?? p.type)}
+                              </span>
                               {isBoundToProject && (
                                 <Badge variant="outline">{t('channel.bound', 'Bound')}</Badge>
                               )}
@@ -1246,7 +1322,7 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
               (p) => !PLUGIN_CATEGORIES.some((c) => c.types.includes(p.type))
             ).length > 0 && (
               <section>
-                <p className="mb-2 px-2 text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground/50">
+                <p className="mb-2 px-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground/50">
                   {t('channel.custom', 'Custom')}
                 </p>
                 <div className="space-y-1.5">
@@ -1258,14 +1334,23 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
                       return (
                         <div
                           key={p.id}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={isSelected}
                           className={cn(
-                            'flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors',
+                            'flex w-full cursor-pointer items-center gap-3 rounded-2xl px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                             isSelected
                               ? 'bg-accent text-accent-foreground'
                               : 'hover:bg-muted/60 text-foreground/85',
                             !p.enabled && !isSelected && 'text-muted-foreground'
                           )}
                           onClick={() => void handleSelectChannel(p)}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return
+                            if (event.key !== 'Enter' && event.key !== ' ') return
+                            event.preventDefault()
+                            void handleSelectChannel(p)
+                          }}
                         >
                           <div className={cn('shrink-0', !p.enabled && 'opacity-40')}>
                             <ChannelIcon
@@ -1287,9 +1372,7 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
                                 )}
                               />
                             </div>
-                            <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                              {p.type}
-                            </p>
+                            <p className="mt-1 truncate text-xs text-muted-foreground">{p.type}</p>
                           </div>
                           <Switch
                             checked={p.enabled}
@@ -1319,7 +1402,10 @@ export function ChannelPanel({ projectId }: ChannelPanelProps = {}): React.JSX.E
           </div>
         </div>
 
-        <div className="min-h-0 min-w-0 bg-background/60">
+        <div
+          className="channel-settings-detail min-h-0 min-w-0 bg-background/60"
+          data-mobile-active={activeNarrowPane === 'config'}
+        >
           {selectedChannel ? (
             <ChannelConfigPanel plugin={selectedChannel} projectId={projectId} />
           ) : (

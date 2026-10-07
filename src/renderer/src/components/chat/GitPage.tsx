@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import {
   ChevronDown,
   ChevronRight,
@@ -960,7 +961,7 @@ export function GitPage(): React.JSX.Element {
                             placeholder={t('newBranchPlaceholder')}
                             className="h-8 flex-1 text-xs"
                             onKeyDown={(event) => {
-                              if (event.key === 'Enter') {
+                              if (event.key === 'Enter' && !isImeCommitKey(event)) {
                                 event.preventDefault()
                                 void handleCreateBranch(selectedRepo.fullPath)
                               }
@@ -1410,7 +1411,7 @@ export function GitPage(): React.JSX.Element {
             placeholder={t('newBranchPlaceholder')}
             className="h-9 text-sm"
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isImeCommitKey(e)) {
                 e.preventDefault()
                 void handleBranchDialogConfirm()
               }

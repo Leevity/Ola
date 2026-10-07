@@ -126,6 +126,27 @@ extension__demo_extension__show_table
 | `tools`               | 是                  | 工具列表                                     |
 | `renderers`           | 否                  | HTML 响应 UI renderer                        |
 
+HTTP 工具可以用 `artifact` 显式登记响应中的一个链接，供运行中心和结果中心回看。只接受 JSON Pointer 指定的字段；不会自动扫描任意响应文本。链接必须是无用户名/密码的 `http:` 或 `https:` URL。用户点击“打开链接”时才会交给系统浏览器打开。
+
+```json
+{
+  "name": "create_report",
+  "kind": "http",
+  "inputSchema": { "type": "object", "properties": {} },
+  "http": {
+    "method": "POST",
+    "url": "https://reports.example.com/api/reports"
+  },
+  "artifact": {
+    "kind": "link",
+    "urlPointer": "/report/url",
+    "titlePointer": "/report/title"
+  }
+}
+```
+
+示例接口响应：`{"report":{"url":"https://reports.example.com/r/123","title":"季度报告"}}`。缺少 URL 字段、URL 协议不受支持或 URL 含凭据时，不登记产物。`artifact` 仅适用于 HTTP 工具；本地文件不会因扩展响应而被信任或自动索引。
+
 配置字段示例：
 
 ```json

@@ -1,19 +1,9 @@
-import { useEffect, useState, useCallback, useSyncExternalStore } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 import {
   MessageSquare,
   CircleHelp,
   Code2,
   ShieldCheck,
-  Plus,
-  Settings,
-  Keyboard,
-  Sun,
-  Moon,
-  PanelLeft,
-  PanelRight,
-  Download,
-  Upload,
-  Trash2,
   Pin,
   Cpu,
   Sparkles,
@@ -32,63 +22,49 @@ import {
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import { useMemo } from 'react'
 import { useChatStore } from '@renderer/stores/chat-store'
-import { useUIStore, type AppMode } from '@renderer/stores/ui-store'
+import { useUIStore } from '@renderer/stores/ui-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
-import { abortSession, clearPendingSessionMessages } from '@renderer/hooks/use-chat-actions'
-import { useTheme } from 'next-themes'
-import type { ProviderType } from '@renderer/lib/api/types'
-import { exportSessionMarkdownFromDb } from '@renderer/lib/utils/export-chat'
+import { useChannelStore } from '@renderer/stores/channel-store'
+import { isProviderAvailableForModelSelection } from '@renderer/stores/provider-store'
+import { useWorkspaceModelRoute, useWorkspaceProviders } from '@renderer/hooks/use-workspace-models'
 import { openSessionOrFocusDetached } from '@renderer/lib/session-window'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { getWorkbenchActionsSnapshot, subscribeWorkbenchRegistry } from '@renderer/lib/workbench'
 
-const MODEL_PRESETS: Record<ProviderType, string[]> = {
-  'seedance-video': [],
-  anthropic: [
-    'claude-sonnet-4-5-20250929',
-    'claude-opus-4-5-20251101',
-    'claude-haiku-4-5-20251001',
-    'claude-sonnet-4-20250514',
-    'claude-opus-4-20250514',
-    '',
-    'claude-3-5-haiku-20241022'
-  ],
-  gemini: [
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-3.1-flash-lite-preview',
-    'gemini-3.1-flash-image-preview',
-    'gemini-3-pro-image-preview'
-  ],
-  'vertex-ai': ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-3.1-flash-lite-preview'],
-  'openai-chat': ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4o', 'gpt-4o-mini', 'o3-mini', 'o4-mini'],
-  'openai-responses': [
-    'gpt-4.1',
-    'gpt-4.1-mini',
-    'gpt-4o',
-    'gpt-4o-mini',
-    'o3-mini',
-    'o4-mini',
-    'gpt-5',
-    'gpt-5.1',
-    'gpt-5.2',
-    'gpt-5.2-mini',
-    'gpt-5.2-codex',
-    'gpt-5.1-codex-mini',
-    'gpt-5.3-codex'
-  ],
-  'openai-images': ['dall-e-3', 'dall-e-2', 'gpt-image-1']
-}
-
 export function CommandPalette(): React.JSX.Element {
   const { t } = useTranslation('layout')
-  const [open, setOpen] = useState(false)
+  const open = useUIStore((s) => s.commandPaletteOpen)
+  const setOpen = useUIStore((s) => s.setCommandPaletteOpen)
+  const providers = useWorkspaceProviders()
+  const mainModelRoute = useWorkspaceModelRoute('main')
+  const availableModels = useMemo(
+    () =>
+      providers
+        .filter(isProviderAvailableForModelSelection)
+        .flatMap((provider) =>
+          provider.models
+            .filter(
+              (model) => model.id && model.enabled && (!model.category || model.category === 'chat')
+            )
+            .map((model) => ({ provider, model }))
+        ),
+    [providers]
+  )
   const workbenchActions = useSyncExternalStore(
     subscribeWorkbenchRegistry,
     getWorkbenchActionsSnapshot,
     getWorkbenchActionsSnapshot
   )
+  const workbenchActionGroups = useMemo(() => {
+    const groups = new Map<string, typeof workbenchActions>()
+    for (const action of workbenchActions) {
+      if (action.showInPalette === false) continue
+      const group = action.group || t('commandPalette.actions')
+      groups.set(group, [...(groups.get(group) ?? []), action])
+    }
+    return [...groups.entries()]
+  }, [t, workbenchActions])
 
   const allSessions = useChatStore((s) => s.sessions)
   const workspaceId = useWorkspaceStore((s) => s.activeWorkspaceId)
@@ -97,45 +73,13 @@ export function CommandPalette(): React.JSX.Element {
     [allSessions, workspaceId]
   )
   const activeSessionId = useChatStore((s) => s.activeSessionId)
-  const deleteSession = useChatStore((s) => s.deleteSession)
-  const togglePinSession = useChatStore((s) => s.togglePinSession)
-  const updateSessionMode = useChatStore((s) => s.updateSessionMode)
   const updateSessionTaskProfile = useChatStore((s) => s.updateSessionTaskProfile)
-  const mode = useUIStore((s) => s.mode)
-  const chatView = useUIStore((s) => s.chatView)
-  const setMode = useUIStore((s) => s.setMode)
-  const toggleLeftSidebar = useUIStore((s) => s.toggleLeftSidebar)
-  const toggleRightPanel = useUIStore((s) => s.toggleRightPanel)
-  const openSettingsPage = useUIStore((s) => s.openSettingsPage)
-  const setShortcutsOpen = useUIStore((s) => s.setShortcutsOpen)
-
-  const { theme, setTheme } = useTheme()
-
-  // Ctrl+K to toggle
-  useEffect(() => {
-    const handler = (e: KeyboardEvent): void => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setOpen((v) => !v)
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
-
-  const runAndClose = useCallback((fn: () => void) => {
-    fn()
-    setOpen(false)
-  }, [])
-
-  const handleModeChange = useCallback(
-    (nextMode: AppMode): void => {
-      setMode(nextMode)
-      if (chatView === 'session' && activeSessionId) {
-        updateSessionMode(activeSessionId, nextMode)
-      }
+  const runAndClose = useCallback(
+    (fn: () => void) => {
+      fn()
+      setOpen(false)
     },
-    [activeSessionId, chatView, setMode, updateSessionMode]
+    [setOpen]
   )
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
@@ -165,106 +109,92 @@ export function CommandPalette(): React.JSX.Element {
   }
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} showCloseButton={false}>
+    <CommandDialog
+      open={open}
+      onOpenChange={setOpen}
+      showCloseButton={false}
+      title={t('commandPalette.title')}
+      description={t('commandPalette.description')}
+    >
       <CommandInput placeholder={t('commandPalette.placeholder')} />
       <CommandList>
         <CommandEmpty>{t('commandPalette.noResults')}</CommandEmpty>
 
         {/* Quick Actions */}
-        <CommandGroup heading={t('commandPalette.actions')}>
-          {workbenchActions.map((action) => (
-            <CommandItem
-              key={action.id}
-              keywords={action.keywords}
-              onSelect={() => runAndClose(() => void action.run())}
-            >
-              <Sparkles className="size-4" />
-              <span>{action.title}</span>
-            </CommandItem>
-          ))}
-          <CommandItem
-            onSelect={() =>
-              runAndClose(() => {
-                const uiStore = useUIStore.getState()
-                useChatStore.getState().setActiveProject(null)
-                uiStore.setMode('chat')
-                uiStore.navigateToHome()
-              })
-            }
-          >
-            <Plus className="size-4" />
-            <span>{t('commandPalette.newChat')}</span>
-            <CommandShortcut>Ctrl+N</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runAndClose(() => openSettingsPage())}>
-            <Settings className="size-4" />
-            <span>{t('commandPalette.openSettings')}</span>
-            <CommandShortcut>Ctrl+,</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runAndClose(() => setShortcutsOpen(true))}>
-            <Keyboard className="size-4" />
-            <span>{t('commandPalette.keyboardShortcuts')}</span>
-            <CommandShortcut>Ctrl+/</CommandShortcut>
-          </CommandItem>
-          <CommandItem
-            onSelect={() => runAndClose(() => setTheme(theme === 'dark' ? 'light' : 'dark'))}
-          >
-            {theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />}
-            <span>{t('commandPalette.toggleTheme')}</span>
-            <CommandShortcut>Ctrl+Shift+D</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runAndClose(toggleLeftSidebar)}>
-            <PanelLeft className="size-4" />
-            <span>{t('commandPalette.toggleSidebar')}</span>
-            <CommandShortcut>Ctrl+B</CommandShortcut>
-          </CommandItem>
-          <CommandItem onSelect={() => runAndClose(toggleRightPanel)}>
-            <PanelRight className="size-4" />
-            <span>{t('commandPalette.toggleRightPanel')}</span>
-            <CommandShortcut>Ctrl+Shift+B</CommandShortcut>
-          </CommandItem>
-          <CommandItem
-            onSelect={() =>
-              runAndClose(() => {
-                window.dispatchEvent(
-                  new KeyboardEvent('keydown', { key: 'o', ctrlKey: true, shiftKey: true })
-                )
-              })
-            }
-          >
-            <Upload className="size-4" />
-            <span>{t('commandPalette.importSessions')}</span>
-            <CommandShortcut>Ctrl+Shift+O</CommandShortcut>
-          </CommandItem>
-        </CommandGroup>
-
+        {workbenchActionGroups.map(([group, actions]) => (
+          <CommandGroup key={group} heading={group}>
+            {actions.map((action) => (
+              <CommandItem
+                key={action.id}
+                keywords={action.keywords}
+                disabled={action.enabledWhen ? !action.enabledWhen() : false}
+                onSelect={() => runAndClose(() => void action.run())}
+              >
+                <Sparkles className="size-4" />
+                <span>{action.title}</span>
+                {action.shortcut && <CommandShortcut>{action.shortcut}</CommandShortcut>}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        ))}
         <CommandSeparator />
 
         {/* Switch Model */}
         <CommandGroup heading={t('commandPalette.switchModel')}>
-          {MODEL_PRESETS[useSettingsStore.getState().provider]
-            ?.filter((m) => m !== useSettingsStore.getState().model)
-            .map((m) => (
+          {availableModels.length === 0 ? (
+            <CommandItem disabled>{t('commandPalette.noAvailableModels')}</CommandItem>
+          ) : (
+            availableModels.map(({ provider, model }) => (
               <CommandItem
-                key={m}
+                key={`${provider.id}:${model.id}`}
+                value={`${provider.name} ${model.name} ${model.id}`}
+                disabled={
+                  activeSession
+                    ? activeSession.modelSelectionMode === 'manual' &&
+                      provider.id === activeSession.providerId &&
+                      model.id === activeSession.modelId
+                    : provider.id === mainModelRoute.providerId &&
+                      model.id === mainModelRoute.modelId &&
+                      useSettingsStore.getState().mainModelSelectionMode === 'manual'
+                }
                 onSelect={() =>
                   runAndClose(() => {
-                    useSettingsStore.getState().updateSettings({ model: m })
-                    toast.success(`Model: ${m.replace(/-\d{8}$/, '')}`)
+                    if (activeSession) {
+                      useChatStore
+                        .getState()
+                        .setSessionModelManual(activeSession.id, provider.id, model.id)
+                      if (activeSession.pluginId) {
+                        void useChannelStore.getState().updateChannel(activeSession.pluginId, {
+                          providerId: provider.id,
+                          model: model.id
+                        })
+                      }
+                    } else {
+                      if (provider.id !== mainModelRoute.providerId) {
+                        mainModelRoute.setProvider(provider.id)
+                      }
+                      mainModelRoute.setModel(model.id)
+                      useSettingsStore
+                        .getState()
+                        .updateSettings({ mainModelSelectionMode: 'manual' })
+                    }
+                    toast.success(t('commandPalette.modelSelected', { model: model.name }))
                   })
                 }
               >
                 <Cpu className="size-4" />
-                <span>{m.replace(/-\d{8}$/, '')}</span>
+                <span>{model.name}</span>
+                <CommandShortcut>{provider.name}</CommandShortcut>
               </CommandItem>
-            ))}
+            ))
+          )}
         </CommandGroup>
 
         <CommandSeparator />
 
         <CommandSeparator />
 
-        <CommandGroup heading={t('commandPalette.switchProfile', { defaultValue: 'Work / Code' })}>
+        <CommandGroup heading={t('commandPalette.switchProfile')}>
           {(['work', 'code'] as const)
             .filter((profile) => profile !== activeSession?.taskProfile)
             .map((profile) => (
@@ -283,133 +213,39 @@ export function CommandPalette(): React.JSX.Element {
                 ) : (
                   <Code2 className="size-4" />
                 )}
-                <span className="capitalize">{profile}</span>
+                <span>{t(`sidebar.taskProfile.${profile}.title`)}</span>
               </CommandItem>
             ))}
         </CommandGroup>
 
         <CommandSeparator />
-
-        <CommandGroup heading={t('commandPalette.switchMode')}>
-          {(
-            [
-              {
-                value: 'chat' as AppMode,
-                label: t('commandPalette.switchToChat'),
-                icon: <MessageSquare className="size-4" />
-              },
-              {
-                value: 'clarify' as AppMode,
-                label: t('commandPalette.switchToClarify'),
-                icon: <CircleHelp className="size-4" />
-              },
-              {
-                value: 'execute' as AppMode,
-                label: t('commandPalette.switchToExecute'),
-                icon: <Code2 className="size-4" />
-              },
-              {
-                value: 'acp' as AppMode,
-                label: t('commandPalette.switchToAcp'),
-                icon: <ShieldCheck className="size-4" />
-              }
-            ] as const
-          )
-            .filter((m) => m.value !== mode)
-            .map((m) => (
-              <CommandItem
-                key={m.value}
-                onSelect={() => runAndClose(() => handleModeChange(m.value))}
-              >
-                {m.icon}
-                <span>{m.label}</span>
-              </CommandItem>
-            ))}
-        </CommandGroup>
-
-        <CommandSeparator />
-
-        {/* Current Session */}
-        {activeSession && (
-          <>
-            <CommandGroup heading={t('commandPalette.currentSession')}>
-              <CommandItem
-                onSelect={() =>
-                  runAndClose(() => {
-                    if (!activeSessionId) return
-                    const latest = useChatStore
-                      .getState()
-                      .sessions.find((s) => s.id === activeSessionId)
-                    if (!latest) return
-                    exportSessionMarkdownFromDb(latest)
-                      .then((md) => {
-                        navigator.clipboard.writeText(md)
-                        toast.success(t('commandPalette.copiedConversation'))
-                      })
-                      .catch(() => {})
-                  })
-                }
-              >
-                <Download className="size-4" />
-                <span>{t('commandPalette.exportCurrentChat')}</span>
-                <CommandShortcut>Ctrl+Shift+E</CommandShortcut>
-              </CommandItem>
-              <CommandItem onSelect={() => runAndClose(() => togglePinSession(activeSessionId!))}>
-                <Pin className="size-4" />
-                <span>
-                  {activeSession.pinned
-                    ? t('commandPalette.unpinSession')
-                    : t('commandPalette.pinSession')}
-                </span>
-              </CommandItem>
-              {sessions.length > 1 && (
-                <CommandItem
-                  onSelect={() =>
-                    runAndClose(() => {
-                      abortSession(activeSessionId!)
-                      clearPendingSessionMessages(activeSessionId!)
-                      deleteSession(activeSessionId!)
-                    })
-                  }
-                >
-                  <Trash2 className="size-4 text-destructive" />
-                  <span className="text-destructive">
-                    {t('commandPalette.deleteCurrentSession')}
-                  </span>
-                </CommandItem>
-              )}
-            </CommandGroup>
-            <CommandSeparator />
-          </>
-        )}
 
         {/* Quick Prompts */}
         <CommandGroup heading={t('commandPalette.quickPrompts')}>
           {[
             {
               label: t('commandPalette.explainCode'),
-              prompt:
-                'Explain the following code in detail, including what it does and how it works:\n\n'
+              prompt: t('commandPalette.quickPromptText.explainCode')
             },
             {
               label: t('commandPalette.findBugs'),
-              prompt: 'Review the following code for bugs, edge cases, and potential issues:\n\n'
+              prompt: t('commandPalette.quickPromptText.findBugs')
             },
             {
               label: t('commandPalette.addErrorHandling'),
-              prompt: 'Add comprehensive error handling to the following code:\n\n'
+              prompt: t('commandPalette.quickPromptText.addErrorHandling')
             },
             {
               label: t('commandPalette.writeTests'),
-              prompt: 'Write thorough unit tests for the following code:\n\n'
+              prompt: t('commandPalette.quickPromptText.writeTests')
             },
             {
               label: t('commandPalette.refactor'),
-              prompt: 'Refactor the following code for better readability and maintainability:\n\n'
+              prompt: t('commandPalette.quickPromptText.refactor')
             },
             {
               label: t('commandPalette.addTypes'),
-              prompt: 'Add proper TypeScript types and interfaces to the following code:\n\n'
+              prompt: t('commandPalette.quickPromptText.addTypes')
             }
           ].map((p) => (
             <CommandItem
@@ -453,7 +289,7 @@ export function CommandPalette(): React.JSX.Element {
                 <span className="truncate">{s.title}</span>
                 <span className="ml-auto flex items-center gap-1 text-[10px] text-muted-foreground/40">
                   {s.pinned && <Pin className="size-2.5" />}
-                  {s.messageCount}msg
+                  {t('commandPalette.messageCount', { count: s.messageCount })}
                 </span>
               </CommandItem>
             ))}

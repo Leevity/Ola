@@ -7,11 +7,13 @@ export const SETTINGS_CARD_CLASS = 'rounded-xl border border-border/60 bg-muted/
 
 export function SettingsPageHeader({
   title,
+  titleId,
   description,
   icon: Icon,
   className
 }: {
   title: string
+  titleId?: string
   description?: string
   icon?: React.ComponentType<{ className?: string }>
   className?: string
@@ -20,7 +22,9 @@ export function SettingsPageHeader({
     <header className={cn('flex items-start gap-3', className)}>
       {Icon ? <Icon className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden="true" /> : null}
       <div className="min-w-0">
-        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+        <h2 id={titleId} className="text-xl font-semibold text-foreground">
+          {title}
+        </h2>
         {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
       </div>
     </header>
@@ -50,9 +54,9 @@ export function SettingsSectionCard({
             <Icon className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
           ) : null}
           <div className="min-w-0">
-            <h3 className="text-sm font-semibold text-foreground/90">{title}</h3>
+            <h3 className="text-[0.9375rem] font-semibold text-foreground/90">{title}</h3>
             {description ? (
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+              <p className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground">{description}</p>
             ) : null}
           </div>
         </div>
@@ -79,7 +83,7 @@ export function SettingsField({
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium text-foreground/90">{label}</p>
         {description ? (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+          <p className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground">{description}</p>
         ) : null}
       </div>
       <div className="shrink-0">{children}</div>
@@ -97,7 +101,7 @@ export function SettingsEmptyState({ children }: { children: ReactNode }): React
 
 export function SettingsSafetyNotice({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs leading-5 text-muted-foreground">
+    <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-[0.8125rem] leading-5 text-muted-foreground">
       <AlertTriangle
         className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
         aria-hidden="true"
@@ -109,7 +113,7 @@ export function SettingsSafetyNotice({ children }: { children: ReactNode }): Rea
 
 export function SettingsInfoNotice({ children }: { children: ReactNode }): React.JSX.Element {
   return (
-    <div className="flex gap-2 rounded-lg border border-border/60 bg-muted/10 p-3 text-xs leading-5 text-muted-foreground">
+    <div className="flex gap-2 rounded-lg border border-border/60 bg-muted/10 p-3 text-[0.8125rem] leading-5 text-muted-foreground">
       <Info className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden="true" />
       <p>{children}</p>
     </div>
@@ -130,9 +134,9 @@ export function SettingsPanelSection({
   return (
     <section className={cn('space-y-4', className)}>
       <div>
-        <h3 className="text-sm font-semibold text-foreground/90">{title}</h3>
+        <h3 className="text-[0.9375rem] font-semibold text-foreground/90">{title}</h3>
         {description ? (
-          <p className="mt-1 text-xs leading-5 text-muted-foreground">{description}</p>
+          <p className="mt-1 text-[0.8125rem] leading-5 text-muted-foreground">{description}</p>
         ) : null}
       </div>
       {children}

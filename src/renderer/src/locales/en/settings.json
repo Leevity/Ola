@@ -1,4 +1,21 @@
 {
+  "providerHealth": {
+    "title": "Model provider health",
+    "description": "Tracks temporary request outcomes without reading or showing request credentials.",
+    "lastChecked": "Last checked: {{time}}",
+    "notChecked": "Provider status has not been checked",
+    "loadFailed": "Status check failed",
+    "retryHint": "Provider status could not be loaded. Refresh to retry; failures are never shown as healthy.",
+    "refresh": "Refresh provider status",
+    "requestCounts": "Successful requests / total requests",
+    "reset": "Reset health statistics for {{provider}}",
+    "empty": "No requests have been recorded, so provider health is unknown.",
+    "status": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Unavailable"
+    }
+  },
   "wiki": {
     "title": "Project Wiki",
     "subtitle": "Build an incremental local project map",
@@ -44,7 +61,18 @@
     "cancelReplay": "Cancel replay",
     "flowSummary": "{{name}} · {{count}} steps",
     "run": "Run",
-    "delete": "Delete {{name}}"
+    "delete": "Delete {{name}}",
+    "errors": {
+      "workspaceUnavailable": "This workspace is temporarily unavailable. Desktop flows could not be loaded.",
+      "loadFailed": "Could not load desktop flows. Try again.",
+      "retry": "Retry loading",
+      "startFailed": "Could not start recording. Check desktop recording permissions and try again.",
+      "stopFailed": "Could not stop or save the recording. Check the current recording state.",
+      "saveFailed": "Could not save the desktop flow.",
+      "replayFailed": "Replay failed. Check the flow and run history.",
+      "cancelFailed": "Could not cancel replay.",
+      "deleteFailed": "Could not delete the desktop flow."
+    }
   },
   "hooks": {
     "title": "Automation hooks",
@@ -118,6 +146,8 @@
     "globalScope": "Global",
     "saving": "Saving…",
     "saved": "Saved",
+    "failed": "Save failed",
+    "retrySave": "Retry saving settings",
     "poweredBy": "Powered by Ola",
     "groups": {
       "general": "General",
@@ -408,6 +438,13 @@
     },
     "status": {
       "title": "Status",
+      "state": {
+        "idle": "Idle",
+        "running": "Syncing",
+        "success": "Synced",
+        "conflict": "Needs conflict resolution",
+        "error": "Sync failed"
+      },
       "device": "Device: {{deviceId}}",
       "lastRun": "Last run",
       "remoteUpdated": "Remote updated",
@@ -774,8 +811,58 @@
     }
   },
   "capabilityCenter": {
+    "refreshFailed": "Some capabilities could not be checked. Review the affected row and open its settings to repair.",
     "title": "Capability Center",
     "description": "Manage installed capabilities, custom extensions, MCP servers, skills, channels, scopes, permissions, and health from one place.",
+    "healthTitle": "Capability connection and installation status",
+    "healthDescription": "Summarizes states that have been read. Unchecked, no request history, and load failures remain distinct and are never inferred as healthy.",
+    "refreshHealth": "Refresh status",
+    "openSettings": "Settings",
+    "diagnostics": {
+      "export": "Export redacted diagnostics",
+      "exportSuccess": "Redacted diagnostics saved.",
+      "exportFailed": "Could not export diagnostics.",
+      "privacyHint": "Exports aggregate states, counts, and time only; names, identifiers, paths, configuration, credentials, messages, and raw errors are excluded."
+    },
+    "health": {
+      "providers": "Model providers",
+      "skills": "Skills",
+      "extensions": "Extensions",
+      "builtinPlugins": "Built-in plugin setup",
+      "mcp": "MCP servers",
+      "channels": "Channels in the current workspace"
+    },
+    "healthTone": {
+      "healthy": "Healthy",
+      "attention": "Needs attention",
+      "unknown": "Unconfirmed",
+      "inventory": "Inventoried"
+    },
+    "healthDetail": {
+      "loadFailed": "Could not read status. Retry from the corresponding settings page.",
+      "notChecked": "Status has not been read yet.",
+      "noProviderRequests": "No request history is available to assess provider health.",
+      "providerCounts": "{{healthy}} of {{total}} providers have healthy recent requests; read at {{checkedAt}}",
+      "skillCount": "{{count}} Skills installed; installation does not mean every Skill fits the current task.",
+      "extensionCounts": "{{installed}} installed, {{enabled}} enabled; enabled does not mean the extension is running correctly.",
+      "builtinPluginCounts": "{{enabled}} of {{total}} enabled; {{needsSetup}} need required configuration (this check includes image model setup).",
+      "mcpCounts": "{{enabled}} enabled, {{connected}} connected, {{connecting}} connecting, {{disconnected}} disconnected, {{failed}} with errors; checked at {{checkedAt}}",
+      "channelCounts": "{{enabled}} enabled, {{running}} running, {{stopped}} stopped, {{failed}} with errors; checked at {{checkedAt}}",
+      "noneEnabled": "Nothing is enabled in this category.",
+      "statusCheckFailed": "Could not read one or more channel statuses. Retry in Channel settings."
+    },
+    "lifecycleTitle": "Capability delivery status",
+    "lifecycleDescription": "Status labels reflect each capability's actual delivery stage and availability.",
+    "lifecyclePolicy": "Delivery status",
+    "status": { "ga": "Generally available", "beta": "In testing" },
+    "capabilities": {
+      "local-agent-workspace": "Local Agent workspace",
+      "remote-ssh-operations": "Remote SSH operations",
+      "channel-automation": "Channel automation",
+      "browser-cookie-import": "Browser cookie import",
+      "media-generation": "Media generation",
+      "unified-execution-audit": "Unified execution audit"
+    },
     "installed": "Installed capabilities",
     "extensions": "Extensions",
     "mcp": "MCP servers",
@@ -1116,6 +1203,10 @@
     "openFullSettings": "Open Full Settings"
   },
   "provider": {
+    "credentialVaultUnavailable": {
+      "title": "Provider credentials are unavailable",
+      "description": "Encrypted storage could not be read. Editing is paused to protect saved accounts. Quit and reopen Ola; if this continues, keep your local data and check the logs."
+    },
     "accounts": {
       "title": "OAuth Accounts",
       "addAccount": "Add Account",
@@ -1154,6 +1245,7 @@
         "importFailed": "Import failed: {{error}}",
         "fileApiMissing": "File picker API is not available",
         "exportCopied": "Accounts JSON copied to clipboard",
+        "clipboardUnavailable": "Clipboard is unavailable",
         "exportFailed": "Export failed: {{error}}",
         "refreshSuccess": "Token refreshed",
         "refreshFailed": "Refresh failed: {{error}}",
@@ -1477,6 +1569,9 @@
   "channel": {
     "title": "Channels",
     "subtitle": "Configure and manage your channels",
+    "narrowPaneLabel": "Channel view",
+    "narrowList": "Channel list",
+    "narrowConfig": "Channel settings",
     "search": "Search channels...",
     "platforms": "Platforms",
     "categoryChina": "China",
@@ -1521,7 +1616,7 @@
     "disabled": "Disabled",
     "conversations": "Conversations",
     "conversationsDesc": "Channel conversation history will appear here.",
-    "messagesCleared": "Messages cleared",
+    "messagesCleared": "Conversation and tasks cleared",
     "sessionDeleted": "Conversation deleted",
     "clearMessages": "Clear messages",
     "deleteSession": "Delete conversation",
@@ -1767,6 +1862,9 @@
     "tools": "Tools",
     "renderers": "Renderers",
     "components": "Components",
+    "workbenchViews": "Workbench views",
+    "workbenchCommands": "Commands",
+    "workbenchCommandsHint": "Enabled commands are available in the command palette.",
     "hostRendered": "host-rendered",
     "network": "Network",
     "noNetwork": "No network access",
@@ -1813,8 +1911,12 @@
     "toggleRightPanel": "Toggle right panel",
     "commandPalette": "Command Palette",
     "prevNextSession": "Previous/next session",
-    "switchMode": "Switch mode (Chat/Cowork/Code)",
+    "previousSession": "Switch to previous session",
+    "nextSession": "Switch to next session",
+    "switchMode": "Switch mode (Chat/Clarify/Execute/ACP)",
     "scrollTopBottom": "Scroll to top/bottom",
+    "scrollTop": "Scroll to conversation top",
+    "scrollBottom": "Scroll to conversation bottom",
     "cycleRightTab": "Cycle right panel tab",
     "sendMessage": "Send message",
     "sendMessageAlt": "Send message (alt)",

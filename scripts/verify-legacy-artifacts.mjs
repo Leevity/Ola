@@ -1,5 +1,9 @@
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import path from 'node:path'
+import { createRequire } from 'node:module'
+import { isLegacyRuntimeArtifactPath } from './legacy-runtime-artifact-patterns.mjs'
+
+const asar = createRequire(import.meta.url)('@electron/asar')
 
 const target = process.argv[2] ?? 'out'
 const root = path.resolve(target)
@@ -7,17 +11,9 @@ if (!existsSync(root) || !statSync(root).isDirectory()) {
   throw new Error(`Unpacked app root does not exist: ${root}`)
 }
 
-const forbidden = [
-  /^Ola\.Native\.Worker(?:\.exe)?$/i,
-  /^Ola\.CodeGraph\.Worker(?:\.exe)?$/i,
-  /^Ola\.(?:Native|CodeGraph|Worker)\.[^/]*\.dll$/i,
-  /\.runtimeconfig\.json$/i,
-  /\.deps\.json$/i,
-  /^hostfxr(?:\.dll|\.so|\.dylib)?$/i,
-  /^hostpolicy(?:\.dll|\.so|\.dylib)?$/i
-]
 const findings = []
 let count = 0
+let archiveEntryCount = 0
 const queue = [root]
 while (queue.length) {
   const directory = queue.pop()
@@ -27,14 +23,25 @@ while (queue.length) {
     if (entry.isDirectory()) queue.push(filename)
     else if (entry.isFile()) {
       count++
-      if (forbidden.some((pattern) => pattern.test(entry.name))) {
+      if (isLegacyRuntimeArtifactPath(path.relative(root, filename))) {
         findings.push(path.relative(root, filename))
+      }
+      if (entry.name === 'app.asar') {
+        const entries = asar.listPackage(filename)
+        archiveEntryCount += entries.length
+        for (const archivePath of entries) {
+          if (isLegacyRuntimeArtifactPath(archivePath)) {
+            findings.push(`${path.relative(root, filename)}:${archivePath}`)
+          }
+        }
       }
     }
   }
 }
 
-console.log(`Inspected ${count} unpacked files under ${root}`)
+console.log(
+  `Inspected ${count} unpacked files and ${archiveEntryCount} app.asar entries under ${root}`
+)
 if (findings.length) {
   for (const filename of findings.slice(0, 25))
     console.error(`legacy runtime artifact: ${filename}`)

@@ -31,7 +31,7 @@ export function LoginProgressOverlay({ open, step, domain }: Props): React.JSX.E
   if (!open) return null
   return (
     <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex justify-center">
-      <div className="m-2 flex items-center gap-2 rounded-md border border-border/70 bg-background/95 px-3 py-1.5 text-[11px] shadow-md backdrop-blur">
+      <div className="m-2 flex items-center gap-2 rounded-md border border-border/70 bg-background/95 px-3 py-1.5 text-xs shadow-md backdrop-blur">
         {step === 'paused' || step === 'failed' ? (
           <KeyRound className="size-3 text-amber-500" />
         ) : (

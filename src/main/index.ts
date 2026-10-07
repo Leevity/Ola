@@ -1,6 +1,5 @@
 import {
   app,
-  shell,
   BrowserWindow,
   ipcMain,
   Menu,
@@ -143,9 +142,12 @@ import {
   configureBuiltInBrowserSession,
   flushBuiltInBrowserStorage,
   getBuiltInBrowserStorageSessions,
-  resolveBrowserSessionStorageMode
+  resolveBrowserSessionStorageMode,
+  shouldUseDefaultBrowserSession
 } from './browser/browser-emulation'
-import { isBuiltInBrowserPartition } from '../shared/browser-plugin'
+import { browserPartitionForWorkspace } from '../shared/browser-plugin'
+import { registerTrustedRendererUrl } from './renderer-security'
+import { assertTrustedRendererIpcEvent } from './renderer-security'
 
 import {
   acknowledgeChannelTaskDelivery,
@@ -445,6 +447,7 @@ function registerBinaryInvokeHandler<TArgs>(
   handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<unknown> | unknown
 ): void {
   ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args, event))
   })
@@ -815,6 +818,7 @@ async function loadRendererWindow(
   searchParams?: URLSearchParams
 ): Promise<void> {
   const rendererUrl = buildRendererUrl(searchParams)
+  registerTrustedRendererUrl(window, rendererUrl)
   try {
     await window.loadURL(rendererUrl)
   } catch (error) {
@@ -824,6 +828,7 @@ async function loadRendererWindow(
     if (!is.dev || rendererUrl.startsWith('file:')) throw error
 
     const fallbackUrl = buildBundledRendererUrl(searchParams)
+    registerTrustedRendererUrl(window, fallbackUrl)
     console.warn('[Main] Dev renderer failed to load; falling back to bundled renderer', {
       rendererUrl,
       fallbackUrl,
@@ -989,17 +994,18 @@ function closeDetachedSessionWindow(sessionId: string): boolean {
 }
 
 async function openDetachedSessionWindow(
-  sessionId: string
+  sessionId: string,
+  workspaceId: string
 ): Promise<{ handled: boolean; created?: boolean; error?: string }> {
-  if (!sessionId) {
-    return { handled: false, error: 'missing-session-id' }
+  if (!sessionId || !workspaceId) {
+    return { handled: false, error: 'missing-session-or-workspace-id' }
   }
 
   if (focusDetachedSessionWindow(sessionId)) {
     return { handled: true, created: false }
   }
 
-  const session = await sessionsDao.getSession(sessionId)
+  const session = await sessionsDao.getSession(sessionId, workspaceId)
   if (!session) {
     return { handled: false, error: 'session-not-found' }
   }
@@ -1019,7 +1025,7 @@ async function openDetachedSessionWindow(
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       webviewTag: true
     }
   })
@@ -1193,8 +1199,11 @@ function registerWindowControlHandlers(): void {
   })
 
   registerMessagePackHandler<string>('session-window:open', async (sessionId, event) => {
-    if (!getTrustedWorkspaceRegistrationWindow(event)) throw new Error('UNTRUSTED_IPC_SENDER')
-    return openDetachedSessionWindow(sessionId)
+    const senderWindow = getTrustedWorkspaceRegistrationWindow(event)
+    if (!senderWindow) throw new Error('UNTRUSTED_IPC_SENDER')
+    const workspaceId = getRegisteredWindowWorkspace(senderWindow)
+    if (!workspaceId) throw new Error('WINDOW_WORKSPACE_UNAVAILABLE')
+    return openDetachedSessionWindow(sessionId, workspaceId)
   })
 
   registerMessagePackHandler<string>('session-window:focus-if-open', (sessionId, event) => {
@@ -1203,6 +1212,7 @@ function registerWindowControlHandlers(): void {
   })
 
   ipcMain.on(toMessagePackChannel('agent:session-visibility'), (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     rememberVisibleSessionWindow(
       event,
       decodeMessagePackPayload<{ sessionId?: string; visible?: boolean }>(bytes)
@@ -1210,14 +1220,17 @@ function registerWindowControlHandlers(): void {
   })
 
   ipcMain.on(toMessagePackChannel('session-runtime:sync'), (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     routeRuntimeSync(event, 'session-runtime:sync', decodeMessagePackPayload(bytes))
   })
 
   ipcMain.on(toMessagePackChannel('session-control:sync'), (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     routeRuntimeSync(event, 'session-control:sync', decodeMessagePackPayload(bytes))
   })
 
   ipcMain.on(toMessagePackChannel('agent-runtime:sync'), (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     routeRuntimeSync(event, 'agent-runtime:sync', decodeMessagePackPayload(bytes))
   })
 }
@@ -1238,7 +1251,13 @@ function configureAppWindow(
   window.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const sourceUrl = params.src ?? ''
     const isHttpUrl = /^https?:\/\//i.test(sourceUrl)
-    const isAllowedPartition = !params.partition || isBuiltInBrowserPartition(params.partition)
+    const workspaceId = getRegisteredWindowWorkspace(window)
+    const expectedPartition = workspaceId ? browserPartitionForWorkspace(workspaceId) : null
+    const isAllowedPartition =
+      workspaceId !== null &&
+      (shouldUseDefaultBrowserSession(workspaceId ?? undefined)
+        ? !params.partition
+        : params.partition === expectedPartition)
 
     if (!isHttpUrl || !isAllowedPartition) {
       event.preventDefault()
@@ -1290,17 +1309,6 @@ function configureAppWindow(
     forgetVisibleSessionWindow(window.id)
     options?.onClosed?.()
   })
-
-  window.webContents.setWindowOpenHandler((details) => {
-    const url = details.url || ''
-    if (/^https?:\/\//i.test(url)) {
-      void shell.openExternal(url).catch((error) => {
-        console.error('[Main] Failed to open external URL:', url, error)
-      })
-    }
-
-    return { action: 'deny' }
-  })
 }
 
 function createWindow(): void {
@@ -1327,7 +1335,7 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       webviewTag: true
     }
   })
@@ -1402,7 +1410,7 @@ async function createSshWindow(): Promise<void> {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
       webviewTag: false
     }
   })
@@ -1471,8 +1479,6 @@ app.on('before-quit', (event) => {
   isQuiting = true
   if (quitStateFlushed) {
     flushBuiltInBrowserStorage()
-    void flushSettingsSync()
-    void desktopRuntime.stop()
     stopBackgroundServicesForQuit()
     return
   }
@@ -1484,13 +1490,13 @@ app.on('before-quit', (event) => {
     await markPetClosedForAppQuit().catch((error) => {
       console.error('[Pet] Failed to mark desktop pet closed before quit:', error)
     })
-    quitStateFlushed = true
     flushBuiltInBrowserStorage()
-    void flushSettingsSync()
     await desktopRuntime.stop().catch((error) => {
       console.error('[TsRuntime] Failed to stop desktop runtime before quit:', error)
     })
+    await flushSettingsSync()
     stopBackgroundServicesForQuit()
+    quitStateFlushed = true
     app.quit()
   })()
 })

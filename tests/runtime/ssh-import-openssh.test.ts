@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { join } from 'node:path'
 import { normalizeSshConfigDocument } from '../../src/main/ssh/ssh-config-json'
 import { applySshImportPreview } from '../../src/main/ssh/ssh-import-ola'
 import { parseKnownHosts, previewOpenSshImport } from '../../src/main/ssh/ssh-import-openssh'
@@ -55,7 +56,7 @@ Host new
       {
         importId: '1:box:box.invalid:22:alice',
         authType: 'privateKey',
-        privateKeyPath: '/home/alice/.ssh/id_box',
+        privateKeyPath: join('/home/alice', '.ssh', 'id_box'),
         proxyJump: 'jump',
         hasKnownHost: true,
         conflictConnectionId: 'existing',
@@ -99,7 +100,7 @@ Host new
       startupCommand: 'echo ready',
       defaultDirectory: '/work',
       keepAliveInterval: 31,
-      privateKeyPath: '/home/alice/.ssh/id_new',
+      privateKeyPath: join('/home/alice', '.ssh', 'id_new'),
       createdAt: 10,
       updatedAt: 100
     })

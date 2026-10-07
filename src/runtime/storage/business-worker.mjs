@@ -43,15 +43,32 @@ async function verifiedHandoverPath() {
     throw new Error('BUSINESS_HANDOVER_MANIFEST_INVALID')
   let backupStat
   try {
-    backupStat = lstatSync(backupPath)
+    backupStat = lstatSync(backupPath, { bigint: true })
   } catch {
     throw new Error('BUSINESS_HANDOVER_BACKUP_UNSAFE')
   }
-  if (!backupStat.isFile() || backupStat.isSymbolicLink() || (backupStat.mode & 0o077) !== 0)
+  if (
+    !backupStat.isFile() ||
+    backupStat.isSymbolicLink() ||
+    (process.platform !== 'win32' && (backupStat.mode & 0o077n) !== 0n)
+  )
+    throw new Error('BUSINESS_HANDOVER_BACKUP_UNSAFE')
+  let sourceStat
+  try {
+    sourceStat = statSync(manifest.sourcePath, { bigint: true })
+  } catch {
+    // A completed handover can outlive its source database.
+  }
+  if (
+    sourceStat &&
+    backupStat.ino > 0n &&
+    backupStat.dev === sourceStat.dev &&
+    backupStat.ino === sourceStat.ino
+  )
     throw new Error('BUSINESS_HANDOVER_BACKUP_UNSAFE')
   let rollbackStat
   try {
-    rollbackStat = lstatSync(manifest.rollbackPath)
+    rollbackStat = lstatSync(manifest.rollbackPath, { bigint: true })
   } catch {
     throw new Error('BUSINESS_HANDOVER_ROLLBACK_UNAVAILABLE')
   }
@@ -59,19 +76,13 @@ async function verifiedHandoverPath() {
     !rollbackStat.isFile() ||
     rollbackStat.isSymbolicLink() ||
     (process.platform === 'win32'
-      ? (rollbackStat.mode & 0o222) !== 0
-      : (rollbackStat.mode & 0o377) !== 0) ||
-    rollbackStat.size !== manifest.rollbackSize
+      ? (rollbackStat.mode & 0o222n) !== 0n
+      : (rollbackStat.mode & 0o377n) !== 0n) ||
+    rollbackStat.size !== BigInt(manifest.rollbackSize)
   )
     throw new Error('BUSINESS_HANDOVER_ROLLBACK_UNSAFE')
-  let sourceStat
-  try {
-    sourceStat = statSync(manifest.sourcePath)
-  } catch {
-    // A completed handover can outlive its source database.
-  }
   if (
-    rollbackStat.ino > 0 &&
+    rollbackStat.ino > 0n &&
     ((rollbackStat.dev === backupStat.dev && rollbackStat.ino === backupStat.ino) ||
       (sourceStat && rollbackStat.dev === sourceStat.dev && rollbackStat.ino === sourceStat.ino))
   )
@@ -1360,6 +1371,19 @@ function sessionProjectModelSource(value, workspaceId) {
   return trimmed
 }
 
+function taskProfile(value) {
+  if (value === null) return null
+  if (value !== 'work' && value !== 'code') throw new Error('INVALID_BUSINESS_TASK_PROFILE')
+  return value
+}
+
+function scenarioPolicy(value) {
+  if (value == null) return null
+  if (value !== 'project-read-only' && value !== 'ssh-read-only' && value !== 'materials-no-tools')
+    throw new Error('INVALID_BUSINESS_SCENARIO_POLICY')
+  return value
+}
+
 function sessionProviderId(value, workspaceId) {
   const providerId = normalizedOptionalText(value, 'PROVIDER')
   if (
@@ -1446,7 +1470,9 @@ function session(id, workspaceId) {
       .prepare(
         `SELECT id, title, icon, mode, created_at, updated_at, project_id, working_folder,
                 ssh_connection_id, plan_id, pinned, plugin_id, external_chat_id, provider_id,
-                model_id, model_selection_mode, model_source, workspace_id, message_count
+                model_id, model_selection_mode, model_source, task_profile, task_profile_locked,
+                scenario_policy,
+                workspace_id, message_count
            FROM sessions WHERE id=? AND workspace_id=?`
       )
       .get(id, workspaceId) ?? null
@@ -3039,7 +3065,9 @@ function dispatch(method, args = {}) {
       .prepare(
         `SELECT id, title, icon, mode, created_at, updated_at, project_id, working_folder,
                 ssh_connection_id, plan_id, pinned, plugin_id, external_chat_id, provider_id,
-                model_id, model_selection_mode, model_source, workspace_id, message_count
+                model_id, model_selection_mode, model_source, task_profile, task_profile_locked,
+                scenario_policy,
+                workspace_id, message_count
            FROM sessions WHERE workspace_id=?
           ORDER BY pinned DESC, updated_at DESC, id DESC LIMIT ? OFFSET ?`
       )
@@ -3154,7 +3182,7 @@ function dispatch(method, args = {}) {
       .prepare(
         `SELECT id,title,icon,mode,created_at,updated_at,project_id,working_folder,
       ssh_connection_id,plan_id,pinned,plugin_id,external_chat_id,provider_id,model_id,
-      model_selection_mode,message_count,workspace_id FROM sessions
+      model_selection_mode,task_profile,task_profile_locked,scenario_policy,message_count,workspace_id FROM sessions
       WHERE plugin_id=? AND workspace_id=? ORDER BY updated_at DESC,id DESC`
       )
       .all(text(args.pluginId, 'PLUGIN'), text(args.workspaceId, 'WORKSPACE'))
@@ -3164,7 +3192,7 @@ function dispatch(method, args = {}) {
       .prepare(
         `SELECT id,title,icon,mode,created_at,updated_at,project_id,working_folder,
       ssh_connection_id,plan_id,pinned,plugin_id,external_chat_id,provider_id,model_id,
-      model_selection_mode,message_count,workspace_id FROM sessions
+      model_selection_mode,task_profile,task_profile_locked,scenario_policy,message_count,workspace_id FROM sessions
       WHERE plugin_id IS NOT NULL AND plugin_id!='' AND workspace_id=?
       ORDER BY updated_at DESC,id DESC`
       )
@@ -3176,7 +3204,7 @@ function dispatch(method, args = {}) {
         .prepare(
           `SELECT id,title,icon,mode,created_at,updated_at,project_id,working_folder,
       ssh_connection_id,plan_id,pinned,plugin_id,external_chat_id,provider_id,model_id,
-      model_selection_mode,message_count,workspace_id FROM sessions
+      model_selection_mode,task_profile,task_profile_locked,scenario_policy,message_count,workspace_id FROM sessions
       WHERE external_chat_id=? AND workspace_id=?
         AND plugin_id IS NOT NULL AND plugin_id!='' LIMIT 1`
         )
@@ -4213,6 +4241,16 @@ function dispatch(method, args = {}) {
     const now = timestamp(args.now, 'CRON_RECOVERY_TIME')
     db.exec('BEGIN IMMEDIATE')
     try {
+      db.prepare(
+        `
+        UPDATE cron_run_deliveries
+        SET status='unknown',finished_at=?,error_code='PROCESS_INTERRUPTED'
+        WHERE status='pending' AND run_id IN (
+          SELECT id FROM cron_runs
+          WHERE job_id IN (SELECT id FROM cron_jobs WHERE workspace_id=?)
+        )
+      `
+      ).run(now, workspaceId)
       const abortedRuns = db
         .prepare(
           `UPDATE cron_runs
@@ -4245,6 +4283,14 @@ function dispatch(method, args = {}) {
   }
   if (method === 'cron-runs-list') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const values = [workspaceId]
+    const boundary = (key, inclusive) => {
+      if (!key) return ''
+      values.push(key.at, key.at, key.id)
+      return `AND (r.started_at < ? OR (r.started_at=? AND r.id ${inclusive ? '<=' : '<'} ?))`
+    }
+    const anchor = boundary(args.anchor, true)
+    const after = boundary(args.after, false)
     return db
       .prepare(
         `SELECT r.id,r.job_id,r.started_at,r.finished_at,r.status,r.tool_call_count,r.output_summary,
@@ -4252,11 +4298,19 @@ function dispatch(method, args = {}) {
                 r.source_session_id_snapshot,r.source_session_title_snapshot,
                 r.source_project_id_snapshot,r.source_project_name_snapshot,
                 r.source_provider_id_snapshot,r.model_snapshot,r.model_source_snapshot,
-                r.working_folder_snapshot,r.delivery_mode_snapshot,r.delivery_target_snapshot
+                r.working_folder_snapshot,r.delivery_mode_snapshot,r.delivery_target_snapshot,r.run_kind,
+                (SELECT CASE
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='failed' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'failed'
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='unknown' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'unknown'
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='pending' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'pending'
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='sent' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'sent'
+                  ELSE NULL END FROM cron_run_deliveries d WHERE d.run_id=r.id) AS delivery_status
            FROM cron_runs r JOIN cron_jobs j ON j.id=r.job_id WHERE j.workspace_id=?
+          ${args.attentionOnly ? "AND (r.status IN ('error','failed') OR EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status IN ('failed','unknown','pending') AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)))" : ''}
+          ${anchor} ${after}
           ORDER BY r.started_at DESC,r.id DESC LIMIT ? OFFSET ?`
       )
-      .all(workspaceId, page(args.limit), offset(args.offset))
+      .all(...values, page(args.limit), offset(args.offset))
   }
   if (method === 'cron-run-detail') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
@@ -4268,7 +4322,13 @@ function dispatch(method, args = {}) {
                 r.source_session_id_snapshot,r.source_session_title_snapshot,
                 r.source_project_id_snapshot,r.source_project_name_snapshot,
                 r.source_provider_id_snapshot,r.model_snapshot,r.model_source_snapshot,
-                r.working_folder_snapshot,r.delivery_mode_snapshot,r.delivery_target_snapshot
+                r.working_folder_snapshot,r.delivery_mode_snapshot,r.delivery_target_snapshot,r.run_kind,
+                (SELECT CASE
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='failed' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'failed'
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='unknown' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'unknown'
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='pending' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'pending'
+                  WHEN EXISTS (SELECT 1 FROM cron_run_deliveries d WHERE d.run_id=r.id AND d.status='sent' AND NOT EXISTS (SELECT 1 FROM cron_run_deliveries child WHERE child.retry_of_id=d.id)) THEN 'sent'
+                  ELSE NULL END FROM cron_run_deliveries d WHERE d.run_id=r.id) AS delivery_status
            FROM cron_runs r JOIN cron_jobs j ON j.id=r.job_id
           WHERE r.id=? AND j.workspace_id=?`
       )
@@ -4290,6 +4350,14 @@ function dispatch(method, args = {}) {
         .prepare(
           `SELECT id,timestamp,type,content
              FROM cron_run_logs WHERE run_id=? ORDER BY sort_order ASC`
+        )
+        .all(runId),
+      deliveries: db
+        .prepare(
+          `
+          SELECT id,run_id,tool_call_id,kind,status,started_at,finished_at,error_code
+          FROM cron_run_deliveries WHERE run_id=? ORDER BY started_at,id
+        `
         )
         .all(runId)
     }
@@ -4522,7 +4590,8 @@ function dispatch(method, args = {}) {
       delivery_target_snapshot: nullableText(
         snapshot('deliveryTargetSnapshot', 'delivery_target'),
         'CRON_DELIVERY_TARGET'
-      )
+      ),
+      run_kind: ['scheduled', 'manual', 'trial'].includes(args.runKind) ? args.runKind : 'scheduled'
     }
     cronSnapshotScope(row.source_session_id_snapshot, row.source_project_id_snapshot, workspaceId)
     const columns = Object.keys(row)
@@ -4536,16 +4605,20 @@ function dispatch(method, args = {}) {
     const jobId = text(args.jobId, 'CRON_JOB')
     const firedAt = timestamp(args.firedAt, 'FIRED_AT')
     const scheduledFor = nullableInteger(args.scheduledFor, 'SCHEDULED_FOR')
+    const runKind = ['scheduled', 'manual', 'trial'].includes(args.runKind)
+      ? args.runKind
+      : 'scheduled'
     db.exec('BEGIN IMMEDIATE')
     try {
       const job = db
         .prepare(
-          `SELECT schedule_kind,fire_count FROM cron_jobs
-          WHERE id=? AND workspace_id=? AND enabled=1 AND deleted_at IS NULL`
+          `SELECT schedule_kind,fire_count,enabled FROM cron_jobs
+          WHERE id=? AND workspace_id=? AND deleted_at IS NULL`
         )
         .get(jobId, workspaceId)
-      if (!job) throw new Error('BUSINESS_CRON_JOB_NOT_FOUND')
-      if (job.schedule_kind === 'at' && job.fire_count > 0) {
+      if (!job || (runKind === 'scheduled' && job.enabled !== 1))
+        throw new Error('BUSINESS_CRON_JOB_NOT_FOUND')
+      if (runKind === 'scheduled' && job.schedule_kind === 'at' && job.fire_count > 0) {
         db.exec('COMMIT')
         return { started: false, reason: 'already-fired' }
       }
@@ -4560,6 +4633,7 @@ function dispatch(method, args = {}) {
         return { started: false, reason: 'already-running' }
       }
       if (
+        runKind === 'scheduled' &&
         scheduledFor !== null &&
         db
           .prepare('SELECT id FROM cron_runs WHERE job_id=? AND scheduled_for=? LIMIT 1')
@@ -4569,11 +4643,13 @@ function dispatch(method, args = {}) {
         return { started: false, reason: 'duplicate-schedule' }
       }
       dispatch('cron-run-create', args)
-      db.prepare(
-        `UPDATE cron_jobs
-        SET last_fired_at=?,fire_count=fire_count+1,updated_at=?
-        WHERE id=? AND workspace_id=?`
-      ).run(firedAt, firedAt, jobId, workspaceId)
+      if (runKind === 'scheduled') {
+        db.prepare(
+          `UPDATE cron_jobs
+          SET last_fired_at=?,fire_count=fire_count+1,updated_at=?
+          WHERE id=? AND workspace_id=? AND enabled=1 AND deleted_at IS NULL`
+        ).run(firedAt, firedAt, jobId, workspaceId)
+      }
       db.exec('COMMIT')
       return { started: true, runId: text(args.id, 'CRON_RUN') }
     } catch (error) {
@@ -4666,6 +4742,274 @@ function dispatch(method, args = {}) {
       throw error
     }
     return true
+  }
+  if (method === 'cron-delivery-record') {
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const runId = text(args.runId, 'CRON_RUN')
+    if (!cronRun(runId, workspaceId)) throw new Error('BUSINESS_CRON_RUN_NOT_FOUND')
+    const kind = text(args.kind, 'CRON_DELIVERY_KIND')
+    const status = text(args.status, 'CRON_DELIVERY_STATUS')
+    if (!['desktop', 'channel', 'session'].includes(kind))
+      throw new Error('INVALID_CRON_DELIVERY_KIND')
+    if (!['pending', 'sent', 'failed', 'unknown'].includes(status))
+      throw new Error('INVALID_CRON_DELIVERY_STATUS')
+    return (
+      db
+        .prepare(
+          `
+      INSERT INTO cron_run_deliveries
+        (id,run_id,tool_call_id,kind,status,started_at,finished_at,error_code,
+         retry_of_id,attempt_number,plugin_id,chat_id)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      ON CONFLICT(run_id,tool_call_id) DO UPDATE SET
+        status=excluded.status,
+        finished_at=excluded.finished_at,
+        error_code=excluded.error_code
+      WHERE cron_run_deliveries.status='pending'
+         OR cron_run_deliveries.status=excluded.status
+    `
+        )
+        .run(
+          text(args.id, 'CRON_DELIVERY'),
+          runId,
+          text(args.toolCallId, 'CRON_TOOL_CALL'),
+          kind,
+          status,
+          timestamp(args.startedAt, 'CRON_DELIVERY_STARTED_AT'),
+          nullableInteger(args.finishedAt, 'CRON_DELIVERY_FINISHED_AT'),
+          nullableText(args.errorCode, 'CRON_DELIVERY_ERROR'),
+          nullableText(args.retryOfId, 'CRON_DELIVERY_RETRY_PARENT'),
+          args.attemptNumber === undefined
+            ? 1
+            : timestamp(args.attemptNumber, 'CRON_DELIVERY_ATTEMPT'),
+          nullableText(args.pluginId, 'CRON_DELIVERY_PLUGIN'),
+          nullableText(args.chatId, 'CRON_DELIVERY_CHAT')
+        ).changes > 0
+    )
+  }
+  if (method === 'cron-session-pending-list') {
+    const afterRunId = typeof args.afterRunId === 'string' ? args.afterRunId : ''
+    const limit = Math.max(1, Math.min(Number(args.limit) || 500, 500))
+    return db
+      .prepare(
+        `SELECT r.id AS run_id,j.workspace_id,r.delivery_target_snapshot,
+                r.source_session_id_snapshot,r.output_summary,r.error
+         FROM cron_runs r JOIN cron_jobs j ON j.id=r.job_id
+         WHERE r.id > ? AND r.delivery_mode_snapshot='session'
+           AND r.run_kind!='trial' AND r.status!='running'
+           AND r.started_at >= (
+             SELECT applied_at FROM ola_ts_schema_migrations WHERE version=11
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM cron_run_deliveries d
+             WHERE d.run_id=r.id AND d.tool_call_id='session-delivery'
+           )
+         ORDER BY r.id LIMIT ?`
+      )
+      .all(afterRunId, limit)
+  }
+  if (method === 'cron-session-deliver') {
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const runId = text(args.runId, 'CRON_RUN')
+    const targetSessionId =
+      typeof args.targetSessionId === 'string' && args.targetSessionId.trim()
+        ? text(args.targetSessionId.trim(), 'SESSION')
+        : ''
+    const content = messageValue(args.content, 'MESSAGE_CONTENT')
+    const createdAt = timestamp(args.createdAt, 'CREATED_AT')
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const run = db
+        .prepare(
+          `
+        SELECT r.id,r.job_id,r.status,r.run_kind,r.delivery_mode_snapshot
+        FROM cron_runs r JOIN cron_jobs j ON j.id=r.job_id
+        WHERE r.id=? AND j.workspace_id=?
+      `
+        )
+        .get(runId, workspaceId)
+      if (!run) throw new Error('BUSINESS_CRON_RUN_NOT_FOUND')
+      if (
+        run.delivery_mode_snapshot !== 'session' ||
+        run.run_kind === 'trial' ||
+        run.status === 'running'
+      )
+        throw new Error('BUSINESS_CRON_SESSION_DELIVERY_NOT_ALLOWED')
+      const toolCallId = 'session-delivery'
+      const existing = db
+        .prepare(
+          'SELECT kind,status,error_code FROM cron_run_deliveries WHERE run_id=? AND tool_call_id=?'
+        )
+        .get(runId, toolCallId)
+      if (existing) {
+        if (existing.kind !== 'session') throw new Error('BUSINESS_CRON_DELIVERY_KIND_MISMATCH')
+        db.exec('COMMIT')
+        return { status: existing.status, inserted: false, errorCode: existing.error_code }
+      }
+      const errorCode = !targetSessionId
+        ? 'TARGET_SESSION_UNSPECIFIED'
+        : !session(targetSessionId, workspaceId)
+          ? 'TARGET_SESSION_NOT_FOUND'
+          : null
+      const status = errorCode ? 'failed' : 'sent'
+      if (!errorCode) {
+        const messageId = `cron-session-${runId}`
+        assertMessageIdOwner(messageId, targetSessionId)
+        const nextOrder = Number(
+          db
+            .prepare(
+              'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM messages WHERE session_id=?'
+            )
+            .get(targetSessionId).next_order
+        )
+        const inserted = db
+          .prepare(
+            `
+          INSERT OR IGNORE INTO messages
+            (id,session_id,role,content,meta,created_at,usage,sort_order)
+          VALUES (?,?,?,?,?,?,?,?)
+        `
+          )
+          .run(
+            messageId,
+            targetSessionId,
+            'assistant',
+            JSON.stringify(content),
+            JSON.stringify({ source: 'cron', runId, jobId: run.job_id }),
+            createdAt,
+            null,
+            nextOrder
+          ).changes
+        if (!inserted) throw new Error('BUSINESS_CRON_SESSION_MESSAGE_CONFLICT')
+        setSessionMessageCount(targetSessionId, workspaceId)
+        db.prepare(
+          'UPDATE sessions SET updated_at=MAX(updated_at,?) WHERE id=? AND workspace_id=?'
+        ).run(createdAt, targetSessionId, workspaceId)
+      }
+      db.prepare(
+        `
+        INSERT INTO cron_run_deliveries
+          (id,run_id,tool_call_id,kind,status,started_at,finished_at,error_code,
+           retry_of_id,attempt_number,plugin_id,chat_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+      `
+      ).run(
+        `delivery-session-${runId}`,
+        runId,
+        toolCallId,
+        'session',
+        status,
+        createdAt,
+        createdAt,
+        errorCode,
+        null,
+        1,
+        null,
+        null
+      )
+      db.exec('COMMIT')
+      return { status, inserted: status === 'sent', errorCode }
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  }
+  if (method === 'cron-deliveries-list') {
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const runId = text(args.runId, 'CRON_RUN')
+    if (!cronRun(runId, workspaceId)) throw new Error('BUSINESS_CRON_RUN_NOT_FOUND')
+    return db
+      .prepare(
+        `
+      SELECT id,run_id,tool_call_id,kind,status,started_at,finished_at,error_code,
+             retry_of_id,attempt_number,plugin_id,chat_id
+      FROM cron_run_deliveries WHERE run_id=? ORDER BY started_at,id
+    `
+      )
+      .all(runId)
+  }
+  if (method === 'cron-delivery-reconcile') {
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const runId = text(args.runId, 'CRON_RUN')
+    const deliveryId = text(args.id, 'CRON_DELIVERY')
+    const outcome = text(args.outcome, 'CRON_DELIVERY_OUTCOME')
+    if (!['sent', 'failed'].includes(outcome)) throw new Error('INVALID_CRON_DELIVERY_OUTCOME')
+    if (!cronRun(runId, workspaceId)) throw new Error('BUSINESS_CRON_RUN_NOT_FOUND')
+    const changed = db
+      .prepare(
+        `
+        UPDATE cron_run_deliveries
+        SET status=?,finished_at=?,error_code=?
+        WHERE id=? AND run_id=? AND status='unknown'
+      `
+      )
+      .run(
+        outcome,
+        timestamp(args.confirmedAt, 'CRON_DELIVERY_CONFIRMED_AT'),
+        outcome === 'sent' ? 'MANUALLY_CONFIRMED_SENT' : 'MANUALLY_CONFIRMED_FAILED',
+        deliveryId,
+        runId
+      ).changes
+    if (!changed) throw new Error('BUSINESS_CRON_DELIVERY_NOT_RECONCILABLE')
+    return true
+  }
+  if (method === 'cron-delivery-retry-prepare') {
+    const maxDeliveryAttempts = 3
+    const workspaceId = text(args.workspaceId, 'WORKSPACE')
+    const runId = text(args.runId, 'CRON_RUN')
+    const retryOfId = text(args.retryOfId, 'CRON_DELIVERY')
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const run = db
+        .prepare(
+          `
+          SELECT r.status FROM cron_runs r JOIN cron_jobs j ON j.id=r.job_id
+          WHERE r.id=? AND j.workspace_id=?
+        `
+        )
+        .get(runId, workspaceId)
+      if (!run) throw new Error('BUSINESS_CRON_RUN_NOT_FOUND')
+      if (run.status !== 'success') throw new Error('CRON_DELIVERY_RETRY_REQUIRES_SUCCESSFUL_RUN')
+      const parent = db
+        .prepare(
+          `
+          SELECT kind,status,plugin_id,chat_id,attempt_number
+          FROM cron_run_deliveries WHERE id=? AND run_id=?
+        `
+        )
+        .get(retryOfId, runId)
+      if (!parent || parent.status !== 'failed')
+        throw new Error('CRON_DELIVERY_RETRY_REQUIRES_CONFIRMED_FAILURE')
+      if (parent.kind !== 'channel' || !parent.plugin_id || !parent.chat_id)
+        throw new Error('CRON_DELIVERY_RETRY_TARGET_UNAVAILABLE')
+      if (parent.attempt_number >= maxDeliveryAttempts)
+        throw new Error('CRON_DELIVERY_RETRY_MAX_ATTEMPTS_REACHED')
+      if (db.prepare('SELECT id FROM cron_run_deliveries WHERE retry_of_id=?').get(retryOfId))
+        throw new Error('CRON_DELIVERY_RETRY_ALREADY_CREATED')
+      const id = text(args.id, 'CRON_DELIVERY')
+      const attemptNumber = timestamp(parent.attempt_number, 'CRON_DELIVERY_ATTEMPT') + 1
+      db.prepare(
+        `
+        INSERT INTO cron_run_deliveries
+          (id,run_id,tool_call_id,kind,status,started_at,retry_of_id,attempt_number,plugin_id,chat_id)
+        VALUES (?,?,?,'channel','pending',?,?,?,?,?)
+      `
+      ).run(
+        id,
+        runId,
+        text(args.toolCallId, 'CRON_TOOL_CALL'),
+        timestamp(args.startedAt, 'CRON_DELIVERY_STARTED_AT'),
+        retryOfId,
+        attemptNumber,
+        parent.plugin_id,
+        parent.chat_id
+      )
+      db.exec('COMMIT')
+      return { deliveryId: id, pluginId: parent.plugin_id, chatId: parent.chat_id, attemptNumber }
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
   }
   if (method === 'qq-wakeup-record-source') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
@@ -5042,8 +5386,8 @@ function dispatch(method, args = {}) {
       `INSERT INTO sessions (
         id,title,icon,mode,created_at,updated_at,message_count,project_id,working_folder,
         ssh_connection_id,plan_id,pinned,plugin_id,external_chat_id,provider_id,model_id,
-        model_selection_mode,model_source,workspace_id
-      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        model_selection_mode,model_source,task_profile,task_profile_locked,scenario_policy,workspace_id
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       text(args.id, 'SESSION'),
       text(args.title, 'TITLE'),
@@ -5063,6 +5407,11 @@ function dispatch(method, args = {}) {
       modelId,
       modelSelectionMode,
       sessionProjectModelSource(args.modelSource, workspaceId),
+      args.taskProfile == null ? null : taskProfile(args.taskProfile),
+      args.taskProfileLocked === undefined
+        ? 0
+        : bool(args.taskProfileLocked, 'TASK_PROFILE_LOCKED'),
+      scenarioPolicy(args.scenarioPolicy),
       workspaceId
     )
     return session(text(args.id, 'SESSION'), workspaceId)
@@ -5175,8 +5524,15 @@ function dispatch(method, args = {}) {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
     const sessionId = text(args.sessionId, 'SESSION')
     if (!session(sessionId, workspaceId)) throw new Error('BUSINESS_SESSION_NOT_FOUND')
+    if (args.clearTasks !== undefined && typeof args.clearTasks !== 'boolean')
+      throw new Error('INVALID_BUSINESS_CLEAR_TASKS')
+    const updatedAt =
+      args.updatedAt === undefined ? undefined : timestamp(args.updatedAt, 'UPDATED_AT')
     db.exec('BEGIN IMMEDIATE')
     try {
+      if (args.clearTasks) {
+        db.prepare('DELETE FROM tasks WHERE session_id=?').run(sessionId)
+      }
       const changed = Number(
         db
           .prepare(
@@ -5186,6 +5542,12 @@ function dispatch(method, args = {}) {
           .run(sessionId, workspaceId).changes
       )
       setSessionMessageCount(sessionId, workspaceId)
+      if (updatedAt !== undefined)
+        db.prepare('UPDATE sessions SET updated_at=? WHERE id=? AND workspace_id=?').run(
+          updatedAt,
+          sessionId,
+          workspaceId
+        )
       db.exec('COMMIT')
       return changed
     } catch (error) {
@@ -5341,6 +5703,7 @@ function dispatch(method, args = {}) {
     return true
   }
   if (method === 'session-update') {
+    if (Object.hasOwn(args, 'scenarioPolicy')) throw new Error('BUSINESS_SCENARIO_POLICY_IMMUTABLE')
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
     const id = text(args.id, 'SESSION')
     if (!session(id, workspaceId)) throw new Error('BUSINESS_SESSION_NOT_FOUND')
@@ -5373,7 +5736,9 @@ function dispatch(method, args = {}) {
           'modelSelectionMode',
           (value) => nullableText(value, 'MODEL_SELECTION')
         ],
-        ['model_source', 'modelSource', (value) => sessionProjectModelSource(value, workspaceId)]
+        ['model_source', 'modelSource', (value) => sessionProjectModelSource(value, workspaceId)],
+        ['task_profile', 'taskProfile', taskProfile],
+        ['task_profile_locked', 'taskProfileLocked', (value) => bool(value, 'TASK_PROFILE_LOCKED')]
       ],
       args.updatedAt
     )
@@ -5507,7 +5872,9 @@ function dispatch(method, args = {}) {
       }
       const preferredName =
         pluginId === null
-          ? 'New Project'
+          ? typeof args.preferredName === 'string' && args.preferredName.trim()
+            ? args.preferredName.trim()
+            : 'New Project'
           : typeof args.preferredName === 'string' && args.preferredName.trim()
             ? args.preferredName.trim()
             : `Plugin ${pluginId}`
@@ -5532,10 +5899,6 @@ function dispatch(method, args = {}) {
   if (method === 'project-update') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
     const id = text(args.id, 'PROJECT')
-    const exists = db
-      .prepare('SELECT id FROM projects WHERE id=? AND workspace_id=?')
-      .get(id, workspaceId)
-    if (!exists) throw new Error('BUSINESS_PROJECT_NOT_FOUND')
     const { changes, values } = updateFields(
       args,
       [
@@ -5546,14 +5909,41 @@ function dispatch(method, args = {}) {
         ['pinned', 'pinned', (value) => bool(value, 'PINNED')],
         ['model_source', 'modelSource', (value) => sessionProjectModelSource(value, workspaceId)]
       ],
-      args.updatedAt
+      undefined
     )
-    db.prepare(`UPDATE projects SET ${changes.join(', ')} WHERE id=? AND workspace_id=?`).run(
-      ...values,
-      id,
-      workspaceId
-    )
-    return db.prepare('SELECT * FROM projects WHERE id=? AND workspace_id=?').get(id, workspaceId)
+    const directoryChanged = args.workingFolder !== undefined || args.sshConnectionId !== undefined
+    db.exec('BEGIN IMMEDIATE')
+    try {
+      const exists = db
+        .prepare('SELECT id, updated_at FROM projects WHERE id=? AND workspace_id=?')
+        .get(id, workspaceId)
+      if (!exists) throw new Error('BUSINESS_PROJECT_NOT_FOUND')
+      const requestedUpdatedAt = timestamp(args.updatedAt ?? Date.now(), 'UPDATED_AT')
+      const committedUpdatedAt = Math.max(requestedUpdatedAt, exists.updated_at + 1)
+      db.prepare(
+        `UPDATE projects SET ${changes.join(', ')}, updated_at=? WHERE id=? AND workspace_id=?`
+      ).run(...values, committedUpdatedAt, id, workspaceId)
+      const updated = db
+        .prepare('SELECT * FROM projects WHERE id=? AND workspace_id=?')
+        .get(id, workspaceId)
+      if (directoryChanged) {
+        db.prepare(
+          `UPDATE sessions SET working_folder=?,ssh_connection_id=?,updated_at=?
+            WHERE project_id=? AND workspace_id=?`
+        ).run(
+          updated.working_folder,
+          updated.ssh_connection_id,
+          updated.updated_at,
+          id,
+          workspaceId
+        )
+      }
+      db.exec('COMMIT')
+      return updated
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
   }
   if (method === 'project-delete') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
@@ -6023,14 +6413,34 @@ function dispatch(method, args = {}) {
       ],
       args.updatedAt
     )
-    db.prepare(`UPDATE tasks SET ${changes.join(', ')} WHERE id=?`).run(...values, id)
+    const expectedUpdatedAt =
+      args.expectedUpdatedAt === undefined
+        ? undefined
+        : timestamp(args.expectedUpdatedAt, 'EXPECTED_UPDATED_AT')
+    const result = db
+      .prepare(
+        `UPDATE tasks SET ${changes.join(', ')} WHERE id=?${expectedUpdatedAt === undefined ? '' : ' AND updated_at=?'}`
+      )
+      .run(...values, id, ...(expectedUpdatedAt === undefined ? [] : [expectedUpdatedAt]))
+    if (expectedUpdatedAt !== undefined && result.changes === 0)
+      throw new Error('BUSINESS_TASK_CONFLICT')
     return true
   }
   if (method === 'task-delete') {
     const workspaceId = text(args.workspaceId, 'WORKSPACE')
     const id = text(args.id, 'TASK')
     if (!task(id, workspaceId)) throw new Error('BUSINESS_TASK_NOT_FOUND')
-    db.prepare('DELETE FROM tasks WHERE id=?').run(id)
+    const expectedUpdatedAt =
+      args.expectedUpdatedAt === undefined
+        ? undefined
+        : timestamp(args.expectedUpdatedAt, 'EXPECTED_UPDATED_AT')
+    const result = db
+      .prepare(
+        `DELETE FROM tasks WHERE id=?${expectedUpdatedAt === undefined ? '' : ' AND updated_at=?'}`
+      )
+      .run(id, ...(expectedUpdatedAt === undefined ? [] : [expectedUpdatedAt]))
+    if (expectedUpdatedAt !== undefined && result.changes === 0)
+      throw new Error('BUSINESS_TASK_CONFLICT')
     return true
   }
   if (method === 'tasks-delete-by-session') {
@@ -6235,6 +6645,83 @@ function dispatch(method, args = {}) {
         'SELECT version, applied_at, description FROM ola_ts_schema_migrations ORDER BY version'
       )
       .all()
+  if (method === 'pending-session-queue-get') {
+    const sessionId = text(args.sessionId, 'SESSION_ID')
+    const workspaceId = text(args.workspaceId, 'WORKSPACE_ID')
+    const row = db
+      .prepare(
+        'SELECT messages_json FROM ola_pending_session_queues WHERE session_id=? AND workspace_id=?'
+      )
+      .get(sessionId, workspaceId)
+    if (!row) return []
+    const messages = JSON.parse(row.messages_json)
+    return Array.isArray(messages) ? messages : []
+  }
+  if (method === 'pending-session-queue-replace') {
+    const sessionId = text(args.sessionId, 'SESSION_ID')
+    const workspaceId = text(args.workspaceId, 'WORKSPACE_ID')
+    if (!Array.isArray(args.messages) || args.messages.length > 51)
+      throw new Error('INVALID_BUSINESS_PENDING_SESSION_QUEUE')
+    const ids = new Set()
+    for (const message of args.messages) {
+      if (
+        !message ||
+        typeof message !== 'object' ||
+        Array.isArray(message) ||
+        typeof message.id !== 'string' ||
+        !message.id.trim() ||
+        message.id.length > 256 ||
+        ids.has(message.id) ||
+        typeof message.text !== 'string' ||
+        message.text.length > 1_000_000 ||
+        !Number.isFinite(message.createdAt) ||
+        message.createdAt <= 0 ||
+        (message.dispatchMode !== undefined &&
+          !['after_loop', 'interrupt_next'].includes(message.dispatchMode)) ||
+        (message.source !== undefined &&
+          !['team', 'queued', 'continue', 'quoted'].includes(message.source)) ||
+        (message.recoveryState !== undefined &&
+          !['dispatching', 'needs_review'].includes(message.recoveryState)) ||
+        (message.images !== undefined && !Array.isArray(message.images)) ||
+        (message.options !== undefined &&
+          (!message.options ||
+            typeof message.options !== 'object' ||
+            Array.isArray(message.options)))
+      )
+        throw new Error('INVALID_BUSINESS_PENDING_SESSION_QUEUE')
+      ids.add(message.id)
+      if (message.images && message.images.length > 64)
+        throw new Error('INVALID_BUSINESS_PENDING_SESSION_QUEUE')
+      for (const image of message.images ?? []) {
+        if (
+          !image ||
+          typeof image !== 'object' ||
+          typeof image.id !== 'string' ||
+          typeof image.dataUrl !== 'string' ||
+          typeof image.mediaType !== 'string'
+        )
+          throw new Error('INVALID_BUSINESS_PENDING_SESSION_QUEUE')
+      }
+    }
+    const messagesJson = JSON.stringify(args.messages)
+    if (Buffer.byteLength(messagesJson, 'utf8') > 32 * 1024 * 1024)
+      throw new Error('BUSINESS_PENDING_SESSION_QUEUE_TOO_LARGE')
+    if (args.messages.length === 0) {
+      db.prepare(
+        'DELETE FROM ola_pending_session_queues WHERE session_id=? AND workspace_id=?'
+      ).run(sessionId, workspaceId)
+      return true
+    }
+    db.prepare(
+      `INSERT INTO ola_pending_session_queues(session_id, workspace_id, messages_json, updated_at)
+       VALUES(?,?,?,?)
+       ON CONFLICT(session_id) DO UPDATE SET
+         workspace_id=excluded.workspace_id,
+         messages_json=excluded.messages_json,
+         updated_at=excluded.updated_at`
+    ).run(sessionId, workspaceId, messagesJson, Date.now())
+    return true
+  }
   if (method === 'close') {
     db.close()
     lease.exec('ROLLBACK')

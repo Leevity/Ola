@@ -6,6 +6,7 @@ import {
   copySftpPath,
   downloadSftpPath,
   sftpDeleteFile,
+  sftpGlob,
   formatSshTextFileLines,
   sftpMakeDirectory,
   sftpMoveFile,
@@ -45,6 +46,34 @@ function fakeSftp(): Record<string, (...args: any[]) => void> {
 }
 
 describe('TS SSH SFTP binary contract', () => {
+  it('skips symlink entries when scoped remote searches enumerate files', async () => {
+    const file = { isDirectory: () => false, isSymbolicLink: () => false }
+    const directory = { isDirectory: () => true, isSymbolicLink: () => false }
+    const link = { isDirectory: () => false, isSymbolicLink: () => true }
+    const sftp = {
+      readdir: (path: string, callback: (error: null, entries: unknown[]) => void) =>
+        callback(
+          null,
+          path === '/srv/project'
+            ? [
+                { filename: 'inside.txt', attrs: file },
+                { filename: 'outside-link', attrs: link },
+                { filename: 'sub', attrs: directory }
+              ]
+            : [{ filename: 'nested.txt', attrs: file }]
+        )
+    }
+    await expect(sftpGlob(sftp as never, '/srv/project', '**/*', true)).resolves.toEqual(
+      expect.arrayContaining([
+        { path: '/srv/project/inside.txt', type: 'file' },
+        { path: '/srv/project/sub/nested.txt', type: 'file' }
+      ])
+    )
+    expect(await sftpGlob(sftp as never, '/srv/project', '**/*', true)).not.toEqual(
+      expect.arrayContaining([{ path: '/srv/project/outside-link', type: 'file' }])
+    )
+  })
+
   it('reads and writes binary payloads without a native worker', async () => {
     const sftp = fakeSftp()
     await expect(sftpReadFile(sftp as never, '/tmp/a.bin')).resolves.toEqual(Buffer.from('abcdef'))

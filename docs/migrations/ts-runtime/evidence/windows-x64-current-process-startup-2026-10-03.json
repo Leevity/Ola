@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-03",
+  "platform": "Windows x64",
+  "version": "1.0.5",
+  "installerSha256": "077FF553938F8301E42D6EAB75D0FDAD5B5CF0E0FFC19E617AFEC56FAC3935FC",
+  "installExitCode": 0,
+  "installedExecutable": "C:\\tmp\\ola-release-current-20261003s\\Ola.exe",
+  "processStartup": {
+    "passed": true,
+    "loadedInstalledRenderer": true,
+    "runtimeReady": true,
+    "windowVisible": true,
+    "isolatedDataRoot": "C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-process-startup-giGGVs"
+  },
+  "isolatedDatabase": {
+    "schemaVersion": 12,
+    "sessionScenarioPolicyColumn": true
+  },
+  "legacyArtifactScan": {
+    "unpackedFilesInspected": 733,
+    "asarEntriesInspected": 5197,
+    "legacyRuntimeArtifactsFound": false
+  },
+  "asarSourceMaps": 0,
+  "sourceMapStagingGate": "passed",
+  "authenticodeStatus": "NotSigned",
+  "oldVersionUpgradeVerified": false,
+  "installerInPlaceUpgradeVerified": true,
+  "installerInPlaceUpgradeEvidence": "docs/migrations/ts-runtime/evidence/windows-x64-upgrade-2026-10-03.md",
+  "rendererInteractionVerified": false,
+  "taskBoardAndWorkspaceInteractionVerified": true,
+  "taskCreateDeleteFailureRecoveryVerified": true,
+  "taskBoardNarrowGeometryVerified": true,
+  "taskBoardKeyboardFocusVerified": true,
+  "settingsFontScalingVerified": true,
+  "settingsNarrowGeometryVerified": true,
+  "settingsPagesAt150PercentEquivalentViewportVerified": 22,
+  "settingsRenderedTextMinimumPx": 12,
+  "taskBoardFullE2EThisPackage": "1 passed in 1 run, including task board and workspace interaction",
+  "settingsFullE2EThisPackage": "1 passed in 1 run, including 22 settings pages, CodeGraph 18/18 grammars and TypeScript indexing",
+  "topLevelPagesE2EThisPackage": "1 passed in 1 run, including Tasks, Resources, Draw, Skills, SOUL, and Sync",
+  "localizedDefaultProjectAfterRestartVerified": true,
+  "settingsScreenshotEvidence": "analysis/audits/2026-10-03-settings-visual/installed-custom-first-screen",
+  "topLevelPagesScreenshotEvidence": "analysis/audits/2026-10-03-settings-visual/top-level-pages/installed",
+  "codegraphPackagedGrammarFiles": 23
+}

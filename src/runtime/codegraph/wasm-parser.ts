@@ -88,23 +88,27 @@ let initialized: Promise<void> | undefined
 function grammarPath(language: WasmCodeGraphLanguage): string | undefined {
   const grammar = grammarNames[language]
   if (!grammar) return undefined
-  if (bundledGrammarFiles.has(language)) {
-    const moduleDir = dirname(fileURLToPath(import.meta.url))
-    const candidates = [
-      join(process.cwd(), 'resources', 'codegraph', 'grammars', grammar),
-      join(moduleDir, '../../resources/codegraph/grammars', grammar),
-      join(moduleDir, '../../../resources/codegraph/grammars', grammar),
-      join(moduleDir, '../../../../resources/codegraph/grammars', grammar)
-    ]
-    if (process.resourcesPath) {
-      candidates.push(
-        join(process.resourcesPath, 'app.asar.unpacked/resources/codegraph/grammars', grammar),
-        join(process.resourcesPath, 'resources/codegraph/grammars', grammar)
-      )
-    }
-    return candidates.find((candidate) => existsSync(candidate))
+  const filename = grammar.endsWith('.wasm') ? grammar : `tree-sitter-${grammar}.wasm`
+  const moduleDir = dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    join(process.cwd(), 'resources', 'codegraph', 'grammars', filename),
+    join(moduleDir, '../../resources/codegraph/grammars', filename),
+    join(moduleDir, '../../../resources/codegraph/grammars', filename),
+    join(moduleDir, '../../../../resources/codegraph/grammars', filename)
+  ]
+  if (process.resourcesPath) {
+    candidates.push(
+      join(process.resourcesPath, 'app.asar.unpacked/resources/codegraph/grammars', filename),
+      join(process.resourcesPath, 'resources/codegraph/grammars', filename)
+    )
   }
-  return require.resolve(`tree-sitter-wasms/out/tree-sitter-${grammar}.wasm`)
+  const bundled = candidates.find((candidate) => existsSync(candidate))
+  if (bundled || bundledGrammarFiles.has(language)) return bundled
+  try {
+    return require.resolve(`tree-sitter-wasms/out/${filename}`)
+  } catch {
+    return undefined
+  }
 }
 
 /** This matrix is explicit: an unavailable grammar is never silently parsed as another language. */

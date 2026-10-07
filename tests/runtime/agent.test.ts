@@ -321,6 +321,56 @@ describe('headless agent and tools', () => {
     expect(results.map((result) => result.output)).toEqual(['read', 'read'])
     expect(maxActive).toBe(2)
   })
+  it('serializes explicitly stateful reads with writes to the same resource', async () => {
+    let active = 0
+    let maxActive = 0
+    const operation = async (): Promise<string> => {
+      maxActive = Math.max(maxActive, ++active)
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      active--
+      return 'done'
+    }
+    const read: ToolDefinition = {
+      ...tool('browser-read', 'read', operation),
+      serializeReads: true,
+      resources: async () => ['browser:workspace:session']
+    }
+    const write: ToolDefinition = {
+      ...tool('browser-write', 'write', operation),
+      resources: async () => ['browser:workspace:session']
+    }
+    const executor = new ToolExecutor([read, write], async () => true)
+    await Promise.all([
+      executor.executeAll(
+        [{ id: 'read', name: 'browser-read', input: {} }],
+        { run, signal: new AbortController().signal },
+        async () => undefined
+      ),
+      executor.executeAll(
+        [{ id: 'write', name: 'browser-write', input: {} }],
+        { run, signal: new AbortController().signal },
+        async () => undefined
+      )
+    ])
+    expect(maxActive).toBe(1)
+  })
+  it('passes the stable host tool-call id into side-effect tool context', async () => {
+    let receivedId: string | undefined
+    const definition: ToolDefinition = {
+      ...tool('identify-call', 'write', async (_input, context) => {
+        receivedId = context.toolCallId
+        return 'ok'
+      }),
+      resources: async () => ['side-effect']
+    }
+    const executor = new ToolExecutor([definition], async () => true)
+    await executor.executeAll(
+      [{ id: 'stable-call-id', name: 'identify-call', input: {} }],
+      { run, signal: new AbortController().signal },
+      async () => undefined
+    )
+    expect(receivedId).toBe('stable-call-id')
+  })
   it('cancels a lock waiter promptly without allowing a later writer to overtake the owner', async () => {
     const locks = new ResourceLocks()
     let release!: () => void

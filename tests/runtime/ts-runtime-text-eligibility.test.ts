@@ -37,6 +37,39 @@ describe('TS runtime text eligibility', () => {
     })
   })
 
+  it('keeps trailing system reminders as history before the current prompt', () => {
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: [
+          ...messages,
+          { id: 'reminder', role: 'system', content: 'Use saved preferences', createdAt: 3 }
+        ],
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      prompt: 'Current question',
+      history: [
+        { role: 'assistant', text: 'Earlier answer' },
+        { role: 'system', text: 'Use saved preferences' }
+      ]
+    })
+  })
+
+  it('continues to reject an assistant tail after the current prompt', () => {
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: [
+          ...messages,
+          { id: 'tail', role: 'assistant', content: 'Incomplete response', createdAt: 3 }
+        ],
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toEqual({ eligible: false, reason: 'CURRENT_PROMPT_NOT_MIGRATED' })
+  })
+
   it('projects a bounded Responses session scope for local WebSocket reuse', () => {
     expect(
       assessTsRuntimeTextEligibility({
@@ -243,6 +276,6 @@ describe('TS runtime text eligibility', () => {
         extensionToolNames: ['extension__weather__lookup']
       })
     ).toBe(false)
-    expect(supportsTsRuntimeAgentTools({ toolNames: ['BrowserNavigate'] })).toBe(false)
+    expect(supportsTsRuntimeAgentTools({ toolNames: ['BrowserNavigate'] })).toBe(true)
   })
 })

@@ -40,6 +40,8 @@ const videoGenerationHandler: ToolHandler = {
         : capability.models[0]
     if (!model) throw new Error('The selected video provider has no available model')
     const request: VideoGenerationRequest = {
+      sessionId: context.sessionId ?? undefined,
+      projectId: context.projectId ?? undefined,
       provider: capability.provider,
       providerId: capability.providerId,
       model,

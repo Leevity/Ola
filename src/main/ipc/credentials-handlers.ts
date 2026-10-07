@@ -145,7 +145,7 @@ export function registerCredentialsHandlers(): void {
         if (!domain || !username || !password) {
           return { success: false, error: 'domain, username, and password are required' }
         }
-        const ref = storeCredential({
+        const ref = await storeCredential({
           domain,
           username,
           password,
@@ -192,15 +192,26 @@ export function registerCredentialsHandlers(): void {
     CREDENTIALS_IPC.DELETE,
     async (args) => {
       if (!args?.id) return { success: false, error: 'id is required' }
-      const ok = deleteCredential(args.id)
-      recordCredentialAudit({
-        action: 'delete',
-        credentialId: args.id,
-        actor: 'renderer',
-        success: ok,
-        error: ok ? undefined : 'not found'
-      })
-      return ok ? { success: true } : { success: false, error: 'not found' }
+      try {
+        const ok = await deleteCredential(args.id)
+        recordCredentialAudit({
+          action: 'delete',
+          credentialId: args.id,
+          actor: 'renderer',
+          success: ok,
+          error: ok ? undefined : 'not found'
+        })
+        return ok ? { success: true } : { success: false, error: 'not found' }
+      } catch (error) {
+        recordCredentialAudit({
+          action: 'delete',
+          credentialId: args.id,
+          actor: 'renderer',
+          success: false,
+          error: getErrorMessage(error)
+        })
+        return { success: false, error: getErrorMessage(error) }
+      }
     }
   )
 
@@ -233,7 +244,7 @@ export function registerCredentialsHandlers(): void {
       if (!template || !template.domain) {
         return { success: false, error: 'template is not configured' }
       }
-      const ref = storeCredential({
+      const ref = await storeCredential({
         domain: template.domain,
         username: args.username,
         password: args.password,
@@ -269,7 +280,7 @@ export function registerCredentialsHandlers(): void {
     async (args) => {
       try {
         if (!args?.id) return { error: 'id required' }
-        const updated = updateCredential(args.id, {
+        const updated = await updateCredential(args.id, {
           username: args.username,
           password: args.password,
           notes: args.notes

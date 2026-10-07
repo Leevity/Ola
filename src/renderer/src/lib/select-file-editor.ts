@@ -43,7 +43,8 @@ function normalizePath(value: string): string {
 }
 
 function normalizePathKey(value: string): string {
-  return normalizePath(value).toLowerCase()
+  const normalized = normalizePath(value)
+  return normalized.startsWith('/') ? normalized : normalized.toLowerCase()
 }
 
 function isAbsolutePath(value: string): boolean {

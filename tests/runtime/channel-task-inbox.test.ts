@@ -66,7 +66,7 @@ describe('persistent channel task inbox', () => {
     expect(inbox.nextRetryDelayMs('missing')).toBeNull()
     expect(inbox.pending('team-a', 2, second.sequence).map((row) => row.id)).toEqual([third.id])
     expect(inbox.pending('local-personal').map((row) => row.id)).toEqual([local.id])
-    expect((await stat(dbPath)).mode & 0o777).toBe(0o600)
+    if (process.platform !== 'win32') expect((await stat(dbPath)).mode & 0o777).toBe(0o600)
 
     inbox.close()
     inbox = new ChannelTaskInbox(dbPath)

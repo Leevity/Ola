@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { IPC, isKnownIpcChannel } from '../../src/shared/ipc/contract'
+import { IPC, isKnownIpcChannel, isKnownIpcTransportChannel } from '../../src/shared/ipc/contract'
 import { ipcChannelSchema } from '../../src/shared/ipc/types'
 
 // All renderer-facing channels must be covered by the IPC literal itself, so
@@ -40,6 +40,19 @@ describe('shared IPC contract', () => {
     expect(isKnownIpcChannel('db:messages:list')).toBe(true)
     expect(isKnownIpcChannel('image:download')).toBe(true)
     expect(isKnownIpcChannel('team-runtime:create')).toBe(true)
+    expect(isKnownIpcChannel('execution-records:list:msgpack')).toBe(true)
+    expect(isKnownIpcChannel('execution-artifacts:list:msgpack')).toBe(true)
+    expect(isKnownIpcChannel('execution-artifacts:hide:msgpack')).toBe(true)
+  })
+
+  it('permits binary transport only for registered IPC bases', () => {
+    expect(isKnownIpcTransportChannel('api:quota-update:msgpack')).toBe(true)
+    expect(isKnownIpcTransportChannel('execution-artifacts:list:msgpack')).toBe(true)
+    expect(isKnownIpcTransportChannel('ts-runtime:run-snapshot:msgpack')).toBe(true)
+    expect(isKnownIpcTransportChannel('ts-runtime:runs-list:msgpack')).toBe(true)
+    expect(isKnownIpcTransportChannel('ts-runtime:run-submit:msgpack')).toBe(true)
+    expect(isKnownIpcTransportChannel('unknown:channel:msgpack')).toBe(false)
+    expect(isKnownIpcTransportChannel('api:quota-update:msgpack:msgpack')).toBe(false)
   })
 
   it('registers literal renderer channels and rejects unlisted prefixes', () => {
@@ -55,9 +68,38 @@ describe('shared IPC contract', () => {
   })
 
   it('keeps every schema key aligned with a registered channel', () => {
-    const drift = Object.keys(ipcChannelSchema).filter(
-      (channel) => !isKnownIpcChannel(channel)
-    )
+    const drift = Object.keys(ipcChannelSchema).filter((channel) => !isKnownIpcChannel(channel))
     expect(drift).toEqual([])
+  })
+
+  it('requires a schema for every high-sensitivity channel', () => {
+    // High-risk invoke channels (fs/shell/credentials/browser/runtime) must be
+    // pinned in the schema so their payload shapes are documented and typed
+    // instead of silently falling through to `unknown`. Push/notification
+    // channels (e.g. `*-output`, `*-started`, `*-changed`, `*-event`) carry no
+    // request/response pair and are excluded. Any new invoke channel under
+    // these prefixes must be added to `ipcChannelSchema` together with its
+    // registration.
+    const highRiskPrefixes = ['fs:', 'shell:', 'credentials:', 'browser:', 'runtime:']
+    const pushSuffixes = [
+      'output',
+      'started',
+      'created',
+      'exit',
+      'changed',
+      'event',
+      'sync-event',
+      'incoming-message',
+      'file-changed',
+      'dir-changed',
+      'approval-request:msgpack'
+    ]
+    const isPush = (channel: string): boolean =>
+      pushSuffixes.some((suffix) => channel.endsWith(suffix))
+    const highRiskChannels = Object.values(IPC).filter(
+      (channel) => highRiskPrefixes.some((prefix) => channel.startsWith(prefix)) && !isPush(channel)
+    )
+    const missing = highRiskChannels.filter((channel) => !(channel in ipcChannelSchema)).sort()
+    expect(missing).toEqual([])
   })
 })

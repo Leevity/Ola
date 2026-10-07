@@ -2,8 +2,15 @@ import { beforeEach, expect, it, vi } from 'vitest'
 import type { IpcMainInvokeEvent } from 'electron'
 
 const state = vi.hoisted(() => {
-  const sender = { mainFrame: {} }
-  const window = { isDestroyed: () => false, webContents: sender }
+  const mainFrame = { url: 'app://ola/index.html#/settings/sync' }
+  const sender = {
+    mainFrame,
+    getURL: () => 'app://ola/index.html',
+    isDestroyed: () => false,
+    on: vi.fn(),
+    setWindowOpenHandler: vi.fn()
+  }
+  const window = { isDestroyed: () => false, webContents: sender, on: vi.fn() }
   return { sender, window, registeredWorkspaceId: 'local-personal', allowed: new Set(['team-a']) }
 })
 
@@ -23,6 +30,7 @@ import {
   assertLegacySyncIpcOwner,
   assertWorkspaceSyncIpcOwner
 } from '../../src/main/sync/sync-ipc-authorization'
+import { registerTrustedRendererUrl } from '../../src/main/renderer-security'
 
 function event(sender: unknown = state.sender, senderFrame: unknown = state.sender.mainFrame) {
   return { sender, senderFrame } as IpcMainInvokeEvent
@@ -31,6 +39,7 @@ function event(sender: unknown = state.sender, senderFrame: unknown = state.send
 beforeEach(() => {
   state.registeredWorkspaceId = 'local-personal'
   state.allowed = new Set(['team-a'])
+  registerTrustedRendererUrl(state.window as never, 'app://ola/index.html')
 })
 
 it('accepts the registered local-personal main frame', () => {

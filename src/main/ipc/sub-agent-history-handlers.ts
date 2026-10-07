@@ -13,12 +13,14 @@ import {
   replaceSubAgentHistory
 } from '../db/sub-agent-history-dao'
 import type { SubAgentHistoryUpsertItem } from '../../shared/sub-agent-history-types'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 
 function registerSubAgentHistoryMessagePackHandler<TArgs>(
   channel: string,
   handler: (args: TArgs) => Promise<unknown> | unknown
 ): void {
-  ipcMain.handle(toMessagePackChannel(channel), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<TArgs>(bytes)
     return encodeMessagePackPayload(await handler(args))
   })

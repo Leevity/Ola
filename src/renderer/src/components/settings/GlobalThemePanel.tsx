@@ -84,7 +84,7 @@ function TerminalPresetPreview({
 
   return (
     <div
-      className="mt-3 h-14 overflow-hidden rounded-xl border border-black/10 px-3 py-2 font-mono text-[0.65rem] leading-5 shadow-inner dark:border-white/10"
+      className="mt-3 h-14 overflow-hidden rounded-xl border border-black/10 px-3 py-2 font-mono text-xs leading-5 shadow-inner dark:border-white/10"
       style={{ background: terminal.background, color: terminal.foreground }}
     >
       <div className="truncate" style={{ color: terminal.green }}>
@@ -132,7 +132,7 @@ function PresetCard({
           <p className="mt-1 text-xs leading-5 text-muted-foreground">{t(preset.descriptionKey)}</p>
         </div>
         {active ? (
-          <span className="shrink-0 rounded-full bg-primary px-2 py-1 text-[0.65rem] font-semibold text-primary-foreground">
+          <span className="shrink-0 rounded-full bg-primary px-2 py-1 text-xs font-semibold text-primary-foreground">
             {t('general.themePreset.current')}
           </span>
         ) : null}
@@ -152,11 +152,11 @@ function PresetCard({
       <div className="mt-3 flex items-center justify-between gap-3">
         <PresetSwatches preset={preset} />
         {previewType === 'terminal' ? (
-          <span className="text-[0.66rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
             {t('general.themePreset.remoteHint', { defaultValue: 'Remote control' })}
           </span>
         ) : (
-          <span className="text-[0.66rem] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
             {t('general.themePreset.globalHint')}
           </span>
         )}

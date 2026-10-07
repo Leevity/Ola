@@ -4,6 +4,8 @@
 >
 > 本文是 Ola 当前 TypeScript Runtime 架构的优化基线，也是后续实施、验收和回滚的唯一计划入口。
 >
+> 改造后缺口的专项收口见 `docs/architecture-remediation-plan.md`。
+>
 > 约束：所有改造必须保持现有 Runtime、Workspace 授权、数据库 handover、MessagePack、消息渠道和既有用户数据兼容。提交描述只使用 Ola 自身模块和能力，不引用外部项目名称。
 
 ## 1. 当前问题基线

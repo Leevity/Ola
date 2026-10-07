@@ -7,6 +7,7 @@ import {
 import { observeCodeGraphOperation, startCodeGraphSync } from '../lib/codegraph-sync'
 import { TsCodeGraphService } from '../codegraph/ts-codegraph-service'
 import { getWasmGrammarStatus, WASM_CODEGRAPH_LANGUAGES } from '../../runtime/codegraph/wasm-parser'
+import { assertTrustedRendererIpcEvent } from '../renderer-security'
 
 interface CodeGraphRequestArgs {
   method: string
@@ -79,7 +80,8 @@ function broadcast(channel: string, payload: unknown): void {
 
 export function registerCodeGraphHandlers(): void {
   void startCodeGraphSync()
-  ipcMain.handle(toMessagePackChannel('codegraph:request'), async (_event, bytes: Uint8Array) => {
+  ipcMain.handle(toMessagePackChannel('codegraph:request'), async (event, bytes: Uint8Array) => {
+    assertTrustedRendererIpcEvent(event)
     const args = decodeMessagePackPayload<CodeGraphRequestArgs>(bytes)
     if (!args.method?.startsWith('codegraph/')) {
       throw new Error('Only codegraph/* methods may use the TS CodeGraph service')
@@ -88,14 +90,17 @@ export function registerCodeGraphHandlers(): void {
     observeCodeGraphOperation(args.method, args.params, result)
     return encodeMessagePackPayload(result)
   })
-  ipcMain.handle(toMessagePackChannel('codegraph:status'), async () => {
+  ipcMain.handle(toMessagePackChannel('codegraph:status'), async (event) => {
+    assertTrustedRendererIpcEvent(event)
     return encodeMessagePackPayload(getTsCodeGraphStatus())
   })
-  ipcMain.handle(toMessagePackChannel('codegraph:stop'), async () => {
+  ipcMain.handle(toMessagePackChannel('codegraph:stop'), async (event) => {
+    assertTrustedRendererIpcEvent(event)
     await stopTsCodeGraphService()
     return encodeMessagePackPayload({ ok: true })
   })
-  ipcMain.handle(toMessagePackChannel('codegraph:recycle'), async () => {
+  ipcMain.handle(toMessagePackChannel('codegraph:recycle'), async (event) => {
+    assertTrustedRendererIpcEvent(event)
     await stopTsCodeGraphService()
     getTsCodeGraphService()
     return encodeMessagePackPayload({ ok: true })

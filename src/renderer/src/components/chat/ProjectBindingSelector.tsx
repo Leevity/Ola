@@ -3,6 +3,7 @@ import { FolderOpen, Pencil, Server } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { cn } from '@renderer/lib/utils'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
@@ -74,8 +75,11 @@ export function ProjectBindingSelector({
   }, [])
 
   const handleSelectDesktopFolder = React.useCallback(
-    (folderPath: string): void => {
-      updateProjectDirectory(project.id, { workingFolder: folderPath, sshConnectionId: null })
+    async (folderPath: string): Promise<void> => {
+      await updateProjectDirectory(project.id, {
+        workingFolder: folderPath,
+        sshConnectionId: null
+      })
     },
     [project.id, updateProjectDirectory]
   )
@@ -86,17 +90,23 @@ export function ProjectBindingSelector({
       path?: string
     }
     if (!result.canceled && result.path) {
-      updateProjectDirectory(project.id, { workingFolder: result.path, sshConnectionId: null })
+      await updateProjectDirectory(project.id, {
+        workingFolder: result.path,
+        sshConnectionId: null
+      })
     }
   }, [project.id, updateProjectDirectory])
 
   const handleSelectSshFolder = React.useCallback(
-    (connId: string): void => {
+    async (connId: string): Promise<void> => {
       const conn = sshConnections.find((item) => item.id === connId)
       if (!conn) return
       const dir = sshDirInputs[connId]?.trim() || conn.defaultDirectory || DEFAULT_SSH_WORKDIR
-      updateProjectDirectory(project.id, { workingFolder: dir, sshConnectionId: connId })
-      setSshDirEditingId(null)
+      if (
+        await updateProjectDirectory(project.id, { workingFolder: dir, sshConnectionId: connId })
+      ) {
+        setSshDirEditingId(null)
+      }
     },
     [project.id, sshConnections, sshDirInputs, updateProjectDirectory]
   )
@@ -239,6 +249,7 @@ export function ProjectBindingSelector({
                         }))
                       }
                       onKeyDown={(event) => {
+                        if (isImeCommitKey(event)) return
                         if (event.key === 'Enter') handleSelectSshFolder(conn.id)
                         if (event.key === 'Escape') setSshDirEditingId(null)
                       }}

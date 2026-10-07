@@ -9,6 +9,7 @@ import {
 
 const originalRoot = process.env.OLA_E2E_DATA_ROOT
 const originalTestInstruction = process.env.OLA_E2E_TEST_INSTRUCTION
+const originalHome = process.env.HOME
 const cleanup: Array<() => Promise<void>> = []
 
 afterEach(async () => {
@@ -16,6 +17,8 @@ afterEach(async () => {
   else process.env.OLA_E2E_DATA_ROOT = originalRoot
   if (originalTestInstruction === undefined) delete process.env.OLA_E2E_TEST_INSTRUCTION
   else process.env.OLA_E2E_TEST_INSTRUCTION = originalTestInstruction
+  if (originalHome === undefined) delete process.env.HOME
+  else process.env.HOME = originalHome
   for (const close of cleanup.splice(0).reverse()) await close()
 })
 
@@ -95,6 +98,7 @@ it('does not expand host environment secrets from an isolated import config', as
   )
   process.env.OLA_E2E_DATA_ROOT = root
   process.env.OLA_E2E_TEST_INSTRUCTION = 'inside.md'
+  process.env.HOME = 'OLA_HOST_HOME_SECRET'
 
   const parsed = parseOpenCodeConfig()
   expect(parsed.warnings).toContain(
@@ -103,5 +107,5 @@ it('does not expand host environment secrets from an isolated import config', as
   expect(parsed.instructions.resolvedFiles.map((file) => file.content)).toEqual([
     'isolated instruction'
   ])
-  expect(parsed.instructions.managedContent).not.toContain(process.env.HOME ?? '')
+  expect(parsed.instructions.managedContent).not.toContain('OLA_HOST_HOME_SECRET')
 })

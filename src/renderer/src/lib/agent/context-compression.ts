@@ -4,7 +4,6 @@ import type {
   ProviderConfig,
   UnifiedMessage
 } from '../api/types'
-import { runTsContextCompression } from '@renderer/lib/ipc/agent-bridge'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
 import { resolveTsRuntimeModelBinding } from '@renderer/lib/ipc/ts-runtime-model-binding'
 import { assessTsRuntimeTextEligibility } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
@@ -296,7 +295,7 @@ async function tryTsRuntimeCompression(args: {
   pinnedContext?: string
   trigger: 'auto' | 'manual'
   preTokens: number
-}): Promise<{ messages: UnifiedMessage[]; result: CompressionResult } | null> {
+}): Promise<{ messages: UnifiedMessage[]; result: CompressionResult }> {
   const originalCount = args.messages.length
   const minMessagesToCompress = args.trigger === 'manual' ? 1 : 2
   const effectivePreserveCount = Math.min(
@@ -323,7 +322,9 @@ async function tryTsRuntimeCompression(args: {
   }
 
   const binding = resolveTsRuntimeModelBinding(args.provider)
-  if (!binding || !(await isTsRuntimeAvailable())) return null
+  if (!binding || !(await isTsRuntimeAvailable())) {
+    throw new Error('TS_RUNTIME_COMPRESSION_UNAVAILABLE')
+  }
 
   const prompt = buildCompressionPrompt(messagesToCompress, args.focusPrompt, args.pinnedContext)
   const eligibility = assessTsRuntimeTextEligibility({
@@ -331,35 +332,31 @@ async function tryTsRuntimeCompression(args: {
     provider: args.provider,
     modelSource: binding.modelSource
   })
-  if (!eligibility.eligible) return null
+  if (!eligibility.eligible) throw new Error('TS_RUNTIME_COMPRESSION_UNSUPPORTED')
+  if (!args.provider.sessionId) throw new Error('TS_RUNTIME_COMPRESSION_SESSION_REQUIRED')
 
   let summary = ''
-  try {
-    for await (const event of streamTsRuntimeTextTurn({
-      workspaceId: binding.workspaceId,
-      sessionId: `context-compression:${crypto.randomUUID()}`,
-      modelSource: binding.modelSource,
-      modelOptions: {
-        ...eligibility.modelOptions,
-        systemPrompt: TS_COMPRESSION_SYSTEM_PROMPT,
-        thinking: { type: 'disabled' },
-        temperature: 0,
-        responsesSessionScope: TS_COMPRESSION_SESSION_SCOPE
-      },
-      prompt,
-      maxTurns: 1,
-      signal: args.signal
-    })) {
-      if (event.type === 'text_delta' && event.text) summary += event.text
-      if (event.type === 'loop_end') break
-      if (event.type === 'error') throw event.error
-    }
-  } catch (error) {
-    if (args.signal?.aborted) throw error
-    return null
+  for await (const event of streamTsRuntimeTextTurn({
+    workspaceId: binding.workspaceId,
+    sessionId: args.provider.sessionId,
+    modelSource: binding.modelSource,
+    modelOptions: {
+      ...eligibility.modelOptions,
+      systemPrompt: TS_COMPRESSION_SYSTEM_PROMPT,
+      thinking: { type: 'disabled' },
+      temperature: 0,
+      responsesSessionScope: TS_COMPRESSION_SESSION_SCOPE
+    },
+    prompt,
+    maxTurns: 1,
+    signal: args.signal
+  })) {
+    if (event.type === 'text_delta' && event.text) summary += event.text
+    if (event.type === 'loop_end') break
+    if (event.type === 'error') throw event.error
   }
   summary = normalizeCompressionSummary(summary)
-  if (!summary) return null
+  if (!summary) throw new Error('TS_RUNTIME_COMPRESSION_EMPTY_SUMMARY')
 
   const summaryId = `oc_${crypto.randomUUID()}`
   const boundaryId = `oc_${crypto.randomUUID()}`
@@ -809,7 +806,7 @@ export async function compressMessages(
     throw new Error('aborted')
   }
 
-  const tsResult = await tryTsRuntimeCompression({
+  return tryTsRuntimeCompression({
     messages,
     provider: providerConfig,
     signal,
@@ -819,24 +816,4 @@ export async function compressMessages(
     trigger,
     preTokens
   })
-  if (tsResult) return tsResult
-
-  const result = await runTsContextCompression({
-    messages,
-    provider: providerConfig,
-    signal,
-    ...(focusPrompt ? { focusPrompt } : {}),
-    ...(typeof preserveCount === 'number' && Number.isFinite(preserveCount)
-      ? { preserveCount }
-      : {}),
-    ...(trigger ? { trigger } : {}),
-    ...(typeof preTokens === 'number' && Number.isFinite(preTokens) ? { preTokens } : {}),
-    ...(pinnedContext?.trim() ? { pinnedContext: pinnedContext.trim() } : {})
-  })
-
-  if (signal?.aborted) {
-    throw new Error('aborted')
-  }
-
-  return result
 }

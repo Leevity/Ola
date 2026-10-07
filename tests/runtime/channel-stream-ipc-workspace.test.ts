@@ -1,4 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+vi.mock('../../src/main/renderer-security', () => ({
+  assertTrustedRendererIpcEvent: () => undefined,
+  isTrustedRendererIpcEvent: () => true,
+  registerTrustedRendererUrl: () => undefined
+}))
 import type { ChannelManager } from '../../src/main/channels/channel-manager'
 import type {
   ChannelInstance,

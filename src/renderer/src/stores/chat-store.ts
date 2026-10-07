@@ -7,6 +7,8 @@ import {
 import { create } from 'zustand'
 import { immer } from 'zustand/middleware/immer'
 import { nanoid } from 'nanoid'
+import { toast } from 'sonner'
+import i18n from '../locales'
 import type {
   UnifiedMessage,
   ContentBlock,
@@ -38,10 +40,12 @@ import {
   DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL,
   DB_SESSIONS_CREATE_MSGPACK_CHANNEL,
   DB_SESSIONS_DELETE_MSGPACK_CHANNEL,
+  DB_SESSIONS_GET_MSGPACK_CHANNEL,
   DB_SESSIONS_LIST_MSGPACK_CHANNEL,
   DB_SESSIONS_UPDATE_MSGPACK_CHANNEL
 } from '../../../shared/messagepack/binary-ipc'
 import { useAgentStore } from './agent-store'
+import { waitForSessionRunToSettle } from '../lib/agent/session-run-lifecycle'
 import { useTeamStore } from './team-store'
 import { useTaskStore } from './task-store'
 import { useWorkspaceStore } from './workspace-store'
@@ -51,7 +55,11 @@ import { useUIStore } from './ui-store'
 import { useBackgroundSessionStore } from './background-session-store'
 import { useSettingsStore } from './settings-store'
 import { useInputDraftStore } from './input-draft-store'
-import { SessionPersistenceQueue } from './chat-persistence-domain'
+import {
+  reconcileSessionDeleteResponse,
+  SessionCreationGate,
+  SessionPersistenceQueue
+} from './chat-persistence-domain'
 import {
   inferTaskProfile,
   normalizeTaskProfile,
@@ -123,6 +131,7 @@ export interface Session {
   mode: SessionMode
   taskProfile: TaskProfile
   taskProfileLocked: boolean
+  scenarioPolicy?: 'project-read-only' | 'ssh-read-only' | 'materials-no-tools' | null
   profileConfigSnapshot?: TaskProfileConfig
   messages: UnifiedMessage[]
   messageCount: number
@@ -167,6 +176,7 @@ export function createRestorableSessionSnapshot(session: Session): Session {
     mode: session.mode,
     taskProfile: session.taskProfile,
     taskProfileLocked: session.taskProfileLocked,
+    scenarioPolicy: session.scenarioPolicy,
     profileConfigSnapshot: session.profileConfigSnapshot,
     messages: session.messages,
     messageCount: session.messageCount,
@@ -207,11 +217,14 @@ export interface CreateSessionOptions {
   sshConnectionId?: string | null
   taskProfile?: TaskProfile
   profileConfigSnapshot?: TaskProfileConfig
+  scenarioPolicy?: 'project-read-only' | 'ssh-read-only' | 'materials-no-tools'
 }
 
 // --- DB persistence helpers (queued fire-and-forget) ---
 
-const _pendingSessionCreates = new Map<string, Promise<unknown>>()
+const _sessionCreationGate = new SessionCreationGate()
+const _pendingSessionDeletes = new Set<string>()
+const _sessionDeleteWriteBarriers = new Set<string>()
 const _sessionMessageWriteQueue = new SessionPersistenceQueue()
 const _messageWriteGenerations = new Map<string, number>()
 const _pendingMessageWriteCounts = new Map<string, number>()
@@ -386,43 +399,59 @@ function enqueueSessionMessageWrite(
 ): Promise<void> {
   return _sessionMessageWriteQueue.enqueue(
     sessionId,
-    async () => {
-      await (_pendingSessionCreates.get(sessionId) ?? Promise.resolve()).catch(() => {})
-      await write()
-    },
+    () => _sessionCreationGate.runAfterCreation(sessionId, write),
     () =>
       expectedGeneration === undefined ||
       getMessageWriteGeneration(sessionId) === expectedGeneration
   )
 }
 
-function dbCreateSession(s: Session): void {
-  const pending = invokeMessagePack(DB_SESSIONS_CREATE_MSGPACK_CHANNEL, {
-    id: s.id,
-    title: s.title,
-    icon: s.icon,
-    mode: s.mode,
-    taskProfile: s.taskProfile,
-    taskProfileLocked: s.taskProfileLocked,
-    createdAt: s.createdAt,
-    updatedAt: s.updatedAt,
-    projectId: s.projectId,
-    workingFolder: s.workingFolder,
-    sshConnectionId: s.sshConnectionId,
-    planId: s.planId,
-    pinned: s.pinned,
-    providerId: s.providerId,
-    modelId: s.modelId,
-    modelSource: s.modelSource ? JSON.stringify(s.modelSource) : undefined,
-    modelSelectionMode: s.modelSelectionMode ?? (s.providerId && s.modelId ? 'manual' : 'inherit'),
-    workspaceId: s.workspaceId ?? 'local-personal'
-  }).finally(() => {
-    if (_pendingSessionCreates.get(s.id) === pending) {
-      _pendingSessionCreates.delete(s.id)
-    }
+function persistSessionMessageReplacement(
+  sessionId: string,
+  messages: UnifiedMessage[]
+): Promise<unknown> {
+  return invokeMessagePack(DB_MESSAGES_REPLACE_MSGPACK_CHANNEL, {
+    sessionId,
+    workspaceId: workspaceForSession(sessionId),
+    messages: messages.map((msg, i) => ({
+      id: msg.id,
+      role: msg.role,
+      content: JSON.stringify(sanitizeMessageContentForPersistence(msg.content)),
+      meta: msg.meta ? JSON.stringify(msg.meta) : null,
+      createdAt: msg.createdAt,
+      usage: msg.usage ? JSON.stringify(msg.usage) : null,
+      sortOrder: i
+    }))
   })
+}
 
-  _pendingSessionCreates.set(s.id, pending)
+function dbCreateSession(s: Session): void {
+  const pending = _sessionCreationGate.track(
+    s.id,
+    invokeMessagePack(DB_SESSIONS_CREATE_MSGPACK_CHANNEL, {
+      id: s.id,
+      title: s.title,
+      icon: s.icon,
+      mode: s.mode,
+      taskProfile: s.taskProfile,
+      taskProfileLocked: s.taskProfileLocked,
+      scenarioPolicy: s.scenarioPolicy,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      projectId: s.projectId,
+      workingFolder: s.workingFolder,
+      sshConnectionId: s.sshConnectionId,
+      planId: s.planId,
+      pinned: s.pinned,
+      providerId: s.providerId,
+      modelId: s.modelId,
+      modelSource: s.modelSource ? JSON.stringify(s.modelSource) : undefined,
+      modelSelectionMode:
+        s.modelSelectionMode ?? (s.providerId && s.modelId ? 'manual' : 'inherit'),
+      workspaceId: s.workspaceId ?? 'local-personal'
+    })
+  )
+
   void pending.catch((error) => {
     console.warn('[ChatStore] Session creation failed', error)
   })
@@ -430,31 +459,77 @@ function dbCreateSession(s: Session): void {
 
 /** TS desktop runs require the Native-owned session row to exist before submission. */
 export async function awaitPendingSessionCreate(sessionId: string): Promise<void> {
-  await _pendingSessionCreates.get(sessionId)
+  await _sessionCreationGate.ensureCreated(
+    sessionId,
+    async () => {
+      const session = useChatStore.getState().sessions.find((entry) => entry.id === sessionId)
+      if (!session) return false
+      const row = await invokeMessagePackBinary<{ session?: { id?: string } } | null>(
+        DB_SESSIONS_GET_MSGPACK_CHANNEL,
+        { id: sessionId, workspaceId: session.workspaceId ?? 'local-personal' }
+      )
+      return row?.session?.id === sessionId
+    },
+    async () => {
+      const session = useChatStore.getState().sessions.find((entry) => entry.id === sessionId)
+      if (!session) throw new Error('SESSION_NOT_FOUND')
+      dbCreateSession(session)
+      await _sessionCreationGate.wait(sessionId)
+    }
+  )
+}
+
+export function hasPendingSessionCreateFailure(sessionId: string): boolean {
+  return _sessionCreationGate.hasFailure(sessionId)
 }
 
 function dbUpdateSession(id: string, patch: Record<string, unknown>): void {
   const session = useChatStore.getState().sessions.find((entry) => entry.id === id)
-  invokeMessagePack(DB_SESSIONS_UPDATE_MSGPACK_CHANNEL, {
-    id,
-    workspaceId: session?.workspaceId ?? 'local-personal',
-    patch
-  }).catch(() => {})
+  void _sessionCreationGate
+    .runAfterCreation(id, () =>
+      invokeMessagePack(DB_SESSIONS_UPDATE_MSGPACK_CHANNEL, {
+        id,
+        workspaceId: session?.workspaceId ?? 'local-personal',
+        patch
+      })
+    )
+    .catch(() => {})
 }
 
-function dbDeleteSession(id: string): void {
-  bumpMessageWriteGeneration(id)
-  _sessionMessageWriteQueue.clear(id)
-  void (_pendingSessionCreates.get(id) ?? Promise.resolve())
-    .catch(() => {})
-    .then(() => {
-      const session = useChatStore.getState().sessions.find((entry) => entry.id === id)
-      return invokeMessagePack(DB_SESSIONS_DELETE_MSGPACK_CHANNEL, {
+async function dbDeleteSession(id: string, workspaceId?: string): Promise<void> {
+  const scopedWorkspaceId =
+    workspaceId ??
+    useChatStore.getState().sessions.find((entry) => entry.id === id)?.workspaceId ??
+    'local-personal'
+  for (const pendingUpsert of _pendingMessageUpserts.values()) {
+    if (pendingUpsert.sessionId === id) flushPendingMessageUpsert(id, pendingUpsert.messageId)
+  }
+  await _sessionMessageWriteQueue.enqueueStrict(id, async () => {
+    await _sessionCreationGate.wait(id).catch(() => {})
+    try {
+      await invokeMessagePack(DB_SESSIONS_DELETE_MSGPACK_CHANNEL, {
         id,
-        workspaceId: session?.workspaceId ?? 'local-personal'
+        workspaceId: scopedWorkspaceId
       })
-    })
-    .catch(() => {})
+    } catch (error) {
+      const missingCreateRow =
+        _sessionCreationGate.hasFailure(id) && String(error).includes('BUSINESS_SESSION_NOT_FOUND')
+      if (!missingCreateRow) {
+        // The delete may have committed before its IPC response was lost.
+        // Only an authoritative read-back can turn this failure into success.
+        await reconcileSessionDeleteResponse(error, async () => {
+          const persisted = await invokeMessagePackBinary<{ session?: { id?: string } } | null>(
+            DB_SESSIONS_GET_MSGPACK_CHANNEL,
+            { id, workspaceId: scopedWorkspaceId }
+          )
+          return persisted?.session?.id === id
+        })
+      }
+    }
+    _sessionCreationGate.clearFailure(id)
+    bumpMessageWriteGeneration(id)
+    clearPendingMessageUpsertsForSession(id)
+  })
 }
 
 function dbClearAllSessions(workspaceId: string, sessionIds: string[] = []): void {
@@ -463,7 +538,10 @@ function dbClearAllSessions(workspaceId: string, sessionIds: string[] = []): voi
     return _sessionMessageWriteQueue.pending(sessionId)
   })
   void Promise.all(pendingWrites)
-    .then(() => invokeMessagePack(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, { workspaceId }))
+    .then(async () => {
+      await invokeMessagePack(DB_SESSIONS_CLEAR_ALL_MSGPACK_CHANNEL, { workspaceId })
+      for (const sessionId of sessionIds) _sessionCreationGate.clearFailure(sessionId)
+    })
     .catch(() => {})
 }
 
@@ -481,28 +559,11 @@ function dbCreateProject(project: Project): void {
   }).catch(() => {})
 }
 
-function dbUpdateProject(id: string, patch: Record<string, unknown>): void {
-  const project = useChatStore.getState().projects.find((entry) => entry.id === id)
-  invokeMessagePack(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, {
-    id,
-    workspaceId: project?.workspaceId ?? 'local-personal',
-    patch
-  }).catch(() => {})
-}
-
 function workspaceForSession(sessionId: string): string {
   return (
     useChatStore.getState().sessions.find((session) => session.id === sessionId)?.workspaceId ??
     'local-personal'
   )
-}
-
-function dbDeleteProject(id: string): void {
-  const project = useChatStore.getState().projects.find((entry) => entry.id === id)
-  invokeMessagePack(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, {
-    id,
-    workspaceId: project?.workspaceId ?? 'local-personal'
-  }).catch(() => {})
 }
 
 function sanitizeMessageContentForPersistence(
@@ -643,6 +704,7 @@ function dbUpsertMessage(
   expectedGeneration = getMessageWriteGeneration(sessionId),
   reason: MessageUpsertReason = 'message-upsert'
 ): void {
+  if (_sessionDeleteWriteBarriers.has(sessionId)) return
   const normalizedContent =
     typeof msg.content === 'string' || Array.isArray(msg.content)
       ? sanitizeMessageContentForPersistence(msg.content)
@@ -735,13 +797,18 @@ function dbUpsertMessage(
   _pendingMessageUpserts.set(pendingKey, pendingUpsert)
 }
 
-function dbClearMessages(sessionId: string): void {
-  bumpMessageWriteGeneration(sessionId)
-  clearPendingMessageUpsertsForSession(sessionId)
-  enqueueSessionMessageWrite(sessionId, () =>
-    invokeMessagePack(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, {
-      sessionId,
-      workspaceId: workspaceForSession(sessionId)
+function dbClearMessages(sessionId: string, updatedAt: number): Promise<void> {
+  const workspaceId = workspaceForSession(sessionId)
+  return _sessionMessageWriteQueue.enqueueStrict(sessionId, () =>
+    _sessionCreationGate.runAfterCreation(sessionId, async () => {
+      await invokeMessagePack(DB_MESSAGES_CLEAR_MSGPACK_CHANNEL, {
+        sessionId,
+        workspaceId,
+        clearTasks: true,
+        updatedAt
+      })
+      bumpMessageWriteGeneration(sessionId)
+      clearPendingMessageUpsertsForSession(sessionId)
     })
   )
 }
@@ -1413,16 +1480,18 @@ interface ChatStore {
   createProject: (
     input?: Partial<Pick<Project, 'name' | 'workingFolder' | 'sshConnectionId' | 'pluginId'>>
   ) => Promise<string>
-  renameProject: (projectId: string, name: string) => void
+  renameProject: (projectId: string, name: string) => Promise<void>
   deleteProject: (projectId: string) => Promise<void>
-  togglePinProject: (projectId: string) => void
+  togglePinProject: (projectId: string) => Promise<boolean>
   updateProjectDirectory: (
     projectId: string,
     patch: Partial<{
       workingFolder: string | null
       sshConnectionId: string | null
     }>
-  ) => void
+  ) => Promise<boolean>
+  upsertProjectFromSync: (row: ProjectRow) => void
+  removeProjectFromSync: (projectId: string) => void
 
   // Session CRUD
   createSession: (
@@ -1430,7 +1499,7 @@ interface ChatStore {
     projectId?: string | null,
     options?: CreateSessionOptions
   ) => string
-  deleteSession: (id: string) => void
+  deleteSession: (id: string) => Promise<boolean>
   setActiveSession: (id: string | null) => void
   updateSessionTitle: (id: string, title: string) => void
   updateSessionIcon: (id: string, icon: string) => void
@@ -1447,7 +1516,7 @@ interface ChatStore {
   setSessionPlanId: (sessionId: string, planId: string | null) => void
   setSessionPromptSnapshot: (sessionId: string, snapshot: SessionPromptSnapshot) => void
   clearSessionPromptSnapshot: (sessionId: string) => void
-  clearSessionMessages: (sessionId: string) => void
+  clearSessionMessages: (sessionId: string) => Promise<boolean>
   duplicateSession: (sessionId: string) => Promise<string | null>
   forkSessionFromMessage: (sessionId: string, messageId: string) => Promise<string | null>
   togglePinSession: (sessionId: string) => void
@@ -1463,7 +1532,15 @@ interface ChatStore {
   removeLastAssistantMessage: (sessionId: string) => boolean
   removeLastUserMessage: (sessionId: string) => void
   truncateMessagesFrom: (sessionId: string, fromIndex: number) => void
-  replaceSessionMessages: (sessionId: string, messages: UnifiedMessage[]) => void
+  replaceSessionMessages: (
+    sessionId: string,
+    messages: UnifiedMessage[],
+    alreadyPersisted?: boolean
+  ) => void
+  replaceSessionMessagesPersisted: (
+    sessionId: string,
+    messages: UnifiedMessage[]
+  ) => Promise<boolean>
   sanitizeToolErrorsForResend: (sessionId: string) => void
   stripOldSystemReminders: (sessionId: string) => void
 
@@ -1552,6 +1629,7 @@ interface SessionRow {
   mode: string
   task_profile?: string | null
   task_profile_locked?: number | null
+  scenario_policy?: 'project-read-only' | 'ssh-read-only' | 'materials-no-tools' | null
   created_at: number
   updated_at: number
   project_id?: string | null
@@ -1678,6 +1756,7 @@ function rowToSession(row: SessionRow, messages: UnifiedMessage[] = []): Session
       row.task_profile ?? inferTaskProfile(row.mode, row.project_id, row.working_folder)
     ),
     taskProfileLocked: row.task_profile_locked === 1,
+    scenarioPolicy: row.scenario_policy ?? null,
     profileConfigSnapshot: profileConfigFor(
       normalizeTaskProfile(
         row.task_profile ?? inferTaskProfile(row.mode, row.project_id, row.working_folder)
@@ -1723,6 +1802,7 @@ function mergeSessionSummary(
   session.mode = next.mode
   session.taskProfile = next.taskProfile
   session.taskProfileLocked = next.taskProfileLocked
+  session.scenarioPolicy = next.scenarioPolicy
   session.profileConfigSnapshot = next.profileConfigSnapshot
   session.createdAt = next.createdAt
   session.updatedAt = next.updatedAt
@@ -2683,7 +2763,10 @@ export const useChatStore = create<ChatStore>()(
       try {
         const row = await invokeMessagePackBinary<ProjectRow | null>(
           DB_PROJECTS_ENSURE_DEFAULT_MSGPACK_CHANNEL,
-          { workspaceId: 'local-personal' }
+          {
+            workspaceId: 'local-personal',
+            preferredName: i18n.t('sidebar.newProject', { ns: 'layout' })
+          }
         )
         if (!row) return null
         if (useWorkspaceStore.getState().activeWorkspaceId !== 'local-personal') return null
@@ -2777,7 +2860,7 @@ export const useChatStore = create<ChatStore>()(
       const now = Date.now()
       const payload = {
         id: nanoid(),
-        name: input?.name ?? 'New Project',
+        name: input?.name ?? i18n.t('sidebar.newProject', { ns: 'layout' }),
         workingFolder: input?.workingFolder ?? null,
         sshConnectionId: input?.sshConnectionId ?? null,
         pluginId: input?.pluginId ?? null,
@@ -2793,52 +2876,39 @@ export const useChatStore = create<ChatStore>()(
           payload
         )
         const project = rowToProject(row)
+        get().upsertProjectFromSync(row)
         set((state) => {
-          state.projects.unshift(project)
           state.activeProjectId = project.id
         })
         return project.id
       } catch (err) {
         console.error('[ChatStore] Failed to create project:', err)
-        const fallbackProject: Project = {
-          id: payload.id,
-          name: payload.name,
-          createdAt: now,
-          updatedAt: now,
-          workingFolder: payload.workingFolder ?? undefined,
-          sshConnectionId: payload.sshConnectionId ?? undefined,
-          pluginId: payload.pluginId ?? undefined,
-          pinned: false,
-          workspaceId: payload.workspaceId
-        }
-        set((state) => {
-          state.projects.unshift(fallbackProject)
-          state.activeProjectId = fallbackProject.id
-        })
-        dbCreateProject(fallbackProject)
-        return fallbackProject.id
+        throw err
       }
     },
 
-    renameProject: (projectId, name) => {
+    renameProject: async (projectId, name) => {
       const nextName = name.trim()
       if (!nextName) return
+      const project = get().projects.find((item) => item.id === projectId)
+      if (!project) throw new Error('PROJECT_NOT_FOUND')
       const now = Date.now()
-
-      set((state) => {
-        const project = state.projects.find((item) => item.id === projectId)
-        if (!project) return
-        project.name = nextName
-        project.updatedAt = now
+      const result = await invokeMessagePackBinary<{
+        success: boolean
+        project: ProjectRow | null
+      }>(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, {
+        id: projectId,
+        workspaceId: project.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
+        patch: { name: nextName, updatedAt: now }
       })
-
-      dbUpdateProject(projectId, {
-        name: nextName,
-        updatedAt: now
-      })
+      if (!result?.success || !result.project) throw new Error('PROJECT_RENAME_FAILED')
+      get().upsertProjectFromSync(result.project)
     },
 
     deleteProject: async (projectId) => {
+      const projectWorkspaceId =
+        get().projects.find((project) => project.id === projectId)?.workspaceId ??
+        useWorkspaceStore.getState().activeWorkspaceId
       const localSessions = get().sessions.filter((session) => session.projectId === projectId)
       const localSessionIds = localSessions.map((session) => session.id)
       const deletedMessageIds = localSessions.flatMap((session) =>
@@ -2846,25 +2916,45 @@ export const useChatStore = create<ChatStore>()(
       )
 
       let deletedSessionIds = localSessionIds
+      const settledRuns = await Promise.all(
+        localSessionIds.map((id) => waitForSessionRunToSettle(id))
+      )
+      if (settledRuns.some((settled) => !settled)) {
+        throw new Error('Cannot delete a project while one of its sessions is still stopping.')
+      }
+      for (const sessionId of localSessionIds) {
+        _sessionDeleteWriteBarriers.add(sessionId)
+        for (const pendingUpsert of _pendingMessageUpserts.values()) {
+          if (pendingUpsert.sessionId === sessionId) {
+            flushPendingMessageUpsert(sessionId, pendingUpsert.messageId)
+          }
+        }
+      }
       try {
+        await Promise.all(
+          localSessionIds.flatMap((sessionId) => [
+            _sessionCreationGate.wait(sessionId).catch(() => {}),
+            _sessionMessageWriteQueue.pending(sessionId)
+          ])
+        )
         const result = await invokeMessagePackBinary<{
           projectId: string
           sessionIds: string[]
         } | null>(DB_PROJECTS_DELETE_MSGPACK_CHANNEL, {
           id: projectId,
-          workspaceId:
-            get().projects.find((project) => project.id === projectId)?.workspaceId ??
-            'local-personal'
+          workspaceId: projectWorkspaceId
         })
         if (result?.sessionIds) {
           deletedSessionIds = Array.from(new Set([...localSessionIds, ...result.sessionIds]))
         }
+        for (const sessionId of deletedSessionIds) _sessionCreationGate.clearFailure(sessionId)
       } catch (err) {
         console.error('[ChatStore] Failed to delete project from DB:', err)
+        throw err
+      } finally {
         for (const sessionId of localSessionIds) {
-          dbDeleteSession(sessionId)
+          _sessionDeleteWriteBarriers.delete(sessionId)
         }
-        dbDeleteProject(projectId)
       }
 
       let nextActiveSessionId: string | null = null
@@ -2922,7 +3012,7 @@ export const useChatStore = create<ChatStore>()(
         if (plan) {
           planState.deletePlan(plan.id)
         }
-        taskState.deleteSessionTasks(sessionId)
+        taskState.applySyncedDeleteSessionTasks(sessionId)
         useInputDraftStore.getState().removeSessionDraft(sessionId)
       }
       scheduleAfterNextPaint(() => cleanupDeletedSessionMessages(deletedMessageIds))
@@ -2954,28 +3044,69 @@ export const useChatStore = create<ChatStore>()(
       scheduleDeferredSessionMaintenance(get)
     },
 
-    togglePinProject: (projectId) => {
-      const now = Date.now()
-      let pinned = false
-
+    upsertProjectFromSync: (row) => {
+      const project = rowToProject(row)
+      if (project.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
       set((state) => {
-        const project = state.projects.find((item) => item.id === projectId)
-        if (!project) return
-        project.pinned = !project.pinned
-        project.updatedAt = now
-        pinned = !!project.pinned
-      })
-
-      dbUpdateProject(projectId, {
-        pinned,
-        updatedAt: now
+        const existing = state.projects.find((item) => item.id === project.id)
+        if (existing && project.updatedAt < existing.updatedAt) return
+        const directoryChanged =
+          existing &&
+          (existing.workingFolder !== project.workingFolder ||
+            existing.sshConnectionId !== project.sshConnectionId)
+        if (existing) Object.assign(existing, project)
+        else state.projects.unshift(project)
+        if (directoryChanged) {
+          for (const session of state.sessions) {
+            if (session.projectId !== project.id) continue
+            session.workingFolder = project.workingFolder
+            session.sshConnectionId = project.sshConnectionId
+            delete session.promptSnapshot
+          }
+        }
       })
     },
 
-    updateProjectDirectory: (projectId, patch) => {
+    removeProjectFromSync: (projectId) => {
+      set((state) => {
+        const project = state.projects.find((item) => item.id === projectId)
+        if (!project || project.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId)
+          return
+        state.projects = state.projects.filter((item) => item.id !== projectId)
+        if (state.activeProjectId === projectId) {
+          state.activeProjectId =
+            state.projects.find((item) => !item.pluginId)?.id ?? state.projects[0]?.id ?? null
+        }
+      })
+    },
+
+    togglePinProject: async (projectId) => {
+      const now = Date.now()
+      const project = get().projects.find((item) => item.id === projectId)
+      if (!project) return false
+      try {
+        const result = await invokeMessagePackBinary<{
+          success: boolean
+          project: ProjectRow | null
+        }>(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, {
+          id: projectId,
+          workspaceId: project.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
+          patch: { pinned: !project.pinned, updatedAt: now }
+        })
+        if (!result?.success || !result.project) throw new Error('PROJECT_PIN_UPDATE_FAILED')
+        get().upsertProjectFromSync(result.project)
+        return true
+      } catch (err) {
+        console.error('[ChatStore] Failed to update project pin:', err)
+        toast.error(i18n.t('sidebar_toast.projectPinUpdateFailed', { ns: 'layout' }))
+        return false
+      }
+    },
+
+    updateProjectDirectory: async (projectId, patch) => {
       const now = Date.now()
       const current = get().projects.find((project) => project.id === projectId)
-      if (!current) return
+      if (!current) return false
 
       const nextWorkingFolder =
         patch.workingFolder !== undefined
@@ -2986,53 +3117,38 @@ export const useChatStore = create<ChatStore>()(
           ? (patch.sshConnectionId ?? undefined)
           : current.sshConnectionId
 
-      if (nextWorkingFolder) {
-        useSettingsStore.getState().pushRecentWorkingTarget({
-          workingFolder: nextWorkingFolder,
-          sshConnectionId: nextSshConnectionId ?? null
-        })
-      }
-
       if (
         nextWorkingFolder === current.workingFolder &&
         nextSshConnectionId === current.sshConnectionId
       ) {
-        return
+        return true
       }
-
-      const affectedSessionIds = get()
-        .sessions.filter((session) => session.projectId === projectId)
-        .map((session) => session.id)
-
-      set((state) => {
-        const project = state.projects.find((item) => item.id === projectId)
-        if (project) {
-          project.workingFolder = nextWorkingFolder
-          project.sshConnectionId = nextSshConnectionId
-          project.updatedAt = now
-        }
-
-        for (const session of state.sessions) {
-          if (session.projectId !== projectId) continue
-          session.workingFolder = nextWorkingFolder
-          session.sshConnectionId = nextSshConnectionId
-          delete session.promptSnapshot
-          session.updatedAt = now
-        }
-      })
-
-      dbUpdateProject(projectId, {
-        workingFolder: nextWorkingFolder ?? null,
-        sshConnectionId: nextSshConnectionId ?? null,
-        updatedAt: now
-      })
-
-      for (const sessionId of affectedSessionIds) {
-        dbUpdateSession(sessionId, {
-          workingFolder: nextWorkingFolder ?? null,
-          sshConnectionId: nextSshConnectionId ?? null,
-          updatedAt: now
+      try {
+        const result = await invokeMessagePackBinary<{
+          success: boolean
+          project: ProjectRow | null
+        }>(DB_PROJECTS_UPDATE_MSGPACK_CHANNEL, {
+          id: projectId,
+          workspaceId: current.workspaceId ?? useWorkspaceStore.getState().activeWorkspaceId,
+          patch: {
+            workingFolder: nextWorkingFolder ?? null,
+            sshConnectionId: nextSshConnectionId ?? null,
+            updatedAt: now
+          }
         })
+        if (!result?.success || !result.project) throw new Error('PROJECT_DIRECTORY_UPDATE_FAILED')
+        get().upsertProjectFromSync(result.project)
+        if (nextWorkingFolder) {
+          useSettingsStore.getState().pushRecentWorkingTarget({
+            workingFolder: nextWorkingFolder,
+            sshConnectionId: nextSshConnectionId ?? null
+          })
+        }
+        return true
+      } catch (err) {
+        console.error('[ChatStore] Failed to update project directory:', err)
+        toast.error(i18n.t('sidebar_toast.projectDirectoryUpdateFailed', { ns: 'layout' }))
+        return false
       }
     },
 
@@ -3775,6 +3891,7 @@ export const useChatStore = create<ChatStore>()(
         mode: normalizeSessionMode(mode),
         taskProfile,
         taskProfileLocked: false,
+        scenarioPolicy: options?.scenarioPolicy ?? null,
         profileConfigSnapshot: profileConfig,
         messages: [],
         messageCount: 0,
@@ -3831,8 +3948,31 @@ export const useChatStore = create<ChatStore>()(
       return id
     },
 
-    deleteSession: (id) => {
+    deleteSession: async (id) => {
       const deletedSession = get().sessions.find((session) => session.id === id)
+      if (!deletedSession || _pendingSessionDeletes.has(id)) return false
+      _pendingSessionDeletes.add(id)
+      let persistenceFailed = false
+      let runSettled = false
+      try {
+        runSettled = await waitForSessionRunToSettle(id)
+        if (!runSettled) return false
+        _sessionDeleteWriteBarriers.add(id)
+        await dbDeleteSession(id, deletedSession.workspaceId)
+      } catch (error) {
+        console.error('[ChatStore] Failed to delete session from DB:', error)
+        persistenceFailed = true
+      } finally {
+        _sessionDeleteWriteBarriers.delete(id)
+        _pendingSessionDeletes.delete(id)
+      }
+      if (persistenceFailed) {
+        const currentSession = get().sessions.find((session) => session.id === id)
+        currentSession?.messages.forEach((message, index) => {
+          dbUpsertMessage(id, message, index)
+        })
+        return false
+      }
       const wasActiveSession = get().activeSessionId === id
       const deletedProjectId = deletedSession?.projectId ?? null
       const deletedStreamingMsgId = get().streamingMessages[id]
@@ -3874,11 +4014,9 @@ export const useChatStore = create<ChatStore>()(
       useTeamStore.getState().clearSessionTeam(id)
       const plan = usePlanStore.getState().getPlanBySession(id)
       if (plan) usePlanStore.getState().deletePlan(plan.id)
-      useTaskStore.getState().deleteSessionTasks(id)
+      useTaskStore.getState().applySyncedDeleteSessionTasks(id)
       useInputDraftStore.getState().removeSessionDraft(id)
       scheduleAfterNextPaint(() => cleanupDeletedSessionMessages(deletedMessageIds))
-      dbDeleteSession(id)
-
       if (wasLiveSession) {
         agentState.switchToolCallSession(null, nextActiveId)
       }
@@ -3906,6 +4044,7 @@ export const useChatStore = create<ChatStore>()(
         }
       }
       scheduleDeferredSessionMaintenance(get)
+      return true
     },
 
     setActiveSession: (id) => {
@@ -4029,8 +4168,7 @@ export const useChatStore = create<ChatStore>()(
       const session = get().sessions.find((item) => item.id === sessionId)
       if (!session) return
       if (session.projectId) {
-        get().updateProjectDirectory(session.projectId, { workingFolder: folder })
-        get().clearSessionPromptSnapshot(sessionId)
+        void get().updateProjectDirectory(session.projectId, { workingFolder: folder })
         return
       }
 
@@ -4048,10 +4186,9 @@ export const useChatStore = create<ChatStore>()(
       const session = get().sessions.find((item) => item.id === sessionId)
       if (!session) return
       if (session.projectId) {
-        get().updateProjectDirectory(session.projectId, {
+        void get().updateProjectDirectory(session.projectId, {
           sshConnectionId: connectionId
         })
-        get().clearSessionPromptSnapshot(sessionId)
         return
       }
 
@@ -4217,6 +4354,7 @@ export const useChatStore = create<ChatStore>()(
       const normalizedSession: Session = {
         ...session,
         mode: normalizeSessionMode(session.mode),
+        scenarioPolicy: session.scenarioPolicy ?? null,
         promptSnapshot: undefined,
         projectId: targetProjectId ?? undefined,
         workingFolder: session.workingFolder ?? project?.workingFolder,
@@ -4415,7 +4553,7 @@ export const useChatStore = create<ChatStore>()(
         clearDeferredMessageAdds(id)
         const plan = planState.getPlanBySession(id)
         if (plan) planState.deletePlan(plan.id)
-        taskState.deleteSessionTasks(id)
+        taskState.applySyncedDeleteSessionTasks(id)
         useInputDraftStore.getState().removeSessionDraft(id)
       }
       clearPendingMessageFlushes(deletedMessageIds)
@@ -4455,6 +4593,8 @@ export const useChatStore = create<ChatStore>()(
     },
 
     removeSessionFromSync: (sessionId) => {
+      // The initiating window waits for the same database acknowledgement before cleanup.
+      if (_pendingSessionDeletes.has(sessionId)) return
       const deletedSession = get().sessions.find((session) => session.id === sessionId)
       if (!deletedSession) return
 
@@ -4494,7 +4634,7 @@ export const useChatStore = create<ChatStore>()(
       useTeamStore.getState().clearSessionTeam(sessionId)
       const plan = usePlanStore.getState().getPlanBySession(sessionId)
       if (plan) usePlanStore.getState().deletePlan(plan.id)
-      useTaskStore.getState().deleteSessionTasks(sessionId)
+      useTaskStore.getState().applySyncedDeleteSessionTasks(sessionId)
       useInputDraftStore.getState().removeSessionDraft(sessionId)
       useUIStore
         .getState()
@@ -4517,41 +4657,73 @@ export const useChatStore = create<ChatStore>()(
       scheduleDeferredSessionMaintenance(get)
     },
 
-    clearSessionMessages: (sessionId) => {
-      const now = Date.now()
-      const deletedMessageIds =
-        get()
-          .sessions.find((s) => s.id === sessionId)
-          ?.messages.map((message) => message.id) ?? []
-      set((state) => {
-        const session = state.sessions.find((s) => s.id === sessionId)
-        if (session) {
-          session.messages = []
-          session.messageCount = 0
-          session.messagesLoaded = true
-          session.loadedRangeStart = 0
-          session.loadedRangeEnd = 0
-          session.lastKnownMessageCount = 0
-          delete session.promptSnapshot
-          session.updatedAt = now
-        }
-      })
-      clearPendingMessageFlushes(deletedMessageIds)
-      clearDeferredMessageAdds(sessionId)
-      for (const messageId of deletedMessageIds) {
-        _streamingDirtyMessageIds.delete(messageId)
+    clearSessionMessages: async (sessionId) => {
+      const agentState = useAgentStore.getState()
+      const runStatus = agentState.runningSessions[sessionId]
+      if (
+        runStatus === 'running' ||
+        runStatus === 'retrying' ||
+        (agentState.isRunning && agentState.liveSessionId === sessionId) ||
+        Boolean(get().streamingMessages[sessionId])
+      ) {
+        toast.error(
+          i18n.t('chat:input.clearConversationRunning', {
+            defaultValue: 'Stop this conversation before clearing it.'
+          })
+        )
+        return false
       }
-      dbClearMessages(sessionId)
-      dbUpdateSession(sessionId, { updatedAt: now })
-      useAgentStore.getState().setSessionStatus(sessionId, null)
-      useAgentStore.getState().clearSessionData(sessionId)
-      useBackgroundSessionStore.getState().clearSession(sessionId)
-      useAgentStore.getState().resetLiveSessionExecution(sessionId)
-      useTeamStore.getState().clearSessionTeam(sessionId)
-      const plan = usePlanStore.getState().getPlanBySession(sessionId)
-      if (plan) usePlanStore.getState().deletePlan(plan.id)
-      useTaskStore.getState().deleteSessionTasks(sessionId)
-      useInputDraftStore.getState().removeSessionDraft(sessionId)
+      const now = Date.now()
+      let releaseTaskClear: (() => void) | undefined
+      try {
+        releaseTaskClear = useTaskStore.getState().beginSessionTaskClear(sessionId)
+        await dbClearMessages(sessionId, now)
+      } catch (error) {
+        releaseTaskClear?.()
+        console.error('[ChatStore] Failed to clear session conversation:', error)
+        toast.error(
+          i18n.t('chat:input.clearConversationFailed', {
+            defaultValue: 'Could not clear this conversation. Please retry.'
+          })
+        )
+        return false
+      }
+      try {
+        const deletedMessageIds =
+          get()
+            .sessions.find((s) => s.id === sessionId)
+            ?.messages.map((message) => message.id) ?? []
+        set((state) => {
+          const session = state.sessions.find((s) => s.id === sessionId)
+          if (session) {
+            session.messages = []
+            session.messageCount = 0
+            session.messagesLoaded = true
+            session.loadedRangeStart = 0
+            session.loadedRangeEnd = 0
+            session.lastKnownMessageCount = 0
+            delete session.promptSnapshot
+            session.updatedAt = now
+          }
+        })
+        clearPendingMessageFlushes(deletedMessageIds)
+        clearDeferredMessageAdds(sessionId)
+        for (const messageId of deletedMessageIds) {
+          _streamingDirtyMessageIds.delete(messageId)
+        }
+        useAgentStore.getState().setSessionStatus(sessionId, null)
+        useAgentStore.getState().clearSessionData(sessionId)
+        useBackgroundSessionStore.getState().clearSession(sessionId)
+        useAgentStore.getState().resetLiveSessionExecution(sessionId)
+        useTeamStore.getState().clearSessionTeam(sessionId)
+        const plan = usePlanStore.getState().getPlanBySession(sessionId)
+        if (plan) usePlanStore.getState().deletePlan(plan.id)
+        useTaskStore.getState().confirmSessionTasksCleared(sessionId)
+        useInputDraftStore.getState().removeSessionDraft(sessionId)
+        return true
+      } finally {
+        releaseTaskClear?.()
+      }
     },
 
     duplicateSession: async (sessionId) => {
@@ -4568,6 +4740,7 @@ export const useChatStore = create<ChatStore>()(
         mode: source.mode,
         taskProfile: source.taskProfile,
         taskProfileLocked: source.taskProfileLocked,
+        scenarioPolicy: source.scenarioPolicy,
         profileConfigSnapshot: source.profileConfigSnapshot,
         messages: clonedMessages,
         messageCount: clonedMessages.length,
@@ -4623,6 +4796,7 @@ export const useChatStore = create<ChatStore>()(
         mode: source.mode,
         taskProfile: source.taskProfile,
         taskProfileLocked: source.taskProfileLocked,
+        scenarioPolicy: source.scenarioPolicy,
         profileConfigSnapshot: source.profileConfigSnapshot,
         messages: clonedMessages,
         messageCount: clonedMessages.length,
@@ -4756,7 +4930,7 @@ export const useChatStore = create<ChatStore>()(
       dbUpdateSession(sessionId, { updatedAt: Date.now() })
     },
 
-    replaceSessionMessages: (sessionId, messages) => {
+    replaceSessionMessages: (sessionId, messages, alreadyPersisted = false) => {
       const now = Date.now()
       const previousMessageIds =
         get()
@@ -4792,22 +4966,38 @@ export const useChatStore = create<ChatStore>()(
       if (streamingMsgId) {
         _streamingDirtyMessageIds.delete(streamingMsgId)
       }
-      enqueueSessionMessageWrite(sessionId, () =>
-        invokeMessagePack(DB_MESSAGES_REPLACE_MSGPACK_CHANNEL, {
-          sessionId,
-          workspaceId: workspaceForSession(sessionId),
-          messages: revisedMessages.map((msg, i) => ({
-            id: msg.id,
-            role: msg.role,
-            content: JSON.stringify(sanitizeMessageContentForPersistence(msg.content)),
-            meta: msg.meta ? JSON.stringify(msg.meta) : null,
-            createdAt: msg.createdAt,
-            usage: msg.usage ? JSON.stringify(msg.usage) : null,
-            sortOrder: i
-          }))
-        })
-      )
+      if (!alreadyPersisted) {
+        enqueueSessionMessageWrite(sessionId, () =>
+          persistSessionMessageReplacement(sessionId, revisedMessages)
+        )
+      }
       dbUpdateSession(sessionId, { updatedAt: now })
+    },
+
+    replaceSessionMessagesPersisted: async (sessionId, messages) => {
+      const initialSession = get().sessions.find((session) => session.id === sessionId)
+      if (!initialSession) return false
+      const initialMessages = initialSession.messages
+      let persisted = false
+
+      await _sessionMessageWriteQueue.enqueueStrict(sessionId, async () => {
+        const beforeWrite = get().sessions.find((session) => session.id === sessionId)
+        if (!beforeWrite || beforeWrite.messages !== initialMessages) {
+          return
+        }
+        await persistSessionMessageReplacement(sessionId, messages)
+        const afterWrite = get().sessions.find((session) => session.id === sessionId)
+        if (!afterWrite || afterWrite.messages !== initialMessages) {
+          if (afterWrite) {
+            await persistSessionMessageReplacement(sessionId, afterWrite.messages)
+          }
+          return
+        }
+        get().replaceSessionMessages(sessionId, messages, true)
+        persisted = true
+      })
+
+      return persisted
     },
 
     sanitizeToolErrorsForResend: (sessionId) => {

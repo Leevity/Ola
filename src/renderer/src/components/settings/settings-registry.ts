@@ -22,6 +22,8 @@ export type SettingsIcon =
   | 'mouse'
   | 'key'
   | 'puzzle'
+  | 'blocks'
+  | 'refresh'
   | 'wand'
   | 'cable'
   | 'messages'
@@ -198,7 +200,7 @@ export const SETTINGS_REGISTRY: readonly SettingsPageDefinition[] = [
     section: 'integrations',
     titleKey: 'extension.title',
     descriptionKey: 'extension.subtitle',
-    icon: 'puzzle',
+    icon: 'blocks',
     layout: 'full',
     component: 'extension'
   },
@@ -271,7 +273,7 @@ export const SETTINGS_REGISTRY: readonly SettingsPageDefinition[] = [
     section: 'advanced',
     titleKey: 'migration.title',
     descriptionKey: 'migration.subtitle',
-    icon: 'flask',
+    icon: 'refresh',
     layout: 'full',
     component: 'migration'
   },

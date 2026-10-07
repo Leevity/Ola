@@ -19,6 +19,10 @@ vi.mock('electron', () => ({
     ) => state.handlers.set(channel, handler)
   }
 }))
+vi.mock('../../src/main/renderer-security', () => ({
+  assertTrustedRendererIpcEvent: () => undefined,
+  isTrustedRendererIpcEvent: () => true
+}))
 vi.mock('../../src/main/db/sessions-dao', () => ({
   getSession: async () => ({ workspace_id: 'team-a' })
 }))

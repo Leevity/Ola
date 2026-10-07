@@ -126,7 +126,7 @@ const SIDEBAR_TREE_HOVER_CLASS =
   'workspace-sidebar-row--hover text-foreground/90 hover:text-foreground'
 const SIDEBAR_TREE_ACTION_BUTTON_CLASS = 'workspace-sidebar-row-action size-6 rounded-md'
 const SIDEBAR_TREE_LABEL_CLASS = 'text-[13px] leading-5'
-const SIDEBAR_TREE_META_CLASS = 'text-[10px]'
+const SIDEBAR_TREE_META_CLASS = 'text-[11px]'
 const PROJECT_SORT_MODES = ['updatedAt', 'name', 'createdAt'] as const
 type ProjectSortMode = (typeof PROJECT_SORT_MODES)[number]
 
@@ -247,11 +247,14 @@ function areSessionListsEqual(
   return true
 }
 
-function deriveProjectNameFromFolder(folderPath?: string | null): string {
+function deriveProjectNameFromFolder(
+  folderPath: string | null | undefined,
+  fallbackName: string
+): string {
   const normalized = folderPath?.trim().replace(/[\\/]+$/, '')
-  if (!normalized) return 'New Project'
+  if (!normalized) return fallbackName
   const parts = normalized.split(/[\\/]/).filter(Boolean)
-  return parts[parts.length - 1] || 'New Project'
+  return parts[parts.length - 1] || fallbackName
 }
 
 function downloadMarkdown(filename: string, content: string): void {
@@ -829,13 +832,17 @@ export function WorkspaceSidebar(): React.JSX.Element {
 
   const handleCreateProjectWithDirectory = useCallback(
     async (workingFolder: string, sshConnectionId: string | null) => {
-      const projectId = await createProject({
-        name: deriveProjectNameFromFolder(workingFolder),
-        workingFolder,
-        sshConnectionId: sshConnectionId ?? undefined
-      })
-      openProjectHome(projectId)
-      toast.success(t('sidebar_toast.projectCreated'))
+      try {
+        const projectId = await createProject({
+          name: deriveProjectNameFromFolder(workingFolder, t('sidebar.newProject')),
+          workingFolder,
+          sshConnectionId: sshConnectionId ?? undefined
+        })
+        openProjectHome(projectId)
+        toast.success(t('sidebar_toast.projectCreated'))
+      } catch {
+        toast.error(t('sidebar_toast.projectCreateFailed'))
+      }
     },
     [createProject, openProjectHome, t]
   )
@@ -866,13 +873,22 @@ export function WorkspaceSidebar(): React.JSX.Element {
         await handleCreateProjectWithDirectory(folders[0], null)
         return
       }
+      let createdCount = 0
       for (const folder of folders) {
-        await createProject({
-          name: deriveProjectNameFromFolder(folder),
-          workingFolder: folder
-        })
+        try {
+          await createProject({
+            name: deriveProjectNameFromFolder(folder, t('sidebar.newProject')),
+            workingFolder: folder
+          })
+          createdCount += 1
+        } catch {
+          // Continue importing other folders and report the partial result below.
+        }
       }
-      toast.success(t('sidebar_toast.projectsCreatedCount', { count: folders.length }))
+      if (createdCount > 0) {
+        toast.success(t('sidebar_toast.projectsCreatedCount', { count: createdCount }))
+      }
+      if (createdCount < folders.length) toast.error(t('sidebar_toast.projectCreateFailed'))
     },
     [createProject, handleCreateProjectWithDirectory, t]
   )
@@ -905,16 +921,20 @@ export function WorkspaceSidebar(): React.JSX.Element {
       variant: 'destructive'
     })
     if (!ok) return
+    let deletedCount = 0
     for (const sessionId of chatSessionIds) {
-      clearPendingSessionMessages(sessionId)
-      deleteSession(sessionId)
+      if (await deleteSession(sessionId)) {
+        clearPendingSessionMessages(sessionId)
+        deletedCount += 1
+      }
     }
-    toast.success(t('sidebar_toast.allDeleted'))
+    if (deletedCount === chatSessionIds.length) toast.success(t('sidebar_toast.allDeleted'))
+    else toast.error(t('sidebar_toast.deleteFailed'))
   }, [deleteSession, t])
 
-  const confirmClearSessionMessages = useCallback(() => {
+  const confirmClearSessionMessages = useCallback(async () => {
     if (!clearSessionTarget) return
-    clearSessionMessages(clearSessionTarget.id)
+    if (!(await clearSessionMessages(clearSessionTarget.id))) return
     clearPendingSessionMessages(clearSessionTarget.id)
     toast.success(t('sidebar_toast.messagesCleared'))
     setClearSessionTarget(null)
@@ -937,40 +957,45 @@ export function WorkspaceSidebar(): React.JSX.Element {
     ]
   )
 
-  const confirmClearProjectSessions = useCallback(() => {
+  const confirmClearProjectSessions = useCallback(async () => {
     if (!clearProjectSessionsTarget) return
     const projectSessions = useChatStore
       .getState()
       .sessions.filter((session) => session.projectId === clearProjectSessionsTarget.id)
     const clearableSessions = projectSessions.filter((session) => !isSessionRunning(session.id))
+    let deletedCount = 0
     for (const session of clearableSessions) {
-      clearPendingSessionMessages(session.id)
-      deleteSession(session.id)
+      if (await deleteSession(session.id)) {
+        clearPendingSessionMessages(session.id)
+        deletedCount += 1
+      }
     }
     setClearProjectSessionsTarget(null)
-    if (clearableSessions.length === 0) {
+    if (clearableSessions.length === 0 || deletedCount === 0) {
       toast.info(t('sidebar_toast.noProjectSessionsCleared'))
       return
     }
-    toast.success(
-      t('sidebar_toast.projectSessionsCleared', {
-        count: clearableSessions.length
-      })
-    )
+    if (deletedCount < clearableSessions.length) toast.error(t('sidebar_toast.deleteFailed'))
+    else toast.success(t('sidebar_toast.projectSessionsCleared', { count: deletedCount }))
   }, [clearProjectSessionsTarget, deleteSession, isSessionRunning, t])
 
-  const confirmRename = useCallback(() => {
+  const confirmRename = useCallback(async () => {
     if (!renameDialog) return
     const nextName = renameValue.trim()
     if (!nextName) return
     if (renameDialog.type === 'project') {
-      renameProject(renameDialog.id, nextName)
+      try {
+        await renameProject(renameDialog.id, nextName)
+      } catch {
+        toast.error(t('sidebar_toast.projectRenameFailed'))
+        return
+      }
     } else {
       updateSessionTitle(renameDialog.id, nextName)
     }
     setRenameDialog(null)
     toast.success(tCommon('action.rename'))
-  }, [renameDialog, renameProject, renameValue, tCommon, updateSessionTitle])
+  }, [renameDialog, renameProject, renameValue, t, tCommon, updateSessionTitle])
 
   const handleSmartRenameSession = useCallback(
     async (sessionId: string) => {
@@ -1027,7 +1052,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const confirmDelete = useCallback(async () => {
     if (!deleteTarget) return
     if (deleteTarget.type === 'project') {
-      await deleteProject(deleteTarget.id)
+      try {
+        await deleteProject(deleteTarget.id)
+      } catch {
+        toast.error(t('sidebar_toast.projectDeleteFailed'))
+        return
+      }
       if (useChatStore.getState().activeProjectId === deleteTarget.id) {
         useUIStore.getState().navigateToHome()
       }
@@ -1043,9 +1073,10 @@ export function WorkspaceSidebar(): React.JSX.Element {
       if (hasRunning) {
         abortSession(deleteTarget.id)
       }
-      clearPendingSessionMessages(deleteTarget.id)
-      deleteSession(deleteTarget.id)
-      toast.success(t('sidebar_toast.sessionDeleted'))
+      if (await deleteSession(deleteTarget.id)) {
+        clearPendingSessionMessages(deleteTarget.id)
+        toast.success(t('sidebar_toast.sessionDeleted'))
+      } else toast.error(t('sidebar_toast.deleteFailed'))
     }
     setDeleteTarget(null)
   }, [
@@ -1184,12 +1215,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-1">
               {hasWaitingReply && (
-                <span className="whitespace-nowrap rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[9px] font-medium text-amber-600 dark:text-amber-400">
+                <span className="whitespace-nowrap rounded-full bg-amber-500/12 px-1.5 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400">
                   {t('sidebar.waitingReply', { defaultValue: 'Waiting reply' })}
                 </span>
               )}
               {pendingCount > 0 && (
-                <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[9px] font-medium text-primary">
+                <span className="rounded-full bg-primary/12 px-1.5 py-0.5 text-[11px] font-medium text-primary">
                   {pendingCount > 99 ? '99+' : pendingCount}
                 </span>
               )}
@@ -1614,10 +1645,10 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 ) : (
                   <ChevronDown className="size-3 text-muted-foreground/80" />
                 )}
-                <span className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/80">
+                <span className="text-[11px] font-semibold tracking-[0.04em] text-muted-foreground">
                   {t('sidebar.projects')}
                 </span>
-                <span className="rounded-full border border-border/60 bg-muted/45 px-1 py-0.5 text-[9px] text-muted-foreground">
+                <span className="rounded-full border border-border/60 bg-muted/45 px-1 py-0.5 text-[11px] text-muted-foreground">
                   {projectGroups.length}
                 </span>
               </button>
@@ -1935,13 +1966,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
                                           {t('sidebar.clearProjectSessions')}
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                          onClick={() => {
-                                            togglePinProject(project.id)
-                                            toast.success(
-                                              project.pinned
-                                                ? t('sidebar_toast.projectUnpinned')
-                                                : t('sidebar_toast.projectPinned')
-                                            )
+                                          onClick={async () => {
+                                            if (await togglePinProject(project.id))
+                                              toast.success(
+                                                project.pinned
+                                                  ? t('sidebar_toast.projectUnpinned')
+                                                  : t('sidebar_toast.projectPinned')
+                                              )
                                           }}
                                         >
                                           {project.pinned ? (
@@ -2058,13 +2089,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
                                 {t('sidebar.clearProjectSessions')}
                               </ContextMenuItem>
                               <ContextMenuItem
-                                onClick={() => {
-                                  togglePinProject(project.id)
-                                  toast.success(
-                                    project.pinned
-                                      ? t('sidebar_toast.projectUnpinned')
-                                      : t('sidebar_toast.projectPinned')
-                                  )
+                                onClick={async () => {
+                                  if (await togglePinProject(project.id))
+                                    toast.success(
+                                      project.pinned
+                                        ? t('sidebar_toast.projectUnpinned')
+                                        : t('sidebar_toast.projectPinned')
+                                    )
                                 }}
                               >
                                 {project.pinned ? (
@@ -2167,10 +2198,10 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   ) : (
                     <ChevronDown className="size-3 text-muted-foreground/80" />
                   )}
-                  <span className="text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/80">
+                  <span className="text-[11px] font-semibold tracking-[0.04em] text-muted-foreground">
                     {t('sidebar.chats')}
                   </span>
-                  <span className="rounded-full border border-border/60 bg-muted/45 px-1 py-0.5 text-[9px] text-muted-foreground">
+                  <span className="rounded-full border border-border/60 bg-muted/45 px-1 py-0.5 text-[11px] text-muted-foreground">
                     {chatSessions.length}
                   </span>
                 </button>
@@ -2381,11 +2412,11 @@ export function WorkspaceSidebar(): React.JSX.Element {
             return
           }
           if (!folderPickerProjectId) return
-          updateProjectDirectory(folderPickerProjectId, {
+          const saved = await updateProjectDirectory(folderPickerProjectId, {
             workingFolder: folderPath,
             sshConnectionId: null
           })
-          toast.success(t('sidebar_toast.projectWorkingFolderUpdated'))
+          if (saved) toast.success(t('sidebar_toast.projectWorkingFolderUpdated'))
         }}
         onSelectSshFolder={async (folderPath, connectionId) => {
           if (folderPickerTarget?.type === 'create') {
@@ -2393,11 +2424,11 @@ export function WorkspaceSidebar(): React.JSX.Element {
             return
           }
           if (!folderPickerProjectId) return
-          updateProjectDirectory(folderPickerProjectId, {
+          const saved = await updateProjectDirectory(folderPickerProjectId, {
             workingFolder: folderPath,
             sshConnectionId: connectionId
           })
-          toast.success(t('sidebar_toast.projectWorkingFolderUpdated'))
+          if (saved) toast.success(t('sidebar_toast.projectWorkingFolderUpdated'))
         }}
       />
 

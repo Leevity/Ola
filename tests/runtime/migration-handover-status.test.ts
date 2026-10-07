@@ -41,6 +41,7 @@ vi.mock('../../src/main/runtime/desktop-runtime', () => ({
 }))
 
 import { BrowserWindow } from 'electron'
+import { registerTrustedRendererUrl } from '../../src/main/renderer-security'
 import { registerMigrationHandlers } from '../../src/main/ipc/migration-handlers'
 import { desktopRuntime } from '../../src/main/runtime/desktop-runtime'
 import { quiesceDesktopLegacyBusinessWriter } from '../../src/main/runtime/business-handover-quiesce'
@@ -50,6 +51,21 @@ import {
   promoteBusinessWriteRepository
 } from '../../src/main/db/business-write-canary'
 import { writeBusinessHandoverMarker } from '../../src/main/db/business-handover-state'
+
+function trustedRendererEvent() {
+  const mainFrame = { url: 'app://ola/index.html#/settings/migration' }
+  const sender = {
+    mainFrame,
+    getURL: () => 'app://ola/index.html',
+    isDestroyed: () => false,
+    on: vi.fn(),
+    setWindowOpenHandler: vi.fn()
+  }
+  const window = { webContents: sender, isDestroyed: () => false, on: vi.fn() }
+  vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(window as never)
+  registerTrustedRendererUrl(window as never, 'app://ola/index.html')
+  return { sender, mainFrame, event: { sender, senderFrame: mainFrame } }
+}
 
 describe('business handover status IPC authorization', () => {
   beforeEach(() => {
@@ -62,12 +78,10 @@ describe('business handover status IPC authorization', () => {
   })
 
   it('accepts only the registered main frame', async () => {
-    const mainFrame = {}
-    const sender = { mainFrame }
-    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const { event } = trustedRendererEvent()
     const handler = handlers.get('migration:business-handover-status')
     expect(handler).toBeDefined()
-    await expect(handler!({ sender, senderFrame: mainFrame }, new Uint8Array())).resolves.toEqual({
+    await expect(handler!(event, new Uint8Array())).resolves.toEqual({
       promoted: false,
       inFlight: false,
       runtimeAvailable: true,
@@ -77,9 +91,7 @@ describe('business handover status IPC authorization', () => {
   })
 
   it('rejects a guest or child frame before exposing ownership state', async () => {
-    const mainFrame = {}
-    const sender = { mainFrame }
-    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const { sender, mainFrame } = trustedRendererEvent()
     const handler = handlers.get('migration:business-handover-status')!
     await expect(handler({ sender, senderFrame: {}, mainFrame }, new Uint8Array())).rejects.toThrow(
       'UNTRUSTED_IPC_SENDER'
@@ -91,8 +103,7 @@ describe('business handover status IPC authorization', () => {
 
   it('does not quiesce Native when the TS runtime is unavailable', async () => {
     vi.spyOn(desktopRuntime, 'isAvailable', 'get').mockReturnValue(false)
-    const sender = { mainFrame: {} }
-    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const { sender } = trustedRendererEvent()
     const handler = handlers.get('migration:business-handover')!
     await expect(
       handler({ sender, senderFrame: sender.mainFrame }, new Uint8Array())
@@ -101,8 +112,7 @@ describe('business handover status IPC authorization', () => {
   })
 
   it('requires an explicit confirmation before quiescing Native', async () => {
-    const sender = { mainFrame: {} }
-    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const { sender } = trustedRendererEvent()
     const handler = handlers.get('migration:business-handover')!
     await expect(
       handler({ sender, senderFrame: sender.mainFrame }, new Uint8Array())
@@ -111,8 +121,7 @@ describe('business handover status IPC authorization', () => {
   })
 
   it('does not report success until the promoted repository is confirmed', async () => {
-    const sender = { mainFrame: {} }
-    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const { sender } = trustedRendererEvent()
     vi.mocked(handoverBusinessDatabase).mockResolvedValue({
       snapshot: {
         manifestPath: '/tmp/handover.manifest.json',
@@ -131,8 +140,7 @@ describe('business handover status IPC authorization', () => {
   })
 
   it('returns the handover artifacts only after promotion is confirmed', async () => {
-    const sender = { mainFrame: {} }
-    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ webContents: sender } as never)
+    const { sender } = trustedRendererEvent()
     const snapshot = { manifestPath: '/tmp/handover.manifest.json', backupPath: '/tmp/handover.db' }
     vi.mocked(handoverBusinessDatabase).mockResolvedValue({
       snapshot: snapshot as never,

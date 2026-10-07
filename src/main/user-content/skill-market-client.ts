@@ -50,27 +50,23 @@ export class SkillMarketClient {
       sortBy: 'popular'
     })
     if (request.query?.trim()) params.set('q', request.query.trim())
-    try {
-      const response = await this.fetcher(`${MARKET_API}/skills/search?${params}`, {
-        method: 'GET',
-        redirect: 'error',
-        headers: {
-          Accept: 'application/json',
-          'User-Agent': this.userAgent,
-          ...(request.apiKey?.trim() ? { Authorization: `Bearer ${request.apiKey.trim()}` } : {})
-        }
-      })
-      const length = response.headers.get('content-length')
-      if (length && Number(length) > MAX_RESPONSE_BYTES)
-        throw new Error('Skills marketplace response is too large')
-      const body = await response.text()
-      if (Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES)
-        throw new Error('Skills marketplace response is too large')
-      if (!response.ok) throw new Error(`Skills marketplace API ${response.status}`)
-      return normalize(JSON.parse(body) as unknown)
-    } catch {
-      return { total: 0, skills: [] }
-    }
+    const response = await this.fetcher(`${MARKET_API}/skills/search?${params}`, {
+      method: 'GET',
+      redirect: 'error',
+      headers: {
+        Accept: 'application/json',
+        'User-Agent': this.userAgent,
+        ...(request.apiKey?.trim() ? { Authorization: `Bearer ${request.apiKey.trim()}` } : {})
+      }
+    })
+    const length = response.headers.get('content-length')
+    if (length && Number(length) > MAX_RESPONSE_BYTES)
+      throw new Error('Skills marketplace response is too large')
+    const body = await response.text()
+    if (Buffer.byteLength(body, 'utf8') > MAX_RESPONSE_BYTES)
+      throw new Error('Skills marketplace response is too large')
+    if (!response.ok) throw new Error(`Skills marketplace API ${response.status}`)
+    return normalize(JSON.parse(body) as unknown)
   }
 
   async download(

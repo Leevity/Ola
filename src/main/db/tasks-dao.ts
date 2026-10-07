@@ -132,28 +132,36 @@ export async function updateTask(
     metadata: Record<string, unknown> | null
     sortOrder: number
     updatedAt: number
-  }>
+  }>,
+  expectedUpdatedAt?: number
 ): Promise<void> {
   const writer = businessWriteCanary()
   if (writer) {
     await writer.updateTask({
       id,
       workspaceId,
+      expectedUpdatedAt,
       ...patch,
       updatedAt: patch.updatedAt ?? Date.now()
     })
     return
   }
-  await requestMutation('db/tasks-update', { id, workspaceId, patch })
+  if (expectedUpdatedAt !== undefined) throw new Error('BUSINESS_TASK_VERSION_UNAVAILABLE')
+  await requestMutation('db/tasks-update', { id, workspaceId, patch, expectedUpdatedAt })
 }
 
-export async function deleteTask(id: string, workspaceId: string): Promise<void> {
+export async function deleteTask(
+  id: string,
+  workspaceId: string,
+  expectedUpdatedAt?: number
+): Promise<void> {
   const writer = businessWriteCanary()
   if (writer) {
-    await writer.deleteTask({ id, workspaceId })
+    await writer.deleteTask({ id, workspaceId, expectedUpdatedAt })
     return
   }
-  await requestMutation('db/tasks-delete', { id, workspaceId })
+  if (expectedUpdatedAt !== undefined) throw new Error('BUSINESS_TASK_VERSION_UNAVAILABLE')
+  await requestMutation('db/tasks-delete', { id, workspaceId, expectedUpdatedAt })
 }
 
 export async function deleteTasksBySession(sessionId: string, workspaceId: string): Promise<void> {

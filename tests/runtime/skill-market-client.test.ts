@@ -29,7 +29,7 @@ describe('SkillMarketClient', () => {
     })
   })
 
-  it('does not issue unsupported provider requests and fails closed on bad responses', async () => {
+  it('does not issue unsupported provider requests and reports bad responses', async () => {
     const client = new SkillMarketClient(
       'Ola/test',
       async () => new Response('bad', { status: 500 })
@@ -38,6 +38,6 @@ describe('SkillMarketClient', () => {
       total: 0,
       skills: []
     })
-    await expect(client.list({})).resolves.toEqual({ total: 0, skills: [] })
+    await expect(client.list({})).rejects.toThrow('Skills marketplace API 500')
   })
 })

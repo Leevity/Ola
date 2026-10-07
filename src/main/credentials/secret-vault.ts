@@ -27,6 +27,7 @@ import type {
   VerificationResult,
   VaultStatus
 } from '../../shared/credentials'
+import { waitForSafeStorageKeyPersistence } from './safe-storage-key-persistence'
 
 interface StoredCredential {
   id: string
@@ -89,13 +90,25 @@ function readIndex(): CredentialIndex {
   try {
     const raw = readFileSync(path, 'utf8')
     const parsed = JSON.parse(raw) as CredentialIndex
-    if (parsed && parsed.version === 1 && Array.isArray(parsed.entries)) {
+    if (
+      parsed &&
+      parsed.version === 1 &&
+      Array.isArray(parsed.entries) &&
+      parsed.entries.every(
+        (entry) =>
+          entry &&
+          typeof entry.id === 'string' &&
+          typeof entry.domain === 'string' &&
+          typeof entry.vaultKey === 'string'
+      )
+    ) {
       return parsed
     }
+    throw new Error('Invalid credential index')
   } catch (error) {
-    console.error('[SecretVault] failed to read index, starting fresh:', error)
+    console.error('[SecretVault] failed to read index:', error)
+    throw error
   }
-  return { version: 1, entries: [] }
 }
 
 function writeIndex(index: CredentialIndex): void {
@@ -120,41 +133,58 @@ function writeAtomic(target: string, contents: Buffer): void {
 // In-memory decrypted cache. Loaded lazily on first access.
 // We never persist plaintext to disk.
 let plaintextCache: Map<string, string> | null = null
+let credentialMutationTail: Promise<void> = Promise.resolve()
+
+function serializeCredentialMutation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = credentialMutationTail.then(operation)
+  credentialMutationTail = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
 
 function getPlaintextCache(): Map<string, string> {
   if (plaintextCache) return plaintextCache
-  plaintextCache = new Map<string, string>()
+  const loaded = new Map<string, string>()
   // Try to hydrate from the encrypted vault file.
   const path = getVaultPath()
-  if (!existsSync(path)) return plaintextCache
+  if (!existsSync(path)) {
+    plaintextCache = loaded
+    return loaded
+  }
   try {
     const buf = readFileSync(path)
-    if (buf.length === 0) return plaintextCache
-    if (isSafeStorageAvailable()) {
-      const json = safeStorage.decryptString(buf)
-      const entries = JSON.parse(json) as Record<string, string>
-      for (const [k, v] of Object.entries(entries)) {
-        plaintextCache.set(k, v)
-      }
-    } else {
-      // No safeStorage: keep empty cache. Credentials cannot be read.
-      console.warn('[SecretVault] safeStorage unavailable; vault not hydrated')
+    if (buf.length === 0) throw new Error('Credential vault is empty')
+    if (!isSafeStorageAvailable()) {
+      throw new Error('Encrypted credential vault is unavailable')
     }
+    const entries: unknown = JSON.parse(safeStorage.decryptString(buf))
+    if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
+      throw new Error('Invalid credential vault')
+    }
+    for (const [key, value] of Object.entries(entries)) {
+      if (typeof value !== 'string') throw new Error('Invalid credential vault')
+      loaded.set(key, value)
+    }
+    plaintextCache = loaded
+    return loaded
   } catch (error) {
     console.error('[SecretVault] failed to decrypt vault:', error)
+    throw error
   }
-  return plaintextCache
 }
 
-function persistPlaintextCache(): void {
+async function persistPlaintextCache(values: Map<string, string>): Promise<void> {
   if (!isSafeStorageAvailable()) {
     // Without safeStorage, we don't persist plaintext. Vault is session-only.
     return
   }
   const obj: Record<string, string> = {}
-  for (const [k, v] of getPlaintextCache().entries()) obj[k] = v
+  for (const [k, v] of values.entries()) obj[k] = v
   const json = JSON.stringify(obj)
   const encrypted = safeStorage.encryptString(json)
+  await waitForSafeStorageKeyPersistence()
   writeAtomic(getVaultPath(), encrypted)
 }
 
@@ -176,6 +206,14 @@ export function getVaultStatus(): VaultStatus {
   if (isSafeStorageAvailable()) {
     return { available: true, backend: 'safe_storage' }
   }
+  if (existsSync(getVaultPath())) {
+    return {
+      available: false,
+      backend: 'in_memory_fallback',
+      reason:
+        'Existing encrypted credentials cannot be opened until system secure storage is available.'
+    }
+  }
   return {
     available: true,
     backend: 'in_memory_fallback',
@@ -194,41 +232,35 @@ export interface StoreCredentialInput {
   notes?: string
 }
 
-export function storeCredential(input: StoreCredentialInput): CredentialRef {
-  const id = randomUUID()
-  const createdAt = Date.now()
-  const vaultKey = randomUUID()
+export function storeCredential(input: StoreCredentialInput): Promise<CredentialRef> {
+  return serializeCredentialMutation(async () => {
+    const id = randomUUID()
+    const createdAt = Date.now()
+    const vaultKey = randomUUID()
+    const index = readIndex()
 
-  // Encrypt and stash the password.
-  if (isSafeStorageAvailable()) {
-    const encrypted = safeStorage.encryptString(input.password)
-    getPlaintextCache().set(vaultKey, input.password)
-    // Persist the cache to disk (encrypted form).
-    persistPlaintextCache()
-    // Discard the in-memory encrypted form to keep the index clean.
-    void encrypted
-  } else {
-    // No safeStorage: still keep in memory only.
-    getPlaintextCache().set(vaultKey, input.password)
-  }
+    const nextCache = new Map(getPlaintextCache())
+    nextCache.set(vaultKey, input.password)
+    await persistPlaintextCache(nextCache)
 
-  const entry: Omit<StoredCredential, 'passwordEncrypted'> & { vaultKey: string } = {
-    id,
-    domain: input.domain,
-    username: input.username,
-    kind: 'password',
-    source: input.source,
-    builtinTemplateId: input.builtinTemplateId,
-    projectId: input.projectId,
-    notes: input.notes,
-    createdAt,
-    vaultKey
-  }
-  const index = readIndex()
-  index.entries.push(entry)
-  writeIndex(index)
+    const entry: Omit<StoredCredential, 'passwordEncrypted'> & { vaultKey: string } = {
+      id,
+      domain: input.domain,
+      username: input.username,
+      kind: 'password',
+      source: input.source,
+      builtinTemplateId: input.builtinTemplateId,
+      projectId: input.projectId,
+      notes: input.notes,
+      createdAt,
+      vaultKey
+    }
+    index.entries.push(entry)
+    writeIndex(index)
+    plaintextCache = nextCache
 
-  return toCredentialRef(entry, index)
+    return toCredentialRef(entry, index)
+  })
 }
 
 function toCredentialRef(
@@ -267,40 +299,50 @@ export function getCredentialRef(id: string): CredentialRef | null {
   return entry ? toCredentialRef(entry, index) : null
 }
 
-export function deleteCredential(id: string): boolean {
-  const index = readIndex()
-  const before = index.entries.length
-  const removed = index.entries.filter((e) => e.id === id)
-  index.entries = index.entries.filter((e) => e.id !== id)
-  if (index.entries.length === before) return false
-  writeIndex(index)
-  // Also wipe from the encrypted cache.
-  for (const e of removed) {
-    getPlaintextCache().delete(e.vaultKey)
-  }
-  persistPlaintextCache()
-  return true
+export function deleteCredential(id: string): Promise<boolean> {
+  return serializeCredentialMutation(async () => {
+    const index = readIndex()
+    const originalIndex: CredentialIndex = { ...index, entries: [...index.entries] }
+    const before = index.entries.length
+    const removed = index.entries.filter((e) => e.id === id)
+    index.entries = index.entries.filter((e) => e.id !== id)
+    if (index.entries.length === before) return false
+    const nextCache = new Map(getPlaintextCache())
+    for (const entry of removed) nextCache.delete(entry.vaultKey)
+    writeIndex(index)
+    try {
+      await persistPlaintextCache(nextCache)
+      plaintextCache = nextCache
+    } catch (error) {
+      writeIndex(originalIndex)
+      throw error
+    }
+    return true
+  })
 }
 
 export function updateCredential(
   id: string,
   input: { username?: string; password?: string; notes?: string }
-): CredentialRef | null {
-  const index = readIndex()
-  const entry = index.entries.find((e) => e.id === id)
-  if (!entry) return null
-  if (input.username !== undefined) entry.username = input.username
-  if (input.notes !== undefined) entry.notes = input.notes
-  if (input.password !== undefined) {
-    // Re-encrypt the new password into the vault cache.
-    getPlaintextCache().set(entry.vaultKey, input.password)
-    persistPlaintextCache()
-  }
-  entry.lastUsedAt = Date.now()
-  writeIndex(index)
-  // Return a ref (no plaintext).
-  const { vaultKey: _, ...ref } = entry
-  return ref as CredentialRef
+): Promise<CredentialRef | null> {
+  return serializeCredentialMutation(async () => {
+    const index = readIndex()
+    const entry = index.entries.find((e) => e.id === id)
+    if (!entry) return null
+    if (input.username !== undefined) entry.username = input.username
+    if (input.notes !== undefined) entry.notes = input.notes
+    if (input.password !== undefined) {
+      const nextCache = new Map(getPlaintextCache())
+      nextCache.set(entry.vaultKey, input.password)
+      await persistPlaintextCache(nextCache)
+      plaintextCache = nextCache
+    }
+    entry.lastUsedAt = Date.now()
+    writeIndex(index)
+    // Return a ref (no plaintext).
+    const { vaultKey: _, ...ref } = entry
+    return ref as CredentialRef
+  })
 }
 
 export function updateVerificationResult(
@@ -351,7 +393,11 @@ export function touchCredential(id: string): void {
 export function initSecretVault(): void {
   // Touch the directory so it exists, and warm the cache.
   getCredentialsDir()
-  getPlaintextCache()
+  try {
+    getPlaintextCache()
+  } catch {
+    // Keep handlers available; every credential read or write still fails closed.
+  }
   // If the app was started before safeStorage was ready, retry on app ready.
   if (!isSafeStorageAvailable() && app.isReady()) {
     console.warn('[SecretVault] safeStorage is not available; credentials will be session-only.')

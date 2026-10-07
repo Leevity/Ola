@@ -94,4 +94,42 @@ describe('TS business session route integration', () => {
       repository.sessionStatus({ sessionId: 'session-a', workspaceId: 'local-personal' })
     ).resolves.toMatchObject({ success: true, found: true, messageCount: 0 })
   })
+
+  it('persists task profile and lock state across session reads', async () => {
+    root = await mkdtemp(join(tmpdir(), 'ola-business-session-profile-'))
+    repository = new BusinessRepository({ path: join(root, 'data.db'), mode: 'direct' })
+    const now = Date.now()
+    await repository.createSession({
+      id: 'profile-session',
+      title: 'Profile session',
+      mode: 'chat',
+      taskProfile: 'code',
+      taskProfileLocked: false,
+      createdAt: now,
+      updatedAt: now,
+      workspaceId: 'local-personal'
+    })
+
+    await expect(
+      repository.session<{ task_profile: string; task_profile_locked: number }>(
+        'profile-session',
+        'local-personal'
+      )
+    ).resolves.toMatchObject({ task_profile: 'code', task_profile_locked: 0 })
+
+    await repository.updateSession({
+      id: 'profile-session',
+      workspaceId: 'local-personal',
+      taskProfile: 'work',
+      taskProfileLocked: true,
+      updatedAt: now + 1
+    })
+
+    await expect(
+      repository.session<{ task_profile: string; task_profile_locked: number }>(
+        'profile-session',
+        'local-personal'
+      )
+    ).resolves.toMatchObject({ task_profile: 'work', task_profile_locked: 1 })
+  })
 })

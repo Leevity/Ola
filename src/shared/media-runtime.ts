@@ -3,6 +3,9 @@ export const MEDIA_FILE_MAX_BYTES = 512 * 1024 * 1024
 export type VideoTaskState = 'queued' | 'running' | 'completed' | 'cancelled' | 'failed'
 export type VideoProviderKind = 'seedance'
 export interface VideoGenerationRequest {
+  projectId?: string
+  sessionId?: string
+
   provider: VideoProviderKind
   providerId: string
   prompt: string
@@ -27,6 +30,11 @@ export interface VideoProviderCapability {
   resolutions: string[]
 }
 export interface VideoTask {
+  workspaceId?: string
+  sessionId?: string
+  projectId?: string
+  previewUrl?: string
+
   id: string
   provider: VideoProviderKind
   providerId: string

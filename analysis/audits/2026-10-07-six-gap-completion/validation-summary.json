@@ -1,0 +1,245 @@
+{
+  "date": "2026-10-07",
+  "scope": "six development gaps; Windows source Electron; TypeScript and Go automated checks",
+  "developmentGaps": {
+    "completed": 6,
+    "total": 6
+  },
+  "vitest": {
+    "passedFiles": 281,
+    "skippedFiles": 7,
+    "passedTests": 1163,
+    "skippedTests": 21,
+    "failedTests": 0
+  },
+  "windowsElectron": {
+    "passedFiles": 6,
+    "passedTests": 9,
+    "failedTests": 0,
+    "durationSeconds": 145.95,
+    "firstRun": "one navigation timeout; isolated rerun and final full rerun passed"
+  },
+  "checks": [
+    {
+      "name": "typecheck:runtime",
+      "code": 0
+    },
+    {
+      "name": "verify:main-safety",
+      "code": 0
+    },
+    {
+      "name": "verify:permission-policy",
+      "code": 0
+    },
+    {
+      "name": "verify:chat-experience",
+      "code": 0
+    },
+    {
+      "name": "verify:browser-cookie-import",
+      "code": 0
+    },
+    {
+      "name": "verify:browser-workspace-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:main-browser-service",
+      "code": 0
+    },
+    {
+      "name": "verify:ai-coding-terminal",
+      "code": 0
+    },
+    {
+      "name": "verify:ts-codegraph",
+      "code": 0
+    },
+    {
+      "name": "verify:codegraph-dashboard",
+      "code": 0
+    },
+    {
+      "name": "verify:remote-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:remote-credential-lease",
+      "code": 0
+    },
+    {
+      "name": "verify:mcp-autoconnect",
+      "code": 0
+    },
+    {
+      "name": "verify:mcp-ipc-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:channel-lazy-providers",
+      "code": 0
+    },
+    {
+      "name": "verify:channel-message-dedup",
+      "code": 0
+    },
+    {
+      "name": "verify:channel-reply-routing",
+      "code": 0
+    },
+    {
+      "name": "verify:tool-registry-governance",
+      "code": 0
+    },
+    {
+      "name": "verify:cron-skipped-runs",
+      "code": 0
+    },
+    {
+      "name": "verify:message-locator",
+      "code": 0
+    },
+    {
+      "name": "verify:webview-security",
+      "code": 0
+    },
+    {
+      "name": "verify:agent-run-owner-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:terminal-owner-isolation",
+      "code": 0
+    },
+    {
+      "name": "verify:credential-injection-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:desktop-ipc-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:js-extension-quarantine",
+      "code": 0
+    },
+    {
+      "name": "verify:ts-grep-canary",
+      "code": 0
+    },
+    {
+      "name": "verify:network-download-safety",
+      "code": 0
+    },
+    {
+      "name": "verify:api-oauth-ipc-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:credential-ssh-remote-ipc-authorization",
+      "code": 0
+    },
+    {
+      "name": "verify:runtime-main-assets",
+      "code": 0
+    },
+    {
+      "name": "verify:ts-runtime-production",
+      "code": 0
+    },
+    {
+      "name": "verify:preload-strangler",
+      "code": 0
+    },
+    {
+      "name": "verify:release-gates",
+      "code": 0
+    },
+    {
+      "name": "verify:skill-quality",
+      "code": 0
+    },
+    {
+      "name": "verify:webdav-conditional-write",
+      "code": 0
+    },
+    {
+      "name": "verify:remote-workspace-theme",
+      "code": 0
+    },
+    {
+      "name": "verify:managed-model-bridge",
+      "code": 0
+    },
+    {
+      "name": "verify:workspace-models",
+      "code": 0
+    },
+    {
+      "name": "verify:media-runtime",
+      "code": 0
+    },
+    {
+      "name": "verify:task-board",
+      "code": 0
+    },
+    {
+      "name": "verify:workbench-registry",
+      "code": 0
+    },
+    {
+      "name": "verify:settings-routes",
+      "code": 0
+    },
+    {
+      "name": "verify:product-experience",
+      "code": 0
+    },
+    {
+      "name": "verify:input-drafts",
+      "code": 0
+    },
+    {
+      "name": "verify:execution-outline",
+      "code": 0
+    },
+    {
+      "name": "verify:settings-visual",
+      "code": 0
+    },
+    {
+      "name": "verify:ts-migration-ledger",
+      "code": 0
+    },
+    {
+      "name": "verify:workspace-isolation",
+      "code": 0
+    },
+    {
+      "name": "verify:user-facing-errors",
+      "code": 0
+    }
+  ],
+  "mainRendererTypecheck": "passed",
+  "runtimeTypecheck": "passed",
+  "build": "passed",
+  "changedFilesLint": {
+    "errors": 0,
+    "warnings": 0
+  },
+  "repositoryLint": {
+    "errors": 0,
+    "warnings": 111141
+  },
+  "goTests": "all packages passed",
+  "goVet": "passed",
+  "manualRemaining": [
+    "real SSH and SFTP",
+    "real MCP services",
+    "real video provider",
+    "real account and authorization",
+    "installed Windows build",
+    "UI visual and font experience"
+  ]
+}

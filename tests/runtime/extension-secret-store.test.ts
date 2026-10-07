@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -45,6 +45,57 @@ describe('extension secret store', () => {
       await store.set('sample', 'token', 'session-value')
       await expect(store.get('sample', 'token')).resolves.toBe('session-value')
       await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reads the encrypted file after the platform key becomes available', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ola-extension-secret-late-key-'))
+    const path = join(root, 'extensions-secrets.bin')
+    let available = false
+    try {
+      await new EncryptedExtensionSecretStore(path, crypto).set('sample', 'token', 'saved-value')
+      const delayed = new EncryptedExtensionSecretStore(path, {
+        ...crypto,
+        available: () => available
+      })
+      await expect(delayed.get('sample', 'token')).resolves.toBe('')
+      available = true
+      await expect(delayed.get('sample', 'token')).resolves.toBe('saved-value')
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('does not acknowledge or cache a write before the encryption key is durable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ola-extension-secret-key-pending-'))
+    const path = join(root, 'extensions-secrets.bin')
+    try {
+      const store = new EncryptedExtensionSecretStore(path, {
+        ...crypto,
+        readyForCommit: async () => {
+          throw new Error('key pending')
+        }
+      })
+      await expect(store.set('sample', 'token', 'unsaved-value')).rejects.toThrow('key pending')
+      await expect(store.get('sample', 'token')).resolves.toBe('')
+      await expect(readFile(path)).rejects.toMatchObject({ code: 'ENOENT' })
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('keeps a malformed encrypted file intact instead of treating it as an empty vault', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'ola-extension-secret-corrupt-'))
+    const path = join(root, 'extensions-secrets.bin')
+    const malformed = crypto.encrypt('{invalid-json')
+    try {
+      await writeFile(path, malformed)
+      const store = new EncryptedExtensionSecretStore(path, crypto)
+      await expect(store.get('sample', 'token')).rejects.toThrow()
+      await expect(store.set('sample', 'token', 'new-value')).rejects.toThrow()
+      expect(await readFile(path)).toEqual(malformed)
     } finally {
       await rm(root, { recursive: true, force: true })
     }

@@ -105,7 +105,7 @@ assert.match(toolRegistry, /videoGenerationEnabled/)
 assert.match(toolRegistry, /unregisterVideoGenerationTool/)
 assert.match(taskCard, /media:tasks-list/)
 assert.match(taskCard, /media:task-cancel/)
-assert.match(taskCard, /ola-media:\/\//)
+assert.match(taskCard, /task\.previewUrl/)
 assert.match(toolCard, /VideoGenerationTaskCard/)
 
 console.log('Media runtime verification passed')

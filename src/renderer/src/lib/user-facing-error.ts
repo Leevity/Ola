@@ -25,7 +25,7 @@ export function explainUserFacingError(
       action: 'refreshStatus'
     }
   }
-  if (/ts_runtime|ts-runtime|local agent runtime/.test(haystack)) {
+  if (/ts_runtime|ts-runtime|local agent runtime|sidecar_unavailable/.test(haystack)) {
     return {
       messageKey: 'assistantMessage.agentError.messageRuntimeUnavailable',
       action: 'openSystem'

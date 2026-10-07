@@ -1,7 +1,28 @@
-import type { RunEvent, RunStatus, RunSummary } from './runtime/contracts'
+import {
+  TERMINAL_STATUSES,
+  type PendingRuntimeInteraction,
+  type RunEvent,
+  type RunStatus,
+  type RunSummary
+} from './runtime/contracts'
 
-export type ExecutionRecordSource = 'chat' | 'cron'
+export type ExecutionRecordSource = 'chat' | 'channel' | 'team' | 'cron'
 export type ExecutionApprovalStatus = 'not_required' | 'approved' | 'rejected' | 'pending'
+
+export interface ExecutionPageKey {
+  at: number
+  id: string
+}
+
+export interface ExecutionSourceCursor {
+  anchor: ExecutionPageKey | null
+  after: ExecutionPageKey | null
+}
+
+export interface ExecutionRecordCursor {
+  ts: ExecutionSourceCursor
+  cron: ExecutionSourceCursor
+}
 
 export interface ExecutionRecordFileChange {
   path: string
@@ -13,10 +34,15 @@ export interface ExecutionRecord {
   id: string
   source: ExecutionRecordSource
   workspaceId: string
-  status: RunStatus | 'pending'
+  status: RunStatus | 'pending' | 'skipped'
   startedAt: number
   finishedAt: number | null
   title: string
+  /** Scheduler identity for Cron; distinct from this attempt's run ID. */
+  jobId: string | null
+  /** Runtime submission identity; not a business TaskItem ID. */
+  runtimeTaskId: string | null
+  businessTaskId: string | null
   sessionId: string | null
   projectId: string | null
   sshConnectionId: string | null
@@ -27,10 +53,12 @@ export interface ExecutionRecord {
   fileChanges: ExecutionRecordFileChange[]
   artifacts: string[]
   failureReason: string | null
+  deliveryStatus?: 'pending' | 'sent' | 'failed' | 'unknown' | null
 }
 
 export interface CronExecutionRecordInput {
   id: string
+  jobId?: string | null
   workspaceId: string
   startedAt: number
   finishedAt?: number | null
@@ -43,6 +71,20 @@ export interface CronExecutionRecordInput {
   error?: string | null
   deliveryMode?: string | null
   deliveryTarget?: string | null
+  deliveryStatus?: 'pending' | 'sent' | 'failed' | 'unknown' | null
+}
+
+export function needsExecutionAttention(record: ExecutionRecord): boolean {
+  return (
+    record.approvalStatus === 'pending' ||
+    record.status === 'waiting_interaction' ||
+    record.status === 'waiting_capability' ||
+    record.status === 'interrupted' ||
+    record.status === 'failed' ||
+    record.deliveryStatus === 'failed' ||
+    record.deliveryStatus === 'unknown' ||
+    record.deliveryStatus === 'pending'
+  )
 }
 
 function text(value: unknown): string | null {
@@ -98,20 +140,20 @@ function artifacts(events: readonly RunEvent[]): string[] {
   return result.slice(0, 256)
 }
 
-function statusFromRun(summary: RunSummary, events: readonly RunEvent[]): RunStatus {
-  const terminal = terminalEvent(events)
-  const value = terminal && eventObject(terminal)?.status
-  return typeof value === 'string' ? (value as RunStatus) : summary.status
-}
-
 export function executionRecordFromTsRun(
   summary: RunSummary,
-  events: readonly RunEvent[] = []
+  events: readonly RunEvent[] = [],
+  pendingInteractions: readonly PendingRuntimeInteraction[] = []
 ): ExecutionRecord {
   const terminal = terminalEvent(events)
   const terminalData = terminal ? eventObject(terminal) : null
+  const terminalTimestamp =
+    terminal && terminalData?.status === summary.status ? terminal.timestamp : null
   const failedToolCallCount = events.filter(
-    (event) => event.type === 'tool.failed' || event.type === 'tool.error'
+    (event) =>
+      event.type === 'tool.failed' ||
+      event.type === 'tool.error' ||
+      (event.type === 'tool.result' && eventObject(event)?.isError === true)
   ).length
   const commands = events
     .filter((event) => event.type === 'command.started' || event.type === 'shell.started')
@@ -119,23 +161,30 @@ export function executionRecordFromTsRun(
     .filter((value): value is string => Boolean(value))
   return {
     id: summary.runId,
-    source: 'chat',
+    source: summary.teamContext ? 'team' : summary.channelContext ? 'channel' : 'chat',
     workspaceId: summary.workspaceId,
-    status: statusFromRun(summary, events),
+    status: summary.status,
     startedAt: summary.createdAt,
-    finishedAt: terminal ? terminal.timestamp : null,
-    title: summary.taskId,
+    finishedAt: TERMINAL_STATUSES.has(summary.status)
+      ? (terminalTimestamp ?? summary.updatedAt)
+      : null,
+    title: summary.businessTaskTitle ?? summary.taskId,
+    jobId: null,
+    runtimeTaskId: summary.taskId,
+    businessTaskId: summary.businessTaskId ?? null,
     sessionId: summary.sessionId,
     projectId: null,
     sshConnectionId: summary.sshConnectionId ?? null,
-    approvalStatus: events.some((event) => event.type === 'interaction.rejected')
-      ? 'rejected'
-      : events.some((event) => event.type === 'interaction.resolved')
-        ? 'approved'
-        : events.some((event) => event.type === 'interaction.requested')
-          ? 'pending'
-          : 'not_required',
-    toolCallCount: events.filter((event) => event.type.startsWith('tool.')).length,
+    approvalStatus:
+      (!TERMINAL_STATUSES.has(summary.status) && pendingInteractions.length > 0) ||
+      summary.status === 'waiting_interaction'
+        ? 'pending'
+        : events.some((event) => event.type === 'interaction.rejected')
+          ? 'rejected'
+          : events.some((event) => event.type === 'interaction.resolved')
+            ? 'approved'
+            : 'not_required',
+    toolCallCount: events.filter((event) => event.type === 'tool.started').length,
     failedToolCallCount,
     commandSummary: commands[0] ?? null,
     fileChanges: fileChanges(events),
@@ -145,11 +194,18 @@ export function executionRecordFromTsRun(
 }
 
 export function executionRecordFromCronRun(input: CronExecutionRecordInput): ExecutionRecord {
-  const status = ['queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted'].includes(
-    input.status
-  )
-    ? (input.status as RunStatus)
-    : 'failed'
+  const status: ExecutionRecord['status'] =
+    input.status === 'success' || input.status === 'completed'
+      ? 'completed'
+      : input.status === 'error' || input.status === 'failed'
+        ? 'failed'
+        : input.status === 'aborted' || input.status === 'cancelled'
+          ? 'cancelled'
+          : input.status === 'skipped'
+            ? 'skipped'
+            : input.status === 'running'
+              ? 'running'
+              : 'pending'
   const delivery = [text(input.deliveryMode), text(input.deliveryTarget)]
     .filter((value): value is string => Boolean(value))
     .join(' → ')
@@ -161,6 +217,9 @@ export function executionRecordFromCronRun(input: CronExecutionRecordInput): Exe
     startedAt: input.startedAt,
     finishedAt: input.finishedAt ?? null,
     title: text(input.jobName) ?? 'Cron execution',
+    jobId: text(input.jobId),
+    runtimeTaskId: null,
+    businessTaskId: null,
     sessionId: text(input.sessionId),
     projectId: text(input.projectId),
     sshConnectionId: text(input.sshConnectionId),
@@ -170,6 +229,7 @@ export function executionRecordFromCronRun(input: CronExecutionRecordInput): Exe
     commandSummary: delivery || null,
     fileChanges: [],
     artifacts: [],
-    failureReason: text(input.error)
+    failureReason: text(input.error),
+    deliveryStatus: input.deliveryStatus ?? null
   }
 }

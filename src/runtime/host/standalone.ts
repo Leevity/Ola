@@ -13,6 +13,10 @@ export async function startStandaloneRuntime(options: {
   authorize: (run: RunSpec) => Promise<void>
   authority: RuntimeAuthority
 }): Promise<{
+  recordExternalArtifact: (
+    spec: RunSpec,
+    artifact: { path: string; mediaType: string }
+  ) => Promise<void>
   endpoint: string
   token: string
   stop: () => Promise<void>
@@ -27,6 +31,7 @@ export async function startStandaloneRuntime(options: {
   const descriptor = join(directory, 'connection.json')
   let descriptorWritten = false
   const token = randomBytes(32).toString('hex')
+  const externalRecords = new Map<string, Promise<void>>()
   let stopPromise: Promise<void> | undefined
   const stop = (): Promise<void> =>
     (stopPromise ??= (async () => {
@@ -68,6 +73,22 @@ export async function startStandaloneRuntime(options: {
     })
     descriptorWritten = true
     return {
+      recordExternalArtifact: async (spec, artifact) => {
+        const key = `${spec.workspaceId}:${spec.runId}`
+        const pending = (externalRecords.get(key) ?? Promise.resolve())
+          .catch(() => undefined)
+          .then(async () => {
+            if (!(await options.authority.workspaceIds()).has(spec.workspaceId))
+              throw new Error('WORKSPACE_FORBIDDEN')
+            await journal!.recordExternalArtifact(spec, artifact)
+          })
+        externalRecords.set(key, pending)
+        try {
+          await pending
+        } finally {
+          if (externalRecords.get(key) === pending) externalRecords.delete(key)
+        }
+      },
       endpoint,
       token,
       stop,

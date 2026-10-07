@@ -1,11 +1,12 @@
 ﻿import * as React from 'react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
 import { useShallow } from 'zustand/react/shallow'
 import { InputArea } from '@renderer/components/chat/InputArea'
 import { ProjectTerminalDock } from '@renderer/components/terminal/ProjectTerminalDock'
 import { WorkingFolderSelectorDialog } from './WorkingFolderSelectorDialog'
 import { useUIStore } from '@renderer/stores/ui-store'
-import { useChatStore, type Project } from '@renderer/stores/chat-store'
+import { awaitPendingSessionCreate, useChatStore, type Project } from '@renderer/stores/chat-store'
 import { useChatActions, type SendMessageOptions } from '@renderer/hooks/use-chat-actions'
 import type { ImageAttachment } from '@renderer/lib/image-attachments'
 import { ensureDefaultChatWorkingFolder } from '@renderer/lib/chat-working-folder'
@@ -18,6 +19,8 @@ import { FirstSuccessPanel } from './FirstSuccessPanel'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { TaskProfileConfig } from '@renderer/lib/task-profile'
+import { getProjectTerminalDockLayout } from '@renderer/lib/workbench/project-terminal-dock-layout'
+import type { ScenarioPolicy } from '../../../../shared/scenario-policy'
 
 type HomeProjectSnapshot = NewSessionProjectOption
 
@@ -47,7 +50,8 @@ function deriveProjectNameFromFolder(folderPath: string, fallbackName: string): 
 }
 
 function applySuggestedPrompt(prompt: string): void {
-  const textarea = document.querySelector('textarea')
+  const composer = document.querySelector('[data-tour="composer"]')
+  const textarea = composer?.querySelector('textarea')
   if (textarea instanceof window.HTMLTextAreaElement) {
     const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
       window.HTMLTextAreaElement.prototype,
@@ -59,7 +63,7 @@ function applySuggestedPrompt(prompt: string): void {
     return
   }
 
-  const editor = document.querySelector('[role="textbox"][contenteditable="true"]')
+  const editor = composer?.querySelector('[role="textbox"][contenteditable="true"]')
   if (editor instanceof HTMLDivElement) {
     editor.replaceChildren(document.createTextNode(prompt))
     editor.dispatchEvent(new Event('input', { bubbles: true }))
@@ -116,6 +120,9 @@ export function ChatHomePage(): React.JSX.Element {
       ? activeProjectId
       : null
   const [selectedProjectId, setSelectedProjectId] = React.useState<string | null>(null)
+  const [pendingScenarioPolicy, setPendingScenarioPolicy] = React.useState<ScenarioPolicy | null>(
+    null
+  )
   const selectedProject =
     selectableProjects.find((project) => project.id === selectedProjectId) ?? null
   const homeProject = selectedProject ?? activeProject
@@ -130,6 +137,28 @@ export function ChatHomePage(): React.JSX.Element {
   const { sendMessage } = useChatActions()
   const [folderDialogOpen, setFolderDialogOpen] = React.useState(false)
   const [createProjectDialogOpen, setCreateProjectDialogOpen] = React.useState(false)
+  const [terminalLayoutWidth, setTerminalLayoutWidth] = React.useState(0)
+  const homeRootRef = React.useRef<HTMLDivElement | null>(null)
+  const preferredTerminalDockArea = useUIStore((s) =>
+    terminalProjectId ? (s.terminalDockAreaByProjectId[terminalProjectId] ?? 'bottom') : 'bottom'
+  )
+  const terminalDockLayout = getProjectTerminalDockLayout({
+    workspaceWidth: terminalLayoutWidth,
+    leftWidth: 0,
+    terminalOpen: terminalDockOpen,
+    preferredArea: preferredTerminalDockArea
+  })
+
+  React.useEffect(() => {
+    const root = homeRootRef.current
+    if (!root) return
+    const observer = new ResizeObserver((entries) => {
+      const width = entries[0]?.contentRect.width
+      if (typeof width === 'number') setTerminalLayoutWidth(width)
+    })
+    observer.observe(root)
+    return () => observer.disconnect()
+  }, [])
 
   React.useEffect(() => {
     setSelectedProjectId(defaultSelectedProjectId)
@@ -156,17 +185,21 @@ export function ChatHomePage(): React.JSX.Element {
   const handleCreateProjectWithDirectory = React.useCallback(
     async (folderPath: string, connectionId: string | null): Promise<void> => {
       const chatStore = useChatStore.getState()
-      const projectId = await chatStore.createProject({
-        name: deriveProjectNameFromFolder(
-          folderPath,
-          t('input.newProject', { defaultValue: 'New project' })
-        ),
-        workingFolder: folderPath,
-        sshConnectionId: connectionId ?? undefined
-      })
-      setSelectedProjectId(projectId)
-      chatStore.setActiveProjectHome(projectId)
-      setCreateProjectDialogOpen(false)
+      try {
+        const projectId = await chatStore.createProject({
+          name: deriveProjectNameFromFolder(
+            folderPath,
+            t('input.newProject', { defaultValue: 'New project' })
+          ),
+          workingFolder: folderPath,
+          sshConnectionId: connectionId ?? undefined
+        })
+        setSelectedProjectId(projectId)
+        chatStore.setActiveProjectHome(projectId)
+        setCreateProjectDialogOpen(false)
+      } catch {
+        toast.error(t('sidebar_toast.projectCreateFailed', { ns: 'layout' }))
+      }
     },
     [t]
   )
@@ -178,31 +211,66 @@ export function ChatHomePage(): React.JSX.Element {
       options?: SendMessageOptions
     ): Promise<void> => {
       const chatStore = useChatStore.getState()
-      const chatWorkingFolder =
-        taskProfile === 'work' ? await ensureDefaultChatWorkingFolder() : undefined
       const projectIdForSession =
         selectedProjectId && chatStore.projects.some((project) => project.id === selectedProjectId)
           ? selectedProjectId
           : null
+      const targetProject = chatStore.projects.find((project) => project.id === projectIdForSession)
+      if (
+        pendingScenarioPolicy &&
+        pendingScenarioPolicy !== 'materials-no-tools' &&
+        (!targetProject ||
+          !targetProject.workingFolder ||
+          (pendingScenarioPolicy === 'project-read-only' && targetProject.sshConnectionId) ||
+          (pendingScenarioPolicy === 'ssh-read-only' && !targetProject.sshConnectionId))
+      ) {
+        throw new Error('SCENARIO_PROJECT_REQUIRED')
+      }
+      const chatWorkingFolder =
+        taskProfile === 'work' &&
+        !projectIdForSession &&
+        pendingScenarioPolicy !== 'materials-no-tools'
+          ? await ensureDefaultChatWorkingFolder()
+          : undefined
       const sessionId =
         taskProfile === 'work' && !projectIdForSession
           ? chatStore.createSession('chat', null, {
               preserveProjectless: true,
               workingFolder: chatWorkingFolder,
               taskProfile,
-              profileConfigSnapshot: profileConfig as TaskProfileConfig
+              profileConfigSnapshot: profileConfig as TaskProfileConfig,
+              scenarioPolicy: pendingScenarioPolicy ?? undefined
             })
           : chatStore.createSession('chat', projectIdForSession ?? activeProject?.id ?? undefined, {
               taskProfile,
-              profileConfigSnapshot: profileConfig as TaskProfileConfig
+              profileConfigSnapshot: profileConfig as TaskProfileConfig,
+              scenarioPolicy: pendingScenarioPolicy ?? undefined
             })
+      try {
+        await awaitPendingSessionCreate(sessionId)
+      } catch (error) {
+        // A failed create may still have committed before its IPC response failed.
+        // Use the normal persisted delete path to reconcile both outcomes.
+        await chatStore.deleteSession(sessionId).catch((cleanupError) => {
+          console.warn('[ChatHomePage] Failed to clean up an unsent session', cleanupError)
+        })
+        throw error
+      }
+      setPendingScenarioPolicy(null)
       useUIStore.getState().navigateToSession(sessionId)
       await sendMessage(text, images, undefined, sessionId, undefined, undefined, {
         ...options,
         clearCompletedTasksOnTurnStart: true
       })
     },
-    [activeProject?.id, profileConfig, selectedProjectId, sendMessage, taskProfile]
+    [
+      activeProject?.id,
+      pendingScenarioPolicy,
+      profileConfig,
+      selectedProjectId,
+      sendMessage,
+      taskProfile
+    ]
   )
 
   const updateHomeProjectDirectory = React.useCallback(
@@ -217,7 +285,7 @@ export function ChatHomePage(): React.JSX.Element {
       if (!projectId) return
       chatStore.setActiveProjectHome(projectId)
       setSelectedProjectId(projectId)
-      chatStore.updateProjectDirectory(projectId, patch)
+      await chatStore.updateProjectDirectory(projectId, patch)
     },
     [activeProject?.id, activeProjectId, selectedProject?.id]
   )
@@ -260,8 +328,13 @@ export function ChatHomePage(): React.JSX.Element {
   const openTasksPage = useUIStore((s) => s.openTasksPage)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className="flex flex-1 flex-col overflow-auto px-6 pb-14 pt-8 sm:pt-10">
+    <div
+      ref={homeRootRef}
+      className={`flex min-h-0 flex-1 overflow-hidden bg-background ${terminalDockLayout.effectiveArea === 'right' ? 'flex-row' : 'flex-col'}`}
+    >
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-auto px-6 pb-14 pt-8 sm:pt-10 ${terminalDockLayout.effectiveArea === 'right' ? 'min-w-[220px]' : ''}`}
+      >
         <div className="flex flex-1 items-start justify-center pt-8 lg:items-center lg:pt-0">
           <div className="w-full max-w-[760px]">
             <div className="mb-6 flex flex-col items-center gap-3 text-center sm:mb-7">
@@ -313,7 +386,10 @@ export function ChatHomePage(): React.JSX.Element {
                   key={prompt}
                   type="button"
                   className="rounded-md border border-border/60 bg-background/40 px-3 py-1.5 text-[11px] text-muted-foreground/72 transition-colors hover:bg-muted/40 hover:text-foreground"
-                  onClick={() => applySuggestedPrompt(prompt)}
+                  onClick={() => {
+                    setPendingScenarioPolicy(null)
+                    applySuggestedPrompt(prompt)
+                  }}
                 >
                   {prompt}
                 </button>
@@ -321,10 +397,27 @@ export function ChatHomePage(): React.JSX.Element {
             </div>
 
             <FirstSuccessPanel
-              hasLocalProject={Boolean(homeWorkingFolder)}
+              hasLocalProject={Boolean(homeWorkingFolder && !homeSshConnectionId)}
               hasRemoteProject={Boolean(homeSshConnectionId && homeWorkingFolder)}
-              onUsePrompt={applySuggestedPrompt}
+              sshConnectionId={homeSshConnectionId}
+              workingFolder={homeWorkingFolder}
+              onUsePrompt={(prompt, scenarioId) => {
+                setPendingScenarioPolicy(
+                  scenarioId === 'project-review'
+                    ? 'project-read-only'
+                    : scenarioId === 'ssh-review'
+                      ? 'ssh-read-only'
+                      : 'materials-no-tools'
+                )
+                applySuggestedPrompt(prompt)
+              }}
               onOpenTasks={openTasksPage}
+              onOpenModelSettings={() => useUIStore.getState().openSettingsPage('model')}
+              onChooseProject={() => setCreateProjectDialogOpen(true)}
+              onOpenSshConnections={() => {
+                useUIStore.getState().setRemoteWorkspaceSection('ssh')
+                useUIStore.getState().setActiveNavItem('remote')
+              }}
             />
 
             <ChatHomeInsights />
@@ -333,12 +426,30 @@ export function ChatHomePage(): React.JSX.Element {
       </div>
 
       {homeProject?.id && terminalDockOpen && (homeWorkingFolder || homeSshConnectionId) && (
-        <ProjectTerminalDock
-          projectId={homeProject.id}
-          projectName={homeProject.name}
-          workingFolder={homeWorkingFolder ?? null}
-          sshConnectionId={homeSshConnectionId}
-        />
+        <div
+          data-terminal-dock-area={terminalDockLayout.effectiveArea}
+          className={
+            terminalDockLayout.effectiveArea === 'right'
+              ? 'w-[38%] min-w-[180px] max-w-[520px] shrink-0 border-l border-border/50'
+              : 'shrink-0 border-t border-border/50'
+          }
+        >
+          <ProjectTerminalDock
+            projectId={homeProject.id}
+            projectName={homeProject.name}
+            workingFolder={homeWorkingFolder ?? null}
+            sshConnectionId={homeSshConnectionId}
+            dockArea={terminalDockLayout.effectiveArea}
+            canMove
+            moveDisabledReason={
+              !terminalDockLayout.canMoveRight
+                ? t('layout:terminalDock.rightDockNeedsSpace', {
+                    defaultValue: 'Expand the workspace to move the terminal to the right.'
+                  })
+                : undefined
+            }
+          />
+        </div>
       )}
 
       {taskProfile === 'code' && (

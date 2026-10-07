@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import {
   chmod,
+  link,
   mkdir,
   mkdtemp,
   readFile,
@@ -48,6 +49,10 @@ import {
 } from '../../src/shared/sync-bundle-contract'
 
 const directories: string[] = []
+
+function linkDirectory(target: string, path: string): Promise<void> {
+  return symlink(target, path, process.platform === 'win32' ? 'junction' : 'dir')
+}
 
 afterEach(async () => {
   vi.unstubAllGlobals()
@@ -442,7 +447,7 @@ describe('legacy database handover snapshot', () => {
     try {
       const document: ProjectWikiDocument = {
         id: 'ts-wiki',
-        projectRoot: '/projects/native-schema',
+        projectRoot: join(fixture.backupDirectory, 'native-schema'),
         generatedAt: 10,
         fileCount: 1,
         nodes: [{ path: 'index.ts', kind: 'file', size: 1, modifiedAt: 10 }]
@@ -523,7 +528,7 @@ describe('legacy database handover snapshot', () => {
   it('rejects a symlinked backup directory during read-only preflight', async () => {
     const fixture = await createFixture()
     const linkedDirectory = join(dirname(fixture.backupDirectory), 'linked-backups')
-    await symlink(fixture.backupDirectory, linkedDirectory)
+    await linkDirectory(fixture.backupDirectory, linkedDirectory)
     directories.push(linkedDirectory)
     const readiness = await businessHandoverReadiness({
       sourcePath: fixture.sourcePath,
@@ -568,7 +573,7 @@ describe('legacy database handover snapshot', () => {
 
   it('does not park Native when the backup destination fails the private-directory preflight', async () => {
     const fixture = await createFixture()
-    await symlink(dirname(fixture.sourcePath), fixture.backupDirectory)
+    await linkDirectory(dirname(fixture.sourcePath), fixture.backupDirectory)
     let parked = false
     await expect(
       handoverBusinessDatabase({
@@ -580,17 +585,19 @@ describe('legacy database handover snapshot', () => {
     ).rejects.toThrow('LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE')
     expect(parked).toBe(false)
     await rm(fixture.backupDirectory)
-    await mkdir(fixture.backupDirectory, { mode: 0o755 })
-    await chmod(fixture.backupDirectory, 0o755)
-    await expect(
-      handoverBusinessDatabase({
-        ...fixture,
-        quiesceLegacyWriter: async () => {
-          parked = true
-        }
-      })
-    ).rejects.toThrow('LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE')
-    expect(parked).toBe(false)
+    if (process.platform !== 'win32') {
+      await mkdir(fixture.backupDirectory, { mode: 0o755 })
+      await chmod(fixture.backupDirectory, 0o755)
+      await expect(
+        handoverBusinessDatabase({
+          ...fixture,
+          quiesceLegacyWriter: async () => {
+            parked = true
+          }
+        })
+      ).rejects.toThrow('LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE')
+      expect(parked).toBe(false)
+    }
     await expect(
       handoverBusinessDatabase({
         ...fixture,
@@ -612,7 +619,7 @@ describe('legacy database handover snapshot', () => {
         quiesceLegacyWriter: async () => {
           parked = true
           await rm(fixture.backupDirectory, { recursive: true })
-          await symlink(dirname(fixture.sourcePath), fixture.backupDirectory)
+          await linkDirectory(dirname(fixture.sourcePath), fixture.backupDirectory)
         }
       })
     ).rejects.toThrow('LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE')
@@ -1207,7 +1214,7 @@ describe('legacy database handover snapshot', () => {
       await repository.saveWikiDocument(
         {
           id: 'wiki-team',
-          projectRoot: '/team-project',
+          projectRoot: join(fixture.backupDirectory, 'team-project'),
           generatedAt: 11,
           fileCount: 1,
           nodes: [
@@ -2615,6 +2622,215 @@ describe('legacy database handover snapshot', () => {
         )
       ).resolves.toMatchObject({ job: { id: 'cron-1', name: 'Legacy cron' } })
       await expect(repository.cronRunDetail('cron-run-1', 'team-a')).resolves.toBeNull()
+      await expect(
+        repository.recordCronDelivery({
+          id: 'delivery-test',
+          runId: 'cron-run-1',
+          workspaceId: 'local-personal',
+          toolCallId: 'tool-test',
+          kind: 'channel',
+          status: 'pending',
+          startedAt: 10
+        })
+      ).resolves.toBe(true)
+      await expect(
+        repository.cronRuns<{ id: string }>('local-personal', 20, 0, true)
+      ).resolves.toEqual(expect.arrayContaining([expect.objectContaining({ id: 'cron-run-1' })]))
+      await expect(
+        repository.recordCronDelivery({
+          id: 'delivery-test-result',
+          runId: 'cron-run-1',
+          workspaceId: 'local-personal',
+          toolCallId: 'tool-test',
+          kind: 'channel',
+          status: 'unknown',
+          startedAt: 11,
+          finishedAt: 12
+        })
+      ).resolves.toBe(true)
+      await expect(
+        repository.reconcileCronDelivery({
+          id: 'delivery-test',
+          runId: 'cron-run-1',
+          workspaceId: 'local-personal',
+          outcome: 'sent',
+          confirmedAt: 13
+        })
+      ).resolves.toBe(true)
+      await expect(
+        repository.cronRunDetail<{
+          deliveries: Array<{ status: string; started_at: number; error_code: string }>
+        }>('cron-run-1', 'local-personal')
+      ).resolves.toMatchObject({
+        deliveries: [
+          {
+            status: 'sent',
+            started_at: 10,
+            error_code: 'MANUALLY_CONFIRMED_SENT'
+          }
+        ]
+      })
+      await expect(
+        repository.reconcileCronDelivery({
+          id: 'delivery-test',
+          runId: 'cron-run-1',
+          workspaceId: 'local-personal',
+          outcome: 'failed',
+          confirmedAt: 14
+        })
+      ).rejects.toThrow('BUSINESS_CRON_DELIVERY_NOT_RECONCILABLE')
+      await expect(
+        repository.cronRuns<{ id: string }>('local-personal', 20, 0, true)
+      ).resolves.not.toEqual(
+        expect.arrayContaining([expect.objectContaining({ id: 'cron-run-1' })])
+      )
+      await repository.recordCronDelivery({
+        id: 'delivery-confirmed-failure',
+        runId: 'cron-run-1',
+        workspaceId: 'local-personal',
+        toolCallId: 'tool-confirmed-failure',
+        kind: 'channel',
+        status: 'pending',
+        startedAt: 20,
+        pluginId: 'plugin-snapshot',
+        chatId: 'chat-snapshot'
+      })
+      await repository.recordCronDelivery({
+        id: 'delivery-confirmed-failure-result',
+        runId: 'cron-run-1',
+        workspaceId: 'local-personal',
+        toolCallId: 'tool-confirmed-failure',
+        kind: 'channel',
+        status: 'failed',
+        startedAt: 21,
+        finishedAt: 22,
+        pluginId: 'plugin-snapshot',
+        chatId: 'chat-snapshot'
+      })
+      const retryCandidates = [
+        {
+          id: 'delivery-retry-one',
+          runId: 'cron-run-1',
+          retryOfId: 'delivery-confirmed-failure',
+          workspaceId: 'local-personal',
+          toolCallId: 'tool-retry-one',
+          startedAt: 30
+        },
+        {
+          id: 'delivery-retry-duplicate',
+          runId: 'cron-run-1',
+          retryOfId: 'delivery-confirmed-failure',
+          workspaceId: 'local-personal',
+          toolCallId: 'tool-retry-duplicate',
+          startedAt: 31
+        }
+      ]
+      const retryResults = await Promise.allSettled(
+        retryCandidates.map((candidate) => repository.prepareCronDeliveryRetry(candidate))
+      )
+      const acceptedRetryIndex = retryResults.findIndex((result) => result.status === 'fulfilled')
+      expect(acceptedRetryIndex).toBeGreaterThanOrEqual(0)
+      expect(retryResults.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
+      const rejectedRetry = retryResults.find((result) => result.status === 'rejected')
+      expect(rejectedRetry?.status).toBe('rejected')
+      if (!rejectedRetry || rejectedRetry.status !== 'rejected') {
+        throw new Error('Expected the concurrent duplicate retry to be rejected')
+      }
+      expect(String(rejectedRetry.reason)).toContain('CRON_DELIVERY_RETRY_ALREADY_CREATED')
+      const acceptedRetry = retryResults[acceptedRetryIndex]
+      if (acceptedRetry?.status !== 'fulfilled') {
+        throw new Error('Expected one concurrent retry attempt to be accepted')
+      }
+      const acceptedRetryInput = retryCandidates[acceptedRetryIndex]
+      expect(acceptedRetry.value).toEqual({
+        deliveryId: acceptedRetryInput.id,
+        pluginId: 'plugin-snapshot',
+        chatId: 'chat-snapshot',
+        attemptNumber: 2
+      })
+      await expect(
+        repository.cronRunDeliveries<{
+          id: string
+          status: string
+          retry_of_id: string | null
+          attempt_number: number
+          plugin_id: string | null
+          chat_id: string | null
+        }>('cron-run-1', 'local-personal')
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: acceptedRetryInput.id,
+            status: 'pending',
+            retry_of_id: 'delivery-confirmed-failure',
+            attempt_number: 2,
+            plugin_id: 'plugin-snapshot',
+            chat_id: 'chat-snapshot'
+          })
+        ])
+      )
+      await repository.recordCronDelivery({
+        id: `${acceptedRetryInput.id}-result`,
+        runId: 'cron-run-1',
+        workspaceId: 'local-personal',
+        toolCallId: acceptedRetryInput.toolCallId,
+        kind: 'channel',
+        status: 'failed',
+        startedAt: 30,
+        finishedAt: 31,
+        retryOfId: 'delivery-confirmed-failure',
+        attemptNumber: 2,
+        pluginId: 'plugin-snapshot',
+        chatId: 'chat-snapshot'
+      })
+      await expect(
+        repository.cronRuns<{ id: string }>('local-personal', 20, 0, true)
+      ).resolves.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: 'cron-run-1', delivery_status: 'failed' })
+        ])
+      )
+      const thirdAttempt = await repository.prepareCronDeliveryRetry({
+        id: 'delivery-retry-three',
+        runId: 'cron-run-1',
+        retryOfId: acceptedRetryInput.id,
+        workspaceId: 'local-personal',
+        toolCallId: 'tool-retry-three',
+        startedAt: 40
+      })
+      expect(thirdAttempt).toMatchObject({
+        deliveryId: 'delivery-retry-three',
+        attemptNumber: 3,
+        pluginId: 'plugin-snapshot',
+        chatId: 'chat-snapshot'
+      })
+      await repository.recordCronDelivery({
+        id: 'delivery-retry-three-result',
+        runId: 'cron-run-1',
+        workspaceId: 'local-personal',
+        toolCallId: 'tool-retry-three',
+        kind: 'channel',
+        status: 'failed',
+        startedAt: 40,
+        finishedAt: 41,
+        retryOfId: acceptedRetryInput.id,
+        attemptNumber: 3,
+        pluginId: 'plugin-snapshot',
+        chatId: 'chat-snapshot'
+      })
+      await expect(
+        repository.prepareCronDeliveryRetry({
+          id: 'delivery-retry-four',
+          runId: 'cron-run-1',
+          retryOfId: 'delivery-retry-three',
+          workspaceId: 'local-personal',
+          toolCallId: 'tool-retry-four',
+          startedAt: 50
+        })
+      ).rejects.toThrow('CRON_DELIVERY_RETRY_MAX_ATTEMPTS_REACHED')
+      await expect(repository.cronRunDeliveries('cron-run-1', 'team-a')).rejects.toThrow(
+        'BUSINESS_CRON_RUN_NOT_FOUND'
+      )
     } finally {
       await repository.close()
     }
@@ -2679,6 +2895,36 @@ describe('legacy database handover snapshot', () => {
       await expect(
         repository.cronJob<{ fire_count: number }>('cron-1', 'local-personal')
       ).resolves.toMatchObject({ fire_count: 0 })
+      await repository.setCronJobEnabled({
+        id: 'cron-1',
+        workspaceId: 'local-personal',
+        enabled: false,
+        updatedAt: 90
+      })
+      await expect(
+        repository.startCronRun({
+          ...first,
+          id: 'run-trial-disabled',
+          runKind: 'trial',
+          scheduledFor: null
+        })
+      ).resolves.toEqual({ started: true, runId: 'run-trial-disabled' })
+      await repository.finishCronRun({
+        id: 'run-trial-disabled',
+        workspaceId: 'local-personal',
+        finishedAt: 91,
+        status: 'success',
+        toolCallCount: 0
+      })
+      await expect(
+        repository.cronJob<{ fire_count: number }>('cron-1', 'local-personal')
+      ).resolves.toMatchObject({ fire_count: 0 })
+      await repository.setCronJobEnabled({
+        id: 'cron-1',
+        workspaceId: 'local-personal',
+        enabled: true,
+        updatedAt: 92
+      })
       await expect(repository.startCronRun(first)).resolves.toEqual({
         started: true,
         runId: first.id
@@ -2710,6 +2956,7 @@ describe('legacy database handover snapshot', () => {
       ).resolves.toMatchObject({ fire_count: 2, last_fired_at: 200 })
       await expect(repository.cronRuns<{ id: string }>('local-personal')).resolves.toEqual(
         expect.arrayContaining([
+          expect.objectContaining({ id: 'run-trial-disabled', run_kind: 'trial' }),
           expect.objectContaining({ id: 'run-atomic-1' }),
           expect.objectContaining({ id: 'run-atomic-2' })
         ])
@@ -2794,6 +3041,24 @@ describe('legacy database handover snapshot', () => {
         workspaceId: 'team-a',
         startedAt: 3
       })
+      await repository.recordCronDelivery({
+        id: 'delivery-interrupted',
+        runId: 'run-local',
+        workspaceId: 'local-personal',
+        toolCallId: 'tool-interrupted',
+        kind: 'channel',
+        status: 'pending',
+        startedAt: 4
+      })
+      await repository.recordCronDelivery({
+        id: 'delivery-other-workspace',
+        runId: 'run-team',
+        workspaceId: 'team-a',
+        toolCallId: 'tool-team',
+        kind: 'channel',
+        status: 'pending',
+        startedAt: 4
+      })
       await expect(
         repository.recoverCronJobs<{ id: string }>('local-personal', 10)
       ).resolves.toMatchObject({
@@ -2812,6 +3077,12 @@ describe('legacy database handover snapshot', () => {
       await expect(
         repository.cronRunDetail<{ run: { status: string } }>('run-team', 'team-a')
       ).resolves.toMatchObject({ run: { status: 'running' } })
+      await expect(
+        repository.cronRunDeliveries<{ status: string }>('run-local', 'local-personal')
+      ).resolves.toEqual([expect.objectContaining({ status: 'unknown' })])
+      await expect(
+        repository.cronRunDeliveries<{ status: string }>('run-team', 'team-a')
+      ).resolves.toEqual([expect.objectContaining({ status: 'pending' })])
       await expect(repository.cronJob('cron-expired', 'local-personal')).resolves.toMatchObject({
         enabled: 0,
         deleted_at: 10
@@ -2881,8 +3152,10 @@ describe('legacy database handover snapshot', () => {
       'wiki_nodes'
     ])
     expect(snapshot.sourcePath).toBe(fixture.sourcePath)
-    expect((await stat(snapshot.backupPath)).mode & 0o777).toBe(0o600)
-    expect((await stat(snapshot.rollbackPath)).mode & 0o777).toBe(0o400)
+    if (process.platform !== 'win32') {
+      expect((await stat(snapshot.backupPath)).mode & 0o777).toBe(0o600)
+      expect((await stat(snapshot.rollbackPath)).mode & 0o777).toBe(0o400)
+    }
     expect(snapshot.rollbackSize).toBe(snapshot.backupSize)
     expect(snapshot.rollbackSha256).toMatch(/^[a-f0-9]{64}$/)
     expect(JSON.parse(await readFile(snapshot.manifestPath, 'utf8'))).toMatchObject({
@@ -2943,17 +3216,19 @@ describe('legacy database handover snapshot', () => {
 
   it('rejects a linked or shared backup directory without changing its target permissions', async () => {
     const fixture = await createFixture()
-    await symlink(dirname(fixture.sourcePath), fixture.backupDirectory)
+    await linkDirectory(dirname(fixture.sourcePath), fixture.backupDirectory)
     await expect(createLegacyDatabaseHandoverSnapshot(fixture)).rejects.toThrow(
       'LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE'
     )
-    await rm(fixture.backupDirectory)
-    await mkdir(fixture.backupDirectory, { mode: 0o755 })
-    await chmod(fixture.backupDirectory, 0o755)
-    await expect(createLegacyDatabaseHandoverSnapshot(fixture)).rejects.toThrow(
-      'LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE'
-    )
-    expect((await stat(fixture.backupDirectory)).mode & 0o777).toBe(0o755)
+    if (process.platform !== 'win32') {
+      await rm(fixture.backupDirectory)
+      await mkdir(fixture.backupDirectory, { mode: 0o755 })
+      await chmod(fixture.backupDirectory, 0o755)
+      await expect(createLegacyDatabaseHandoverSnapshot(fixture)).rejects.toThrow(
+        'LEGACY_DATABASE_BACKUP_DIRECTORY_UNSAFE'
+      )
+      expect((await stat(fixture.backupDirectory)).mode & 0o777).toBe(0o755)
+    }
   })
 
   it('detects a write to the parked source after the handover snapshot', async () => {
@@ -3035,6 +3310,193 @@ describe('legacy database handover snapshot', () => {
     await expect(
       verifyLegacyDatabaseHandoverSnapshot({ manifestPath: snapshot.manifestPath })
     ).resolves.toEqual(expect.objectContaining({ backupPath: snapshot.backupPath }))
+  })
+
+  it('clears a conversation and its tasks in one committed write', async () => {
+    const fixture = await createFixture()
+    const snapshot = await createLegacyDatabaseHandoverSnapshot(fixture)
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    try {
+      await repository.createTask({
+        id: 'conversation-task',
+        sessionId: 'session-1',
+        workspaceId: 'local-personal',
+        subject: 'Clear together',
+        description: 'Clear this task with its conversation',
+        sortOrder: 0,
+        createdAt: 2,
+        updatedAt: 2
+      })
+      await expect(repository.messages('session-1', 'local-personal')).resolves.toHaveLength(1)
+      await expect(repository.tasksBySession('session-1', 'local-personal')).resolves.toHaveLength(
+        1
+      )
+      await expect(
+        repository.clearMessages('session-1', 'other-workspace', { clearTasks: true, updatedAt: 9 })
+      ).rejects.toThrow('BUSINESS_SESSION_NOT_FOUND')
+      await expect(
+        repository.clearMessages('session-1', 'local-personal', { clearTasks: true, updatedAt: 9 })
+      ).resolves.toBe(1)
+      await expect(repository.messages('session-1', 'local-personal')).resolves.toEqual([])
+      await expect(repository.tasksBySession('session-1', 'local-personal')).resolves.toEqual([])
+      await expect(repository.session('session-1', 'local-personal')).resolves.toMatchObject({
+        message_count: 0,
+        updated_at: 9
+      })
+    } finally {
+      await repository.close()
+    }
+  })
+
+  it('rolls back session, message, and task deletion when the session delete fails', async () => {
+    const fixture = await createFixture()
+    const snapshot = await createLegacyDatabaseHandoverSnapshot(fixture)
+    const triggerDb = new DatabaseSync(snapshot.backupPath)
+    triggerDb.exec(`
+      CREATE TRIGGER reject_session_delete
+      BEFORE DELETE ON sessions
+      BEGIN
+        SELECT RAISE(ABORT, 'injected session delete failure');
+      END;
+    `)
+    triggerDb.close()
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    try {
+      await repository.createTask({
+        id: 'delete-rollback-task',
+        sessionId: 'session-1',
+        workspaceId: 'local-personal',
+        subject: 'Retain task after failed session delete',
+        description: 'Keep this task if deletion fails',
+        sortOrder: 0,
+        createdAt: 1,
+        updatedAt: 1
+      })
+      await expect(
+        repository.deleteSession({ id: 'session-1', workspaceId: 'local-personal' })
+      ).rejects.toThrow('injected session delete failure')
+      await expect(repository.session('session-1', 'local-personal')).resolves.toBeTruthy()
+      await expect(repository.messages('session-1', 'local-personal')).resolves.toHaveLength(1)
+      await expect(repository.tasksBySession('session-1', 'local-personal')).resolves.toHaveLength(
+        1
+      )
+    } finally {
+      await repository.close()
+    }
+  })
+
+  it('preserves date-only task metadata across a repository restart', async () => {
+    const fixture = await createFixture()
+    const snapshot = await createLegacyDatabaseHandoverSnapshot(fixture)
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    try {
+      await repository.createTask({
+        id: 'calendar-day-task',
+        sessionId: 'session-1',
+        workspaceId: 'local-personal',
+        subject: 'Date-only task',
+        description: 'Keep the selected calendar day',
+        metadata: { board: { startDate: '2026-10-01', dueDate: '2026-10-03' } },
+        sortOrder: 0,
+        createdAt: 2,
+        updatedAt: 2
+      })
+    } finally {
+      await repository.close()
+    }
+    const reopened = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    try {
+      const row = await reopened.task<{ metadata: string }>('calendar-day-task', 'local-personal')
+      expect(JSON.parse(row?.metadata ?? '{}')).toEqual({
+        board: { startDate: '2026-10-01', dueDate: '2026-10-03' }
+      })
+    } finally {
+      await reopened.close()
+    }
+  })
+
+  it('rolls back message deletion when task deletion fails', async () => {
+    const fixture = await createFixture()
+    const source = new DatabaseSync(fixture.sourcePath)
+    source.exec(`
+      CREATE TRIGGER reject_task_clear BEFORE DELETE ON tasks
+      BEGIN SELECT RAISE(ABORT, 'TASK_CLEAR_REJECTED'); END;
+    `)
+    source.close()
+    const snapshot = await createLegacyDatabaseHandoverSnapshot(fixture)
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    try {
+      await repository.createTask({
+        id: 'protected-task',
+        sessionId: 'session-1',
+        workspaceId: 'local-personal',
+        subject: 'Keep together',
+        description: 'Keep this task when the transaction rolls back',
+        sortOrder: 0,
+        createdAt: 2,
+        updatedAt: 2
+      })
+      await expect(
+        repository.clearMessages('session-1', 'local-personal', { clearTasks: true, updatedAt: 9 })
+      ).rejects.toThrow('TASK_CLEAR_REJECTED')
+      await expect(repository.messages('session-1', 'local-personal')).resolves.toHaveLength(1)
+      await expect(repository.tasksBySession('session-1', 'local-personal')).resolves.toHaveLength(
+        1
+      )
+    } finally {
+      await repository.close()
+    }
+  })
+
+  it('rolls back task deletion when message deletion fails', async () => {
+    const fixture = await createFixture()
+    const source = new DatabaseSync(fixture.sourcePath)
+    source.exec(`
+      CREATE TRIGGER reject_message_clear BEFORE DELETE ON messages
+      BEGIN SELECT RAISE(ABORT, 'MESSAGE_CLEAR_REJECTED'); END;
+    `)
+    source.close()
+    const snapshot = await createLegacyDatabaseHandoverSnapshot(fixture)
+    const repository = new BusinessRepository({
+      path: snapshot.backupPath,
+      handoverManifestPath: snapshot.manifestPath
+    })
+    try {
+      await repository.createTask({
+        id: 'protected-task',
+        sessionId: 'session-1',
+        workspaceId: 'local-personal',
+        subject: 'Keep together',
+        description: 'Keep this task when message deletion rolls back',
+        sortOrder: 0,
+        createdAt: 2,
+        updatedAt: 2
+      })
+      await expect(
+        repository.clearMessages('session-1', 'local-personal', { clearTasks: true, updatedAt: 9 })
+      ).rejects.toThrow('MESSAGE_CLEAR_REJECTED')
+      await expect(repository.messages('session-1', 'local-personal')).resolves.toHaveLength(1)
+      await expect(repository.tasksBySession('session-1', 'local-personal')).resolves.toHaveLength(
+        1
+      )
+    } finally {
+      await repository.close()
+    }
   })
 
   it('rejects a missing or modified immutable rollback baseline', async () => {
@@ -3475,6 +3937,42 @@ describe('legacy database handover snapshot', () => {
         expect.objectContaining({
           version: 3,
           description: 'workspace ownership for project wiki tables'
+        }),
+        expect.objectContaining({
+          version: 4,
+          description: 'persisted per-session pending user message queues'
+        }),
+        expect.objectContaining({
+          version: 5,
+          description: 'stable cron run history pagination'
+        }),
+        expect.objectContaining({
+          version: 6,
+          description: 'persisted Cron delivery attempts independent of execution'
+        }),
+        expect.objectContaining({
+          version: 7,
+          description: 'idempotent Cron delivery-only retries'
+        }),
+        expect.objectContaining({
+          version: 8,
+          description: 'distinguish scheduled, manual, and trial Cron runs'
+        }),
+        expect.objectContaining({
+          version: 9,
+          description: 'workspace ownership for desktop automation flows'
+        }),
+        expect.objectContaining({
+          version: 10,
+          description: 'persist task profile selection and lock state on sessions'
+        }),
+        expect.objectContaining({
+          version: 11,
+          description: 'durable session delivery for Cron runs'
+        }),
+        expect.objectContaining({
+          version: 12,
+          description: 'persist immutable read-only scenario policy on sessions'
         })
       ])
       const competingRepository = new BusinessRepository({
@@ -3508,7 +4006,10 @@ describe('legacy database handover snapshot', () => {
           model_id: null,
           model_selection_mode: 'inherit',
           model_source: null,
-          workspace_id: 'local-personal'
+          workspace_id: 'local-personal',
+          task_profile: null,
+          task_profile_locked: 0,
+          scenario_policy: null
         }
       ])
       await expect(repository.sessions('other-workspace')).resolves.toEqual([])
@@ -3740,6 +4241,37 @@ describe('legacy database handover snapshot', () => {
       await expect(
         repository.cronJobs<{ last_fired_at: number; fire_count: number }>('local-personal')
       ).resolves.toEqual([expect.objectContaining({ last_fired_at: 3, fire_count: 1 })])
+      await repository.createCronRun({
+        id: 'cron-run-attention',
+        jobId: 'cron-1',
+        workspaceId: 'local-personal',
+        startedAt: 6
+      })
+      await repository.finishCronRun({
+        id: 'cron-run-attention',
+        workspaceId: 'local-personal',
+        finishedAt: 7,
+        status: 'error',
+        toolCallCount: 0
+      })
+      const firstCronPage = await repository.cronRuns<{ id: string; started_at: number }>(
+        'local-personal',
+        1
+      )
+      expect(firstCronPage[0]?.id).toBe('cron-run-attention')
+      const firstCronKey = { at: firstCronPage[0].started_at, id: firstCronPage[0].id }
+      expect(
+        (
+          await repository.cronRuns<{ id: string }>(
+            'local-personal',
+            1,
+            0,
+            false,
+            firstCronKey,
+            firstCronKey
+          )
+        )[0]?.id
+      ).toBe('cron-run-2')
       await expect(
         repository.setCronJobEnabled({
           id: 'cron-1',
@@ -3769,6 +4301,9 @@ describe('legacy database handover snapshot', () => {
         ])
       )
       await expect(repository.cronRuns('other-workspace')).resolves.toEqual([])
+      await expect(
+        repository.cronRuns<{ id: string }>('local-personal', 50, 0, true)
+      ).resolves.toEqual([expect.objectContaining({ id: 'cron-run-attention' })])
       await expect(
         repository.cronRunDetail<{
           messages: Array<{ content: string }>
@@ -4096,6 +4631,34 @@ describe('legacy database handover snapshot', () => {
         expect.objectContaining({ subject: 'Migrated' })
       ])
       await expect(
+        repository.updateTask({
+          id: 'task-2',
+          workspaceId: 'local-personal',
+          expectedUpdatedAt: 3,
+          subject: 'Stale overwrite',
+          updatedAt: 5
+        })
+      ).rejects.toThrow('BUSINESS_TASK_CONFLICT')
+      await expect(
+        repository.deleteTask({
+          id: 'task-2',
+          workspaceId: 'local-personal',
+          expectedUpdatedAt: 3
+        })
+      ).rejects.toThrow('BUSINESS_TASK_CONFLICT')
+      await expect(repository.tasks<{ subject: string }>('local-personal')).resolves.toEqual([
+        expect.objectContaining({ subject: 'Migrated' })
+      ])
+      await expect(
+        repository.updateTask({
+          id: 'task-2',
+          workspaceId: 'local-personal',
+          expectedUpdatedAt: 4,
+          subject: 'Current overwrite',
+          updatedAt: 5
+        })
+      ).resolves.toBe(true)
+      await expect(
         repository.deleteMessage({
           id: 'message-2',
           sessionId: 'session-2',
@@ -4343,7 +4906,8 @@ describe('legacy database handover snapshot', () => {
   it('rejects a handover path that is a symlink to the live legacy database', async () => {
     const fixture = await createFixture()
     const aliasPath = join(fixture.sourcePath, '..', 'live-alias.db')
-    await symlink(fixture.sourcePath, aliasPath)
+    if (process.platform === 'win32') await link(fixture.sourcePath, aliasPath)
+    else await symlink(fixture.sourcePath, aliasPath)
     const manifestPath = `${aliasPath}.manifest.json`
     await writeFile(
       manifestPath,

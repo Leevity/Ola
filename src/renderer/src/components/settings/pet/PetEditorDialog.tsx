@@ -4,6 +4,7 @@ import { Pencil, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import { Button } from '@renderer/components/ui/button'
 import { CapybaraSprite } from '@renderer/components/pet/CapybaraSprite'
 import { getCombinedGrowth, getPetLevel, usePetsStore, type Pet } from '@renderer/stores/pets-store'
@@ -50,7 +51,7 @@ export function PetEditorDialog({
   if (!pet) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="settings-dialog max-w-2xl">
           <DialogTitle>{t('editor.notFound')}</DialogTitle>
           <p className="text-sm text-muted-foreground">{t('editor.notFoundDesc')}</p>
           <div className="flex justify-end">
@@ -65,7 +66,7 @@ export function PetEditorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden p-0">
+      <DialogContent className="settings-dialog max-h-[85vh] max-w-2xl overflow-hidden p-0">
         <Header
           pet={pet}
           headerStats={headerStats}
@@ -151,6 +152,7 @@ function Header({
                 maxLength={20}
                 onChange={(e) => setNameDraft(e.target.value)}
                 onKeyDown={(e) => {
+                  if (isImeCommitKey(e)) return
                   if (e.key === 'Enter') commitEditName()
                   if (e.key === 'Escape') cancelEditName()
                 }}

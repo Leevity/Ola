@@ -1168,7 +1168,8 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   const isMainChatSession =
     !sessionId && Boolean(activeSessionId) && activeSessionId === currentActiveSessionId
   const isDetachedSessionView = Boolean(sessionId && activeSessionId)
-  const mode = useUIStore((s) => s.mode)
+  const requestedMode = useUIStore((s) => s.mode)
+  const mode = requestedMode in modeHints ? requestedMode : 'chat'
   const hasStreamingMessage = useChatStore((s) =>
     activeSessionId ? Boolean(s.streamingMessages[activeSessionId]) : false
   )
@@ -2158,7 +2159,8 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
   }, [requestScrollToBottom])
 
   const applySuggestedPrompt = React.useCallback((prompt: string) => {
-    const textarea = document.querySelector('textarea')
+    const composer = document.querySelector('[data-tour="composer"]')
+    const textarea = composer?.querySelector('textarea')
     if (textarea instanceof window.HTMLTextAreaElement) {
       const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
         window.HTMLTextAreaElement.prototype,
@@ -2170,7 +2172,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
       return
     }
 
-    const editor = document.querySelector('[role="textbox"][contenteditable="true"]')
+    const editor = composer?.querySelector('[role="textbox"][contenteditable="true"]')
     if (editor instanceof HTMLDivElement) {
       editor.replaceChildren(document.createTextNode(prompt))
       editor.dispatchEvent(new Event('input', { bubbles: true }))
@@ -2208,7 +2210,7 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
         ? t('messageList.homeTitleChatQuestion')
         : t(hint.titleKey)
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-6 text-center">
         <div
           className={`flex flex-col items-center gap-3 ${getMessageColumnCompactClass(fullWidth)}`}
         >

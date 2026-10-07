@@ -153,7 +153,7 @@ export function AiCodingConfigPanel(): React.JSX.Element {
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-semibold">{t('aiCoding.title')}</h2>
-            <p className="text-xs text-muted-foreground">{t('aiCoding.subtitle')}</p>
+            <p className="text-[0.8125rem] text-muted-foreground">{t('aiCoding.subtitle')}</p>
           </div>
           <Button size="icon" variant="ghost" onClick={newConfig}>
             <Plus className="size-4" />
@@ -164,11 +164,11 @@ export function AiCodingConfigPanel(): React.JSX.Element {
             <button
               key={config.id}
               type="button"
-              className={`w-full rounded-lg px-3 py-2 text-left text-xs ${selectedId === config.id ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted/50'}`}
+              className={`w-full rounded-lg px-3 py-2 text-left text-sm ${selectedId === config.id ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted/50'}`}
               onClick={() => selectConfig(config)}
             >
               <span className="block truncate font-medium">{config.name}</span>
-              <span className="mt-0.5 block truncate text-[10px] opacity-70">
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                 {config.tool} · {config.modelId}
               </span>
             </button>
@@ -178,14 +178,14 @@ export function AiCodingConfigPanel(): React.JSX.Element {
 
       <section className="space-y-4 rounded-xl border p-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="space-y-1 text-xs">
+          <label className="space-y-1 text-sm">
             <span className="font-medium">{t('aiCoding.name')}</span>
             <Input
               value={draft.name}
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             />
           </label>
-          <label className="space-y-1 text-xs">
+          <label className="space-y-1 text-sm">
             <span className="font-medium">{t('aiCoding.tool')}</span>
             <Select
               value={draft.tool}
@@ -213,7 +213,7 @@ export function AiCodingConfigPanel(): React.JSX.Element {
               </SelectContent>
             </Select>
           </label>
-          <label className="space-y-1 text-xs">
+          <label className="space-y-1 text-sm">
             <span className="font-medium">{t('aiCoding.provider')}</span>
             <Select
               value={draft.providerId}
@@ -238,7 +238,7 @@ export function AiCodingConfigPanel(): React.JSX.Element {
               </SelectContent>
             </Select>
           </label>
-          <label className="space-y-1 text-xs">
+          <label className="space-y-1 text-sm">
             <span className="font-medium">{t('aiCoding.model')}</span>
             <Select
               value={draft.modelId}
@@ -256,7 +256,7 @@ export function AiCodingConfigPanel(): React.JSX.Element {
               </SelectContent>
             </Select>
           </label>
-          <label className="space-y-1 text-xs">
+          <label className="space-y-1 text-sm">
             <span className="font-medium">{t('aiCoding.permissionMode')}</span>
             <Select
               value={draft.permissionMode}
@@ -277,7 +277,7 @@ export function AiCodingConfigPanel(): React.JSX.Element {
             </Select>
           </label>
           <div className="flex items-end justify-between rounded-lg border px-3 py-2">
-            <span className="text-xs font-medium">{t('aiCoding.enabled')}</span>
+            <span className="text-sm font-medium">{t('aiCoding.enabled')}</span>
             <Switch
               checked={draft.enabled}
               onCheckedChange={(enabled) => setDraft({ ...draft, enabled })}
@@ -285,7 +285,7 @@ export function AiCodingConfigPanel(): React.JSX.Element {
           </div>
         </div>
 
-        <div className="rounded-lg border bg-muted/15 p-3 text-xs">
+        <div className="rounded-lg border bg-muted/15 p-3 text-[0.8125rem] leading-relaxed">
           <p className="font-medium">{t('aiCoding.mapping')}</p>
           <p className="mt-1 text-muted-foreground">
             {selectedProvider?.name ?? '—'} / {selectedModel?.name ?? '—'} ·{' '}

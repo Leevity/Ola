@@ -1,4 +1,5 @@
-import { ElectronAPI } from '@electron-toolkit/preload'
+/// <reference types="electron" />
+
 import type {
   AppendTeamRuntimeMessageArgs,
   ConsumeTeamRuntimeMessagesArgs,
@@ -41,6 +42,11 @@ interface OlaAPI {
 }
 
 interface OlaBridge {
+  desktop: {
+    platform: NodeJS.Platform
+    versions: { electron: string; chrome: string; node: string }
+    getPathForFile: (file: File) => string
+  }
   ipc: OlaIpcBridge
   media: Pick<OlaAPI, 'downloadImage' | 'fetchImageBase64' | 'writeImageToClipboard'>
   teamRuntime: {
@@ -57,7 +63,6 @@ interface OlaBridge {
 declare global {
   interface Window {
     ola: OlaBridge
-    electron: ElectronAPI
     api: OlaAPI
   }
 }

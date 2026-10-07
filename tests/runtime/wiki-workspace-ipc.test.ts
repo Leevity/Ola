@@ -1,4 +1,9 @@
 import { beforeEach, expect, it, vi } from 'vitest'
+vi.mock('../../src/main/renderer-security', () => ({
+  assertTrustedRendererIpcEvent: () => undefined,
+  isTrustedRendererIpcEvent: () => true,
+  registerTrustedRendererUrl: () => undefined
+}))
 
 const state = vi.hoisted(() => {
   const sender = { mainFrame: {} }

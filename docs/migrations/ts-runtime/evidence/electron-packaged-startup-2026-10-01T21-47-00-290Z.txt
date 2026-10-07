@@ -1,0 +1,58 @@
+
+[Browser] Browser profile reuse enabled, but no supported profile was found
+[RemoteAuth] protocol arguments: ["C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\dist-staged-win-x64\\win-unpacked\\ola.exe","--no-sandbox","--disable-gpu","--remote-debugging-port=9491","--user-data-dir=C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-F3Fegv\\electron-user-data"]
+[credentials] sanity tests passed
+[DB][TS] initialized {
+  dbPath: 'C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-F3Fegv/data.db'
+}
+Checking for update
+[Updater] Checking for updates...
+[TS] settings startup ready
+Generated new staging user ID: ba53519c-97ab-585f-a9b5-ee7392f705cc
+[Main] Using system proxy settings
+[CrashLogger] Logs will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-F3Fegv\logs
+[CrashLogger] Native crash dumps will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-F3Fegv\crash-dumps
+[TS] legacy runtime global startup skipped; compatibility routes are lazy
+[TsRuntime] desktop host ready
+[TS] TypeScript runtime is authoritative; legacy executable startup is removed
+[CronScheduler] Loaded 0/0 persisted cron jobs
+[Main] Renderer finished loading: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4
+}
+[Pet] Installed built-in pet files: aniya (+13)
+[Pet] Installed built-in pet files: penguin (+13)
+Update for version 1.0.5 is not available (latest version: 1.0.5, downgrade is disallowed).
+[Updater] No update available (latest: 1.0.5)
+
+
+DevTools listening on ws://127.0.0.1:9491/devtools/browser/321ebc37-173f-41dd-8f19-619b2e46aa26
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4,
+  level: 1,
+  message: '🌐 i18next is maintained with support from Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙',
+  line: 1962,
+  sourceId: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/assets/theme-provider-L0K51zIK.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4,
+  level: 1,
+  message: '[PluginAutoReply] Listener initialized',
+  line: 247339,
+  sourceId: 'file:///C:/Users/80663/Desktop/vibecoding/Ola/dist-staged-win-x64/win-unpacked/resources/app.asar/out/renderer/assets/App-BRAhu2Tj.js'
+}

@@ -8,6 +8,9 @@ directories:
   buildResources: build
 afterPack: build/after-sign-mac.cjs
 files:
+  # The TypeScript runtime is authoritative. Ignored build outputs can leave
+  # old Native Worker binaries under resources/, so never package that tree.
+  - '!resources/native-worker/**'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -96,6 +99,7 @@ files:
   - '!node_modules/**/CHANGELOG.md'
   - '!node_modules/**/*.ts'
   - '!node_modules/**/*.map'
+  - '!out/runtime/*.map'
 asarUnpack:
   # The desktop TS runtime opens this sibling Worker from Main.
   - out/main/journal-worker.mjs

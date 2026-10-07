@@ -30,7 +30,12 @@ export interface ToolCapabilityRequest {
  * This is deliberately conservative: unknown mutating tools become plugin.tool.
  */
 export function capabilityForTool(toolName: string, effect: 'read' | 'write'): ToolCapabilityKind {
-  if (toolName === 'Bash' || toolName === 'Shell' || toolName === 'Monitor' || toolName === 'PowerShell') {
+  if (
+    toolName === 'Bash' ||
+    toolName === 'Shell' ||
+    toolName === 'Monitor' ||
+    toolName === 'PowerShell'
+  ) {
     return 'shell.execute'
   }
   if (toolName === 'Read' || toolName === 'Glob' || toolName === 'Grep') {
@@ -60,7 +65,12 @@ export function evaluateToolCapability(
     if (!commandResult.allowed) {
       return {
         decision: 'deny',
-        rule: { id: 'capability-command-syntax', pattern: commandResult.reason, mode: 'wildcard', enabled: true }
+        rule: {
+          id: 'capability-command-syntax',
+          pattern: commandResult.reason,
+          mode: 'wildcard',
+          enabled: true
+        }
       }
     }
   }
@@ -74,7 +84,12 @@ export function evaluateToolCapability(
     if (!pathResult.allowed) {
       return {
         decision: 'deny',
-        rule: { id: 'capability-path-policy', pattern: pathResult.reason, mode: 'wildcard', enabled: true }
+        rule: {
+          id: 'capability-path-policy',
+          pattern: pathResult.reason,
+          mode: 'wildcard',
+          enabled: true
+        }
       }
     }
   }

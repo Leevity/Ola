@@ -85,6 +85,23 @@ export interface BusinessCronRunInput {
   workingFolderSnapshot?: string | null
   deliveryModeSnapshot?: 'desktop' | 'session' | 'none'
   deliveryTargetSnapshot?: string | null
+  runKind?: 'scheduled' | 'manual' | 'trial'
+}
+
+export interface BusinessCronDeliveryInput {
+  id: string
+  runId: string
+  workspaceId: string
+  toolCallId: string
+  kind: 'desktop' | 'channel' | 'session'
+  status: 'pending' | 'sent' | 'failed' | 'unknown'
+  startedAt: number
+  finishedAt?: number | null
+  errorCode?: string | null
+  retryOfId?: string | null
+  attemptNumber?: number
+  pluginId?: string | null
+  chatId?: string | null
 }
 
 export interface BusinessUsageEventInput {
@@ -1072,6 +1089,9 @@ export class BusinessRepository {
     modelId?: string | null
     modelSelectionMode?: string | null
     modelSource?: string | null
+    taskProfile?: string | null
+    taskProfileLocked?: boolean
+    scenarioPolicy?: 'project-read-only' | 'ssh-read-only' | 'materials-no-tools' | null
   }): Promise<T> {
     return this.call('session-create', input)
   }
@@ -1107,8 +1127,12 @@ export class BusinessRepository {
     return this.call('message-update', input)
   }
 
-  clearMessages(sessionId: string, workspaceId: string): Promise<number> {
-    return this.call('messages-clear', { sessionId, workspaceId })
+  clearMessages(
+    sessionId: string,
+    workspaceId: string,
+    options: { clearTasks?: boolean; updatedAt?: number } = {}
+  ): Promise<number> {
+    return this.call('messages-clear', { sessionId, workspaceId, ...options })
   }
 
   replaceMessages(input: {
@@ -1172,6 +1196,8 @@ export class BusinessRepository {
     modelId?: string | null
     modelSelectionMode?: string | null
     modelSource?: string | null
+    taskProfile?: string | null
+    taskProfileLocked?: boolean
   }): Promise<T> {
     return this.call('session-update', input)
   }
@@ -1268,7 +1294,11 @@ export class BusinessRepository {
     return this.call('project-delete', input)
   }
 
-  ensureDefaultProject<T>(input: { workspaceId: string; baseDirectory: string }): Promise<T> {
+  ensureDefaultProject<T>(input: {
+    workspaceId: string
+    baseDirectory: string
+    preferredName?: string
+  }): Promise<T> {
     return this.call('project-ensure-default', input)
   }
 
@@ -1641,8 +1671,15 @@ export class BusinessRepository {
     return this.call('cron-job-delete', input)
   }
 
-  cronRuns<T>(workspaceId: string, limit?: number, offset?: number): Promise<T[]> {
-    return this.call('cron-runs-list', { workspaceId, limit, offset })
+  cronRuns<T>(
+    workspaceId: string,
+    limit?: number,
+    offset?: number,
+    attentionOnly = false,
+    anchor?: { at: number; id: string },
+    after?: { at: number; id: string }
+  ): Promise<T[]> {
+    return this.call('cron-runs-list', { workspaceId, limit, offset, attentionOnly, anchor, after })
   }
 
   cronRunDetail<T>(runId: string, workspaceId: string): Promise<T | null> {
@@ -1731,6 +1768,54 @@ export class BusinessRepository {
     return this.call('cron-run-append-log', input)
   }
 
+  recordCronDelivery(input: BusinessCronDeliveryInput): Promise<boolean> {
+    return this.call('cron-delivery-record', input)
+  }
+
+  deliverCronRunToSession(input: {
+    runId: string
+    workspaceId: string
+    targetSessionId: string | null
+    content: string
+    createdAt: number
+  }): Promise<{ status: 'sent' | 'failed'; inserted: boolean; errorCode: string | null }> {
+    return this.call('cron-session-deliver', input)
+  }
+
+  pendingCronSessionDeliveries<T>(afterRunId = '', limit = 500): Promise<T[]> {
+    return this.call('cron-session-pending-list', { afterRunId, limit })
+  }
+
+  cronRunDeliveries<T>(runId: string, workspaceId: string): Promise<T[]> {
+    return this.call('cron-deliveries-list', { runId, workspaceId })
+  }
+
+  reconcileCronDelivery(input: {
+    id: string
+    runId: string
+    workspaceId: string
+    outcome: 'sent' | 'failed'
+    confirmedAt: number
+  }): Promise<boolean> {
+    return this.call('cron-delivery-reconcile', input)
+  }
+
+  prepareCronDeliveryRetry(input: {
+    id: string
+    runId: string
+    retryOfId: string
+    workspaceId: string
+    toolCallId: string
+    startedAt: number
+  }): Promise<{
+    deliveryId: string
+    pluginId: string
+    chatId: string
+    attemptNumber: number
+  }> {
+    return this.call('cron-delivery-retry-prepare', input)
+  }
+
   createTask(input: {
     id: string
     sessionId: string
@@ -1754,6 +1839,7 @@ export class BusinessRepository {
   updateTask(input: {
     id: string
     workspaceId: string
+    expectedUpdatedAt?: number
     updatedAt?: number
     planId?: string | null
     subject?: string
@@ -1769,7 +1855,11 @@ export class BusinessRepository {
     return this.call('task-update', input)
   }
 
-  deleteTask(input: { id: string; workspaceId: string }): Promise<boolean> {
+  deleteTask(input: {
+    id: string
+    workspaceId: string
+    expectedUpdatedAt?: number
+  }): Promise<boolean> {
     return this.call('task-delete', input)
   }
 
@@ -1804,6 +1894,18 @@ export class BusinessRepository {
 
   migrationStatus(): Promise<Array<{ version: number; applied_at: number; description: string }>> {
     return this.call('migration-status')
+  }
+
+  pendingSessionQueue<T>(sessionId: string, workspaceId: string): Promise<T[]> {
+    return this.call('pending-session-queue-get', { sessionId, workspaceId })
+  }
+
+  replacePendingSessionQueue<T>(
+    sessionId: string,
+    workspaceId: string,
+    messages: T[]
+  ): Promise<boolean> {
+    return this.call('pending-session-queue-replace', { sessionId, workspaceId, messages })
   }
 
   normalizeMessageSortOrders(): Promise<{

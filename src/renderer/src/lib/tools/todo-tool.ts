@@ -1,3 +1,4 @@
+import type { TaskItem } from '@renderer/stores/task-store'
 import { toolRegistry } from '../agent/tool-registry'
 import { encodeStructuredToolResult, encodeToolError } from './tool-result-format'
 import type { ToolHandler } from './tool-types'
@@ -42,24 +43,29 @@ const taskCreateHandler: ToolHandler = {
     const title = typeof input.title === 'string' ? input.title.trim() : ''
     if (!title) return encodeToolError('title is required')
     const now = Date.now()
-    const task = useTaskStore.getState().addTask({
-      id: crypto.randomUUID(),
-      sessionId,
-      subject: title,
-      description: title,
-      ...(typeof input.activeForm === 'string' && input.activeForm.trim()
-        ? { activeForm: input.activeForm.trim() }
-        : {}),
-      status: 'pending',
-      owner: null,
-      blocks: [],
-      blockedBy: [],
-      ...(input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
-        ? { metadata: input.metadata as Record<string, unknown> }
-        : {}),
-      createdAt: now,
-      updatedAt: now
-    })
+    let task: TaskItem
+    try {
+      task = await useTaskStore.getState().addTask({
+        id: crypto.randomUUID(),
+        sessionId,
+        subject: title,
+        description: title,
+        ...(typeof input.activeForm === 'string' && input.activeForm.trim()
+          ? { activeForm: input.activeForm.trim() }
+          : {}),
+        status: 'pending',
+        owner: null,
+        blocks: [],
+        blockedBy: [],
+        ...(input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata)
+          ? { metadata: input.metadata as Record<string, unknown> }
+          : {}),
+        createdAt: now,
+        updatedAt: now
+      })
+    } catch (error) {
+      return encodeToolError(`Task creation failed: ${String(error)}`)
+    }
     return encodeStructuredToolResult({ task: { ...task } })
   },
   requiresApproval: () => false
@@ -118,7 +124,16 @@ const taskUpdateHandler: ToolHandler = {
         },
         status: {
           type: 'string',
-          enum: ['pending', 'in_progress', 'completed', 'deleted'],
+          enum: [
+            'pending',
+            'in_progress',
+            'in_review',
+            'blocked',
+            'completed',
+            'failed',
+            'cancelled',
+            'deleted'
+          ],
           description: 'New status for the task'
         },
         addBlocks: {
@@ -148,7 +163,13 @@ const taskUpdateHandler: ToolHandler = {
     const current = useTaskStore.getState().getTask(taskId)
     if (!current || current.sessionId !== sessionId) return encodeToolError('Task not found')
     if (input.status === 'deleted') {
-      useTaskStore.getState().deleteTask(taskId)
+      try {
+        if (!(await useTaskStore.getState().deleteTask(taskId))) {
+          return encodeToolError('Task was not deleted')
+        }
+      } catch (error) {
+        return encodeToolError(`Task deletion failed: ${String(error)}`)
+      }
       return encodeStructuredToolResult({ success: true, deleted: taskId })
     }
     const statusValue = input.status
@@ -158,7 +179,9 @@ const taskUpdateHandler: ToolHandler = {
       statusValue !== 'in_progress' &&
       statusValue !== 'in_review' &&
       statusValue !== 'blocked' &&
-      statusValue !== 'completed'
+      statusValue !== 'completed' &&
+      statusValue !== 'failed' &&
+      statusValue !== 'cancelled'
     )
       return encodeToolError(`Unsupported task status: ${String(statusValue)}`)
     const status = statusValue as TaskStatus | undefined
@@ -181,7 +204,12 @@ const taskUpdateHandler: ToolHandler = {
         ? { metadata: input.metadata as Record<string, unknown> }
         : {})
     }
-    const task = useTaskStore.getState().updateTask(taskId, patch)
+    let task: TaskItem | undefined
+    try {
+      task = await useTaskStore.getState().updateTask(taskId, patch)
+    } catch (error) {
+      return encodeToolError(`Task update failed: ${String(error)}`)
+    }
     return task
       ? encodeStructuredToolResult({ task: { ...task } })
       : encodeToolError('Task was not updated')

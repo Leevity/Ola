@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { join, resolve, sep } from 'node:path'
+import { join, parse, resolve, sep } from 'node:path'
 import { olaDataRoot } from '../lib/ola-data-root'
 import { WasmCodeGraphStore } from '../../runtime/codegraph/graph-store'
 import { indexWorkspaceWithWasm } from '../../runtime/codegraph/workspace-indexer'
@@ -68,8 +68,14 @@ function projectHash(root: string): string {
 
 function isSafeProjectRoot(root: string): boolean {
   const normalized = resolve(root)
+  const filesystemRoot = resolve(parse(normalized).root)
   const home = resolve(homedir())
-  return normalized !== sep && normalized !== home && !home.startsWith(`${normalized}${sep}`)
+  return (
+    normalized !== filesystemRoot &&
+    normalized !== sep &&
+    normalized !== home &&
+    !home.startsWith(`${normalized}${sep}`)
+  )
 }
 
 function asRoot(params: unknown): string | null {

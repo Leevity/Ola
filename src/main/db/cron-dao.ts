@@ -1,19 +1,27 @@
 import { nanoid } from 'nanoid'
 import { getTsDatabaseRouteGuard } from './business-write-canary'
 import { guardedCronWrite } from '../cron/cron-write-gate'
-import {
-  canaryGetCronJob,
-  canaryGetCronRun,
-  canaryGetCronRunDetail,
-  canaryListCronJobs,
-  canaryListCronRuns
-} from './legacy-read-canary'
+import { canaryGetCronJob, canaryGetCronRun, canaryListCronJobs } from './legacy-read-canary'
 import { businessWriteCanary } from './business-write-canary'
 import { loadOfflineWorkspaceIds } from '../remote/account-client'
 
 export type CronScheduleKind = 'at' | 'every' | 'cron'
 export type CronRunStatus = 'running' | 'success' | 'error' | 'aborted' | 'skipped'
 export type CronRunLogType = 'start' | 'text' | 'tool_call' | 'tool_result' | 'error' | 'end'
+export interface CronRunDeliveryRecord {
+  id: string
+  run_id: string
+  tool_call_id: string
+  kind: 'desktop' | 'channel' | 'session'
+  status: 'pending' | 'sent' | 'failed' | 'unknown'
+  started_at: number
+  finished_at: number | null
+  error_code: string | null
+  retry_of_id: string | null
+  attempt_number: number
+  plugin_id: string | null
+  chat_id: string | null
+}
 
 export interface CronJobRecord {
   workspace_id?: string
@@ -73,6 +81,8 @@ export interface CronRunRecord {
   working_folder_snapshot: string | null
   delivery_mode_snapshot: string | null
   delivery_target_snapshot: string | null
+  run_kind?: 'scheduled' | 'manual' | 'trial'
+  delivery_status?: 'pending' | 'sent' | 'failed' | 'unknown' | null
 }
 
 export interface CronRunMessageRow {
@@ -119,6 +129,7 @@ export interface CronRunCreateArgs {
   workingFolderSnapshot?: string | null
   deliveryModeSnapshot?: string | null
   deliveryTargetSnapshot?: string | null
+  runKind?: 'scheduled' | 'manual' | 'trial'
 }
 
 export interface CronRunUpdateArgs {
@@ -170,7 +181,16 @@ interface CronRunDetailResult {
   job?: CronJobRecord | null
   messages: CronRunMessageRow[]
   logs: CronRunLogRow[]
+  deliveries?: CronRunDeliveryRecord[]
   error?: string | null
+}
+
+interface CronRunDetailData {
+  run: CronRunRecord
+  job?: CronJobRecord | null
+  messages: CronRunMessageRow[]
+  logs: CronRunLogRow[]
+  deliveries?: CronRunDeliveryRecord[]
 }
 
 interface CronStartupLoadResult {
@@ -253,7 +273,13 @@ function unwrapRun(result: CronRunFindResult, operation: string): CronRunRecord 
   return result.run ?? null
 }
 
-function unwrapRunList(result: CronRunListResult, operation: string): CronRunRecord[] {
+function unwrapRunList(
+  result: CronRunListResult | CronRunRecord[],
+  operation: string
+): CronRunRecord[] {
+  // The TS BusinessRepository route returns the rows directly. Legacy Native
+  // adapters return the historical `{ success, runs }` envelope.
+  if (Array.isArray(result)) return result
   if (!result.success) {
     throw new Error(result.error || `Native cron run ${operation} failed`)
   }
@@ -431,9 +457,14 @@ export async function listCronRuns(args: {
   start?: number
   end?: number
   limit?: number
+  offset?: number
+  attentionOnly?: boolean
+  anchor?: { at: number; id: string }
+  after?: { at: number; id: string }
 }): Promise<CronRunRecord[]> {
-  const canary = await canaryListCronRuns(args)
-  if (canary !== undefined) return canary
+  // Delivery ledger rows live in the TS-owned database. Keep run history and
+  // attention filtering on the same source so legacy read canaries cannot hide
+  // a failed or unconfirmed delivery.
   const result = await getTsDatabaseRouteGuard().request<CronRunListResult>(
     'db/cron-runs-list',
     args,
@@ -463,7 +494,8 @@ export async function createCronRun(args: CronRunCreateArgs): Promise<void> {
       modelSourceSnapshot: args.modelSourceSnapshot,
       workingFolderSnapshot: args.workingFolderSnapshot,
       deliveryModeSnapshot: args.deliveryModeSnapshot as 'desktop' | 'session' | 'none' | undefined,
-      deliveryTargetSnapshot: args.deliveryTargetSnapshot
+      deliveryTargetSnapshot: args.deliveryTargetSnapshot,
+      runKind: args.runKind
     })
     return
   }
@@ -563,6 +595,58 @@ export async function appendCronRunLog(
   )
 }
 
+export async function recordCronDelivery(args: {
+  runId: string
+  workspaceId: string
+  toolCallId: string
+  kind: 'desktop' | 'channel' | 'session'
+  status: CronRunDeliveryRecord['status']
+  startedAt: number
+  finishedAt?: number | null
+  errorCode?: string | null
+  retryOfId?: string | null
+  attemptNumber?: number
+  pluginId?: string | null
+  chatId?: string | null
+}): Promise<void> {
+  const writer = businessWriteCanary()
+  if (writer) {
+    await writer.recordCronDelivery({ id: `delivery-${nanoid(10)}`, ...args })
+    return
+  }
+  await cronMutation(
+    'db/cron-delivery-record',
+    { id: `delivery-${nanoid(10)}`, ...args },
+    'record delivery'
+  )
+}
+
+export async function reconcileCronDelivery(args: {
+  id: string
+  runId: string
+  workspaceId: string
+  outcome: 'sent' | 'failed'
+  confirmedAt: number
+}): Promise<void> {
+  const writer = businessWriteCanary()
+  if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+  const changed = await writer.reconcileCronDelivery(args)
+  if (!changed) throw new Error('CRON_DELIVERY_NOT_RECONCILABLE')
+}
+
+export async function prepareCronDeliveryRetry(args: {
+  id: string
+  runId: string
+  retryOfId: string
+  workspaceId: string
+  toolCallId: string
+  startedAt: number
+}): Promise<{ deliveryId: string; pluginId: string; chatId: string; attemptNumber: number }> {
+  const writer = businessWriteCanary()
+  if (!writer) throw new Error('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
+  return writer.prepareCronDeliveryRetry(args)
+}
+
 export async function getCronRunDetail(
   runId: string,
   workspaceId?: string
@@ -571,24 +655,25 @@ export async function getCronRunDetail(
   job: CronJobRecord | null
   messages: CronRunMessageRow[]
   logs: CronRunLogRow[]
+  deliveries: CronRunDeliveryRecord[]
 }> {
-  const canary = await canaryGetCronRunDetail({ runId, workspaceId })
-  if (canary !== undefined) {
-    if (!canary) throw new Error(`Run "${runId}" not found`)
-    return canary
-  }
-  const result = await getTsDatabaseRouteGuard().request<CronRunDetailResult>(
+  // The run detail must read its delivery ledger from the TS-owned database.
+  const result = await getTsDatabaseRouteGuard().request<CronRunDetailResult | CronRunDetailData>(
     'db/cron-run-detail',
     { runId, workspaceId },
     120_000
   )
-  if (!result.success || !result.run) {
-    throw new Error(result.error || `Run "${runId}" not found`)
+
+  const legacyEnvelope = 'success' in result
+  const run = legacyEnvelope ? result.run : result.run
+  if ((legacyEnvelope && !result.success) || !run) {
+    throw new Error((legacyEnvelope ? result.error : undefined) || `Run "${runId}" not found`)
   }
   return {
-    run: result.run,
+    run,
     job: result.job ?? null,
     messages: result.messages,
-    logs: result.logs
+    logs: result.logs,
+    deliveries: result.deliveries ?? []
   }
 }

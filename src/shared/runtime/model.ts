@@ -23,6 +23,7 @@ export interface ModelToolResult {
   id: string
   name: string
   output: unknown
+  images?: ModelImage[]
   isError?: boolean
 }
 export interface ProviderReplay {

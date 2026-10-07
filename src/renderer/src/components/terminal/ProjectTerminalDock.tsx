@@ -1,5 +1,13 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, MonitorSmartphone, Plus, SquareTerminal, X } from 'lucide-react'
+import {
+  ChevronDown,
+  MonitorSmartphone,
+  PanelBottom,
+  PanelRight,
+  Plus,
+  SquareTerminal,
+  X
+} from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { Button } from '@renderer/components/ui/button'
 import {
@@ -82,13 +90,19 @@ interface ProjectTerminalDockProps {
   projectName?: string | null
   workingFolder?: string | null
   sshConnectionId?: string | null
+  dockArea?: 'bottom' | 'right'
+  canMove?: boolean
+  moveDisabledReason?: string
 }
 
 export function ProjectTerminalDock({
   projectId,
   projectName,
   workingFolder,
-  sshConnectionId
+  sshConnectionId,
+  dockArea = 'bottom',
+  canMove = false,
+  moveDisabledReason
 }: ProjectTerminalDockProps): React.JSX.Element {
   const { t } = useTranslation('layout')
 
@@ -114,6 +128,7 @@ export function ProjectTerminalDock({
   const setSshActiveTab = useSshStore((s) => s.setActiveTab)
 
   const setBottomTerminalDockOpen = useUIStore((s) => s.setBottomTerminalDockOpen)
+  const setTerminalDockArea = useUIStore((s) => s.setTerminalDockArea)
   const bottomTerminalDockHeight = useUIStore((s) => s.bottomTerminalDockHeight)
   const setBottomTerminalDockHeight = useUIStore((s) => s.setBottomTerminalDockHeight)
   const [isEnsuringTerminal, setIsEnsuringTerminal] = useState(false)
@@ -375,13 +390,21 @@ export function ProjectTerminalDock({
 
   return (
     <div
+      data-project-terminal-dock
+      data-project-id={projectId}
       className={cn(
-        'workspace-terminal-dock relative shrink-0',
+        'workspace-terminal-dock relative h-full min-h-0 min-w-0 shrink-0',
+        dockArea === 'right' && 'w-full',
         isResizing && 'workspace-terminal-dock--resizing select-none'
       )}
     >
-      <div className="workspace-terminal-resize-handle" onMouseDown={startResize} />
-      <div className="flex flex-col" style={{ height: bottomTerminalDockHeight }}>
+      {dockArea === 'bottom' && (
+        <div className="workspace-terminal-resize-handle" onMouseDown={startResize} />
+      )}
+      <div
+        className="flex h-full min-h-0 flex-col"
+        style={dockArea === 'bottom' ? { height: bottomTerminalDockHeight } : undefined}
+      >
         <div className="workspace-terminal-header flex h-10 shrink-0 items-center gap-2 px-3">
           <div className="min-w-0 flex-1 overflow-x-auto [scrollbar-width:none]">
             <div className="flex min-w-max items-center gap-1">
@@ -458,6 +481,39 @@ export function ProjectTerminalDock({
           </div>
 
           <div className="ml-auto flex items-center gap-1">
+            {canMove ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className="workspace-terminal-action size-7 rounded-[10px]"
+                    disabled={Boolean(moveDisabledReason)}
+                    title={moveDisabledReason}
+                    aria-label={
+                      dockArea === 'bottom'
+                        ? t('terminalDock.moveRight', { defaultValue: 'Move terminal to right' })
+                        : t('terminalDock.moveBottom', { defaultValue: 'Move terminal to bottom' })
+                    }
+                    onClick={() =>
+                      setTerminalDockArea(projectId, dockArea === 'bottom' ? 'right' : 'bottom')
+                    }
+                  >
+                    {dockArea === 'bottom' ? (
+                      <PanelRight className="size-3.5" />
+                    ) : (
+                      <PanelBottom className="size-3.5" />
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {moveDisabledReason ??
+                    (dockArea === 'bottom'
+                      ? t('terminalDock.moveRight', { defaultValue: 'Move terminal to right' })
+                      : t('terminalDock.moveBottom', { defaultValue: 'Move terminal to bottom' }))}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button

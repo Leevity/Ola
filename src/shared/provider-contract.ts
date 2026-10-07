@@ -47,4 +47,5 @@ export interface ProviderMirrorSnapshot {
   }>
   activeProviderId?: string | null
   activeModelId?: string
+  credentialVaultUnavailable?: boolean
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { join, resolve } from 'node:path'
 import {
   extensionManifestPath,
   normalizeExtensionId,
@@ -9,9 +10,10 @@ import {
 describe('extension paths', () => {
   it('normalizes valid ids and confines extension paths', () => {
     expect(normalizeExtensionId(' Example_Extension ')).toBe('example_extension')
-    expect(resolveExtensionPath('/tmp/extensions', 'sample')).toBe('/tmp/extensions/sample')
+    const extensionDirectory = resolve('/tmp/extensions/sample')
+    expect(resolveExtensionPath('/tmp/extensions', 'sample')).toBe(extensionDirectory)
     expect(extensionManifestPath('/tmp/extensions', 'sample')).toBe(
-      '/tmp/extensions/sample/extension.json'
+      join(extensionDirectory, 'extension.json')
     )
   })
 

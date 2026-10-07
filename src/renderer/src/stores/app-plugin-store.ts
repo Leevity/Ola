@@ -158,6 +158,7 @@ function isImageModelEnabled(providerId: string, modelId: string): boolean {
 }
 
 interface AppPluginStore {
+  hydrated: boolean
   pluginsByProject: Record<string, AppPluginInstance[]>
   getPlugins: (projectId?: string | null) => AppPluginInstance[]
   getDescriptors: () => AppPluginDescriptor[]
@@ -179,6 +180,7 @@ interface AppPluginStore {
 export const useAppPluginStore = create<AppPluginStore>()(
   persist(
     (set, get) => ({
+      hydrated: false,
       pluginsByProject: {
         [GLOBAL_PROJECT_ID]: provisionBuiltinPlugins([])
       },
@@ -300,10 +302,12 @@ function ensureBuiltinPlugins(): void {
 
 export function initAppPluginStore(): void {
   if (useAppPluginStore.persist.hasHydrated()) {
+    useAppPluginStore.setState({ hydrated: true })
     ensureBuiltinPlugins()
   }
 
   useAppPluginStore.persist.onFinishHydration(() => {
+    useAppPluginStore.setState({ hydrated: true })
     ensureBuiltinPlugins()
   })
 }

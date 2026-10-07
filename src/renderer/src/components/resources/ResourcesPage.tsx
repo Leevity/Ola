@@ -165,6 +165,7 @@ export function ResourcesPage(): React.JSX.Element {
   const listLoading = useResourcesStore((s) => s.listLoading)
   const detailLoading = useResourcesStore((s) => s.detailLoading)
   const saving = useResourcesStore((s) => s.saving)
+  const listError = useResourcesStore((s) => s.listError)
   const error = useResourcesStore((s) => s.error)
   const loadAll = useResourcesStore((s) => s.loadAll)
   const setActiveKind = useResourcesStore((s) => s.setActiveKind)
@@ -220,6 +221,8 @@ export function ResourcesPage(): React.JSX.Element {
       return
     }
 
+    if (detailLoading || error) return
+
     if (
       !selectedResource ||
       selectedResource.kind !== activeKind ||
@@ -227,7 +230,16 @@ export function ResourcesPage(): React.JSX.Element {
     ) {
       void selectResource(currentSelectedId, activeKind)
     }
-  }, [activeKind, currentItems, currentSelectedId, selectedResource, selectResource, showTemplates])
+  }, [
+    activeKind,
+    currentItems,
+    currentSelectedId,
+    detailLoading,
+    error,
+    selectedResource,
+    selectResource,
+    showTemplates
+  ])
 
   const handleSave = async (): Promise<void> => {
     const result = await saveSelected()
@@ -239,7 +251,16 @@ export function ResourcesPage(): React.JSX.Element {
   }
 
   const handleCreateCommand = async (): Promise<void> => {
-    const result = await createCommand(newCommandName)
+    const name = newCommandName.trim()
+    if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name)) {
+      toast.error(
+        t('resourcesPage.invalidCommandName', {
+          defaultValue: 'Use lowercase letters, numbers, and hyphens for the command name.'
+        })
+      )
+      return
+    }
+    const result = await createCommand(name)
     toast[result.success ? 'success' : 'error'](
       result.success
         ? t('resourcesPage.commandCreated', { defaultValue: 'Command created' })
@@ -258,6 +279,7 @@ export function ResourcesPage(): React.JSX.Element {
       <div className="flex items-center gap-3 border-b px-4 py-2.5 shrink-0">
         <button
           onClick={() => useUIStore.getState().closeResourcesPage()}
+          aria-label={t('resourcesPage.back', { defaultValue: 'Back' })}
           className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         >
           <ArrowLeft className="size-4" />
@@ -290,6 +312,9 @@ export function ResourcesPage(): React.JSX.Element {
           <Input
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
+            aria-label={t('resourcesPage.searchPlaceholder', {
+              defaultValue: 'Search name, summary or path'
+            })}
             placeholder={t('resourcesPage.searchPlaceholder', {
               defaultValue: 'Search name, summary or path'
             })}
@@ -324,7 +349,10 @@ export function ResourcesPage(): React.JSX.Element {
         ))}
         <span className="ml-auto text-[11px] text-muted-foreground">
           {t('resourcesPage.currentProfile', {
-            profile: defaultTaskProfile === 'code' ? 'Code 编程' : 'Work 工作',
+            profile:
+              defaultTaskProfile === 'code'
+                ? t('resourcesPage.profile.code', { defaultValue: 'Code' })
+                : t('resourcesPage.profile.work', { defaultValue: 'Work' }),
             defaultValue: `Current profile: ${defaultTaskProfile === 'code' ? 'Code' : 'Work'}`
           })}
         </span>
@@ -350,10 +378,14 @@ export function ResourcesPage(): React.JSX.Element {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            <label className="text-xs font-medium text-foreground/80">
+            <label
+              htmlFor="resource-command-name"
+              className="text-xs font-medium text-foreground/80"
+            >
               {t('resourcesPage.commandName', { defaultValue: 'Command name' })}
             </label>
             <Input
+              id="resource-command-name"
               value={newCommandName}
               onChange={(event) => setNewCommandName(event.target.value)}
               placeholder={t('resourcesPage.commandNamePlaceholder', {
@@ -448,6 +480,15 @@ export function ResourcesPage(): React.JSX.Element {
                     <Loader2 className="mr-2 size-3.5 animate-spin" />
                     {t('resourcesPage.loadingList', { defaultValue: 'Loading list...' })}
                   </div>
+                ) : listError ? (
+                  <div className="flex flex-col items-center gap-3 py-10 text-center" role="alert">
+                    <p className="text-sm text-destructive">
+                      {t('resourcesPage.loadFailed', { defaultValue: 'Could not load resources' })}
+                    </p>
+                    <Button variant="outline" size="sm" onClick={() => void loadAll()}>
+                      {t('resourcesPage.retry', { defaultValue: 'Retry' })}
+                    </Button>
+                  </div>
                 ) : filteredItems.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
                     <p className="text-sm text-muted-foreground">
@@ -529,12 +570,16 @@ export function ResourcesPage(): React.JSX.Element {
                       {editing ? (
                         <>
                           <Button variant="ghost" size="icon-sm" onClick={() => setEditing(false)}>
+                            <span className="sr-only">
+                              {t('resourcesPage.preview', { defaultValue: 'Preview resource' })}
+                            </span>
                             <Eye className="size-3.5" />
                           </Button>
                           <Button
                             size="icon-sm"
                             onClick={() => void handleSave()}
                             disabled={saving}
+                            aria-label={t('resourcesPage.save', { defaultValue: 'Save resource' })}
                           >
                             {saving ? (
                               <Loader2 className="size-3.5 animate-spin" />
@@ -549,6 +594,7 @@ export function ResourcesPage(): React.JSX.Element {
                           size="icon-sm"
                           onClick={() => setEditing(true)}
                           disabled={!selectedResource.editable}
+                          aria-label={t('resourcesPage.edit', { defaultValue: 'Edit resource' })}
                         >
                           <Pencil className="size-3.5" />
                         </Button>
@@ -581,6 +627,7 @@ export function ResourcesPage(): React.JSX.Element {
                       <textarea
                         value={draftContent ?? ''}
                         onChange={(event) => setDraftContent(event.target.value)}
+                        aria-label={t('resourcesPage.editor', { defaultValue: 'Resource content' })}
                         className="h-full w-full resize-none border-0 bg-transparent p-4 font-mono text-xs leading-relaxed focus:outline-none"
                         spellCheck={false}
                       />
@@ -591,6 +638,24 @@ export function ResourcesPage(): React.JSX.Element {
                     )}
                   </div>
                 </>
+              ) : error && currentSelectedId ? (
+                <div
+                  className="flex flex-1 flex-col items-center justify-center gap-3 text-center"
+                  role="alert"
+                >
+                  <p className="text-sm text-destructive">
+                    {t('resourcesPage.detailLoadFailed', {
+                      defaultValue: 'Could not load resource content'
+                    })}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void selectResource(currentSelectedId, activeKind)}
+                  >
+                    {t('resourcesPage.retry', { defaultValue: 'Retry' })}
+                  </Button>
+                </div>
               ) : (
                 <div className="flex flex-1 flex-col items-center justify-center gap-2 text-center">
                   <p className="text-sm text-muted-foreground">

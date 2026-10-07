@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
 import {
   Dialog,
   DialogContent,
@@ -100,7 +101,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
     try {
       const result = await importOauthAccountsFromJson(provider.id, rawText)
       const msg = t('provider.accounts.toasts.importResult', {
-        imported: result.imported,
+        imported: result.imported.length,
         skipped: result.skipped.length
       })
       if (result.skipped.length > 0) {
@@ -165,15 +166,18 @@ export function AccountListEditor({ provider }: Props): ReactElement {
     }
   }
 
-  function handleExport(): void {
+  async function handleExport(): Promise<void> {
     try {
       const json = exportProviderAccounts(provider.id)
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        void navigator.clipboard.writeText(json)
-        toast.success(t('provider.accounts.toasts.exportCopied'))
-      } else {
-        toast.info(json)
+      if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) {
+        throw new Error(
+          t('provider.accounts.toasts.clipboardUnavailable', {
+            defaultValue: 'Clipboard is unavailable'
+          })
+        )
       }
+      await navigator.clipboard.writeText(json)
+      toast.success(t('provider.accounts.toasts.exportCopied'))
     } catch (err) {
       toast.error(
         t('provider.accounts.toasts.exportFailed', {
@@ -248,7 +252,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
 
   return (
     <div className="space-y-2 rounded-md border bg-muted/20 p-3">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <h4 className="text-sm font-medium">
           {t('provider.accounts.title')}
           <span className="ml-2 text-xs text-muted-foreground">({accounts.length})</span>
@@ -257,7 +261,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 gap-1 text-[11px]"
+            className="h-8 gap-1 text-[0.8125rem]"
             onClick={() => void handleAddAccount()}
             disabled={addingAccount}
           >
@@ -271,7 +275,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 gap-1 text-[11px]"
+            className="h-8 gap-1 text-[0.8125rem]"
             onClick={() => setImportOpen(true)}
           >
             <FileJson className="size-3" />
@@ -280,7 +284,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 gap-1 text-[11px]"
+            className="h-8 gap-1 text-[0.8125rem]"
             onClick={() => void handleImportFromFile()}
           >
             <Upload className="size-3" />
@@ -289,8 +293,8 @@ export function AccountListEditor({ provider }: Props): ReactElement {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 gap-1 text-[11px]"
-            onClick={handleExport}
+            className="h-8 gap-1 text-[0.8125rem]"
+            onClick={() => void handleExport()}
             disabled={accounts.length === 0}
           >
             <Download className="size-3" />
@@ -300,7 +304,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
       </div>
 
       {accounts.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-3 text-center">
+        <p className="py-3 text-center text-[0.8125rem] text-muted-foreground">
           {t('provider.accounts.empty')}
         </p>
       ) : (
@@ -342,17 +346,18 @@ export function AccountListEditor({ provider }: Props): ReactElement {
                         onChange={(e) => setEmailDraft(e.target.value)}
                         onBlur={() => commitEmail(account)}
                         onKeyDown={(e) => {
+                          if (isImeCommitKey(e)) return
                           if (e.key === 'Enter') commitEmail(account)
                           if (e.key === 'Escape') setEditingEmailId(null)
                         }}
-                        className="h-6 text-xs"
+                        className="h-8 text-sm"
                         autoFocus
                       />
                     ) : (
                       <button
                         type="button"
                         onClick={() => beginEditEmail(account)}
-                        className="text-xs font-medium truncate text-left hover:underline"
+                        className="truncate text-left text-sm font-medium hover:underline"
                         title={account.email}
                       >
                         {account.email}
@@ -360,7 +365,7 @@ export function AccountListEditor({ provider }: Props): ReactElement {
                     )}
                     <StatusChip status={status} account={account} />
                   </div>
-                  <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     {account.lastUsedAt && (
                       <span>
                         {t('provider.accounts.lastUsed', {
@@ -427,16 +432,17 @@ export function AccountListEditor({ provider }: Props): ReactElement {
       )}
 
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="settings-dialog max-h-[90vh] max-w-xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('provider.accounts.import.title')}</DialogTitle>
             <DialogDescription>{t('provider.accounts.import.description')}</DialogDescription>
           </DialogHeader>
           <textarea
+            aria-label={t('provider.accounts.import.title')}
             value={importText}
             onChange={(e) => setImportText(e.target.value)}
             spellCheck={false}
-            className="w-full h-60 font-mono text-xs border rounded-md p-2 bg-background"
+            className="h-40 max-h-[30vh] min-h-20 w-full rounded-md border bg-background p-2 font-mono text-xs sm:h-60 sm:max-h-[35vh]"
             placeholder='[ { "email": "a@x.com", "access_token": "...", "refresh_token": "...", "expires_at": 1700000000000 } ]'
           />
           <div className="flex justify-end gap-2">
@@ -484,5 +490,5 @@ function StatusChip({
         : status === 'expired'
           ? t('provider.accounts.status.expired')
           : t('provider.accounts.status.idle')
-  return <span className={`text-[10px] px-1.5 py-0.5 rounded ${cls}`}>{label}</span>
+  return <span className={`rounded px-1.5 py-0.5 text-xs ${cls}`}>{label}</span>
 }
