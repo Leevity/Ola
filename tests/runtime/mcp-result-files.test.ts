@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -40,7 +40,7 @@ describe('MCP file results', () => {
       'docs'
     )
     expect(artifacts).toHaveLength(2)
-    expect(artifacts[0].path.startsWith(join(root, '.ola-results'))).toBe(true)
+    expect(artifacts[0].path.startsWith(join(await realpath(root), '.ola-results'))).toBe(true)
     expect(await readFile(artifacts[0].path, 'utf8')).toBe('# Report')
     expect(artifacts[1].mediaType).toBe('audio/wav')
   })
@@ -63,7 +63,7 @@ describe('MCP file results', () => {
       'docs'
     )
     expect(artifacts).toHaveLength(1)
-    expect(artifacts[0].path).toBe(join(root, 'report.txt'))
+    expect(artifacts[0].path).toBe(await realpath(join(root, 'report.txt')))
   })
   it('reads server-owned resource links and excludes failed or malformed content', async () => {
     const { context, manager } = await fixture()
@@ -111,5 +111,5 @@ it('stores embedded chat results in a host-managed directory when no working fol
     managed
   )
   expect(artifacts).toHaveLength(1)
-  expect(artifacts[0].path.startsWith(managed)).toBe(true)
+  expect(artifacts[0].path.startsWith(await realpath(managed))).toBe(true)
 })

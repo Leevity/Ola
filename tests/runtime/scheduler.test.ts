@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { RunJournal } from '../../src/runtime/storage/run-journal'
@@ -80,7 +80,7 @@ describe('durable scheduler', () => {
         runId: 'shell-artifact-run',
         data: expect.objectContaining({
           toolCallId: 'shell-output',
-          path: join(workspace, 'result.txt'),
+          path: await realpath(join(workspace, 'result.txt')),
           operation: 'create'
         })
       })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ToolExecutor, type ToolDefinition } from '../../src/runtime/tools/tool-executor'
@@ -143,7 +143,7 @@ describe('runtime artifact events', () => {
             toolCallId: 'shell-write',
             kind: 'file',
             transport: 'local',
-            path: join(root, 'report.txt'),
+            path: await realpath(join(root, 'report.txt')),
             operation: 'create'
           }
         }

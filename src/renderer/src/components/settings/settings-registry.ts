@@ -3,8 +3,7 @@ export const SETTINGS_SECTION_IDS = [
   'models',
   'execution',
   'integrations',
-  'personalization',
-  'advanced'
+  'personalization'
 ] as const
 
 export type SettingsSectionId = (typeof SETTINGS_SECTION_IDS)[number]
@@ -54,10 +53,8 @@ export type SettingsPageId =
   | 'projectIntelligence'
   | 'profile'
   | 'memory'
-  | 'migration'
-  | 'advanced'
-
-export type LegacySettingsPageId = 'hooks' | 'aiCoding' | 'analytics' | 'pet' | 'wiki'
+  | 'pet'
+export type LegacySettingsPageId = 'hooks' | 'aiCoding' | 'analytics' | 'wiki'
 export type SettingsNavigationTarget = SettingsPageId | LegacySettingsPageId
 
 export interface SettingsSectionDefinition {
@@ -82,8 +79,7 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDefinition[] = [
   { id: 'models', labelKey: 'architecture.groups.models' },
   { id: 'execution', labelKey: 'architecture.groups.execution' },
   { id: 'integrations', labelKey: 'architecture.groups.integrations' },
-  { id: 'personalization', labelKey: 'architecture.groups.personalization' },
-  { id: 'advanced', labelKey: 'architecture.groups.advanced' }
+  { id: 'personalization', labelKey: 'architecture.groups.personalization' }
 ]
 
 export const SETTINGS_REGISTRY: readonly SettingsPageDefinition[] = [
@@ -269,23 +265,13 @@ export const SETTINGS_REGISTRY: readonly SettingsPageDefinition[] = [
     component: 'memory'
   },
   {
-    id: 'migration',
-    section: 'advanced',
-    titleKey: 'migration.title',
-    descriptionKey: 'migration.subtitle',
-    icon: 'refresh',
-    layout: 'full',
-    component: 'migration'
-  },
-  {
-    id: 'advanced',
-    section: 'advanced',
-    titleKey: 'architecture.pages.advanced.title',
-    descriptionKey: 'architecture.pages.advanced.description',
+    id: 'pet',
+    section: 'personalization',
+    titleKey: 'pet.title',
+    descriptionKey: 'pet.subtitle',
     icon: 'flask',
-    layout: 'standard',
-    component: 'advanced',
-    legacyIds: ['hooks', 'aiCoding']
+    layout: 'full',
+    component: 'pet'
   }
 ]
 
@@ -293,10 +279,9 @@ const pageById = new Map(SETTINGS_REGISTRY.map((page) => [page.id, page]))
 const legacyPageTargets: Readonly<
   Record<LegacySettingsPageId, SettingsPageId | 'usage' | 'petStudio'>
 > = {
-  hooks: 'advanced',
-  aiCoding: 'advanced',
+  hooks: 'general',
+  aiCoding: 'general',
   analytics: 'usage',
-  pet: 'petStudio',
   wiki: 'projectIntelligence'
 }
 

@@ -4916,7 +4916,11 @@ export function useChatActions(): {
             })
 
             if (!useTsAgent) {
-              throw new Error('TS_RUNTIME_AGENT_UNAVAILABLE')
+              const reason =
+                tsAgentEligibility?.eligible === false
+                  ? tsAgentEligibility.reason
+                  : 'RUNTIME_UNAVAILABLE'
+              throw new Error(`TS_RUNTIME_AGENT_UNAVAILABLE: ${reason}`)
             }
 
             setRequestTraceInfo(assistantMsgId, {

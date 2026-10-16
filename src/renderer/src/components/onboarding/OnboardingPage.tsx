@@ -7,6 +7,7 @@ import {
   type ReactNode
 } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
+import { OlaBrand } from '@renderer/components/brand/OlaBrand'
 import {
   ArrowLeft,
   ArrowRight,
@@ -188,7 +189,7 @@ function BrandHeader({
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between px-5">
-      <div className="text-base font-semibold text-foreground">Ola</div>
+      <OlaBrand />
       <Select
         value={language}
         onValueChange={(value) => onLanguageChange(value as OnboardingLanguage)}

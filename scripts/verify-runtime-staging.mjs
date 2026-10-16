@@ -13,7 +13,7 @@ if (!platform || !rootArg || !['darwin', 'linux', 'win32'].includes(platform)) {
   throw new Error('Usage: verify-runtime-staging.mjs <unpacked-dir> --platform=darwin|linux|win32')
 }
 
-const root = resolve(rootArg)
+const root = await realpath(resolve(rootArg))
 const executable =
   platform === 'darwin'
     ? join(root, 'Ola.app', 'Contents', 'MacOS', 'Ola')

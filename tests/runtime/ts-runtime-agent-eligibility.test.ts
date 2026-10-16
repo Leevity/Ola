@@ -31,6 +31,17 @@ const baseline = {
 } as const
 
 describe('TS runtime Execute eligibility', () => {
+  it.each(['chat', 'clarify'])('routes %s through the same typed runtime boundary', (mode) => {
+    expect(assessTsRuntimeAgentEligibility({ ...baseline, mode })).toMatchObject({ eligible: true })
+    expect(
+      assessTsRuntimeAgentEligibility({ ...baseline, mode, toolNames: ['UnknownTool'] })
+    ).toEqual({ eligible: false, reason: 'TOOLS_NOT_MIGRATED' })
+    expect(assessTsRuntimeAgentEligibility({ ...baseline, mode, modelSource: null })).toEqual({
+      eligible: false,
+      reason: 'MODEL_SOURCE_NOT_MIGRATED'
+    })
+  })
+
   it('projects the compatible execution request without provider secrets', () => {
     expect(assessTsRuntimeAgentEligibility(baseline)).toEqual({
       eligible: true,
@@ -49,7 +60,7 @@ describe('TS runtime Execute eligibility', () => {
     [{ toolNames: ['UnknownTool'] }, 'TOOLS_NOT_MIGRATED'],
     [{ workingDirectory: null }, 'TOOLS_NOT_MIGRATED'],
     [{ mode: 'acp' }, 'MODE_NOT_MIGRATED']
-  ] as const)('keeps unsupported Execute capabilities on sidecar: %s', (patch, reason) => {
+  ] as const)('rejects unsupported runtime capabilities: %s', (patch, reason) => {
     expect(assessTsRuntimeAgentEligibility({ ...baseline, ...patch })).toEqual({
       eligible: false,
       reason
@@ -328,10 +339,29 @@ describe('TS runtime Execute eligibility', () => {
     ).toMatchObject({ eligible: true })
   })
 
-  it('keeps malformed or non-MCP external tool names on the sidecar path', () => {
+  it('rejects malformed or non-MCP external tool names', () => {
     expect(
       assessTsRuntimeAgentEligibility({ ...baseline, toolNames: ['mcp__docs__not safe'] })
     ).toEqual({ eligible: false, reason: 'TOOLS_NOT_MIGRATED' })
+  })
+
+  it.each(['chat', 'clarify', 'execute'])('enforces team workspace ownership for %s', (mode) => {
+    const managed = {
+      ...baseline,
+      mode,
+      workspaceId: 'team-a',
+      provider: { ...provider, apiKey: '', requiresApiKey: false },
+      modelSource: { kind: 'ola-team', workspaceId: 'team-a', resourceId: 'resource-a' }
+    }
+    expect(assessTsRuntimeAgentEligibility(managed)).toMatchObject({ eligible: true })
+    expect(assessTsRuntimeAgentEligibility({ ...managed, workspaceId: 'team-b' })).toEqual({
+      eligible: false,
+      reason: 'WORKSPACE_MISMATCH'
+    })
+    expect(assessTsRuntimeAgentEligibility({ ...managed, toolNames: ['UnknownTool'] })).toEqual({
+      eligible: false,
+      reason: 'TOOLS_NOT_MIGRATED'
+    })
   })
 
   it('rejects a managed source from another workspace', () => {

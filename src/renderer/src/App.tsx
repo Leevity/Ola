@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { Layout } from './components/layout/Layout'
 import { DetachedSessionPage } from './components/layout/DetachedSessionPage'
 import { RemotePage } from './components/remote/RemotePage'
+import { FirstRunAccessPage } from './components/onboarding/FirstRunAccessPage'
 import { OnboardingPage } from './components/onboarding/OnboardingPage'
 import { Toaster } from './components/ui/sonner'
 import { Button } from './components/ui/button'
@@ -217,6 +218,7 @@ function App(): React.JSX.Element {
   const cronLogBufferRef = useRef<CronAgentLogEntry[]>([])
   const cronLogFlushTimerRef = useRef<number | null>(null)
   const onboardingCompleted = useSettingsStore((s) => s.onboardingCompleted)
+  const onboardingAccessMode = useSettingsStore((s) => s.onboardingAccessMode)
   const videoGenerationEnabled = useSettingsStore((s) => s.videoGenerationEnabled)
   const [settingsHydrated, setSettingsHydrated] = useState(() =>
     useSettingsStore.persist.hasHydrated()
@@ -1094,7 +1096,7 @@ function App(): React.JSX.Element {
       <ErrorBoundary>
         <ThemeProvider defaultTheme={theme}>
           <ThemeRuntimeSync />
-          <OnboardingPage />
+          {onboardingAccessMode ? <OnboardingPage /> : <FirstRunAccessPage />}
           <Toaster position="bottom-left" theme="system" richColors />
         </ThemeProvider>
       </ErrorBoundary>

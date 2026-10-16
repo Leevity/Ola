@@ -21,23 +21,44 @@ export function resolveWorkspacePath(
   }
 
   const root = path.resolve(workspaceRoot)
-  const resolvedPath = path.resolve(root, requestedPath)
-
-  let candidate = resolvedPath
+  let comparisonRoot = root
   if (checkRealPath) {
     try {
-      candidate = realpathSync(resolvedPath)
+      comparisonRoot = realpathSync(root)
     } catch {
-      // The path does not exist yet (e.g. an intended write target). Fall back
-      // to lexical containment; an existing parent is still bound to root below.
+      // A root that is being created can still be checked lexically.
+    }
+  }
+  const resolvedPath = path.resolve(root, requestedPath)
+
+  let comparisonCandidate = resolvedPath
+  if (checkRealPath) {
+    try {
+      comparisonCandidate = realpathSync(resolvedPath)
+    } catch {
+      // Resolve the nearest existing parent so a not-yet-created path cannot
+      // escape through a symlinked directory.
+      const missingSegments: string[] = []
+      let existingParent = resolvedPath
+      while (true) {
+        try {
+          comparisonCandidate = path.join(realpathSync(existingParent), ...missingSegments)
+          break
+        } catch {
+          const parent = path.dirname(existingParent)
+          if (parent === existingParent) break
+          missingSegments.unshift(path.basename(existingParent))
+          existingParent = parent
+        }
+      }
     }
   }
 
-  const relative = path.relative(root, candidate)
+  const relative = path.relative(comparisonRoot, comparisonCandidate)
   const outside =
     relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
 
   return outside
     ? { allowed: false, reason: 'outside-workspace' }
-    : { allowed: true, resolvedPath: candidate }
+    : { allowed: true, resolvedPath: comparisonCandidate }
 }

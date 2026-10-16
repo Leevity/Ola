@@ -389,17 +389,10 @@ export function touchCredential(id: string): void {
   writeIndex(index)
 }
 
-// Initialize once on app startup.
+// Prepare storage without requesting keychain access before a window exists.
 export function initSecretVault(): void {
-  // Touch the directory so it exists, and warm the cache.
   getCredentialsDir()
-  try {
-    getPlaintextCache()
-  } catch {
-    // Keep handlers available; every credential read or write still fails closed.
-  }
-  // If the app was started before safeStorage was ready, retry on app ready.
-  if (!isSafeStorageAvailable() && app.isReady()) {
-    console.warn('[SecretVault] safeStorage is not available; credentials will be session-only.')
-  }
+  // Cache hydration and secure-storage availability stay lazy. On macOS an
+  // unsigned build can trigger a blocking keychain authorization request;
+  // credential reads/writes retain their checks when actually requested.
 }

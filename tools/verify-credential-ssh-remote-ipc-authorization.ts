@@ -68,7 +68,13 @@ assert.match(remote, /registerTrustedRemoteMessagePackHandler<RemoteConnectInput
 assert.match(remote, /registerTrustedRemoteMessagePackHandler<\s*RemoteInputEnvelope/)
 assert.match(remote, /remote:input:set-session'[\s\S]*remoteControlEngine\.sessions\.isOwnedBy/)
 assert.match(remote, /remote:input:dispatch'[\s\S]*isRemoteInputSessionOwnedBy/)
-assert.match(remote, /Remote session is owned by another window/)
+// Incoming Ola sessions delegate ownership checks to the engine; the handler
+// must pass its trusted sender identity rather than a renderer-supplied owner.
+assert.match(remote, /createIncomingOlaDeviceSession\(\s*sessionId,\s*ownerWebContentsId,/)
+assert.match(
+  remoteEngine,
+  /!this\.sessions\.isOwnedBy\(sessionId, ownerWebContentsId\)[\s\S]*Remote session is owned by another window/
+)
 assert.match(remote, /Remote input is owned by another window/)
 assert.match(remoteEngine, /clearRemoteInputSessionIfOwned\(sessionId, ownerWebContentsId\)/)
 assert.match(remoteEngine, /clearRemoteInputSession\(ownerWebContentsId\)/)

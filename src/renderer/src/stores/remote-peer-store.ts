@@ -84,7 +84,8 @@ function sendSignal(message: Omit<RemoteSignalMessage, 'from' | 'sentAt'>): void
 }
 
 function cleanupPeer(): void {
-  void ipcClient.invoke(IPC.REMOTE_INPUT_SET_SESSION, { sessionId: null })
+  const retiredSessionId = useRemotePeerStore.getState().sessionId
+  void ipcClient.invoke(IPC.REMOTE_INPUT_SET_SESSION, { sessionId: null, retiredSessionId })
   const channelToClose = dataChannel
   const peerToClose = peer
   dataChannel = null
@@ -224,7 +225,8 @@ function attachDataChannel(
     if (state.role === 'controlled' && state.sessionId) {
       void ipcClient.invoke(IPC.REMOTE_INPUT_SET_SESSION, {
         sessionId: state.sessionId,
-        displayId: getRemoteCaptureDisplayId()
+        displayId: getRemoteCaptureDisplayId(),
+        peerDeviceId: state.peerDeviceId
       })
     }
     channel.send('ola-remote-datachannel-ok')

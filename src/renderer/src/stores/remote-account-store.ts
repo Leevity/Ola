@@ -83,6 +83,22 @@ type ResolvedPairing = {
   iceServers: Array<{ urls: string; username?: string; credential?: string }>
 }
 
+export type MeshTaskDispatch = {
+  eventId: string
+  taskId: string
+  sessionId: string
+  targetNodeId: string
+}
+
+export type MeshTaskReceipt = {
+  cursor: number
+  eventId: string
+  sessionId: string
+  sequence: number
+  type: string
+  payload: { task_id: string; task_state: string; result_text?: string }
+}
+
 type RemoteAccountStore = {
   apiBaseUrl: string
   token: string | null
@@ -106,6 +122,8 @@ type RemoteAccountStore = {
   issueDeviceSignalToken: () => Promise<string>
   loadDevices: () => Promise<void>
   loadMeshNodes: () => Promise<void>
+  loadMeshTaskEvents: (after: number) => Promise<{ events: MeshTaskReceipt[]; nextCursor: number }>
+  sendMeshTask: (targetNodeId: string, taskText: string) => Promise<MeshTaskDispatch>
   loadSessionAudits: () => Promise<void>
   heartbeatDevice: () => Promise<void>
   syncWorkspaces: () => Promise<void>
@@ -228,6 +246,15 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         } else {
           await get().loadDevices()
           await get().loadMeshNodes()
+          // Refresh the signed capability manifest after desktop upgrades so
+          // existing nodes can receive newly supported Mesh receipts.
+          try {
+            await request(apiBaseUrl, 'mesh-node-register', { deviceId: result.device.id })
+            await get().loadMeshNodes()
+          } catch {
+            // Keep the authenticated account usable if the Mesh control plane
+            // is temporarily unavailable during desktop startup.
+          }
         }
         await get()
           .syncWorkspaces()
@@ -289,7 +316,7 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
     logout: () => {
       workspaceSyncGeneration++
       const { apiBaseUrl } = get()
-      void request(apiBaseUrl, 'logout').catch(() => undefined)
+      const clearMainProcessSession = request(apiBaseUrl, 'logout').catch(() => undefined)
       set({
         token: null,
         account: null,
@@ -301,8 +328,13 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         resolvedPairing: null,
         allowRemoteControl: false
       })
-      persist({ apiBaseUrl, token: null, account: null, device: null })
       useWorkspaceStore.getState().clearOlaState()
+      // Publish the shared-storage change only after the main process has
+      // cleared its authoritative credential. Other windows hydrate from that
+      // credential when they receive the storage event.
+      void clearMainProcessSession.finally(() =>
+        persist({ apiBaseUrl, token: null, account: null, device: null })
+      )
     },
     registerDevice: async (deviceName) => {
       const { apiBaseUrl, token } = get()
@@ -342,6 +374,115 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       if (!token) return
       const result = await request<{ nodes: MeshNode[] }>(apiBaseUrl, 'mesh-node-list')
       set({ meshNodes: result.nodes })
+    },
+    loadMeshTaskEvents: async (after) => {
+      const { apiBaseUrl, token, device } = get()
+      if (!token || !device) return { events: [], nextCursor: after }
+      return request(apiBaseUrl, 'mesh-event-list', {
+        targetNodeId: `node-${device.id}`,
+        after
+      })
+    },
+    sendMeshTask: async (targetNodeId, taskText) => {
+      const text = taskText.trim()
+      const initial = get()
+      if (!initial.token || !initial.device)
+        throw new Error('Login and device registration are required')
+      if (!targetNodeId.trim()) throw new Error('Choose a mobile Mesh node')
+      if (!text || new TextEncoder().encode(text).byteLength > 12 * 1024) {
+        throw new Error('Task text must be between 1 byte and 12 KiB')
+      }
+
+      await Promise.all([get().loadDevices(), get().loadMeshNodes()])
+      let current = get()
+      if (
+        current.account?.id !== initial.account?.id ||
+        current.device?.id !== initial.device.id ||
+        current.apiBaseUrl !== initial.apiBaseUrl ||
+        !current.token
+      ) {
+        throw new Error('Ola account changed before the task could be sent')
+      }
+
+      const target = current.meshNodes.find((node) => node.nodeId === targetNodeId)
+      if (!target || !['android', 'ios'].includes(target.platform)) {
+        throw new Error('The selected node is not an Ola Mobile device')
+      }
+      const subjectNodeId = `node-${current.device.id}`
+      if (target.nodeId === subjectNodeId || target.deviceId === current.device.id) {
+        throw new Error('A desktop cannot send a Mesh task to itself')
+      }
+      if (!target.capabilities.some((capability) => capability.id === 'task.execute')) {
+        throw new Error('The selected mobile node cannot execute Agent tasks')
+      }
+      const targetDevice = current.devices.find((item) => item.id === target.deviceId)
+      if (!targetDevice || targetDevice.accountId !== current.account?.id) {
+        throw new Error('The selected mobile device does not belong to the active Ola account')
+      }
+      if (!targetDevice?.isOnline) throw new Error('The selected mobile device is offline')
+
+      const desktopNode = current.meshNodes.find((node) => node.nodeId === subjectNodeId)
+      if (!desktopNode?.capabilities.some((capability) => capability.id === 'mesh.event.receive')) {
+        await request(current.apiBaseUrl, 'mesh-node-register', { deviceId: current.device.id })
+        await Promise.all([get().loadDevices(), get().loadMeshNodes()])
+        current = get()
+        if (
+          current.account?.id !== initial.account?.id ||
+          current.device?.id !== initial.device.id ||
+          current.apiBaseUrl !== initial.apiBaseUrl ||
+          !current.token
+        ) {
+          throw new Error('Ola account changed before the task could be sent')
+        }
+        const refreshedDesktopNode = current.meshNodes.find((node) => node.nodeId === subjectNodeId)
+        if (
+          !refreshedDesktopNode?.capabilities.some(
+            (capability) => capability.id === 'mesh.event.receive'
+          )
+        ) {
+          throw new Error('Desktop Mesh receipt inbox is unavailable; refresh nodes and retry')
+        }
+        const refreshedTarget = current.meshNodes.find((node) => node.nodeId === targetNodeId)
+        if (
+          !refreshedTarget ||
+          !['android', 'ios'].includes(refreshedTarget.platform) ||
+          !refreshedTarget.capabilities.some((capability) => capability.id === 'task.execute')
+        ) {
+          throw new Error('The selected mobile node no longer supports Agent tasks')
+        }
+        const refreshedTargetDevice = current.devices.find(
+          (item) => item.id === refreshedTarget.deviceId
+        )
+        if (!refreshedTargetDevice || refreshedTargetDevice.accountId !== current.account?.id) {
+          throw new Error('The selected mobile device no longer belongs to the active Ola account')
+        }
+        if (!refreshedTargetDevice.isOnline)
+          throw new Error('The selected mobile device is offline')
+      }
+      const sessionId = globalThis.crypto.randomUUID()
+      const taskId = `task-${globalThis.crypto.randomUUID()}`
+      const eventId = `event-${globalThis.crypto.randomUUID()}`
+      const ticket = await request<{ ticket: string }>(
+        current.apiBaseUrl,
+        'mesh-capability-ticket',
+        {
+          subjectNodeId,
+          targetNodeId,
+          sessionId,
+          capabilities: ['task.execute']
+        }
+      )
+      await request(current.apiBaseUrl, 'mesh-event-publish', {
+        ticket: ticket.ticket,
+        eventId,
+        subjectNodeId,
+        targetNodeId,
+        sessionId,
+        sequence: 1,
+        type: 'task.requested',
+        payload: { task_id: taskId, task_text: text }
+      })
+      return { eventId, taskId, sessionId, targetNodeId }
     },
     loadSessionAudits: async () => {
       const { apiBaseUrl, token } = get()
@@ -484,3 +625,40 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
     }
   }
 })
+
+// The primary workspace and the detached remote-control window have separate
+// renderer stores but share Electron's default-session localStorage. Keep the
+// visible account/device identity aligned when either window signs in, signs
+// out, or changes the control-plane URL. Tokens remain in the main process.
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== STORAGE_KEY) return
+
+    const persisted = loadPersistedState()
+    const current = useRemoteAccountStore.getState()
+    if (
+      current.apiBaseUrl === persisted.apiBaseUrl &&
+      current.account?.id === persisted.account?.id &&
+      current.device?.id === persisted.device?.id
+    ) {
+      return
+    }
+
+    workspaceSyncGeneration++
+    useWorkspaceStore.getState().clearOlaState()
+    useRemoteAccountStore.setState({
+      apiBaseUrl: persisted.apiBaseUrl,
+      token: null,
+      account: null,
+      device: null,
+      devices: [],
+      meshNodes: [],
+      sessionAudits: [],
+      pairingCode: null,
+      resolvedPairing: null,
+      allowRemoteControl: false,
+      workspaceSyncState: 'idle'
+    })
+    void useRemoteAccountStore.getState().hydrate()
+  })
+}

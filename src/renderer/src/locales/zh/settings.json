@@ -237,6 +237,10 @@
       "remoteHint": "远控",
       "current": "使用中",
       "presets": {
+        "connected": {
+          "label": "Ola 协同工作区",
+          "desc": "三端统一的蓝紫工作台，清晰呈现账户、设备与任务。"
+        },
         "mulberry": {
           "label": "黑曜灰",
           "desc": "黑白灰高对比配色，主机库清爽，终端保持克制和清晰。"
@@ -826,8 +830,8 @@
     },
     "health": {
       "providers": "模型服务",
-      "skills": "Skills",
-      "extensions": "Extensions",
+      "skills": "技能",
+      "extensions": "自定义扩展",
       "builtinPlugins": "内置插件配置",
       "mcp": "MCP 服务",
       "channels": "当前工作区消息渠道"
@@ -843,7 +847,7 @@
       "notChecked": "尚未读取状态。",
       "noProviderRequests": "尚无请求记录，无法判断服务状态。",
       "providerCounts": "{{healthy}} / {{total}} 个服务近期请求正常；读取于 {{checkedAt}}",
-      "skillCount": "已安装 {{count}} 个 Skill；安装情况不代表每个 Skill 均适用于当前任务。",
+      "skillCount": "已安装 {{count}} 个技能；安装情况不代表每个技能均适用于当前任务。",
       "extensionCounts": "已安装 {{installed}} 个，已启用 {{enabled}} 个；启用状态不代表扩展运行正常。",
       "builtinPluginCounts": "已启用 {{enabled}} / {{total}} 个；有 {{needsSetup}} 个需要补齐必要配置（检查范围含图像模型配置）。",
       "mcpCounts": "已启用 {{enabled}} 个，已连接 {{connected}} 个，连接中 {{connecting}} 个，未连接 {{disconnected}} 个，错误 {{failed}} 个；检查于 {{checkedAt}}",
@@ -854,7 +858,10 @@
     "lifecycleTitle": "能力交付状态",
     "lifecycleDescription": "按实际交付阶段标记能力，确保展示状态与可用范围一致。",
     "lifecyclePolicy": "交付状态",
-    "status": { "ga": "正式可用", "beta": "测试中" },
+    "status": {
+      "ga": "正式可用",
+      "beta": "测试中"
+    },
     "capabilities": {
       "local-agent-workspace": "本地 Agent 工作区",
       "remote-ssh-operations": "远程 SSH 操作",
@@ -973,7 +980,7 @@
         "title": "图片插件",
         "description": "为 Agent 提供专用图片生成 Tool。",
         "promptTitle": "Tool 使用约束",
-        "promptDesc": "仅当你希望 Agent 直接生成图片时再启用。Tool 只接受 `prompt` 和 `count`，并使用当前配置的图片模型执行生成。"
+        "promptDesc": "使用当前配置的图片模型生成图片。必填参数为 prompt；可选参数包括 count、reference_images、size 和 quality，实际支持情况取决于模型服务。"
       },
       "browser": {
         "title": "浏览器插件",
@@ -988,10 +995,10 @@
         "promptDesc": "这些工具可以读取并操作整个桌面。建议保持审批开启，先截图再操作，仅在确实需要桌面自动化时启用。若当前模型启用了 Computer Use，将优先通过 OpenAI Computer Use 协调这些桌面能力。"
       },
       "product-design": {
-        "title": "Product Design",
+        "title": "产品设计",
         "description": "探索设计方向、构建原型、审查流程并检查视觉还原度。",
         "promptTitle": "工作流约束",
-        "promptDesc": "Product Design 会先确认 brief；构建前必须有视觉目标；没有目标时先生成三个方向；原型交付前必须通过设计 QA。"
+        "promptDesc": "产品设计工作流会先确认需求，构建前确定视觉目标；没有目标时先生成三个方向，原型交付前进行设计质量检查。"
       },
       "codegraph": {
         "title": "项目智能",
@@ -1182,30 +1189,30 @@
     "description": "Ola 是一个开源的 AI 协作平台，支持多种大语言模型提供商。",
     "github": "GitHub",
     "heroTagline": "AI 协作工作台",
-    "heroDescription": "将多模型工作流、MCP 服务器、Skills 与自定义聊天频道统一在一个桌面体验里，你可以在 Chat / Clarify / Cowork / Code / ACP 模式间自由切换，并保持对所有数据的本地掌控。",
-    "workflowLabel": "WORKFLOW",
-    "workflowTitle": "工作模式",
-    "workflowDescription": "根据任务类型选择最合适的模式，所有数据始终留在本地。",
+    "heroDescription": "Ola 是本地优先的 AI 工作台，将项目、团队空间、模型、工具和自动化整合到一个桌面应用中。你可以通过自然语言处理编码、研究、内容创作和跨应用任务，并在工作台中审阅过程与结果。",
+    "workflowLabel": "功能概览",
+    "workflowTitle": "核心功能",
+    "workflowDescription": "围绕项目工作区、智能体协作、自动化与集成能力组织日常工作。",
     "workflowCta": "查看发布历史",
     "featureCards": {
       "chat": {
-        "title": "Chat 模式",
-        "desc": "通用对话模式，适合问答、头脑风暴、内容创作等日常交互。"
+        "title": "项目工作台",
+        "desc": "管理项目和会话，在同一工作区查看文件、终端、Git 变更、预览与执行结果。"
       },
       "clarify": {
-        "title": "Clarify 模式",
-        "desc": "需求澄清模式：在开始任务前，Agent 会先提问并确认你的意图，适合复杂或模糊的需求。"
+        "title": "AI 智能体",
+        "desc": "连接不同模型，让智能体按权限使用文件、终端、浏览器和其他工具，并审阅执行过程。"
       },
       "execute": {
-        "title": "Execute 模式",
-        "desc": "统一完成编码、研究、文档、DevOps 与跨应用操作，并保留可审计的工具调用和验证记录。"
+        "title": "账户与团队工作区",
+        "desc": "登录 Ola 后查看所属工作区、设备和已授权的团队模型；也可使用本机自定义模型。资源和操作范围以当前账户权限为准。"
       },
       "acp": {
-        "title": "ACP 模式",
-        "desc": "多 Agent 协作模式（Agent Collaboration Protocol）：自动拆解目标、分配子任务给专业 Agent 团队，适合大型工程或跨领域项目。"
+        "title": "自动化与扩展",
+        "desc": "通过任务、定时运行、技能、插件和 MCP 组织工作。通讯平台、图像和视频能力需启用并配置对应服务。"
       }
     },
-    "summary": "四种模式覆盖从日常问答到多 Agent 协作的完整工作流，所有数据始终留在本地。"
+    "summary": "此外，Ola 还支持 SSH 与远程桌面工作区、浏览器自动化、记忆、凭据管理、桌面宠物、多语言界面和跨窗口工作台。应用数据优先保存在本机，并通过权限控制管理智能体对工作区和工具的访问。"
   },
   "dialog": {
     "title": "快速设置",
@@ -1594,10 +1601,22 @@
     "narrowList": "频道列表",
     "narrowConfig": "频道配置",
     "builtin": {
-      "feishu-bot": { "name": "飞书机器人", "description": "通过内置 WebSocket 接入飞书消息。" },
-      "dingtalk-bot": { "name": "钉钉机器人", "description": "通过 Stream API 接入钉钉消息。" },
-      "wecom-bot": { "name": "企业微信机器人", "description": "接入企业微信消息。" },
-      "qq-bot": { "name": "QQ 机器人", "description": "通过官方 Gateway WebSocket 接入 QQ 消息。" },
+      "feishu-bot": {
+        "name": "飞书机器人",
+        "description": "通过内置 WebSocket 接入飞书消息。"
+      },
+      "dingtalk-bot": {
+        "name": "钉钉机器人",
+        "description": "通过 Stream API 接入钉钉消息。"
+      },
+      "wecom-bot": {
+        "name": "企业微信机器人",
+        "description": "接入企业微信消息。"
+      },
+      "qq-bot": {
+        "name": "QQ 机器人",
+        "description": "通过官方 Gateway WebSocket 接入 QQ 消息。"
+      },
       "weixin-official": {
         "name": "微信官方频道",
         "description": "通过扫码登录和长轮询接入微信消息。"
@@ -2052,36 +2071,43 @@
       },
       "olaAccount": {
         "title": "Ola 账户",
-        "description": "使用 Ola 个人与团队模型资源，终端不会保存其 API Key。",
-        "localProviderNotice": "本地服务商在所有空间中都可离线使用；Ola 托管模型的凭据仅保存在 Ola 主站。",
+        "description": "管理当前账户、工作区与已授权的模型。",
+        "localProviderNotice": "本机自定义模型可在不同工作区使用；调用网络模型仍需联网。当前 Ola 托管模型的 API Key 保存在服务端。",
         "connection": {
           "title": "账户连接",
-          "description": "登录后加载个人空间与团队空间资源。",
+          "description": "账户身份、当前设备和工作区资源分别展示。",
           "signIn": "登录 Ola",
           "signOut": "退出登录",
           "manage": "前往 Ola 管理",
           "notSignedIn": "尚未登录",
-          "notSignedInDescription": "登录后可使用 Ola 托管的个人与团队模型。"
+          "notSignedInDescription": "登录后加载账户有权访问的工作区与模型。"
         },
         "spaces": {
-          "title": "工作空间",
-          "description": "切换空间会影响新建工作；已有对话保留原来的空间和模型绑定。",
-          "local": "本地个人空间",
-          "personal": "Ola 个人空间",
-          "team": "Ola 团队空间",
-          "localModels": "本地模型",
+          "title": "工作区",
+          "description": "选择新任务使用的资源范围；已有对话保留原来的工作区和模型绑定。",
+          "local": "使用本机配置的模型与内容",
+          "personal": "个人工作区",
+          "team": "团队工作区",
+          "localModels": "本机自定义模型",
           "resourceCount": "{{count}} 个托管模型",
-          "localName": "本地个人空间"
+          "localName": "本机工作区",
+          "current": "当前工作区",
+          "switchFailed": "工作区切换失败，请重试。"
         },
         "resources": {
-          "title": "托管模型资源",
+          "title": "工作区模型",
           "description": "终端仅保存资源元数据，API Key 不会离开 Ola 主站。",
           "refresh": "刷新",
           "available": "可用",
           "unavailable": "不可用",
-          "empty": "当前空间没有可用的 Ola 托管模型。"
+          "empty": "当前工作区尚未分配 Ola 托管模型。请在 Ola 控制台查看配置，或联系工作区管理员。",
+          "workspace": "当前工作区：{{name}}",
+          "loading": "正在同步",
+          "notVerified": "状态待确认",
+          "localDescription": "本机自定义模型在“AI 服务商”中配置。登录并切换到团队工作区后，可查看该团队授权的模型。",
+          "localAction": "管理本机自定义模型"
         },
-        "syncUnavailable": "当前主站尚未提供工作空间同步服务。已保留本地与此前同步的内容；请在主站升级完成后刷新。",
+        "syncUnavailable": "暂时无法同步工作区与模型，请检查服务连接后重试。此时不能确认模型资源是否可用。",
         "deviceRegistered": "已注册设备：{{name}}",
         "lastSynced": "上次刷新：{{time}}",
         "defaultModel": "默认模型"

@@ -1,8 +1,10 @@
 import type { ITheme } from '@xterm/xterm'
 import type { CSSProperties } from 'react'
+import { OLA_DESIGN } from './ola-design-tokens'
 
 export type AppThemeMode = 'light' | 'dark'
-export type AppThemePreset = 'mulberry' | 'studio' | 'graphite' | 'ocean' | 'forest' | 'dawn'
+type LegacyAppThemePreset = 'mulberry' | 'studio' | 'graphite' | 'ocean' | 'forest' | 'dawn'
+export type AppThemePreset = 'connected' | LegacyAppThemePreset
 export type SshTerminalThemePreset = AppThemePreset
 
 type ThemeCssVars = Record<`--${string}`, string>
@@ -72,7 +74,7 @@ export type ThemePresetDefinition = {
   ssh: Record<AppThemeMode, SshChromePalette>
 }
 
-export const DEFAULT_APP_THEME_PRESET: AppThemePreset = 'mulberry'
+export const DEFAULT_APP_THEME_PRESET: AppThemePreset = 'connected'
 export const DEFAULT_SSH_TERMINAL_THEME_PRESET: SshTerminalThemePreset = DEFAULT_APP_THEME_PRESET
 
 function createTerminalTheme(colors: {
@@ -122,7 +124,7 @@ function createTerminalTheme(colors: {
   }
 }
 
-const PRESET_DEFINITIONS: Record<AppThemePreset, ThemePresetDefinition> = {
+const LEGACY_PRESET_DEFINITIONS: Record<LegacyAppThemePreset, ThemePresetDefinition> = {
   mulberry: {
     id: 'mulberry',
     labelKey: 'general.themePreset.presets.mulberry.label',
@@ -1628,7 +1630,137 @@ const PRESET_DEFINITIONS: Record<AppThemePreset, ThemePresetDefinition> = {
   }
 }
 
+function createConnectedTheme(): ThemePresetDefinition {
+  const base = LEGACY_PRESET_DEFINITIONS.mulberry
+  const modes: AppThemeMode[] = ['light', 'dark']
+  const theme: ThemePresetDefinition = {
+    ...base,
+    id: 'connected',
+    labelKey: 'general.themePreset.presets.connected.label',
+    descriptionKey: 'general.themePreset.presets.connected.desc',
+    swatches: ['#5B5FC7', '#F3F4FB', '#202136'],
+    preview: { ...base.preview },
+    cssVars: { ...base.cssVars },
+    terminal: { ...base.terminal },
+    ssh: { ...base.ssh }
+  }
+  for (const mode of modes) {
+    const c = OLA_DESIGN.colors[mode]
+    theme.preview[mode] = {
+      rail: c.sidebar,
+      canvas: c.canvas,
+      card: c.surface,
+      accent: c.primary,
+      accentSoft: c.primarySoft,
+      text: c.text
+    }
+    theme.cssVars[mode] = {
+      ...base.cssVars[mode],
+      '--background': c.canvas,
+      '--foreground': c.text,
+      '--card': c.surface,
+      '--card-foreground': c.text,
+      '--popover': c.surface,
+      '--popover-foreground': c.text,
+      '--primary': c.primary,
+      '--primary-foreground': c.onPrimary,
+      '--secondary': c.surfaceRaised,
+      '--secondary-foreground': c.text,
+      '--muted': c.surfaceRaised,
+      '--muted-foreground': c.textSecondary,
+      '--accent': c.primarySoft,
+      '--accent-foreground': c.onPrimarySoft,
+      '--destructive': c.danger,
+      '--destructive-foreground': c.surface,
+      '--border': c.border,
+      '--input': c.border,
+      '--ring': c.primary,
+      '--sidebar': c.sidebar,
+      '--sidebar-foreground': c.text,
+      '--sidebar-primary': c.primary,
+      '--sidebar-primary-foreground': c.onPrimary,
+      '--sidebar-accent': c.primarySoft,
+      '--sidebar-accent-foreground': c.onPrimarySoft,
+      '--sidebar-border': c.border,
+      '--sidebar-ring': c.primary,
+      '--workspace-titlebar-bg': c.surface,
+      '--workspace-titlebar-border': c.border,
+      '--workspace-titlebar-button-hover': c.hover,
+      '--workspace-titlebar-toolgroup-bg': c.surfaceRaised,
+      '--workspace-titlebar-toolgroup-border': c.border,
+      '--workspace-titlebar-toolbutton-hover': c.hover,
+      '--workspace-titlebar-toolbutton-active': c.primarySoft,
+      '--workspace-sidebar-divider': c.border,
+      '--workspace-sidebar-section-border': c.border,
+      '--workspace-sidebar-row-hover-bg': c.hover,
+      '--workspace-sidebar-row-hover-border': c.border,
+      '--workspace-sidebar-row-active-bg': c.primarySoft,
+      '--workspace-sidebar-row-active-border': c.border,
+      '--radius': `${OLA_DESIGN.radius.control}px`
+    }
+    theme.terminal[mode] = {
+      ...base.terminal[mode],
+      background: c.codeSurface,
+      foreground: c.text,
+      cursor: c.primary,
+      selectionBackground: c.primarySoft
+    }
+    theme.ssh[mode] = {
+      ...base.ssh[mode],
+      libraryFrameStart: c.sidebar,
+      libraryFrameEnd: c.sidebar,
+      libraryBorder: c.border,
+      libraryText: c.text,
+      connectFrame: c.surface,
+      connectBorder: c.border,
+      connectText: c.text,
+      terminalFrame: c.canvas,
+      terminalBorder: c.border,
+      terminalText: c.text,
+      canvas: c.canvas,
+      canvasSubtle: c.surfaceRaised,
+      terminalCanvas: c.codeSurface,
+      panel: c.surface,
+      panelStrong: c.surfaceRaised,
+      panelBorder: c.border,
+      surface: c.surface,
+      surfaceStrong: c.surfaceRaised,
+      text: c.text,
+      muted: c.textSecondary,
+      accent: c.primary,
+      accentSoft: c.primarySoft,
+      accentContrast: c.onPrimary,
+      success: c.success,
+      successSoft: c.successSoft,
+      warning: c.warning,
+      warningSoft: c.warningSoft,
+      danger: c.danger,
+      dangerSoft: c.dangerSoft,
+      badge: c.surfaceRaised,
+      libraryPill: c.surface,
+      libraryPillActive: c.primarySoft,
+      libraryPillText: c.textSecondary,
+      libraryPillActiveText: c.onPrimarySoft,
+      connectPill: c.surface,
+      connectPillActive: c.primarySoft,
+      connectPillText: c.textSecondary,
+      connectPillActiveText: c.onPrimarySoft,
+      terminalPill: c.surface,
+      terminalPillActive: c.primarySoft,
+      terminalPillText: c.textSecondary,
+      terminalPillActiveText: c.onPrimarySoft
+    }
+  }
+  return theme
+}
+
+const PRESET_DEFINITIONS: Record<AppThemePreset, ThemePresetDefinition> = {
+  ...LEGACY_PRESET_DEFINITIONS,
+  connected: createConnectedTheme()
+}
+
 const APP_THEME_PRESET_IDS: AppThemePreset[] = [
+  'connected',
   'mulberry',
   'studio',
   'graphite',

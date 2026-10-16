@@ -1,5 +1,5 @@
 import { readFileSync, realpathSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { homedir, userInfo } from 'node:os'
 import { isAbsolute, join, parse, resolve } from 'node:path'
 
 const e2eMarker = '.ola-e2e-root'
@@ -14,7 +14,7 @@ export function olaDataRoot(): string {
     }
     const requestedRoot = resolve(override)
     const root = realpathSync(requestedRoot)
-    const home = realpathSync(homedir())
+    const home = realpathSync(userInfo().homedir)
     if (root === parse(root).root || root === home || root === resolve(home, '.ola')) {
       throw new Error('OLA_E2E_DATA_ROOT cannot be a user or filesystem data root')
     }

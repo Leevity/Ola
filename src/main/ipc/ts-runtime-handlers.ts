@@ -1,6 +1,6 @@
 import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { lstat } from 'node:fs/promises'
-import { basename, extname, isAbsolute, posix, win32 } from 'node:path'
+import { isAbsolute, posix, win32 } from 'node:path'
 import { desktopRuntime } from '../runtime/desktop-runtime'
 import { registerMessagePackHandler } from './messagepack-handler'
 import {
@@ -718,7 +718,7 @@ export function registerTsRuntimeHandlers(): void {
           if (
             typeof data.path !== 'string' ||
             data.path.length > 4096 ||
-            (transport === 'local' && !isAbsolute(data.path)) ||
+            (transport === 'local' && !isAbsolute(data.path) && !win32.isAbsolute(data.path)) ||
             (transport === 'ssh' && !posix.isAbsolute(data.path) && !win32.isAbsolute(data.path)) ||
             (transport === 'ssh' &&
               (typeof connectionId !== 'string' ||
@@ -727,8 +727,9 @@ export function registerTsRuntimeHandlers(): void {
                 session?.ssh_connection_id !== connectionId))
           )
             continue
-          const title = basename(data.path)
-          const extension = extname(data.path).toLowerCase()
+          const pathApi = win32.isAbsolute(data.path) ? win32 : posix
+          const title = pathApi.basename(data.path)
+          const extension = pathApi.extname(data.path).toLowerCase()
           const mediaType = ARTIFACT_MEDIA_TYPES[extension]
           const artifactCategory = executionArtifactCategory(extension, mediaType)
           if (category !== 'all' && category !== artifactCategory) continue

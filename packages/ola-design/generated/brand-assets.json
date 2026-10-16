@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "source": "packages/ola-design/assets/ola-icon.png",
+  "sourceHash": "3713f14e72728682872d7f3c11b9452c26c84f16e42de6cf7380175219aeaceb",
+  "files": {
+    "Ola/build/icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "Ola/resources/icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "Ola/resources/icon-mac.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "Ola/src/renderer/src/assets/ola-brand-icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "Ola-admin/public/ola-brand-icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/android/app/src/main/res/drawable-nodpi/ola_brand_icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/ios/Assets.xcassets/AppIcon.appiconset/Icon-1024.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/ios/Assets.xcassets/AppIcon.appiconset/Icon-1024-Dark.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/ios/Resources/AlternateIcons/AppIcon-Light.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/ios/Resources/AlternateIcons/AppIcon-Dark.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/ios/Resources/AlternateIcons/AppIcon-LegacyLight.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/ios/Resources/AlternateIcons/AppIcon-LegacyDark.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
+    "ola-mobile/src/android/app/src/main/res/mipmap-mdpi/ic_launcher.png": "7f91478985483637ec6c27c3a5ce62939ac0f1be45113df6bbaa506f0887b5c1",
+    "ola-mobile/src/android/app/src/main/res/mipmap-night-mdpi/ic_launcher.png": "7f91478985483637ec6c27c3a5ce62939ac0f1be45113df6bbaa506f0887b5c1",
+    "ola-mobile/src/android/app/src/main/res/mipmap-hdpi/ic_launcher.png": "109fb9bf74229b06d84f7d80da54dc8e8fe1232eba8812b601ae353869c51c60",
+    "ola-mobile/src/android/app/src/main/res/mipmap-night-hdpi/ic_launcher.png": "109fb9bf74229b06d84f7d80da54dc8e8fe1232eba8812b601ae353869c51c60",
+    "ola-mobile/src/android/app/src/main/res/mipmap-xhdpi/ic_launcher.png": "ef75b5503541bd99daf81b2d6b7542890e9750ff10aac8debe1daa5f2ef10897",
+    "ola-mobile/src/android/app/src/main/res/mipmap-night-xhdpi/ic_launcher.png": "ef75b5503541bd99daf81b2d6b7542890e9750ff10aac8debe1daa5f2ef10897",
+    "ola-mobile/src/android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png": "296b7b9b554492be43498da7ced15bd4482ba64a50b1692e2d3c70b9d371f1cd",
+    "ola-mobile/src/android/app/src/main/res/mipmap-night-xxhdpi/ic_launcher.png": "296b7b9b554492be43498da7ced15bd4482ba64a50b1692e2d3c70b9d371f1cd",
+    "ola-mobile/src/android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png": "89d9e6f0453f44d0372a82626524cddce07ea1f7a5b7f20dbf3c79c94741e740",
+    "ola-mobile/src/android/app/src/main/res/mipmap-night-xxxhdpi/ic_launcher.png": "89d9e6f0453f44d0372a82626524cddce07ea1f7a5b7f20dbf3c79c94741e740",
+    "Ola/build/icon.ico": "395cfe8d20eac58f094d2e89281d1366203ac66203a59d361e76d42c6f85d1e2",
+    "Ola/resources/icon.ico": "395cfe8d20eac58f094d2e89281d1366203ac66203a59d361e76d42c6f85d1e2"
+  }
+}

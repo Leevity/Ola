@@ -1,6 +1,24 @@
-﻿# Changelog
+# Changelog
 
 All notable changes to this project will be documented in this file.
+
+## [1.0.6] - 2026-10-17
+
+### Highlights
+
+- Introduces the Ola Connected Workspace visual system, shared light/dark design tokens, and a consistent ola identity across desktop, mobile, and the web console.
+- Adds a first-run choice between account sign-in and device-local use, with browser authorization as the primary account path.
+- Makes the current workspace and authorized team models visible in desktop settings and chat. Team model requests use the main-process TypeScript runtime and account-scoped service authorization.
+- Updates settings navigation, keeps desktop companion configuration discoverable, and replaces the About page with current capability descriptions.
+- Fixes built-in plugin navigation so switching from a scrolled plugin opens the next plugin at its heading. Improves Chinese account and plugin labels.
+- Distinguishes syncing, unavailable resources, empty assignments, and local model configuration in the account settings page.
+
+### Distribution and verification notes
+
+- This delivery is intended for builds without a publisher signing certificate. macOS packaging may apply an ad-hoc signature required for executable integrity; it is not Developer ID signing or Apple notarization. Windows packages are not Authenticode signed.
+- iOS runtime testing is deferred. Compilation or source parity must not be interpreted as iPhone acceptance.
+- Personal cloud model management and private-network model access still have separate implementation/verification requirements; this release does not claim those flows are complete.
+- Full release build, upload, and final acceptance results are pending and will be recorded in the release report before publication.
 
 ## [1.0.4] - 2026-07-24
 

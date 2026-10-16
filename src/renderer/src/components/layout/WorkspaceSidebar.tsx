@@ -1,4 +1,5 @@
 import { LOCAL_PERSONAL_WORKSPACE } from '@renderer/lib/workspace-context'
+import { OlaBrand } from '@renderer/components/brand/OlaBrand'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import packageJson from '../../../../../package.json'
@@ -11,7 +12,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  CloudSync,
   Code2,
   Copy,
   Download,
@@ -1432,7 +1432,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
             <PanelLeftClose className="size-4" />
           </Button>
           <div className="min-w-0 flex-1 truncate text-sm font-semibold text-sidebar-foreground/90">
-            Ola
+            <OlaBrand />
           </div>
         </div>
 
@@ -1594,13 +1594,6 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 >
                   <Sparkles className="size-4" />
                   <span>{t('navRail.souls')}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => useUIStore.getState().openSyncPage()}
-                  className={cn(syncPageOpen && 'bg-accent text-accent-foreground')}
-                >
-                  <CloudSync className="size-4" />
-                  <span>{t('navRail.sync')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -2293,7 +2286,9 @@ export function WorkspaceSidebar(): React.JSX.Element {
                     {account?.displayName || account?.email || t('accountAuth.login')}
                   </span>
                   <span className="block truncate text-[10px] text-muted-foreground">
-                    {account ? 'Ola account' : '未登录'}
+                    {account
+                      ? t('sidebar.accountMenu.signedIn', { defaultValue: 'Ola account' })
+                      : t('sidebar.accountMenu.signedOut', { defaultValue: 'Not signed in' })}
                   </span>
                 </span>
                 <UserCircle2 className="size-4 shrink-0 text-muted-foreground" />
@@ -2301,9 +2296,15 @@ export function WorkspaceSidebar(): React.JSX.Element {
             </DropdownMenuTrigger>
             <DropdownMenuContent side="top" align="start" className="w-64 rounded-xl p-1.5">
               <DropdownMenuLabel className="px-3 py-2">
-                <span className="block truncate">{account?.displayName || 'Ola 用户'}</span>
+                <span className="block truncate">
+                  {account?.displayName ||
+                    t('sidebar.accountMenu.user', { defaultValue: 'Ola user' })}
+                </span>
                 <span className="block truncate text-xs font-normal text-muted-foreground">
-                  {account?.email || '登录后同步账户、团队和设备'}
+                  {account?.email ||
+                    t('sidebar.accountMenu.signInHint', {
+                      defaultValue: 'Sign in to access your account, teams, and devices'
+                    })}
                 </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
@@ -2314,12 +2315,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   }
                 >
                   <UserCircle2 className="size-4" />
-                  账户中心
+                  {t('sidebar.accountMenu.center', { defaultValue: 'Account center' })}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem onClick={openAccountAuthPage}>
                   <UserCircle2 className="size-4" />
-                  登录 Ola
+                  {t('sidebar.accountMenu.signIn', { defaultValue: 'Sign in to Ola' })}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onClick={() => useUIStore.getState().openSettingsPage('general')}>
@@ -2330,7 +2331,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
               {account && (
                 <DropdownMenuItem onClick={() => useRemoteAccountStore.getState().logout()}>
                   <UserCircle2 className="size-4" />
-                  退出登录
+                  {t('sidebar.accountMenu.signOut', { defaultValue: 'Sign out' })}
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />

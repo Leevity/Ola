@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-16",
+  "scope": "Desktop and Android real team model native chat; partial P3 evidence",
+  "server": "https://lbxai.cn",
+  "serverCommit": "734ab2a",
+  "desktop": {
+    "model": "deepseek-flash",
+    "requestedReply": "OLA_PC_OK",
+    "observedReply": "OLA_PC_OK",
+    "authentication": "native compatibility login; browser OAuth not covered",
+    "runtime": "Main-owned TS agent",
+    "apiKeyConfiguredOnClient": false
+  },
+  "android": {
+    "browserOAuth": "passed",
+    "teamModelImport": "passed",
+    "nativeReply": "passed",
+    "disabledModelSync": "removed local provider and model",
+    "restoredModelSync": "restored one provider and model",
+    "offlineSync": "failure preserved local model; network restored"
+  },
+  "regressions": {
+    "command": "npx vitest run tests/runtime/ts-runtime-agent-eligibility.test.ts tests/runtime/ts-runtime-text-eligibility.test.ts tests/runtime/workspace-model-store.test.ts",
+    "files": 3,
+    "tests": 46,
+    "result": "passed",
+    "webTypecheck": "passed before test-only additions",
+    "targetedLint": "passed before test-only additions"
+  },
+  "localEvidenceFolder": "Ola-brand-unification-2026-10-16/verification/brand-second-batch",
+  "screenshots": [
+    "desktop-deepseek-team-chat.png",
+    "android-deepseek-team-chat.png",
+    "android-team-model-disabled.png",
+    "android-model-sync-offline.png"
+  ],
+  "unverified": [
+    "desktop browser OAuth callback",
+    "iOS native authentication/model interaction",
+    "personal cloud model configuration",
+    "private endpoint terminal-direct model use",
+    "complete P3 and strict migration exit acceptance"
+  ],
+  "verdict": "partial progress; not full acceptance"
+}

@@ -1,4 +1,5 @@
 import { readdir } from 'node:fs/promises'
+import { realpath } from 'node:fs/promises'
 import { basename, relative, resolve, sep } from 'node:path'
 import { executeGit } from './git-executor'
 
@@ -29,8 +30,12 @@ export interface LocalGitRepositorySummary {
 async function isRepository(directory: string): Promise<boolean> {
   const result = await executeGit(directory, ['rev-parse', '--show-toplevel'])
   if (!result.success) return false
-  const topLevel = resolve(result.stdout.trim())
-  const normalizedDirectory = process.platform === 'win32' ? directory.toLowerCase() : directory
+  const [topLevel, realDirectory] = await Promise.all([
+    realpath(resolve(result.stdout.trim())).catch(() => resolve(result.stdout.trim())),
+    realpath(directory).catch(() => directory)
+  ])
+  const normalizedDirectory =
+    process.platform === 'win32' ? realDirectory.toLowerCase() : realDirectory
   const normalizedTopLevel = process.platform === 'win32' ? topLevel.toLowerCase() : topLevel
   return normalizedDirectory === normalizedTopLevel
 }

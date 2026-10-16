@@ -1632,7 +1632,7 @@ if (gotSingleInstanceLock) {
     registerWebSearchHandlers()
     registerBrowserHandlers()
     registerAiCodingHandlers()
-    registerCredentialsHandlers()
+    runLoggedStartupStep('register_credentials_handlers', registerCredentialsHandlers)
     registerOauthHandlers()
     registerImageGifHandlers()
     registerDrawGraphHandlers()
@@ -1659,6 +1659,22 @@ if (gotSingleInstanceLock) {
       arch: process.arch,
       release: release()
     }))
+    // Restore an explicitly promoted repository before DB handlers can open
+    // the default repository. Otherwise the startup handover collides with the
+    // already-open write canary and prevents the TS runtime from starting.
+    await runLoggedStartupStepAsync('restore_business_handover', async () => {
+      const marker = await restoreBusinessHandoverIfEnabled()
+      if (marker) {
+        // Reapply the complete legacy-writer quiesce boundary on every
+        // restart, so Cron, channels, and sync must not issue late writes.
+        await quiesceDesktopLegacyBusinessWriter()
+        if (process.env.OLA_ENABLE_TS_CHANNEL_RESUME === '1') {
+          await resumeDesktopTsChannelWriter()
+        }
+        console.log(`[BusinessHandover] restored TS ownership from ${marker.manifestPath}`)
+      }
+    })
+
     // The first renderer paint loads persisted projects and sessions. Register
     // the TS-owned database IPC surface before creating the window so a fast
     // renderer cannot race database handler installation.
@@ -1682,19 +1698,6 @@ if (gotSingleInstanceLock) {
       }
     })
     runLoggedStartupStep('create_main_window', createWindow)
-
-    await runLoggedStartupStepAsync('restore_business_handover', async () => {
-      const marker = await restoreBusinessHandoverIfEnabled()
-      if (marker) {
-        // Reapply the complete legacy-writer quiesce boundary on every
-        // restart, so Cron, channels, and sync must not issue late writes.
-        await quiesceDesktopLegacyBusinessWriter()
-        if (process.env.OLA_ENABLE_TS_CHANNEL_RESUME === '1') {
-          await resumeDesktopTsChannelWriter()
-        }
-        console.log(`[BusinessHandover] restored TS ownership from ${marker.manifestPath}`)
-      }
-    })
 
     await runLoggedStartupStepAsync('sync_macos_shell_environment', syncMacOSShellEnvironment)
     await runLoggedStartupStepAsync('ts_settings_startup', initializeSettingsCache)

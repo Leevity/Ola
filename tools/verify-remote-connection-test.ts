@@ -1,7 +1,7 @@
 import { createServer } from 'net'
 import { testRemoteEndpoint } from '../src/main/remote/connection-tester.ts'
 
-const server = createServer((socket) => socket.end())
+const server = createServer((socket) => socket.end('RFB 003.008\n'))
 await new Promise<void>((resolve, reject) => {
   server.once('error', reject)
   server.listen(0, '127.0.0.1', resolve)

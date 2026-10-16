@@ -237,6 +237,10 @@
       "remoteHint": "Remote",
       "current": "Active",
       "presets": {
+        "connected": {
+          "label": "Ola Connected Workspace",
+          "desc": "A calm blue-violet workspace shared across Ola desktop, mobile and the console."
+        },
         "mulberry": {
           "label": "Obsidian Gray",
           "desc": "A high-contrast black, white, and gray palette with a clean host library and restrained terminal surface."
@@ -854,7 +858,10 @@
     "lifecycleTitle": "Capability delivery status",
     "lifecycleDescription": "Status labels reflect each capability's actual delivery stage and availability.",
     "lifecyclePolicy": "Delivery status",
-    "status": { "ga": "Generally available", "beta": "In testing" },
+    "status": {
+      "ga": "Generally available",
+      "beta": "In testing"
+    },
     "capabilities": {
       "local-agent-workspace": "Local Agent workspace",
       "remote-ssh-operations": "Remote SSH operations",
@@ -973,7 +980,7 @@
         "title": "Image Plugin",
         "description": "Expose a dedicated image-generation Tool to the Agent.",
         "promptTitle": "Tool usage constraints",
-        "promptDesc": "Enable this only when you want the Agent to directly generate images. The Tool accepts only `prompt` and `count`, and uses the configured image model."
+        "promptDesc": "Generate images with the configured image model. The prompt parameter is required; count, reference_images, size, and quality are optional. Support depends on the model service."
       },
       "browser": {
         "title": "Browser Plugin",
@@ -1161,30 +1168,30 @@
     "description": "Ola is an open-source AI collaboration platform supporting multiple LLM providers.",
     "github": "GitHub",
     "heroTagline": "AI Collaborative Workbench",
-    "heroDescription": "Unifies multi-model workflows, MCP servers, skills, and custom chat channels in one desktop experience. Switch freely between Chat, Clarify, Cowork, Code, and ACP modes while keeping full local control over your data.",
-    "workflowLabel": "WORKFLOW",
-    "workflowTitle": "Work Modes",
-    "workflowDescription": "Choose the right mode for your task. All data stays local.",
+    "heroDescription": "Ola is a local-first AI workbench that brings projects, team spaces, models, tools, and automation into one desktop app. Use natural language for coding, research, writing, and cross-app work, then review the process and results in the workbench.",
+    "workflowLabel": "CAPABILITIES",
+    "workflowTitle": "Core capabilities",
+    "workflowDescription": "Organize work around project workspaces, agent collaboration, automation, and integrations.",
     "workflowCta": "View release history",
     "featureCards": {
       "chat": {
-        "title": "Chat Mode",
-        "desc": "General conversation for Q&A, brainstorming, content creation, and everyday interaction."
+        "title": "Project workbench",
+        "desc": "Manage projects and sessions, and review files, terminals, Git changes, previews, and execution results in one workspace."
       },
       "clarify": {
-        "title": "Clarify Mode",
-        "desc": "Requirement clarification: before starting a task, the agent asks questions and confirms your intent — ideal for complex or ambiguous requests."
+        "title": "AI agents",
+        "desc": "Connect different models and let agents use files, terminals, browsers, and other tools within the permissions you set."
       },
       "execute": {
-        "title": "Execute Mode",
-        "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
+        "title": "Account and team workspaces",
+        "desc": "Sign in to Ola to view your workspaces, devices, and authorized team models, or use custom models on this device. Resources and actions depend on your account permissions."
       },
       "acp": {
-        "title": "ACP Mode",
-        "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
+        "title": "Automation and extensions",
+        "desc": "Organize work with tasks, scheduled runs, skills, plugins, and MCP. Messaging, image, and video capabilities require their corresponding services to be enabled and configured."
       }
     },
-    "summary": "Four modes cover the full workflow from everyday Q&A to multi-agent collaboration. All data stays local."
+    "summary": "Ola also supports SSH and remote desktop workspaces, browser automation, memory, credential management, desktop companions, a multilingual interface, and multi-window workflows. App data is stored locally by default, with permissions governing agent access to workspaces and tools."
   },
   "dialog": {
     "title": "Quick Settings",
@@ -2009,36 +2016,43 @@
       },
       "olaAccount": {
         "title": "Ola account",
-        "description": "Use your Ola personal and team model resources without storing their API keys on this device.",
-        "localProviderNotice": "Local providers remain available offline in every workspace. Ola-managed model credentials stay on the Ola service.",
+        "description": "Manage your account, workspaces, and authorized models.",
+        "localProviderNotice": "Custom models on this device can be used across workspaces. Network models still require a connection. Current Ola-managed model API keys stay on the service.",
         "connection": {
           "title": "Account connection",
-          "description": "Sign in to load your personal and team resources.",
+          "description": "Your account, registered device, and workspace resources are shown separately.",
           "signIn": "Sign in",
           "signOut": "Sign out",
           "manage": "Manage on Ola",
           "notSignedIn": "Not signed in",
-          "notSignedInDescription": "Sign in to access Ola-managed personal and team models."
+          "notSignedInDescription": "Sign in to load the workspaces and models your account can access."
         },
         "spaces": {
           "title": "Workspaces",
           "description": "Switching spaces changes what new work uses. Existing conversations keep their original binding.",
-          "local": "Local personal workspace",
-          "personal": "Ola personal workspace",
-          "team": "Ola team workspace",
-          "localModels": "Local models",
+          "local": "Use models and content configured on this device",
+          "personal": "Personal workspace",
+          "team": "Team workspace",
+          "localModels": "Custom device models",
           "resourceCount": "{{count}} managed models",
-          "localName": "Local workspace"
+          "localName": "Device workspace",
+          "current": "Current workspace",
+          "switchFailed": "Could not switch workspaces. Please try again."
         },
         "resources": {
-          "title": "Managed model resources",
+          "title": "Workspace models",
           "description": "Only metadata is stored on this device; API keys never leave Ola.",
           "refresh": "Refresh",
           "available": "Available",
           "unavailable": "Unavailable",
-          "empty": "No Ola-managed models are available in this workspace."
+          "empty": "No Ola-managed models have been assigned to this workspace. Check the Ola console or contact your workspace administrator.",
+          "workspace": "Current workspace: {{name}}",
+          "loading": "Syncing",
+          "notVerified": "Status unverified",
+          "localDescription": "Configure custom models under AI providers. Sign in and select a team workspace to view its authorized models.",
+          "localAction": "Manage custom device models"
         },
-        "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
+        "syncUnavailable": "Workspaces and models could not be synced. Check the service connection and try again. Model availability cannot be confirmed right now.",
         "deviceRegistered": "Registered device: {{name}}",
         "lastSynced": "Last refreshed: {{time}}",
         "defaultModel": "Default model"

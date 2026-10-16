@@ -34,10 +34,41 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await rm(fixture.root, { recursive: true, force: true })
 })
 
 describe('credential vault persistence', () => {
+  it('does not request keychain access during startup initialization', async () => {
+    const { safeStorage } = await import('electron')
+    const probe = vi.spyOn(safeStorage, 'isEncryptionAvailable')
+    const decrypt = vi.spyOn(safeStorage, 'decryptString')
+    const vault = await import('../../src/main/credentials/secret-vault')
+    vault.initSecretVault()
+    expect(probe).not.toHaveBeenCalled()
+    expect(decrypt).not.toHaveBeenCalled()
+    expect(vault.getVaultStatus()).toMatchObject({ available: true })
+    expect(probe).toHaveBeenCalled()
+  })
+
+  it('keeps an existing encrypted vault lazy until its secret is requested', async () => {
+    const vault = await import('../../src/main/credentials/secret-vault')
+    const ref = await vault.storeCredential({
+      domain: 'example.invalid',
+      username: 'owner',
+      password: 'test-password',
+      source: 'manual'
+    })
+    vi.resetModules()
+    const { safeStorage } = await import('electron')
+    const decrypt = vi.spyOn(safeStorage, 'decryptString')
+    const reopened = await import('../../src/main/credentials/secret-vault')
+    reopened.initSecretVault()
+    expect(decrypt).not.toHaveBeenCalled()
+    expect(reopened.getPlaintextPassword(ref.id)).toBe('test-password')
+    expect(decrypt).toHaveBeenCalledTimes(1)
+  })
+
   it('stores an encrypted password and restores it after module reload', async () => {
     const vault = await import('../../src/main/credentials/secret-vault')
     const ref = await vault.storeCredential({

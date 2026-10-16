@@ -1,3 +1,5 @@
+import { useWorkspaceStore } from '@renderer/stores/workspace-store'
+import { workspaceModelProviders } from '@renderer/lib/workspace-models'
 import * as React from 'react'
 import { useState as useLocalState } from 'react'
 import { toast } from 'sonner'
@@ -1777,6 +1779,17 @@ export function InputArea({
   const autoSelection = useUIStore((s) =>
     targetSession ? (s.autoModelSelectionsBySession[targetSession.id] ?? null) : null
   )
+  const workspaceDirectory = useWorkspaceStore(
+    useShallow((state) => ({
+      activeWorkspaceId: state.activeWorkspaceId,
+      olaWorkspaces: state.olaWorkspaces,
+      resourcesByWorkspace: state.resourcesByWorkspace
+    }))
+  )
+  const workspaceProviders = React.useMemo(
+    () => workspaceModelProviders({ ...useWorkspaceStore.getState(), ...workspaceDirectory }),
+    [workspaceDirectory]
+  )
   const activeProvider = useProviderStore(
     useShallow((s) => {
       const { providers, activeProviderId, activeModelId } = s
@@ -1811,7 +1824,7 @@ export function InputArea({
             : selection.modelId
           : activeModelId)
       if (!providerId || !modelId) return null
-      const provider = providers.find((item) => item.id === providerId)
+      const provider = [...providers, ...workspaceProviders].find((item) => item.id === providerId)
       if (!provider) return null
       const model = provider.models.find((item) => item.id === modelId)
       if (!model) return null

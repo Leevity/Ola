@@ -27,7 +27,11 @@ import {
 } from '@renderer/stores/provider-store'
 import { SETTINGS_PANEL_CLASS, SettingsPageHeader } from './settings-primitives'
 
-export function AdvancedSettingsPanel(): React.JSX.Element {
+export function AdvancedSettingsPanel({
+  embedded = false
+}: {
+  embedded?: boolean
+}): React.JSX.Element {
   const { t } = useTranslation('settings')
   const settings = useSettingsStore()
   const providers = useProviderStore((state) => state.providers)
@@ -54,10 +58,14 @@ export function AdvancedSettingsPanel(): React.JSX.Element {
 
   return (
     <div className={SETTINGS_PANEL_CLASS}>
-      <SettingsPageHeader
-        title={t('architecture.pages.advanced.title')}
-        description={t('architecture.pages.advanced.description')}
-      />
+      {embedded ? (
+        <h3 className="text-base font-semibold">{t('architecture.pages.advanced.title')}</h3>
+      ) : (
+        <SettingsPageHeader
+          title={t('architecture.pages.advanced.title')}
+          description={t('architecture.pages.advanced.description')}
+        />
+      )}
 
       <section className="space-y-4 rounded-xl border border-border/60 bg-muted/15 p-4">
         <div className="flex items-center justify-between gap-4">

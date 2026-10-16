@@ -1,0 +1,5 @@
+### 2026-10-10 G0：Mesh v0alpha2 共享签名向量进入 Android JVM 回归
+
+- 当前共享向量此前有 Go server、Android instrumentation 和 iOS XCTest 源码，但 Android JVM 主机 suite 只覆盖随机 Ed25519 消息，不能在没有设备的回归中发现 canonical JSON 漂移。现将 Android 事件验签提取为纯 `verifyMeshEventSignature`，客户端仍委托该实现；新增 JVM 测试核对规范化 UTF-8 payload 与规定 SHA-256、重排 JSON key 仍验签通过，并拒绝 payload/task 文本、event ID、subject、target、session、sequence 和 type 篡改。
+- Android `MeshEd25519Test` **2/2 PASS**，完整 Android JVM 回归 **3,931 tests、0 failures、0 errors、3 skipped**；Android instrumentation 源码编译通过。Ola-admin `TestMeshV2SharedGoldenEventSignature` **PASS**。`mobile_mesh_capability_contract.py`、控制面 URL contract、Swift parser 和 `git diff --check` 通过。iOS XCTest 文件仍只有源码向量、没有 Xcode runtime 结果。证据：`docs/acceptance-evidence/g0-mesh-golden-crossplatform-20261010/RESULTS.md`。
+- Android Debug APK 已重建，SHA-256：`37cbcb643d891a231989274b4b18a3a161e32bde49e7ed2ee21a8e197bb08a28`；v2 signature、zipalign 和 DEX 服务地址校验通过。ADB 无设备，因此签名互通的真移动端/服务器运行、iOS XCTest 仍待后续环境或联合联测；G0 总门与整体继续 **IN PROGRESS / NOT READY**。

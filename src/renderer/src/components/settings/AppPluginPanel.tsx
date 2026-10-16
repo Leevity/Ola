@@ -217,6 +217,11 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
   const { t } = useTranslation('settings')
   const [selectedPluginId, setSelectedPluginId] = useState<AppPluginId>(IMAGE_PLUGIN_ID)
   const pluginTabRefs = useRef<Array<HTMLButtonElement | null>>([])
+  const pluginContentRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    // Each plugin starts at its own heading instead of inheriting the previous form's position.
+    pluginContentRef.current?.scrollTo({ top: 0, behavior: 'instant' })
+  }, [selectedPluginId])
   const [clearingCookies, setClearingCookies] = useState(false)
   const [exportingCookies, setExportingCookies] = useState(false)
   const [cookieProfiles, setCookieProfiles] = useState<BrowserCookieProfile[]>([])
@@ -533,6 +538,7 @@ export function AppPluginPanel({ embedded = false }: { embedded?: boolean }): Re
 
       <div
         id="app-plugin-panel-content"
+        ref={pluginContentRef}
         role="tabpanel"
         aria-labelledby={`app-plugin-tab-${selectedPluginId}`}
         tabIndex={0}

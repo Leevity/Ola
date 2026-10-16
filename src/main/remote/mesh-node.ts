@@ -27,10 +27,10 @@ export function desktopMeshPlatform(): MeshNodePlatform {
 }
 
 export function desktopMeshCapabilities(): MeshCapability[] {
-  return [
-    { id: 'mesh.event.receive', risk: 'low', version: '1' },
-    { id: 'system.info', risk: 'low', version: '1' }
-  ]
+  // The remote workspace owns the authenticated event inbox while it is open.
+  // This capability only allows a peer to publish a signed receipt back to
+  // this desktop; task execution remains mobile-only.
+  return [{ id: 'mesh.event.receive', risk: 'low', version: '1' }]
 }
 
 function identityPath(): string {

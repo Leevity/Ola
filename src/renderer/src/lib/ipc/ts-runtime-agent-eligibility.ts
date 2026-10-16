@@ -19,7 +19,7 @@ export type TsRuntimeAgentEligibility =
   | { eligible: false; reason: string }
 
 /**
- * Explicit migration gate for Execute mode. Keep it free of React/Electron so
+ * Explicit migration gate for the Main-owned chat, clarify, and execution loop. Keep it free of React/Electron so
  * every exclusion is testable and unsupported requests fail closed.
  */
 export function assessTsRuntimeAgentEligibility(input: {
@@ -44,7 +44,8 @@ export function assessTsRuntimeAgentEligibility(input: {
   /** Main-compatible declarative HTTP extension names captured at submission. */
   extensionToolNames?: readonly string[]
 }): TsRuntimeAgentEligibility {
-  if (input.mode !== 'execute') return { eligible: false, reason: 'MODE_NOT_MIGRATED' }
+  if (!['chat', 'clarify', 'execute'].includes(input.mode))
+    return { eligible: false, reason: 'MODE_NOT_MIGRATED' }
   // Plan persistence is now Main-owned by the TS runtime. Advanced plan-only
   // UI capabilities still remain explicit gates below through tool parity.
   if (input.hasSsh && !input.sshConnectionId?.trim())

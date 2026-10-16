@@ -10,6 +10,11 @@ import { setRemoteControlAllowed } from './authorization-state'
 import { notifyRemoteAccountCleared, notifyWorkspaceDirectoryChanged } from './account-lifecycle'
 import { desktopMeshCapabilities, desktopMeshPlatform, loadDesktopMeshIdentity } from './mesh-node'
 import {
+  verifyMeshTaskReceiptDelivery,
+  type MeshTaskReceiptDelivery,
+  type MeshVerificationNode
+} from './mesh-events'
+import {
   cachedWorkspaceExpiresAt,
   cachedWorkspaceDirectory,
   isOfflineTransportError,
@@ -523,6 +528,14 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
   }
   if (request.operation === 'logout') {
     setRemoteControlAllowed(false)
+    if (state?.token && state.device?.id) {
+      await apiRequest(
+        apiBaseUrl,
+        '/api/pairing/revoke',
+        { deviceId: state.device.id },
+        state.token
+      ).catch(() => undefined)
+    }
     await saveState(null)
     if (state?.token) {
       await apiRequest(apiBaseUrl, '/api/auth/logout', {}, state.token).catch(() => undefined)
@@ -651,19 +664,28 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     if (!payload.payload || typeof payload.payload !== 'object' || Array.isArray(payload.payload)) {
       throw new Error('event payload must be an object')
     }
+    const eventPayload = payload.payload as Record<string, unknown>
     const identity = await loadDesktopMeshIdentity()
     const signedEvent = {
+      protocolVersion: 'v0alpha2',
       eventId: eventID,
       subjectNodeId: subjectNodeID,
       targetNodeId: targetNodeID,
       sessionId: sessionID,
       sequence,
       type,
-      payload: payload.payload
+      payload: eventPayload
     }
-    const payloadDigest = createHash('sha256').update(JSON.stringify(payload.payload)).digest('hex')
+    const canonicalPayload = JSON.stringify(
+      Object.fromEntries(
+        Object.keys(eventPayload)
+          .sort()
+          .map((key) => [key, eventPayload[key]])
+      )
+    )
+    const payloadDigest = createHash('sha256').update(canonicalPayload).digest('hex')
     const signingInput = [
-      'v0alpha1',
+      'v0alpha2',
       eventID,
       subjectNodeID,
       targetNodeID,
@@ -706,13 +728,46 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
       {},
       state.token
     )
-    return apiRequest(
+    const result = await apiRequest<{ events: MeshTaskReceiptDelivery[] }>(
       apiBaseUrl,
       `/api/mesh/v1/events?targetNodeId=${encodeURIComponent(targetNodeID)}&after=${Number(after)}`,
       undefined,
       state.token,
       deviceToken.token
     )
+    const events = result.events ?? []
+    const nextCursor = events.reduce(
+      (cursor, event) => Math.max(cursor, event.cursor),
+      Number(after)
+    )
+    if (events.length === 0) return { events: [], nextCursor }
+
+    const [nodeResponse, keyResponse] = await Promise.all([
+      apiRequest<{ nodes: MeshVerificationNode[] }>(
+        apiBaseUrl,
+        '/api/mesh/v1/nodes',
+        undefined,
+        state.token
+      ),
+      apiRequest<{ publicKey: string }>(apiBaseUrl, '/api/mesh/v1/control-plane-key', undefined)
+    ])
+    const verifiedEvents: MeshTaskReceiptDelivery[] = []
+    for (const event of events) {
+      try {
+        verifiedEvents.push(
+          verifyMeshTaskReceiptDelivery(
+            event,
+            nodeResponse.nodes,
+            keyResponse.publicKey,
+            String(state.account.id),
+            targetNodeID
+          )
+        )
+      } catch {
+        // Invalid or unrelated events must never reach the renderer as receipts.
+      }
+    }
+    return { events: verifiedEvents, nextCursor }
   }
   if (request.operation === 'device-list')
     return apiRequest(apiBaseUrl, '/api/devices', undefined, state.token)

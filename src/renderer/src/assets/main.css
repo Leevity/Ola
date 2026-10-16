@@ -2,6 +2,7 @@
 @import 'tw-animate-css';
 @import 'markstream-react/index.css';
 @import 'katex/dist/katex.min.css';
+@import './ola-design-tokens.css';
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:is(.dark *));
@@ -1927,35 +1928,11 @@
 }
 
 .capability-center-overview-toggle {
-  display: none;
+  display: flex;
 }
 
-@media (max-height: 600px) {
-  .capability-center,
-  .app-plugin-panel {
-    height: auto;
-  }
-
-  .capability-center {
-    min-height: 100%;
-  }
-
-  .capability-center-tabpanel,
-  .app-plugin-content {
-    flex: none;
-  }
-
-  .app-plugin-content {
-    overflow-y: visible;
-  }
-
-  .capability-center-overview-toggle {
-    display: flex;
-  }
-
-  .capability-center-overview:not(.is-expanded) {
-    display: none;
-  }
+.capability-center-overview:not(.is-expanded) {
+  display: none;
 }
 
 @media (max-width: 700px) {

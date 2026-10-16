@@ -67,7 +67,8 @@
         "tests/runtime/secret-vault-persistence.test.ts",
         "tests/runtime/settings-save-failure-electron.test.ts",
         "docs/migrations/ts-runtime/evidence/provider-credential-storage-2026-10-04.md",
-        "tests/runtime/workspace-directory.test.ts"
+        "tests/runtime/workspace-directory.test.ts",
+        "docs/migrations/ts-runtime/evidence/account-team-model-native-2026-10-16.json"
       ],
       "status": "实现中"
     },

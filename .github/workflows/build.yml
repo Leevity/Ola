@@ -25,6 +25,11 @@ on:
         required: true
         default: false
         type: boolean
+      unsigned_build:
+        description: '不使用发布证书构建（macOS 不公证，Windows 不签名）'
+        required: true
+        default: false
+        type: boolean
 
 # 同一时间只允许一个构建流水线运行
 concurrency:
@@ -101,6 +106,7 @@ jobs:
         env:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           INPUT_PRERELEASE: ${{ github.event.inputs.prerelease }}
+          INPUT_UNSIGNED_BUILD: ${{ github.event.inputs.unsigned_build }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="v${INPUT_VERSION}"
@@ -108,7 +114,8 @@ jobs:
           echo "tag_name=${TAG}" >> "$GITHUB_OUTPUT"
           echo "checkout_ref=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
           echo "is_prerelease=${INPUT_PRERELEASE}" >> "$GITHUB_OUTPUT"
-          echo "release_body=$(printf '%s' '由发布工作流创建的 draft Release' | base64 -w 0)" >> "$GITHUB_OUTPUT"
+          node scripts/prepare-release-notes.mjs
+          echo "release_body=$(base64 -w 0 release-notes.md)" >> "$GITHUB_OUTPUT"
 
           if gh release view "$TAG" > /dev/null 2>&1; then
             is_draft=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
@@ -118,9 +125,10 @@ jobs:
             fi
             echo "✅ Found existing draft Release: ${TAG}"
           else
-            gh release create "$TAG" --title "Release ${TAG}" --notes "由发布工作流创建" --draft
+            gh release create "$TAG" --target "$GITHUB_SHA" --title "Release ${TAG}" --notes-file release-notes.md --draft
             echo "✅ Created draft Release: ${TAG}"
           fi
+          gh release edit "$TAG" --target "$GITHUB_SHA" --notes-file release-notes.md
 
           release_id=$(gh release view "$TAG" --json id --jq '.id')
           echo "release_id=${release_id}" >> "$GITHUB_OUTPUT"
@@ -250,9 +258,9 @@ jobs:
         if: matrix.platform == 'win'
         shell: bash
         env:
-          RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          RELEASE_REQUIRED: ${{ inputs.publish && !inputs.unsigned_build && 'true' || 'false' }}
+          WIN_CSC_LINK: ${{ !inputs.unsigned_build && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ !inputs.unsigned_build && secrets.WIN_CSC_KEY_PASSWORD || '' }}
         run: |
           if [ "$RELEASE_REQUIRED" = "true" ] && { [ -z "$WIN_CSC_LINK" ] || [ -z "$WIN_CSC_KEY_PASSWORD" ]; }; then
             echo "::error::Release signing credentials are required for public Windows packages"
@@ -266,8 +274,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
-          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK || '' }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.unsigned_build && 'false' || 'true' }}
+          WIN_CSC_LINK: ${{ !inputs.unsigned_build && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ !inputs.unsigned_build && secrets.WIN_CSC_KEY_PASSWORD || '' }}
 
       # ── 上传构建产物 ──
 
@@ -331,7 +340,7 @@ jobs:
         shell: bash
         env:
           OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
-          OLA_REQUIRE_SIGNATURE: ${{ inputs.publish && secrets.WIN_CSC_LINK != '' && secrets.WIN_CSC_KEY_PASSWORD != '' && 'true' || 'false' }}
+          OLA_REQUIRE_SIGNATURE: ${{ inputs.publish && !inputs.unsigned_build && secrets.WIN_CSC_LINK != '' && secrets.WIN_CSC_KEY_PASSWORD != '' && 'true' || 'false' }}
         run: node scripts/verify-release-artifacts.mjs --platform win --assets release-assets --checksums release-assets/SHA256SUMS-win-${{ matrix.artifact_arch }}.txt --sbom release-assets/Ola-win-${{ matrix.artifact_arch }}.spdx.json
 
       - name: Upload Windows artifacts
@@ -531,8 +540,16 @@ jobs:
         shell: bash
         env:
           CSC_LINK: ${{ secrets.CSC_LINK || '' }}
+          UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
         run: |
           echo "csc_link=" >> "$GITHUB_OUTPUT"
+
+          if [ "$UNSIGNED_BUILD" = "true" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "auto_update_enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Explicit unsigned distribution; Developer ID signing and notarization disabled"
+            exit 0
+          fi
 
           if [ -z "$CSC_LINK" ]; then
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -587,7 +604,7 @@ jobs:
       - name: Require macOS signing and notarization credentials for published releases
         shell: bash
         env:
-          RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
+          RELEASE_REQUIRED: ${{ inputs.publish && !inputs.unsigned_build && 'true' || 'false' }}
           MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
           APPLE_ID: ${{ secrets.APPLE_ID || '' }}
@@ -620,9 +637,14 @@ jobs:
             echo "Building macOS package without code signing"
           fi
 
-          npx electron-builder --mac dmg zip --${{ matrix.build_arch }} --publish never
+          if [ "${UNSIGNED_BUILD}" = "true" ]; then
+            npx electron-builder --mac dmg zip --${{ matrix.build_arch }} -c.mac.identity=null -c.mac.notarize=false --publish never
+          else
+            npx electron-builder --mac dmg zip --${{ matrix.build_arch }} --publish never
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
           MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
           MAC_SIGNING_CSC_LINK: ${{ steps.mac_signing.outputs.csc_link }}
@@ -710,7 +732,7 @@ jobs:
         shell: bash
         env:
           OLA_RELEASE_REQUIRED: ${{ inputs.publish && 'true' || 'false' }}
-          OLA_REQUIRE_SIGNATURE: ${{ inputs.publish && secrets.CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'true' || 'false' }}
+          OLA_REQUIRE_SIGNATURE: ${{ inputs.publish && !inputs.unsigned_build && secrets.CSC_KEY_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_APP_SPECIFIC_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' && 'true' || 'false' }}
         run: node scripts/verify-release-artifacts.mjs --platform mac --assets release-assets --checksums release-assets/SHA256SUMS-mac-${{ matrix.artifact_arch }}.txt --smoke-dir dist --sbom release-assets/Ola-mac-${{ matrix.artifact_arch }}.spdx.json
 
       - name: Upload macOS artifacts

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createLocalShellCommandTool } from '../../src/runtime/tools/local-shell-command'
@@ -51,9 +51,10 @@ describe('local shell command tool', () => {
       tool.validate({ command, outputFiles: ['result.txt', 'missing.txt'] }),
       context
     )
+    const resultPath = await realpath(join(root, 'result.txt'))
     expect(created).toMatchObject({
       exitCode: 0,
-      artifacts: [{ path: join(root, 'result.txt'), operation: 'create' }]
+      artifacts: [{ path: resultPath, operation: 'create' }]
     })
     expect(await readFile(join(root, 'result.txt'), 'utf8')).toContain('hello')
 
@@ -67,7 +68,7 @@ describe('local shell command tool', () => {
     )
     expect(modified).toMatchObject({
       exitCode: 0,
-      artifacts: [{ path: join(root, 'result.txt'), operation: 'modify' }]
+      artifacts: [{ path: resultPath, operation: 'modify' }]
     })
 
     await writeFile(join(root, 'untouched.txt'), 'before')

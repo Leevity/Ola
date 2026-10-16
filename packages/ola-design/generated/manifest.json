@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0",
+  "sourceHash": "8b0a5d2ece454e5962640cfcbf301af5312bb936fbe337bb81a219553cf20c32",
+  "files": {
+    "Ola/src/renderer/src/assets/ola-design-tokens.css": "b2c32f49da503fa80ac7ba62879656c7c248b63e870df71e407412308b8702ec",
+    "Ola/src/renderer/src/lib/ola-design-tokens.ts": "65bb8b6d5e2d1617c7dbff894e3ce1384d481c59ad1dd4e045701f2db9e5d53b",
+    "Ola-admin/src/design/tokens.css": "b2c32f49da503fa80ac7ba62879656c7c248b63e870df71e407412308b8702ec",
+    "Ola-admin/src/design/tokens.ts": "65bb8b6d5e2d1617c7dbff894e3ce1384d481c59ad1dd4e045701f2db9e5d53b",
+    "ola-mobile/src/android/app/src/main/java/chat/olaai/mobile/ui/theme/OlaDesignTokens.kt": "40b8a443613b33fbc4b8438a7ec9e54256fa4f0cce857c914aac1ff7d3756b8a",
+    "ola-mobile/src/ios/Shared/OlaDesignTokens.swift": "76f92f0e7c7bbf521d221716d40cdeaf159fb2f2737eadcff222e9b0819650f0",
+    "ola-mobile/src/ios/Assets.xcassets/AccentColor.colorset/Contents.json": "a2d37a18ce63d9246d0cfcf78bb9fd7f9df44cc44c232fce014d88d588879f98"
+  }
+}

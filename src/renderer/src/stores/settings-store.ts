@@ -2,10 +2,11 @@
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { ProviderType, ReasoningEffortLevel, ThinkingConfig } from '../lib/api/types'
 import { ipcStorage } from '../lib/ipc/ipc-storage'
+import { DEFAULT_THEME_MODE, normalizeThemePreferences } from '../lib/theme-preferences'
+export { DEFAULT_THEME_MODE } from '../lib/theme-preferences'
 import {
   DEFAULT_APP_THEME_PRESET,
   DEFAULT_SSH_TERMINAL_THEME_PRESET,
-  isAppThemePreset,
   type AppThemePreset,
   type SshTerminalThemePreset
 } from '../lib/theme-presets'
@@ -69,18 +70,7 @@ export type ShellExecutionEndpoint =
   | 'pwsh'
   | 'cmd'
   | 'custom'
-export const DEFAULT_THEME_MODE = 'dark' as const
 export const DEFAULT_SHELL_EXECUTION_ENDPOINT: ShellExecutionEndpoint = 'auto'
-const LEGACY_DEFAULT_THEME_MODE = 'system' as const
-const LEGACY_DEFAULT_APP_THEME_PRESET: AppThemePreset = 'studio'
-const LEGACY_DEFAULT_SSH_TERMINAL_THEME_PRESET: SshTerminalThemePreset = 'graphite'
-const V17_DEFAULT_THEME_MODE = 'dark' as const
-const V17_DEFAULT_APP_THEME_PRESET: AppThemePreset = 'mulberry'
-const V17_DEFAULT_SSH_TERMINAL_THEME_PRESET: SshTerminalThemePreset = 'mulberry'
-const V18_DEFAULT_THEME_MODE = 'dark' as const
-const V18_DEFAULT_APP_THEME_PRESET: AppThemePreset = 'graphite'
-const V18_DEFAULT_SSH_TERMINAL_THEME_PRESET: SshTerminalThemePreset = 'graphite'
-
 export const DEFAULT_MAX_PARALLEL_TOOL_CALLS = 8
 export const MIN_MAX_PARALLEL_TOOL_CALLS = 1
 export const MAX_MAX_PARALLEL_TOOL_CALLS = 16
@@ -156,10 +146,6 @@ function sanitizeRecentWorkingTargets(targets: unknown): RecentWorkingTarget[] {
   return Array.from(deduped.values())
     .sort((left, right) => right.updatedAt - left.updatedAt)
     .slice(0, MAX_RECENT_WORKING_TARGETS)
-}
-
-function isThemeSetting(value: unknown): value is 'light' | 'dark' | 'system' {
-  return value === 'light' || value === 'dark' || value === 'system'
 }
 
 export function clampMaxParallelToolCalls(value: number): number {
@@ -300,6 +286,7 @@ interface SettingsStore {
   shellEnvironmentVariablesText: string
   userName: string
   userAvatar: string
+  onboardingAccessMode: 'account' | 'local' | null
   onboardingCompleted: boolean
   onboardingCompletedAt: number | null
   onboardingInterests: string[]
@@ -391,9 +378,9 @@ export const useSettingsStore = create<SettingsStore>()(
       maxTokens: 32000,
       temperature: 0.7,
       systemPrompt: '',
-      theme: 'light' as const,
-      themePreset: 'graphite' as const,
-      sshTerminalThemePreset: 'graphite' as const,
+      theme: DEFAULT_THEME_MODE,
+      themePreset: DEFAULT_APP_THEME_PRESET,
+      sshTerminalThemePreset: DEFAULT_SSH_TERMINAL_THEME_PRESET,
       language: detectSystemLanguage(),
       autoApprove: false,
       permissionPolicy: { ...DEFAULT_PERMISSION_POLICY },
@@ -426,6 +413,7 @@ export const useSettingsStore = create<SettingsStore>()(
       shellEnvironmentVariablesText: '',
       userName: '',
       userAvatar: '',
+      onboardingAccessMode: null,
       onboardingCompleted: false,
       onboardingCompletedAt: null,
       onboardingInterests: [],
@@ -532,24 +520,8 @@ export const useSettingsStore = create<SettingsStore>()(
       name: 'ola-settings',
       version: 29,
       storage: createJSONStorage(() => ipcStorage),
-      migrate: (persisted: unknown, version: number) => {
+      migrate: (persisted: unknown) => {
         const state = persisted as Record<string, unknown>
-        const matchesLegacyThemeDefaults =
-          (state.theme === undefined || state.theme === LEGACY_DEFAULT_THEME_MODE) &&
-          (state.themePreset === undefined ||
-            state.themePreset === LEGACY_DEFAULT_APP_THEME_PRESET) &&
-          (state.sshTerminalThemePreset === undefined ||
-            state.sshTerminalThemePreset === LEGACY_DEFAULT_SSH_TERMINAL_THEME_PRESET)
-        const matchesV17ThemeDefaults =
-          (state.theme === undefined || state.theme === V17_DEFAULT_THEME_MODE) &&
-          (state.themePreset === undefined || state.themePreset === V17_DEFAULT_APP_THEME_PRESET) &&
-          (state.sshTerminalThemePreset === undefined ||
-            state.sshTerminalThemePreset === V17_DEFAULT_SSH_TERMINAL_THEME_PRESET)
-        const matchesV18ThemeDefaults =
-          (state.theme === undefined || state.theme === V18_DEFAULT_THEME_MODE) &&
-          (state.themePreset === undefined || state.themePreset === V18_DEFAULT_APP_THEME_PRESET) &&
-          (state.sshTerminalThemePreset === undefined ||
-            state.sshTerminalThemePreset === V18_DEFAULT_SSH_TERMINAL_THEME_PRESET)
         if (typeof state.language === 'string') {
           state.language = normalizeLanguageCode(state.language)
         } else {
@@ -628,36 +600,9 @@ export const useSettingsStore = create<SettingsStore>()(
           state.lastProjectDirectory = ''
         }
         state.recentWorkingTargets = sanitizeRecentWorkingTargets(state.recentWorkingTargets)
-        // Add appearance settings if missing
-        if (!isThemeSetting(state.theme)) {
-          state.theme = DEFAULT_THEME_MODE
-        } else if (
-          (version < 17 && matchesLegacyThemeDefaults) ||
-          (version < 18 && matchesV17ThemeDefaults) ||
-          (version < 19 && matchesV18ThemeDefaults)
-        ) {
-          state.theme = DEFAULT_THEME_MODE
-        }
+        Object.assign(state, normalizeThemePreferences(state))
         if (state.backgroundColor === undefined) {
           state.backgroundColor = ''
-        }
-        if (!isAppThemePreset(state.themePreset)) {
-          state.themePreset = DEFAULT_APP_THEME_PRESET
-        } else if (
-          (version < 17 && matchesLegacyThemeDefaults) ||
-          (version < 18 && matchesV17ThemeDefaults) ||
-          (version < 19 && matchesV18ThemeDefaults)
-        ) {
-          state.themePreset = DEFAULT_APP_THEME_PRESET
-        }
-        if (!isAppThemePreset(state.sshTerminalThemePreset)) {
-          state.sshTerminalThemePreset = DEFAULT_SSH_TERMINAL_THEME_PRESET
-        } else if (
-          (version < 17 && matchesLegacyThemeDefaults) ||
-          (version < 18 && matchesV17ThemeDefaults) ||
-          (version < 19 && matchesV18ThemeDefaults)
-        ) {
-          state.sshTerminalThemePreset = DEFAULT_SSH_TERMINAL_THEME_PRESET
         }
         if (state.fontFamily === undefined) {
           state.fontFamily = ''
@@ -879,6 +824,7 @@ export const useSettingsStore = create<SettingsStore>()(
         shellEnvironmentVariablesText: state.shellEnvironmentVariablesText,
         userName: state.userName,
         userAvatar: state.userAvatar,
+        onboardingAccessMode: state.onboardingAccessMode,
         onboardingCompleted: state.onboardingCompleted,
         onboardingCompletedAt: state.onboardingCompletedAt,
         onboardingInterests: state.onboardingInterests,

@@ -9,7 +9,7 @@ import type {
   ModelToolResult as ToolResult
 } from '../../shared/runtime/model'
 import type { RunSnapshot } from '../../shared/runtime/contracts'
-import { lstat } from 'node:fs/promises'
+import { lstat, realpath } from 'node:fs/promises'
 import { isAbsolute, relative, sep } from 'node:path'
 export type {
   ModelToolCall as ToolCall,
@@ -113,6 +113,7 @@ async function confirmedFileArtifacts(
       imageResult.images.length > 4
     )
       return []
+    const canonicalRoot = await realpath(resources[0]).catch(() => resources[0])
     const images: Array<{ path: string; operation: 'create'; mediaType: string }> = []
     for (const entry of imageResult.images) {
       if (!entry || typeof entry !== 'object' || Array.isArray(entry)) continue
@@ -123,7 +124,9 @@ async function confirmedFileArtifacts(
         image.mediaType !== 'image/png'
       )
         continue
-      const pathWithinRoot = relative(resources[0], image.filePath)
+      const canonicalPath = await realpath(image.filePath).catch(() => null)
+      if (!canonicalPath) continue
+      const pathWithinRoot = relative(canonicalRoot, canonicalPath)
       if (
         pathWithinRoot === '..' ||
         pathWithinRoot.startsWith(`..${sep}`) ||

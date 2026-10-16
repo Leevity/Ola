@@ -318,12 +318,17 @@ export function registerRemoteHandlers(): void {
   )
 
   registerTrustedRemoteMessagePackHandler<
-    { sessionId: string | null; displayId?: string | null },
+    {
+      sessionId: string | null
+      displayId?: string | null
+      peerDeviceId?: string | null
+      retiredSessionId?: string | null
+    },
     { success: true } | { success: false; error: string }
   >('remote:input:set-session', (args, event) => {
     const value = requireExactObject(
       args,
-      ['sessionId', 'displayId'],
+      ['sessionId', 'displayId', 'peerDeviceId', 'retiredSessionId'],
       'remote input session request'
     )
     if (value.sessionId !== null && typeof value.sessionId !== 'string') {
@@ -335,17 +340,34 @@ export function registerRemoteHandlers(): void {
     ) {
       throw new Error('Invalid remote capture display ID')
     }
+    for (const key of ['peerDeviceId', 'retiredSessionId'] as const) {
+      const item = value[key]
+      if (item != null && (typeof item !== 'string' || item.length > 128)) {
+        throw new Error(`Invalid ${key}`)
+      }
+    }
     const ownerWebContentsId = getRemoteSessionOwner(event)
     const sessionId = value.sessionId as string | null
     if (sessionId === null) {
       const success = clearRemoteInputSession(ownerWebContentsId)
+      const retiredSessionId = value.retiredSessionId as string | null | undefined
+      if (retiredSessionId)
+        remoteControlEngine.disconnectIncomingOlaDeviceSession(retiredSessionId, ownerWebContentsId)
       recordRemoteAudit({ action: 'input_disable', ownerWebContentsId, success })
       return success
         ? { success: true }
         : { success: false, error: 'Remote input is owned by another window' }
     }
     if (!remoteControlEngine.sessions.isOwnedBy(sessionId, ownerWebContentsId)) {
-      return { success: false, error: 'Remote session is owned by another window' }
+      try {
+        remoteControlEngine.createIncomingOlaDeviceSession(
+          sessionId,
+          ownerWebContentsId,
+          (value.peerDeviceId as string | null) ?? 'Ola device'
+        )
+      } catch (error) {
+        return { success: false, error: error instanceof Error ? error.message : String(error) }
+      }
     }
     setRemoteInputSession(sessionId, (value.displayId as string | null) ?? null, ownerWebContentsId)
     recordRemoteAudit({ action: 'input_enable', sessionId, ownerWebContentsId, success: true })

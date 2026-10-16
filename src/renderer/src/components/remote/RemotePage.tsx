@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next'
 import { useTheme } from 'next-themes'
 import {
   Cable,
-  CheckCircle2,
   ChevronRight,
   CircleOff,
   Globe2,
@@ -51,6 +50,7 @@ import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { SshPage } from '@renderer/components/ssh/SshPage'
 import { IronRdpViewer } from './IronRdpViewer'
 import { NoVncViewer } from './NoVncViewer'
+import { MobileMeshWorkspace } from './MobileMeshWorkspace'
 
 type DirectKind = Extract<RemoteConnectionKind, 'rdp' | 'vnc'>
 type WorkspaceKind = 'ssh' | 'direct' | 'managed' | 'mobile'
@@ -779,18 +779,7 @@ export function RemotePage({
             : 'hidden'
         }
       >
-        <FutureWorkspace
-          icon={Smartphone}
-          eyebrow={t('remote.crossPlatform')}
-          title={t('remote.mobileTitle')}
-          description={t('remote.mobileDescription')}
-          points={[
-            t('remote.mobilePointOne'),
-            t('remote.mobilePointTwo'),
-            t('remote.mobilePointThree')
-          ]}
-          action={t('remote.mobileAppLater')}
-        />
+        <MobileMeshWorkspace />
       </div>
 
       {editor ? (
@@ -1311,6 +1300,8 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   const registerDevice = useRemoteAccountStore((state) => state.registerDevice)
   const devices = useRemoteAccountStore((state) => state.devices)
   const loadDevices = useRemoteAccountStore((state) => state.loadDevices)
+  const allowRemoteControl = useRemoteAccountStore((state) => state.allowRemoteControl)
+  const setAllowRemoteControl = useRemoteAccountStore((state) => state.setAllowRemoteControl)
   const issueDeviceSignalToken = useRemoteAccountStore((state) => state.issueDeviceSignalToken)
   const autoResolvePairing = useRemoteAccountStore((state) => state.autoResolvePairing)
   const connectSignaling = useRemoteSignalingStore((state) => state.connect)
@@ -1330,6 +1321,7 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   const [deviceName, setDeviceName] = useState(t('remote.defaultDeviceName'))
   const [error, setError] = useState('')
   const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null)
+  const [permissionLoading, setPermissionLoading] = useState(false)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   useEffect(() => {
     if (account && device) void loadDevices().catch(() => undefined)
@@ -1352,6 +1344,22 @@ function ManagedAccountWorkspace(): React.JSX.Element {
     return listenForIncoming(device.id, true)
   }, [device, listenForIncoming])
   useEffect(() => {
+    if (captureStatus === 'capturing' || !allowRemoteControl) return
+    void setAllowRemoteControl(false).catch((reason) => {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    })
+  }, [allowRemoteControl, captureStatus, setAllowRemoteControl])
+  useEffect(
+    () => () => {
+      const account = useRemoteAccountStore.getState()
+      if (account.allowRemoteControl) {
+        void account.setAllowRemoteControl(false).catch(() => undefined)
+      }
+      useRemoteCaptureStore.getState().stop()
+    },
+    []
+  )
+  useEffect(() => {
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream
   }, [remoteStream])
   const submit = async (): Promise<void> => {
@@ -1362,6 +1370,30 @@ function ManagedAccountWorkspace(): React.JSX.Element {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     }
+  }
+  const updateRemotePermission = async (allow: boolean): Promise<void> => {
+    setPermissionLoading(true)
+    setError('')
+    try {
+      await setAllowRemoteControl(allow)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+  const stopScreenSharing = async (): Promise<void> => {
+    if (allowRemoteControl) {
+      setPermissionLoading(true)
+      try {
+        await setAllowRemoteControl(false)
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : String(reason))
+      } finally {
+        setPermissionLoading(false)
+      }
+    }
+    stopCapture()
   }
   const connectSameAccountDevice = async (targetDeviceId: string): Promise<void> => {
     setConnectingDeviceId(targetDeviceId)
@@ -1427,6 +1459,34 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                   })}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
+                  <div className="min-w-0 flex-1 text-xs">
+                    <p>
+                      {t(
+                        allowRemoteControl
+                          ? 'remote.controlPermissionEnabled'
+                          : 'remote.controlPermissionDisabled'
+                      )}
+                    </p>
+                    {!allowRemoteControl && captureStatus !== 'capturing' && (
+                      <p className="mt-1 text-muted-foreground">
+                        {t('remote.controlPermissionRequiresCapture')}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={allowRemoteControl ? 'destructive' : 'outline'}
+                    disabled={
+                      permissionLoading || (!allowRemoteControl && captureStatus !== 'capturing')
+                    }
+                    onClick={() => void updateRemotePermission(!allowRemoteControl)}
+                  >
+                    {permissionLoading
+                      ? t('remote.controlPermissionUpdating')
+                      : t(allowRemoteControl ? 'remote.disableControl' : 'remote.enableControl')}
+                  </Button>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
                   <span className="min-w-0 flex-1 text-xs">
                     {t('remote.screenSharingStatus', {
                       status:
@@ -1442,7 +1502,7 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                     variant="outline"
                     disabled={captureStatus === 'requesting'}
                     onClick={() =>
-                      void (captureStatus === 'capturing' ? stopCapture() : startCapture())
+                      void (captureStatus === 'capturing' ? stopScreenSharing() : startCapture())
                     }
                   >
                     {captureStatus === 'capturing'
@@ -1532,50 +1592,6 @@ function ManagedAccountWorkspace(): React.JSX.Element {
             onChange={(event) => setApiBaseUrl(event.target.value)}
           />
         </label>
-      </div>
-    </div>
-  )
-}
-
-function FutureWorkspace({
-  icon: Icon,
-  eyebrow,
-  title,
-  description,
-  points,
-  action
-}: {
-  icon: typeof Server
-  eyebrow: string
-  title: string
-  description: string
-  points: string[]
-  action: string
-}): React.JSX.Element {
-  const { t } = useTranslation('layout')
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto px-10 py-14">
-      <div className="w-full max-w-3xl">
-        <div className="flex items-center gap-2 text-sm font-semibold text-primary">
-          <Icon className="size-4" /> {eyebrow}
-        </div>
-        <h2 className="mt-5 max-w-2xl text-lg font-semibold">{title}</h2>
-        <p className="mt-3 max-w-2xl text-sm leading-7 text-muted-foreground">{description}</p>
-        <div className="mt-10 border-y">
-          {points.map((point, index) => (
-            <div key={point} className="flex items-center gap-4 border-b py-4 last:border-b-0">
-              <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                {index + 1}
-              </span>
-              <span className="text-sm">{point}</span>
-              <CheckCircle2 className="ml-auto size-4 text-muted-foreground/50" />
-            </div>
-          ))}
-        </div>
-        <div className="mt-8 flex items-center gap-3">
-          <Button disabled>{action}</Button>
-          <span className="text-xs text-muted-foreground">{t('remote.plannedFeature')}</span>
-        </div>
       </div>
     </div>
   )

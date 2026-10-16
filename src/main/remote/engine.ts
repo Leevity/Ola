@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto'
 import { getRemoteConnection, markRemoteConnectionConnected } from './connection-store'
 import { createRdpCleanPathBridge } from './rdp/rdp-cleanpath-bridge'
 import { clearRemoteInputSession, clearRemoteInputSessionIfOwned } from './input-controller'
+import { isRemoteControlAllowed } from './authorization-state'
 import { RemoteSessionManager } from './session-manager'
 import { ViewerCredentialLeaseRegistry } from './viewer-credential-lease'
 import { launchNoVncProxy } from './vnc/novnc-proxy'
@@ -19,6 +20,46 @@ import {
 export class RemoteControlEngine {
   readonly sessions = new RemoteSessionManager()
   private readonly viewerCredentialLeases = new ViewerCredentialLeaseRegistry()
+
+  createIncomingOlaDeviceSession(
+    sessionId: string,
+    ownerWebContentsId: number,
+    peerDeviceId: string
+  ): RemoteSession {
+    if (!isRemoteControlAllowed()) throw new Error('Desktop remote control is disabled')
+    const existing = this.sessions.list().find((session) => session.id === sessionId)
+    if (existing) {
+      if (
+        !this.sessions.isOwnedBy(sessionId, ownerWebContentsId) ||
+        existing.kind !== 'ola-device'
+      ) {
+        throw new Error('Remote session is owned by another window')
+      }
+      return existing
+    }
+    return this.sessions.create(
+      {
+        id: sessionId,
+        kind: 'ola-device',
+        connectionId: null,
+        status: 'connected',
+        error: null,
+        viewerUrl: null,
+        viewerType: null,
+        viewerDestination: peerDeviceId,
+        credentialAvailable: false
+      },
+      ownerWebContentsId
+    )
+  }
+
+  disconnectIncomingOlaDeviceSession(sessionId: string, ownerWebContentsId: number): void {
+    const session = this.sessions.list().find((item) => item.id === sessionId)
+    if (session?.kind === 'ola-device' && this.sessions.isOwnedBy(sessionId, ownerWebContentsId)) {
+      clearRemoteInputSessionIfOwned(sessionId, ownerWebContentsId)
+      this.sessions.disconnect(sessionId)
+    }
+  }
 
   claimViewerCredential(
     sessionId: string,

@@ -2,7 +2,7 @@
  * Versioned contracts for communication between independently released Ola Nodes.
  * Electron IPC contracts deliberately do not appear here.
  */
-export const OLA_MESH_PROTOCOL_VERSION = 'v0alpha1'
+export const OLA_MESH_PROTOCOL_VERSION = 'v0alpha2'
 
 export type MeshNodePlatform = 'android' | 'ios' | 'linux' | 'macos' | 'windows'
 export type MeshCapabilityRisk = 'low' | 'medium' | 'high'

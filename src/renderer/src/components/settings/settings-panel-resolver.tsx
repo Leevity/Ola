@@ -9,10 +9,9 @@ import { CredentialsPanel } from '@renderer/components/credentials/CredentialsPa
 import { ProjectIntelligenceDashboard } from './ProjectIntelligenceDashboard'
 import { DesktopAutomationPanel } from './DesktopAutomationPanel'
 import { WorkModesPanel } from './WorkModesPanel'
-import { AdvancedSettingsPanel } from './AdvancedSettingsPanel'
 import { ProfilePanel } from './ProfilePanel'
 import { OlaAccountPanel } from './OlaAccountPanel'
-import { MigrationPanel } from './MigrationPanel'
+import { PetPanel } from './PetPanel'
 import type { SettingsPageId } from './settings-registry'
 
 export type SettingsPanelComponent = ComponentType
@@ -35,9 +34,8 @@ const EXTERNAL_PANEL_BINDINGS: Partial<Record<SettingsPageId, SettingsPanelCompo
   websearch: WebSearchPanel,
   projectIntelligence: ProjectIntelligenceDashboard,
   profile: ProfilePanel,
-  olaAccount: OlaAccountPanel,
-  migration: MigrationPanel,
-  advanced: AdvancedSettingsPanel
+  pet: PetPanel,
+  olaAccount: OlaAccountPanel
 }
 
 export function resolveSettingsPanel(

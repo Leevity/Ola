@@ -150,7 +150,7 @@ export function CapabilityCenterPanel(): React.JSX.Element {
         role="tabpanel"
         aria-labelledby={`capability-tab-${activeTab}`}
         tabIndex={0}
-        className="capability-center-tabpanel min-h-0 min-w-0 flex-1 outline-none"
+        className="capability-center-tabpanel flex min-h-0 min-w-0 flex-1 flex-col outline-none"
       >
         {activeTab === 'custom' ? <ExtensionPanel embedded /> : <AppPluginPanel embedded />}
       </div>
