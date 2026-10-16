@@ -60,6 +60,8 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
@@ -164,6 +166,8 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
@@ -232,6 +236,8 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
@@ -273,7 +279,8 @@ jobs:
         run: npm run package:release-staging -- --${{ matrix.platform }} --${{ matrix.build_arch }} --output=dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.unsigned_build && 'false' || 'true' }}
           WIN_CSC_LINK: ${{ !inputs.unsigned_build && secrets.WIN_CSC_LINK || '' }}
           WIN_CSC_KEY_PASSWORD: ${{ !inputs.unsigned_build && secrets.WIN_CSC_KEY_PASSWORD || '' }}
@@ -515,12 +522,24 @@ jobs:
             ~/.npm
             ~/.cache/electron
             ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
           key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Install dependencies
         run: npm ci
+
+      # Electron 43 downloads lazily on require(); keep network installation
+      # outside the bounded IPC execution gate.
+      - name: Install Electron test runtime
+        timeout-minutes: 10
+        env:
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          ELECTRON_INSTALL_PLATFORM: darwin
+          ELECTRON_INSTALL_ARCH: ${{ matrix.build_arch }}
+        run: node node_modules/electron/install.js
 
       - name: Verify Electron workspace IPC frame isolation
         timeout-minutes: 2
@@ -646,7 +665,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
-          ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://github.com/electron-userland/electron-builder-binaries/releases/download/
           MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
           MAC_SIGNING_CSC_LINK: ${{ steps.mac_signing.outputs.csc_link }}
           MAC_SIGNING_CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD || '' }}
