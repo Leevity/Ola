@@ -5,7 +5,7 @@ vi.mock('../../src/main/renderer-security', () => ({
   registerTrustedRendererUrl: () => undefined
 }))
 import { decode, encode } from '@msgpack/msgpack'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -38,8 +38,6 @@ vi.mock('../../src/main/mcp/autoconnect-coordinator', () => ({
 }))
 vi.mock('../../src/main/mcp/mcp-manager', () => ({ McpManager: class {} }))
 
-import { registerMcpHandlers } from '../../src/main/ipc/mcp-handlers'
-
 const sender = { mainFrame: {}, isDestroyed: () => false }
 const event = { sender, senderFrame: sender.mainFrame }
 
@@ -62,6 +60,10 @@ const server = (id: string) => ({
 beforeEach(async () => {
   state.root = await mkdtemp(join(tmpdir(), 'ola-mcp-ipc-'))
   state.handlers.clear()
+  // The handler owns a module-level config store; import after the isolated
+  // data root exists so the fixture cannot capture the repository directory.
+  vi.resetModules()
+  const { registerMcpHandlers } = await import('../../src/main/ipc/mcp-handlers')
   registerMcpHandlers({
     disconnectServer: vi.fn(async () => {}),
     connectServer: vi.fn(async () => {})
@@ -73,6 +75,7 @@ afterEach(async () => {
 })
 
 it('owns MCP config CRUD in Main TS and enforces the trusted IPC sender', async () => {
+  const repositoryConfig = await readFile('mcp-servers.json')
   await expect(call('mcp:list', undefined)).resolves.toEqual([])
   await expect(call('mcp:add', server('one'))).resolves.toEqual({ success: true })
   await expect(call('mcp:get', 'one')).resolves.toEqual({ server: server('one') })
@@ -81,6 +84,8 @@ it('owns MCP config CRUD in Main TS and enforces the trusted IPC sender', async 
     success: true
   })
   await expect(call('mcp:remove', 'one')).resolves.toEqual({ success: true })
+  expect(JSON.parse(await readFile(join(state.root, 'mcp-servers.json'), 'utf8'))).toEqual([])
+  expect(await readFile('mcp-servers.json')).toEqual(repositoryConfig)
   const handler = state.handlers.get('mcp:list:msgpack')
   expect(handler).toBeDefined()
   await expect(handler!({ sender: {}, senderFrame: {} }, encode(undefined))).rejects.toThrow(
