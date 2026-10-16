@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { createServer } from 'node:http'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
-import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile, readFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { publishDesktopRuntimeConnection } from '../../src/runtime/host/desktop-connection'
@@ -244,5 +244,29 @@ it('executes a model-requested file read only inside the explicitly configured C
     await new Promise<void>((r) => model.close(() => r()))
     await rm(dir, { recursive: true, force: true })
     await rm(workspace, { recursive: true, force: true })
+  }
+}, 15000)
+
+it('builds CLI and Main worker assets in a clean output directory', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'ola-clean-runtime-build-'))
+  const exec = promisify(execFile)
+  try {
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir'
+    for (const name of ['src', 'scripts', 'node_modules'])
+      await symlink(resolve(name), join(directory, name), linkType)
+    await exec(process.execPath, ['scripts/build-ts-runtime.mjs'], { cwd: directory })
+    for (const name of [
+      'journal-worker.mjs',
+      'journal-schema.mjs',
+      'business-worker.mjs',
+      'business-schema.mjs'
+    ]) {
+      expect((await readFile(join(directory, 'out/main', name))).length).toBeGreaterThan(0)
+      expect((await readFile(join(directory, 'out/runtime', name))).length).toBeGreaterThan(0)
+    }
+    const result = await exec(process.execPath, ['out/runtime/cli.mjs', 'help'], { cwd: directory })
+    expect(result.stdout).toContain('Ola staged TS runtime')
+  } finally {
+    await rm(directory, { recursive: true, force: true })
   }
 }, 15000)

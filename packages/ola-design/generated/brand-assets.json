@@ -2,7 +2,11 @@
   "schemaVersion": 1,
   "source": "packages/ola-design/assets/ola-icon.png",
   "sourceHash": "3713f14e72728682872d7f3c11b9452c26c84f16e42de6cf7380175219aeaceb",
+  "monochromeSource": "scripts/export-ola-mono-icon.swift",
+  "monochromeSourceHash": "2283a0756e4f7f48e3c86ba74765c3bb8b8c5ceca2ca406f4746b56dc40dc21b",
   "files": {
+    "Ola/resources/trayTemplate.png": "cb779820cfa80f8c68e176afaab648dd42defd6f34412a25d284e706abfc7974",
+    "Ola/resources/trayTemplate@2x.png": "a0db5a8ec668df0acb72e59045ad8730e3db36b7cfcda05fb01d0fb8a2ff35fa",
     "Ola/build/icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
     "Ola/resources/icon.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",
     "Ola/resources/icon-mac.png": "63cda6aeed63d5b15ea54d69e1c2ee4889194c9f19a627467b39dbc6fb56ba06",

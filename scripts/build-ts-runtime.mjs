@@ -2,6 +2,7 @@ import { build } from 'esbuild'
 import { mkdir, copyFile } from 'node:fs/promises'
 
 await mkdir('out/runtime', { recursive: true })
+await mkdir('out/main', { recursive: true })
 await build({
   entryPoints: ['src/runtime/host/cli.ts'],
   outfile: 'out/runtime/cli.mjs',

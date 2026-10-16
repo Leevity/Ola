@@ -4,7 +4,12 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-const state = vi.hoisted(() => ({ baseUrl: '' }))
+const state = vi.hoisted(() => ({ baseUrl: '', dataDirectory: '' }))
+
+vi.mock('../../src/main/lib/ola-data-root', () => ({
+  olaDataRoot: () => state.dataDirectory,
+  olaExternalDataHome: () => state.dataDirectory
+}))
 
 vi.mock('../../src/main/remote/account-client', () => ({
   loadOfflineWorkspaceIds: async () => new Set(['team-a']),
@@ -29,6 +34,7 @@ vi.mock('../../src/main/providers/provider-main-store', () => ({
 }))
 
 import { DesktopRuntime } from '../../src/main/runtime/desktop-runtime'
+import { closeBusinessWriteCanary } from '../../src/main/db/business-write-canary'
 import { notifyWorkspaceDirectoryChanged } from '../../src/main/remote/account-lifecycle'
 
 it('aborts an in-flight desktop model stream when its team workspace is revoked', async () => {
@@ -43,6 +49,7 @@ it('aborts an in-flight desktop model stream when its team workspace is revoked'
     response.flushHeaders()
   })
   const dataDirectory = await mkdtemp(join(tmpdir(), 'ola-revoked-model-stream-'))
+  state.dataDirectory = dataDirectory
   const runtime = new DesktopRuntime(join(dataDirectory, 'desktop-runtime.json'))
   try {
     await new Promise<void>((resolve) => model.listen(0, '127.0.0.1', resolve))
@@ -78,6 +85,7 @@ it('aborts an in-flight desktop model stream when its team workspace is revoked'
     await expect.poll(() => responseClosed).toBe(true)
   } finally {
     await runtime.stop()
+    await closeBusinessWriteCanary()
     model.closeAllConnections()
     await new Promise<void>((resolve) => model.close(() => resolve()))
     await rm(dataDirectory, { recursive: true, force: true })

@@ -211,3 +211,14 @@ describe('channel store workspace IPC', () => {
     ])
   })
 })
+
+it('keeps workspace persistence safe when browser storage is unavailable', async () => {
+  vi.stubGlobal('localStorage', undefined)
+  const storage = useWorkspaceStore.persist.getOptions().storage
+  expect(storage).toBeDefined()
+  await expect(storage!.getItem('isolated-workspace-test')).resolves.toBeNull()
+  await expect(
+    storage!.setItem('isolated-workspace-test', { state: useWorkspaceStore.getState(), version: 0 })
+  ).resolves.toBeUndefined()
+  await expect(storage!.removeItem('isolated-workspace-test')).resolves.toBeUndefined()
+})

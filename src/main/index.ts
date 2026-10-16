@@ -14,7 +14,7 @@ import {
 
 import { join, extname } from 'path'
 import { pathToFileURL } from 'url'
-import { mkdirSync, writeFileSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { homedir, hostname, release, totalmem } from 'os'
 import { randomUUID } from 'crypto'
 import { spawn } from 'child_process'
@@ -29,6 +29,8 @@ let is: { dev: boolean }
 
 import icon from '../../resources/icon.png?asset'
 import icon_mac from '../../resources/icon-mac.png?asset'
+import trayTemplate from '../../resources/trayTemplate.png?asset'
+import trayTemplateRetina from '../../resources/trayTemplate@2x.png?asset'
 
 import { registerFsHandlers } from './ipc/fs-handlers'
 import { registerAgentChangeHandlers } from './ipc/agent-change-handlers'
@@ -1062,10 +1064,10 @@ async function openDetachedSessionWindow(
 
 function getTrayIcon(): ReturnType<typeof nativeImage.createFromPath> {
   if (process.platform === 'darwin') {
-    const image = nativeImage.createFromPath(icon_mac)
-    const resized = image.resize({ width: 18, height: 18 })
-    resized.setTemplateImage(true)
-    return resized
+    const image = nativeImage.createFromPath(trayTemplate)
+    image.addRepresentation({ scaleFactor: 2, buffer: readFileSync(trayTemplateRetina) })
+    image.setTemplateImage(true)
+    return image
   }
 
   const image = nativeImage.createFromPath(icon)

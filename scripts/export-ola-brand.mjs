@@ -12,9 +12,13 @@ const sourcePath = resolve(root, 'packages/ola-design/assets/ola-icon.png')
 const manifestPath = resolve(root, 'packages/ola-design/generated/brand-assets.json')
 const hash = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const sourceHash = hash(await readFile(sourcePath))
+const monochromeSourcePath = resolve(root, 'scripts/export-ola-mono-icon.swift')
+const monochromeSourceHash = hash(await readFile(monochromeSourcePath))
 
 if (process.argv.includes('--check')) {
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  if (manifest.monochromeSourceHash !== monochromeSourceHash)
+    throw new Error('Monochrome source changed; export again')
   if (manifest.sourceHash !== sourceHash) throw new Error('Brand source changed; export again')
   for (const [path, expected] of Object.entries(manifest.files)) {
     if (hash(await readFile(resolve(workspace, path))) !== expected)
@@ -36,6 +40,9 @@ if (process.argv.includes('--check')) {
       return sizes.get(size)
     }
     const outputs = new Map()
+    execFileSync('/usr/bin/swift', [monochromeSourcePath, resolve(root, 'resources')])
+    for (const name of ['trayTemplate.png', 'trayTemplate@2x.png'])
+      outputs.set(`Ola/resources/${name}`, await readFile(resolve(root, 'resources', name)))
     for (const path of [
       'Ola/build/icon.png',
       'Ola/resources/icon.png',
@@ -97,6 +104,8 @@ if (process.argv.includes('--check')) {
           schemaVersion: 1,
           source: 'packages/ola-design/assets/ola-icon.png',
           sourceHash,
+          monochromeSource: 'scripts/export-ola-mono-icon.swift',
+          monochromeSourceHash,
           files: Object.fromEntries([...outputs].map(([path, bytes]) => [path, hash(bytes)]))
         },
         null,

@@ -137,7 +137,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       name: 'ola.workspace-context.v1',
       storage: createJSONStorage(() => ({
         getItem: async (name) => {
-          if (typeof localStorage?.getItem !== 'function') return null
+          if (typeof globalThis.localStorage?.getItem !== 'function') return null
           const saved = await ipcStorage.getItem(name)
           if (saved !== null) return saved
           const legacy = localStorage.getItem(name)
@@ -145,12 +145,12 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
           return legacy
         },
         setItem: async (name, value) => {
-          if (typeof localStorage?.setItem !== 'function') return
+          if (typeof globalThis.localStorage?.setItem !== 'function') return
           localStorage.setItem(name, value)
           await ipcStorage.setItem(name, value)
         },
         removeItem: async (name) => {
-          if (typeof localStorage?.removeItem !== 'function') return
+          if (typeof globalThis.localStorage?.removeItem !== 'function') return
           localStorage.removeItem(name)
           await ipcStorage.removeItem(name)
         }
