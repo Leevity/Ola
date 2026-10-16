@@ -30,3 +30,15 @@ full-view comparison evidence: components-desktop-light.png / components-desktop
 focused region comparison evidence: components-desktop-dark-list-end.png / components-desktop-en-390-focus.png；DOM 颜色和滚动数据作为补充
 patches made since previous QA: Tailwind 源扫描、实际主题接入、危险操作前景色、窄容器重排
 final result: passed
+
+## Select and Dialog follow-up
+
+- Actual Radix Select: Arrow Down focuses the team sample; Return changes selected value and
+  the visible sample scope. Disabled option and disabled selector are exposed as disabled.
+- Actual Dialog: opens with focus on Cancel; Shift+Tab wraps to the destructive action; Escape
+  closes and returns focus to the trigger. This changes only local sample feedback.
+- Body portals use the same connected preset as the container. Light computed colors:
+  background rgb(247,248,252), foreground rgb(32,33,54). Dark/light screenshots inspected.
+- Evidence: components-desktop-dialog-dark.png and components-desktop-dialog-light.png in the
+  second-batch evidence directory. Existing 390px container proof does not establish a mobile
+  viewport or narrow-modal acceptance. Full four-renderer component coverage remains open.

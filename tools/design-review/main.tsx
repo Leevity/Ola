@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useLayoutEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AlertCircle, Check, LockKeyhole } from 'lucide-react'
 import { getThemePresetDefinition } from '@renderer/lib/theme-presets'
@@ -10,6 +10,23 @@ import { Alert, AlertTitle, AlertDescription } from '@renderer/components/ui/ale
 import { Skeleton } from '@renderer/components/ui/skeleton'
 import { Spinner } from '@renderer/components/ui/spinner'
 import { Switch } from '@renderer/components/ui/switch'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@renderer/components/ui/select'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from '@renderer/components/ui/dialog'
 import './review.css'
 
 function Section({ title, children }: { title: string; children: ReactNode }): React.JSX.Element {
@@ -28,6 +45,25 @@ function ComponentReview(): React.JSX.Element {
   const [saved, setSaved] = useState(false)
   const [value, setValue] = useState('')
   const [enabled, setEnabled] = useState(true)
+  const [selection, setSelection] = useState('personal')
+  // Radix portals attach to body; give them the same real preset as the review container.
+  useLayoutEffect(() => {
+    const root = document.documentElement
+    const previousDark = root.classList.contains('dark')
+    const variables = getThemePresetDefinition('connected').cssVars[dark ? 'dark' : 'light']
+    const previous = Object.fromEntries(
+      Object.keys(variables).map((key) => [key, root.style.getPropertyValue(key)])
+    )
+    root.classList.toggle('dark', dark)
+    for (const [key, value] of Object.entries(variables)) root.style.setProperty(key, value)
+    return () => {
+      root.classList.toggle('dark', previousDark)
+      for (const [key, value] of Object.entries(previous)) {
+        if (value) root.style.setProperty(key, value)
+        else root.style.removeProperty(key)
+      }
+    }
+  }, [dark])
   const text = (cn: string, en: string): string => (zh ? cn : en)
   return (
     <div
@@ -132,6 +168,73 @@ function ComponentReview(): React.JSX.Element {
             />
             {text('示例同步开关', 'Example sync switch')}
           </label>
+        </Section>
+        <Section title={text('选择与确认', 'Selection and confirmation')}>
+          <div className="review-row">
+            <Select value={selection} onValueChange={setSelection}>
+              <SelectTrigger
+                aria-label={text('示例工作区', 'Example workspace')}
+                className="max-w-full"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="personal">
+                  {text('个人工作区 · 示例', 'Personal workspace · example')}
+                </SelectItem>
+                <SelectItem value="team">
+                  {text('团队工作区 · 示例', 'Team workspace · example')}
+                </SelectItem>
+                <SelectItem value="unavailable" disabled>
+                  {text('无权限 · 示例', 'Unavailable · example')}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <Select disabled value="locked">
+              <SelectTrigger aria-label={text('禁用选择器', 'Disabled selector')}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="locked">{text('等待授权', 'Awaiting authorization')}</SelectItem>
+              </SelectContent>
+            </Select>
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  {text('查看确认示例', 'Review confirmation example')}
+                </Button>
+              </DialogTrigger>
+              <DialogContent showCloseButton={false}>
+                <DialogHeader>
+                  <DialogTitle>
+                    {text('清除本页示例反馈', 'Clear this page’s example feedback')}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {text(
+                      '仅清除此审查页面的保存提示，不修改账户、设备或服务端数据。',
+                      'Clears only the saved notice in this review page. Account, device and server data are unaffected.'
+                    )}
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <DialogClose asChild>
+                    <Button variant="outline">{text('取消', 'Cancel')}</Button>
+                  </DialogClose>
+                  <DialogClose asChild>
+                    <Button variant="destructive" onClick={() => setSaved(false)}>
+                      {text('清除示例反馈', 'Clear example feedback')}
+                    </Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+          <p className="review-feedback" role="status">
+            {text('当前示例范围：', 'Current sample scope: ')}
+            {selection === 'personal'
+              ? text('个人工作区', 'Personal workspace')
+              : text('团队工作区', 'Team workspace')}
+          </p>
         </Section>
         <Section title={text('资源状态', 'Resource states')}>
           <div className="review-grid">
