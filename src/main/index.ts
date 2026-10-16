@@ -1523,7 +1523,6 @@ if (!gotSingleInstanceLock) {
 
 if (gotSingleInstanceLock) {
   const handleProtocolArguments = (commandLine: string[]): void => {
-    console.log('[RemoteAuth] protocol arguments:', JSON.stringify(commandLine))
     const rawCallback = commandLine.find((arg) => {
       const normalized = arg.replace(/^['"]|['"]$/g, '')
       return normalized.toLowerCase().includes('ola://auth/callback')
@@ -1560,6 +1559,8 @@ if (gotSingleInstanceLock) {
   })
 
   app.whenReady().then(async () => {
+    recordStartupStep('app_when_ready', 'start')
+    recordStartupStep('register_app_protocol', 'start')
     if (app.isPackaged) {
       app.setAsDefaultProtocolClient('ola')
     } else {
@@ -1570,8 +1571,8 @@ if (gotSingleInstanceLock) {
       // Electron-Vite development mode.
       app.setAsDefaultProtocolClient('ola', process.execPath, [app.getAppPath(), '--'])
     }
+    recordStartupStep('register_app_protocol', 'success')
     handleProtocolArguments(process.argv)
-    recordStartupStep('app_when_ready', 'start')
     // Import @electron-toolkit/utils after app is ready
     const utils = await runLoggedStartupStepAsync(
       'import_electron_toolkit_utils',
