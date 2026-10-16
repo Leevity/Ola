@@ -31,6 +31,7 @@ async function waitForReceivedCount(window: BrowserWindow, expected: number): Pr
 }
 
 async function run(): Promise<void> {
+  process.stdout.write('Electron IPC fixture: app ready\n')
   ipcMain.handle('test:workspace-register', (event, workspaceId: string) => {
     const window = getTrustedWorkspaceRegistrationWindow(event)
     if (!window) return { accepted: false }
@@ -57,6 +58,7 @@ async function run(): Promise<void> {
   )) as { accepted?: boolean }
   if (mainResult?.accepted !== true || getRegisteredWindowWorkspace(window) !== 'local-personal')
     throw new Error('ELECTRON_WORKSPACE_MAIN_FRAME_REJECTED')
+  process.stdout.write('Electron IPC fixture: trusted main frame accepted\n')
   const childFrame = window.webContents.mainFrame.frames[0]
   if (!childFrame) throw new Error('ELECTRON_WORKSPACE_CHILD_FRAME_MISSING')
   const childResult = (await childFrame.executeJavaScript(
@@ -64,6 +66,7 @@ async function run(): Promise<void> {
   )) as { accepted?: boolean }
   if (childResult?.accepted !== false || getRegisteredWindowWorkspace(window) !== 'local-personal')
     throw new Error('ELECTRON_WORKSPACE_CHILD_FRAME_ACCEPTED')
+  process.stdout.write('Electron IPC fixture: child frame rejected\n')
   const other = new BrowserWindow({
     show: false,
     webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false }
@@ -92,6 +95,7 @@ async function run(): Promise<void> {
   await waitForReceivedCount(window, 1)
   await waitForReceivedCount(other, 2)
 
+  process.stdout.write('Electron IPC fixture: checking reload invalidation\n')
   await other.loadURL('data:text/html,%3C!doctype%20html%3E%3Cbody%3E')
   await other.webContents.executeJavaScript(
     "window.__olaTestEvents = []; require('electron').ipcRenderer.on('goal:updated:msgpack', () => window.__olaTestEvents.push(1)); true"

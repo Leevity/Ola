@@ -3,6 +3,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { tmpdir } from 'node:os'
 import { collectRuntimeMainDependencies } from './runtime-main-dependencies.mjs'
 import { stageCodegraphGrammars } from './stage-codegraph-grammars.mjs'
 
@@ -42,6 +43,7 @@ if (requestedPlatforms.length !== 1) {
 const platform = requestedPlatforms[0]
 const keepStaging = process.argv.includes('--keep')
 const directoryOnly = process.argv.includes('--dir')
+const unsignedBuild = process.argv.includes('--unsigned')
 const arch = process.argv.includes('--x64')
   ? 'x64'
   : process.argv.includes('--arm64')
@@ -51,12 +53,18 @@ const packageJson = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'
 const stagingScripts = { ...packageJson.scripts }
 delete stagingScripts.preinstall
 delete stagingScripts.postinstall
-const dependencies = await collectRuntimeMainDependencies(root, packageJson, externalDependencies)
 const stagingDevDependencies = packageJson.devDependencies?.electron
   ? { electron: packageJson.devDependencies.electron }
   : {}
-const staging = await mkdtemp('/tmp/ola-release-package-')
-const outputName = `dist-staged-${platform}${arch ? `-${arch}` : ''}`
+const outputName =
+  process.argv.find((arg) => arg.startsWith('--output='))?.slice('--output='.length) ??
+  `dist-staged-${platform}${arch ? `-${arch}` : ''}`
+// The output is replaced after verification; never accept source or arbitrary paths.
+if (!/^dist(?:-[a-z0-9-]+)?$/.test(outputName)) {
+  throw new Error('Release output must be dist or a dist- prefixed directory name')
+}
+const dependencies = await collectRuntimeMainDependencies(root, packageJson, externalDependencies)
+const staging = await mkdtemp(join(tmpdir(), 'ola-release-package-'))
 const output = join(root, outputName)
 
 // This file is intentionally plain ESM so it can run before the app build.
@@ -72,7 +80,9 @@ async function copyIfPresent(name) {
 
 try {
   await mkdir(staging, { recursive: true })
-  await Promise.all(['out', 'resources', 'build', 'electron-builder.yml'].map(copyIfPresent))
+  await Promise.all(
+    ['out', 'resources', 'build', 'electron-builder.yml', 'LICENSE'].map(copyIfPresent)
+  )
   await stageCodegraphGrammars(root, staging)
   await writeFile(
     join(staging, 'package.json'),
@@ -86,6 +96,9 @@ try {
       null,
       2
     )}\n`
+  )
+  console.log(
+    `Installing ${Object.keys(dependencies).length} runtime dependency roots in release staging`
   )
   await execFileAsync(process.execPath, [npmCli, 'install', '--no-package-lock'], {
     cwd: staging,
@@ -126,11 +139,13 @@ try {
     '--config.directories.output=dist'
   ]
   if (arch) args.push('--' + arch)
-  if (platform === 'mac') args.push('-c.mac.notarize=false')
+  if (platform === 'mac' && unsignedBuild) {
+    args.push('-c.mac.identity=null', '-c.mac.notarize=false')
+  }
 
   const { stdout, stderr } = await execFileAsync(process.execPath, [electronBuilderCli, ...args], {
     cwd: root,
-    env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=8192' },
+    env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' },
     maxBuffer: 30 * 1024 * 1024
   })
   process.stdout.write(stdout)
@@ -141,7 +156,7 @@ try {
   const unpackedOutput =
     platform === 'mac'
       ? join(staging, 'dist', macOutputName)
-      : join(staging, 'dist', `${platform}-unpacked`)
+      : join(staging, 'dist', `${platform}${targetArch === 'x64' ? '' : `-${targetArch}`}-unpacked`)
   const platformName = targetPlatform
   await execFileAsync(
     process.execPath,

@@ -24,26 +24,40 @@ try {
       stdio: ['ignore', 'pipe', 'pipe']
     })
     let output = ''
+    let timedOut = false
+    let forceTimer
     const timer = setTimeout(() => {
+      timedOut = true
       child.kill('SIGTERM')
-      reject(new Error(`Electron workspace IPC test timed out\n${output}`))
+      forceTimer = setTimeout(() => {
+        child.kill('SIGKILL')
+        // Only close this test child's pipes; orphaned Chromium helpers must
+        // not keep the test runner alive after the failed deadline.
+        child.stdout.destroy()
+        child.stderr.destroy()
+        reject(new Error(`Electron workspace IPC test timed out\n${output}`))
+      }, 5000)
     }, 30_000)
     for (const stream of [child.stdout, child.stderr]) {
       stream.on('data', (chunk) => {
         output += chunk.toString()
+        const destination = stream === child.stdout ? process.stdout : process.stderr
+        destination.write(chunk)
       })
     }
     child.on('error', (error) => {
       clearTimeout(timer)
+      clearTimeout(forceTimer)
       reject(error)
     })
-    child.on('exit', (code, signal) => {
+    child.on('close', (code, signal) => {
       clearTimeout(timer)
-      resolveResult({ code, signal, output })
+      clearTimeout(forceTimer)
+      if (timedOut) reject(new Error(`Electron workspace IPC test timed out\n${output}`))
+      else resolveResult({ code, signal, output })
     })
   })
   if (result.code !== 0) throw new Error(result.output || `Electron exited: ${result.signal}`)
-  process.stdout.write(result.output)
 } finally {
   await rm(testRoot, { recursive: true, force: true })
 }

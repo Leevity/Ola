@@ -270,10 +270,8 @@ jobs:
           fi
 
       - name: Package (${{ matrix.platform }}-${{ matrix.artifact_arch }})
-        run: npx electron-builder --${{ matrix.platform }} --${{ matrix.build_arch }} --publish never
+        run: npm run package:release-staging -- --${{ matrix.platform }} --${{ matrix.build_arch }} --output=dist
         env:
-          # Dependency collection exceeds Node's default heap on clean runners.
-          NODE_OPTIONS: --max-old-space-size=6144
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.unsigned_build && 'false' || 'true' }}
@@ -525,6 +523,7 @@ jobs:
         run: npm ci
 
       - name: Verify Electron workspace IPC frame isolation
+        timeout-minutes: 2
         run: npm run test:electron-ipc
 
       # 将 Release 版本号同步写入 package.json
@@ -640,14 +639,13 @@ jobs:
           fi
 
           if [ "${UNSIGNED_BUILD}" = "true" ]; then
-            npx electron-builder --mac dmg zip --${{ matrix.build_arch }} -c.mac.identity=null -c.mac.notarize=false --publish never
+            npm run package:release-staging -- --mac --${{ matrix.build_arch }} --unsigned --output=dist
           else
-            npx electron-builder --mac dmg zip --${{ matrix.build_arch }} --publish never
+            npm run package:release-staging -- --mac --${{ matrix.build_arch }} --output=dist
           fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
-          NODE_OPTIONS: --max-old-space-size=6144
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
           MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
           MAC_SIGNING_CSC_LINK: ${{ steps.mac_signing.outputs.csc_link }}

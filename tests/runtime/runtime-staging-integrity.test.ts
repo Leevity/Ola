@@ -69,6 +69,17 @@ async function fixture(
 }
 
 describe('runtime staging integrity', () => {
+  it.each([
+    'tools/design-review/main.tsx',
+    'tests/fixture.json',
+    'scripts/dev.mjs',
+    'docs/review.md'
+  ])('rejects packaged development source %s', async (path) => {
+    const root = await fixture(false, path)
+    expect(() =>
+      execFileSync(process.execPath, [script, root, '--platform=win32'], { stdio: 'pipe' })
+    ).toThrow(/development source/)
+  })
   it('accepts a package without source maps', async () => {
     const root = await fixture(false)
     expect(() =>

@@ -38,6 +38,14 @@ for (const path of required) {
 }
 
 const archiveEntries = asar.listPackage(join(resourceRoot, 'app.asar'))
+const developmentEntries = archiveEntries.filter((path) =>
+  /^\/?(?:tools|tests|scripts|docs)\//.test(path)
+)
+if (developmentEntries.length > 0) {
+  throw new Error(
+    `Production staging contains development source: ${developmentEntries.slice(0, 5).join(', ')}`
+  )
+}
 const sourceMaps = archiveEntries.filter((path) => path.toLowerCase().endsWith('.map'))
 if (sourceMaps.length > 0) {
   throw new Error(`Production staging contains source maps: ${sourceMaps.slice(0, 5).join(', ')}`)
