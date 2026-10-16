@@ -272,6 +272,8 @@ jobs:
       - name: Package (${{ matrix.platform }}-${{ matrix.artifact_arch }})
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.build_arch }} --publish never
         env:
+          # Dependency collection exceeds Node's default heap on clean runners.
+          NODE_OPTIONS: --max-old-space-size=6144
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.unsigned_build && 'false' || 'true' }}
@@ -541,6 +543,7 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.CSC_LINK || '' }}
           UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
+          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           echo "csc_link=" >> "$GITHUB_OUTPUT"
 

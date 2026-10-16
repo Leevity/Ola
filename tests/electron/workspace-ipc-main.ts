@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from 'electron'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { registerTrustedRendererUrl } from '../../src/main/renderer-security'
 import {
   beginWindowWorkspaceRegistration,
   getRegisteredWindowWorkspace,
@@ -48,9 +49,9 @@ async function run(): Promise<void> {
       sandbox: false
     }
   })
-  await window.loadURL(
-    `data:text/html,${encodeURIComponent('<!doctype html><body><iframe srcdoc="<p>child</p>"></iframe></body>')}`
-  )
+  const mainUrl = `data:text/html,${encodeURIComponent('<!doctype html><body><iframe srcdoc="<p>child</p>"></iframe></body>')}`
+  registerTrustedRendererUrl(window, mainUrl)
+  await window.loadURL(mainUrl)
   const mainResult = (await window.webContents.executeJavaScript(
     "require('electron').ipcRenderer.invoke('test:workspace-register', 'local-personal')"
   )) as { accepted?: boolean }
@@ -67,7 +68,9 @@ async function run(): Promise<void> {
     show: false,
     webPreferences: { nodeIntegration: true, contextIsolation: false, sandbox: false }
   })
-  await other.loadURL('data:text/html,%3C!doctype%20html%3E%3Cbody%3E')
+  const otherUrl = 'data:text/html,%3C!doctype%20html%3E%3Cbody%3E'
+  registerTrustedRendererUrl(other, otherUrl)
+  await other.loadURL(otherUrl)
   for (const target of [window, other]) {
     await target.webContents.executeJavaScript(
       "window.__olaTestEvents = []; require('electron').ipcRenderer.on('goal:updated:msgpack', () => window.__olaTestEvents.push(1)); true"
