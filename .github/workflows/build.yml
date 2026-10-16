@@ -1,4 +1,4 @@
-﻿name: Build & Release
+name: Build & Release
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -337,7 +337,15 @@ jobs:
 
           $installRoot = Join-Path $env:TEMP "ola-install-smoke-${{ matrix.artifact_arch }}"
           Remove-Item -Recurse -Force $installRoot -ErrorAction SilentlyContinue
-          Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$installRoot" -Wait -NoNewWindow
+          Write-Host "Runner architecture: $env:RUNNER_ARCH; process architecture: $env:PROCESSOR_ARCHITECTURE"
+          $installProcess = Start-Process -FilePath $installer.FullName -ArgumentList "/S", "/D=$installRoot" -Wait -NoNewWindow -PassThru
+          Write-Host "Installer exit code: $($installProcess.ExitCode)"
+          if (Test-Path $installRoot) {
+            Get-ChildItem -LiteralPath $installRoot | Select-Object Name, Length, Mode | Format-Table
+          }
+          if ($installProcess.ExitCode -ne 0) {
+            throw "Windows installer failed with exit code $($installProcess.ExitCode)"
+          }
           if (-not (Test-Path (Join-Path $installRoot 'ola.exe'))) {
             throw "Installed Ola executable was not found under $installRoot"
           }
