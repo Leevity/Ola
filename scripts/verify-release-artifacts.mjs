@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, relative, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
+import { createReleaseSbom, findPackagedArchive, readPackagedInventory } from './release-sbom.mjs'
 
 const args = process.argv.slice(2)
 
@@ -26,100 +27,15 @@ function sha256(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
-function readPackageComponents() {
-  const lockfile = JSON.parse(readFileSync('package-lock.json', 'utf8'))
-  const packages = lockfile.packages ?? {}
-  return Object.entries(packages)
-    .filter(([path, metadata]) => path.startsWith('node_modules/') && metadata?.version)
-    .map(([path, metadata]) => ({
-      name: path.slice('node_modules/'.length),
-      versionInfo: metadata.version,
-      downloadLocation: metadata.resolved ?? 'NOASSERTION',
-      checksums: metadata.integrity
-        ? [
-            {
-              algorithm: 'SHA512',
-              checksumValue: metadata.integrity.replace(/^sha512-/, '')
-            }
-          ]
-        : undefined
-    }))
-    .sort((left, right) => left.name.localeCompare(right.name))
-}
-
-function writeSpdxSbom(file, artifacts) {
-  const packageJson = JSON.parse(readFileSync('package.json', 'utf8'))
-  const created = new Date().toISOString()
-  const rootPackageId = `SPDXRef-Package-${packageJson.name}`
-  const packages = [
-    {
-      SPDXID: rootPackageId,
-      name: packageJson.name,
-      versionInfo: packageJson.version,
-      downloadLocation: 'NOASSERTION',
-      filesAnalyzed: false,
-      licenseConcluded: 'NOASSERTION',
-      licenseDeclared: 'NOASSERTION',
-      copyrightText: 'NOASSERTION'
-    },
-    ...readPackageComponents().map((component, index) => ({
-      SPDXID: `SPDXRef-Dependency-${index + 1}`,
-      name: component.name,
-      versionInfo: component.versionInfo,
-      downloadLocation: component.downloadLocation,
-      filesAnalyzed: false,
-      licenseConcluded: 'NOASSERTION',
-      licenseDeclared: 'NOASSERTION',
-      copyrightText: 'NOASSERTION',
-      ...(component.checksums ? { checksums: component.checksums } : {})
-    }))
-  ]
-  const files = artifacts.map((artifact, index) => ({
-    SPDXID: `SPDXRef-Artifact-${index + 1}`,
-    fileName: `./${artifact.name}`,
-    checksums: [
-      {
-        algorithm: 'SHA256',
-        checksumValue: artifact.sha256
-      }
-    ],
-    licenseConcluded: 'NOASSERTION',
-    licenseInfoInFiles: ['NOASSERTION'],
-    copyrightText: 'NOASSERTION'
-  }))
-  const relationships = [
-    ...packages.slice(1).map((dependency) => ({
-      spdxElementId: rootPackageId,
-      relationshipType: 'DEPENDS_ON',
-      relatedSpdxElement: dependency.SPDXID
-    })),
-    ...files.map((artifact) => ({
-      spdxElementId: rootPackageId,
-      relationshipType: 'CONTAINS',
-      relatedSpdxElement: artifact.SPDXID
-    }))
-  ]
-
+function writeSpdxSbom(file, artifacts, smokeDir) {
+  const expected = JSON.parse(readFileSync('package.json', 'utf8'))
+  const { manifest, components } = readPackagedInventory(findPackagedArchive(smokeDir))
+  if (manifest.name !== expected.name || manifest.version !== expected.version) {
+    throw new Error('Packaged app name/version differs from release source')
+  }
   writeFileSync(
     file,
-    `${JSON.stringify(
-      {
-        SPDXID: 'SPDXRef-DOCUMENT',
-        spdxVersion: 'SPDX-2.3',
-        dataLicense: 'CC0-1.0',
-        name: `${packageJson.name}-release-sbom`,
-        documentNamespace: `https://spdx.org/spdxdocs/${packageJson.name}-${packageJson.version}-${created.replace(/[:.]/g, '-')}`,
-        creationInfo: {
-          created,
-          creators: ['Tool: Ola release artifact verifier']
-        },
-        packages,
-        files,
-        relationships
-      },
-      null,
-      2
-    )}\n`
+    `${JSON.stringify(createReleaseSbom(manifest, components, artifacts), null, 2)}\n`
   )
 }
 
@@ -148,10 +64,9 @@ function assertWindowsArtifact(artifact, requireSignature) {
 
 function findMacApp(smokeDir) {
   if (!existsSync(smokeDir)) return undefined
-  const candidates = listFiles(smokeDir)
-    .filter((file) => file.endsWith('.app/Contents/Info.plist'))
-    .map((file) => resolve(file, '..', '..'))
-  return candidates[0]
+  const archive = findPackagedArchive(smokeDir)
+  const app = resolve(archive, '..', '..', '..')
+  return app.endsWith('.app') && existsSync(join(app, 'Contents', 'Info.plist')) ? app : undefined
 }
 
 function assertMacArtifact(artifacts, smokeDir, requireSignature) {
@@ -243,7 +158,7 @@ writeFileSync(
   checksumsPath,
   `${hashedArtifacts.map((artifact) => `${artifact.sha256}  ${artifact.name}`).join('\n')}\n`
 )
-writeSpdxSbom(sbomPath, hashedArtifacts)
+writeSpdxSbom(sbomPath, hashedArtifacts, smokeDir)
 console.log(
   `release artifact verification passed for ${platform}: ${hashedArtifacts.length} artifact(s)`
 )
