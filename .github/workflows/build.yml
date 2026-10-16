@@ -543,7 +543,6 @@ jobs:
         env:
           CSC_LINK: ${{ secrets.CSC_LINK || '' }}
           UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
-          NODE_OPTIONS: --max-old-space-size=6144
         run: |
           echo "csc_link=" >> "$GITHUB_OUTPUT"
 
@@ -648,6 +647,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           UNSIGNED_BUILD: ${{ inputs.unsigned_build && 'true' || 'false' }}
+          NODE_OPTIONS: --max-old-space-size=6144
           ELECTRON_BUILDER_BINARIES_MIRROR: https://cdn.npmmirror.com/binaries/electron-builder-binaries/
           MAC_SIGNING_ENABLED: ${{ steps.mac_signing.outputs.enabled }}
           MAC_SIGNING_CSC_LINK: ${{ steps.mac_signing.outputs.csc_link }}
