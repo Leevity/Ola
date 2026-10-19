@@ -3,8 +3,8 @@
 /** @typedef {{name: string, versionInfo: string, path: string}} InstalledComponent */
 /** @typedef {{name: string, sha256: string}} ReleaseArtifact */
 import { createRequire } from 'node:module'
-import { readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 
 const asar = createRequire(import.meta.url)('@electron/asar')
 const packageManifestPath =
@@ -23,8 +23,20 @@ function extractManifest(archivePath, original, normalized) {
   try {
     return asar.extractFile(archivePath, original)
   } catch {
-    return asar.extractFile(archivePath, normalized)
+    try {
+      return asar.extractFile(archivePath, normalized)
+    } catch {
+      return undefined
+    }
   }
+}
+
+/** @param {string} root @returns {string[]} */
+function listFiles(root) {
+  return readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
+    const file = join(root, entry.name)
+    return entry.isDirectory() ? listFiles(file) : entry.isFile() ? [file] : []
+  })
 }
 
 /**
@@ -42,14 +54,16 @@ export function readPackagedInventory(archivePath) {
     !manifest.version
   )
     throw new Error('Packaged app manifest lacks name/version')
-  const components = asar
+  const archiveComponents = asar
     .listPackage(archivePath)
     // @electron/asar emits slash-separated paths on Unix and can expose
     // backslash-separated paths on Windows; SPDX inventory is platform-neutral.
     .map((original) => ({ original, normalized: normalizeArchivePath(original) }))
     .filter(({ normalized }) => packageManifestPath.test(normalized))
     .map(({ original, normalized }) => {
-      const data = JSON.parse(extractManifest(archivePath, original, normalized).toString('utf8'))
+      const content = extractManifest(archivePath, original, normalized)
+      if (!content) return undefined
+      const data = JSON.parse(content.toString('utf8'))
       if (
         typeof data.name !== 'string' ||
         !data.name ||
@@ -60,6 +74,39 @@ export function readPackagedInventory(archivePath) {
       }
       return { name: data.name, versionInfo: data.version, path: normalized }
     })
+    .filter((component) => component !== undefined)
+
+  const unpackedRoot = `${archivePath}.unpacked`
+  const unpackedComponents = existsSync(unpackedRoot)
+    ? listFiles(unpackedRoot)
+        .map((file) => ({
+          file,
+          normalized: normalizeArchivePath(relative(unpackedRoot, file))
+        }))
+        .filter(({ normalized }) => packageManifestPath.test(normalized))
+        .map(({ file, normalized }) => {
+          const data = JSON.parse(readFileSync(file, 'utf8'))
+          if (
+            typeof data.name !== 'string' ||
+            !data.name ||
+            typeof data.version !== 'string' ||
+            !data.version
+          ) {
+            throw new Error(`Packaged dependency manifest lacks name/version: ${normalized}`)
+          }
+          return {
+            name: data.name,
+            versionInfo: data.version,
+            path: normalizeArchivePath(relative(dirname(archivePath), file))
+          }
+        })
+    : []
+
+  const components = [...archiveComponents, ...unpackedComponents]
+    .filter(
+      (component, index, all) =>
+        all.findIndex((candidate) => candidate.path === component.path) === index
+    )
     .sort((a, b) => a.path.localeCompare(b.path))
   if (components.length === 0)
     throw new Error('No installed dependency manifests in packaged archive')
