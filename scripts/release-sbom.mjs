@@ -27,7 +27,9 @@ export function readPackagedInventory(archivePath) {
     throw new Error('Packaged app manifest lacks name/version')
   const components = asar
     .listPackage(archivePath)
-    .map((entry) => entry.replace(/^\//, ''))
+    // @electron/asar emits slash-separated paths on Unix and can expose
+    // backslash-separated paths on Windows; SPDX inventory is platform-neutral.
+    .map((entry) => entry.replace(/^\//, '').replaceAll('\\', '/'))
     .filter((entry) => packageManifestPath.test(entry))
     .map((path) => {
       const data = JSON.parse(asar.extractFile(archivePath, path).toString('utf8'))
