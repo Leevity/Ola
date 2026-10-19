@@ -6,6 +6,8 @@ import { promisify } from 'node:util'
 import { tmpdir } from 'node:os'
 import { collectRuntimeMainDependencies } from './runtime-main-dependencies.mjs'
 import { stageCodegraphGrammars } from './stage-codegraph-grammars.mjs'
+import { createNativeUnsignedDmg } from './native-unsigned-dmg.mjs'
+import { releaseBuilderEnvironment, releaseTargets } from './release-packaging-options.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -120,13 +122,7 @@ try {
   process.stdout.write(rebuildStdout)
   process.stderr.write(rebuildStderr)
 
-  const targets = directoryOnly
-    ? ['--dir']
-    : platform === 'mac'
-      ? ['dmg', 'zip']
-      : platform === 'win'
-        ? ['nsis', 'zip']
-        : ['AppImage', 'deb']
+  const targets = releaseTargets(platform, directoryOnly, unsignedBuild)
   const args = [
     '--projectDir',
     staging,
@@ -145,7 +141,7 @@ try {
 
   const { stdout, stderr } = await execFileAsync(process.execPath, [electronBuilderCli, ...args], {
     cwd: root,
-    env: { ...process.env, NODE_OPTIONS: '--max-old-space-size=4096' },
+    env: releaseBuilderEnvironment(platform, targetArch, process.env),
     maxBuffer: 30 * 1024 * 1024
   })
   process.stdout.write(stdout)
@@ -167,6 +163,14 @@ try {
     ],
     { cwd: root, maxBuffer: 10 * 1024 * 1024 }
   )
+
+  if (platform === 'mac' && unsignedBuild && !directoryOnly) {
+    await createNativeUnsignedDmg({
+      appPath: join(unpackedOutput, 'Ola.app'),
+      output: join(staging, 'dist', `${packageJson.name}-${packageJson.version}.dmg`),
+      volumeName: `Ola ${packageJson.version}`
+    })
+  }
 
   await rm(output, { recursive: true, force: true })
   await mkdir(output, { recursive: true })
