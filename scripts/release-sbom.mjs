@@ -8,7 +8,24 @@ import { join, resolve } from 'node:path'
 
 const asar = createRequire(import.meta.url)('@electron/asar')
 const packageManifestPath =
-  /^node_modules\/(?:@[^/]+\/)?[^/]+\/(?:node_modules\/(?:@[^/]+\/)?[^/]+\/)*package\.json$/
+  /^node_modules\/(?:@[^/]+\/)?[^/]+\/(?:node_modules\/(?:@[^/]+\/)?[^/]+\/)*package\.json$/i
+
+/** @param {string} entry @returns {string} */
+function normalizeArchivePath(entry) {
+  return entry
+    .replace(/^[/\\]+/, '')
+    .replaceAll('\\', '/')
+    .replace(/^\.\//, '')
+}
+
+/** @param {string} archivePath @param {string} original @param {string} normalized */
+function extractManifest(archivePath, original, normalized) {
+  try {
+    return asar.extractFile(archivePath, original)
+  } catch {
+    return asar.extractFile(archivePath, normalized)
+  }
+}
 
 /**
  * Inventory installed manifests from the actual archive, never the development lockfile.
@@ -29,19 +46,19 @@ export function readPackagedInventory(archivePath) {
     .listPackage(archivePath)
     // @electron/asar emits slash-separated paths on Unix and can expose
     // backslash-separated paths on Windows; SPDX inventory is platform-neutral.
-    .map((entry) => entry.replace(/^\//, '').replaceAll('\\', '/'))
-    .filter((entry) => packageManifestPath.test(entry))
-    .map((path) => {
-      const data = JSON.parse(asar.extractFile(archivePath, path).toString('utf8'))
+    .map((original) => ({ original, normalized: normalizeArchivePath(original) }))
+    .filter(({ normalized }) => packageManifestPath.test(normalized))
+    .map(({ original, normalized }) => {
+      const data = JSON.parse(extractManifest(archivePath, original, normalized).toString('utf8'))
       if (
         typeof data.name !== 'string' ||
         !data.name ||
         typeof data.version !== 'string' ||
         !data.version
       ) {
-        throw new Error(`Packaged dependency manifest lacks name/version: ${path}`)
+        throw new Error(`Packaged dependency manifest lacks name/version: ${normalized}`)
       }
-      return { name: data.name, versionInfo: data.version, path }
+      return { name: data.name, versionInfo: data.version, path: normalized }
     })
     .sort((a, b) => a.path.localeCompare(b.path))
   if (components.length === 0)
