@@ -59,6 +59,20 @@ describe('packaged release dependency inventory', () => {
     })
     expect(() => readPackagedInventory(archive)).toThrow('lacks name/version')
   })
+  it('includes dependency manifests from the platform unpacked directory', async () => {
+    const archive = await fixture({ 'package.json': app })
+    const unpacked = `${archive}.unpacked/node_modules/native/package.json`
+    await mkdir(join(unpacked, '..'), { recursive: true })
+    await writeFile(unpacked, JSON.stringify({ name: 'native', version: '5.0.0' }))
+    const inventory = readPackagedInventory(archive)
+    expect(inventory.components).toEqual([
+      {
+        name: 'native',
+        versionInfo: '5.0.0',
+        path: 'app.asar.unpacked/node_modules/native/package.json'
+      }
+    ])
+  })
   it('rejects a non-string packaged application version', async () => {
     const archive = await fixture({ 'package.json': { name: 'ola', version: 106 } })
     expect(() => readPackagedInventory(archive)).toThrow('lacks name/version')
