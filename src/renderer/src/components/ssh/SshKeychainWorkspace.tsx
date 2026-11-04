@@ -558,7 +558,7 @@ export function SshKeychainWorkspace(): React.JSX.Element {
                 onClick={() => void handleDelete()}
                 disabled={saving}
               >
-                {t('delete')}
+                {t('action.delete', { ns: 'common' })}
               </Button>
             ) : null}
             <Button
@@ -567,7 +567,7 @@ export function SshKeychainWorkspace(): React.JSX.Element {
               disabled={saving}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-              {t('save')}
+              {t('action.save', { ns: 'common' })}
             </Button>
           </div>
         </div>

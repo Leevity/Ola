@@ -50,10 +50,13 @@ src/
 └── shared/            Cross-process TypeScript contracts
 
 runtime/
-├── agent/             Agent execution and orchestration
 ├── codegraph/         WASM parser, indexer and graph store
-├── db/                SQLite business repository and migrations
-└── cli/               TypeScript CLI runtime entrypoint
+├── core/              Shared runtime contracts and agent core
+├── host/              Runtime host protocol, server and client
+├── providers/         Model provider clients
+├── scheduler/         Run scheduler and event journal
+├── storage/           SQLite business repository and migrations
+└── tools/             Tool executor and built-in runtime tools
 
 resources/
 ├── agents/            Built-in agent templates

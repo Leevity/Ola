@@ -4,7 +4,6 @@
     "placeholderClarify": "アイデアを書いてください。要件が明確になるまで、こちらから確認を続けます...",
     "placeholderCowork": "あなたのプロジェクトを支援するためにアシスタントを依頼...",
     "placeholderCode": "バグの修正、スクリプトの作成、または/commit を使用して、リポジトリをコミットしたいものを記述します。",
-    "placeholderAcp": "目標、コンテキスト、制約、受諾基準を記述します。 直接コーディングではなく、最初に設計し、委任します...",
     "placeholderPlanReview": "このプランのリビジョンフィードバックを入力するか、上記のカードをクリックして実行します。",
     "placeholderPendingGoal": "追求する目標を記述する...",
     "pendingGoalBanner": "ゴールの追求は準備ができています。 次のテキストメッセージは目標として使用され、正常に送信されます。",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "リクエストを完全にピン留めするように要求する次の鋭い質問を予測します。",
     "recommendationDefaultCowork": "次のコラボレーションアクションを予測します。",
     "recommendationDefaultCode": "次の具体的なコードリクエストの変更を予測します。",
-    "recommendationDefaultAcp": "次のACPスキャッピングやデザイン質問を自然にタイプします。",
-    "recommendationInitWorkspace": "現在の作業フォルダーに AGENTS.md が見つかりません。 プロジェクトのコンテキストを初期化するために /init が自然に次のステップを予測します。",
-    "startAcp": "ACPセッションを開始",
-    "startAcpDesc": "まず目標、背景、制約、受入条件を明確にします。その後、実装前にアーキテクチャを設計し、タスクを委任します。",
-    "homeTitleAcp": "ACPモード",
-    "homeDescAcp": "ACP モードでは、まず目標、背景、制約、受入条件を明確にします。その後、実装前にアーキテクチャとタスク分解を提案します。"
+    "recommendationInitWorkspace": "現在の作業フォルダーに AGENTS.md が見つかりません。 プロジェクトのコンテキストを初期化するために /init が自然に次のステップを予測します。"
   },
   "planReview": {
     "awaitingReview": "レビュー待ち",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "Code モード",
         "description": "ファイルの編集、コードの作成、チェックの実行、およびエンジニアリングの詳細の処理など、直接の実装タスクに使用します。"
-      },
-      "modeAcp": {
-        "title": "ACP モード",
-        "description": "複雑な作業のための制御塔として使用してください:境界を明確にし、最初に受け入れ、アーキテクチャを設計し、タスクを分割し、主要なエージェントが直接コーディングから離れながら実行を委任します。"
       },
       "leftSidebar": {
         "title": "プロジェクトとセッション領域",
@@ -654,7 +644,8 @@
     "thinkingFor": "{{seconds}}の考え方",
     "pending": "考えること",
     "thinkingEllipsis": "お問い合わせ",
-    "thoughts": "ログイン"
+    "thoughts": "ログイン",
+    "elapsedSeconds": "{{seconds}} 秒"
   },
   "messageList": {
     "startConversation": "会話を始める",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "タスクを最初に宣言する",
     "homeTitleCowork": "プロジェクト内の作業",
     "homeTitleCode": "コーディングを始める",
-    "homeTitleAcp": "ACPコラボレーションを開始",
-    "homeDescAcp": "アーキテクチャの確認、制約の明確化、および実行の故障のためのACPモードを始めて下さい。",
     "homeDescAutoChat": "送信後、タスクの複雑性に基づいて自動的により良いモデルを選択します。",
     "homeDescAutoClarify": "送信後、質問やプランの絞り込みに適したモデルを選ぶことができます。",
     "homeDescAutoCowork": "送信後、プロジェクトワーク、ファイル編集、ツールに適したモデルを選択します。",
     "homeDescAutoCode": "送信後、コーディング、リファクタリング、解析に適したモデルを選択します。",
-    "homeDescAutoAcp": "送信後、アーキテクチャの確認、制約の明確化、実行のブレイクダウンに適したモデルを選択します。",
     "homeDescChatGeneral": "日常会話やライティング、軽量な質問に適しています。",
     "homeDescChatVision": "チャットに適し、画像のコンテキストで迅速に対応できます。",
     "homeDescClarifyGeneral": "フォローアップの質問、目標の形成および制約の詰物のためによい。",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "ステージが最初に変更され、メッセージを生成する",
     "aiCommitEmptyStaged": "ステージ無し — メッセージを生成することができません",
     "aiCommitFailed": "生成が失敗しました。 API/モデルの設定を確認し、もう一度お試しください"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

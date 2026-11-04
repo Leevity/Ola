@@ -76,8 +76,7 @@
       "chat": "Chat",
       "clarify": "Clarifier",
       "cowork": "Collaborer",
-      "code": "Code",
-      "acp": "ACP"
+      "code": "Code"
     },
     "deleteAllSessions": "Supprimer toutes les sessions",
     "deleteAllConfirm": "Tout supprimer {{count}} Ça ne peut pas être annulé.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Session supprimée",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Mode cible de commutation automatique après l'entrée de Clarify en Mode Plan",
     "clarifyPlanModeAutoSwitchOff": "Rester",
     "clarifyPlanModeAutoSwitchCode": "Coder",
-    "clarifyPlanModeAutoSwitchAcp": "Aux ACP",
     "autoApproveOn": "Auto-approbation est ON — tous les outils fonctionnent sans confirmation",
     "autoApproveOff": "Auto-approbation est OFF — les appels d'outils doivent être confirmés",
     "pendingCount": "{{count}} en attente",
@@ -407,7 +406,6 @@
     "switchToClarify": "Passer au mode Clarify",
     "switchToCowork": "Passer au mode Cowork",
     "switchToCode": "Passer au mode code",
-    "switchToAcp": "Passer au mode ACP",
     "currentSession": "Session en cours",
     "exportCurrentChat": "Exportation Chat actuel",
     "copiedConversation": "Une conversation copiée dans le presse-papiers",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Appels d'outils",
     "orchestrationToolCallsEmpty": "Ce membre n'a aucun appel d'outils à afficher",
     "orchestrationToolCallCount": "{{count}} appels",
-    "acp": "ACP",
-    "acpTitle": "ACP · Planification du contrôle de l'architecture",
-    "acpDesc": "L'agent principal clarifie les exigences, définit les limites, conçoit l'approche, décompose les tâches et synthétise les résultats; l'implémentation concrète est exécutée par des sous-agents.",
-    "acpRuleNoCode": "L'agent principal n'écrit pas de code d'implémentation ni ne modifie directement les fichiers. Il clarifie d'abord les objectifs, les contraintes, les risques et les critères d'acceptation.",
-    "acpRuleDelegate": "Les tâches de mise en oeuvre doivent être déléguées au sous-agent approprié par l'intermédiaire du sous-agent ou du sous-agent.",
-    "acpRuleReport": "Chaque sous-tâche doit renvoyer un résumé de Markdown structuré afin que l'agent principal puisse examiner, synthétiser et poursuivre l'exécution.",
-    "acpCurrentPhase": "Phase actuelle",
-    "acpNextAction": "Étape suivante recommandée",
-    "acpPhaseClarify": "Précisions requises",
-    "acpPhasePlan": "Planification",
-    "acpPhaseReview": "Examen du plan",
-    "acpPhaseApproved": "Prêt à exécuter",
-    "acpPhaseExecute": "Exécution déléguée",
-    "acpNextActionClarify": "Complétez les objectifs, les contraintes, les limites et les critères d'acceptation avant de planifier.",
-    "acpNextActionPlan": "Continuer à affiner le plan de mise en œuvre, le sauvegarder, puis quitter le mode Plan.",
-    "acpNextActionExecute": "Continuer de décomposer le plan approuvé en tâches, déléguer des sous-agents et synthétiser leurs extrants.",
-    "acpInProgressCount_one": "{{count}} en cours",
-    "acpInProgressCount_other": "{{count}} en cours",
     "skills": "Outils",
     "cron": "Cron",
     "expand": "Élargir",
@@ -676,14 +656,6 @@
           "Implémentation précise: caractéristiques d'écriture, correction de bugs, refactoring, ou compléter des modules avec discipline d'ingénierie",
           "Lorsque vous voulez une sortie de code propre avec une narration minimale — la confirmation terse au lieu des passages verbeux",
           "Changements exigeant une attention stricte aux conventions, types, importations et contrats d'API existants"
-        ]
-      },
-      "acp": {
-        "summary": "Contrôle de l'architecture La planification s'applique aux travaux complexes qui nécessitent un contrôle avant la mise en oeuvre: clarifier les buts et les limites d'abord, puis concevoir l'architecture, décomposer l'exécution et déléguer la livraison.",
-        "solves": [
-          "Tâches complexes nécessitant des éclaircissements sur le contexte, la portée, les contraintes, les dépendances et les critères d'acceptation avant leur mise en œuvre",
-          "Travail où l'agent principal devrait se concentrer sur l'architecture, l'orchestration et le contrôle des processus au lieu de coder directement",
-          "Cas où les sous-tâches devraient fonctionner en parallèle et les résumés de Markdown structurés pour une coordination continue"
         ]
       }
     }

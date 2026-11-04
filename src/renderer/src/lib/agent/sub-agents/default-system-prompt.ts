@@ -61,8 +61,8 @@ export function buildDefaultSubAgentSystemPrompt(options: {
     parts.push(`- Working Folder: \`${workingFolder}\``)
     parts.push(
       environmentContext.target === 'ssh'
-        ? `  All relative paths resolve against this remote folder. Use it as the default cwd for terminal commands run via the Bash tool on the remote host.`
-        : `  All relative paths resolve against this folder. Use it as the default cwd for terminal commands run via the Bash tool.`
+        ? `  All relative paths resolve against this remote folder. The Bash tool already runs there on the remote host.`
+        : `  All relative paths resolve against this folder. The Bash tool already runs there.`
     )
   }
 
@@ -137,7 +137,7 @@ export function buildDefaultSubAgentSystemPrompt(options: {
     environmentContext.target === 'ssh'
       ? `You can run terminal commands on the selected SSH remote host.`
       : `You can run terminal commands on the user's machine.`,
-    `- Use the Bash tool to run terminal commands; never include \`cd\` in the command. Set \`cwd\` instead.`,
+    `- Use the Bash tool to run terminal commands; never include \`cd\` in the command. The tool already runs in the working folder.`,
     `- The Bash tool name does not guarantee bash syntax; follow the shell shown in the Environment section.`,
     `- Check for existing dev servers before starting new ones.`,
     `- Never delete unrelated files, install system packages, or expose secrets in output.`,

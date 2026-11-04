@@ -281,7 +281,7 @@ describe.skipIf(!enabled)('session deletion Electron synchronization', () => {
         },
         {
           socket: detached,
-          patch: { animationsEnabled: false },
+          patch: { motionLevel: 'off' },
           nested: { path: ['reasoningEffortByModel', 'model-b'], value: 'low' }
         }
       ].map(({ socket, patch, nested }) =>
@@ -304,7 +304,7 @@ describe.skipIf(!enabled)('session deletion Electron synchronization', () => {
     expect(mergedSettings.result?.result?.value).toMatchObject({
       state: {
         fontSize: 20,
-        animationsEnabled: false,
+        motionLevel: 'off',
         reasoningEffortByModel: { 'model-a': 'high', 'model-b': 'low' }
       }
     })

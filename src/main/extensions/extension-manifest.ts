@@ -1,12 +1,15 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
+  ExtensionCapabilityDeclaration,
+  ExtensionCapabilityKind,
   ExtensionComponentDefinition,
   ExtensionConfigFieldSchema,
   ExtensionWorkbenchCommandDefinition,
   ExtensionWorkbenchViewDefinition,
   ExtensionHttpDefinition,
   ExtensionManifest,
+  ExtensionPermissions,
   ExtensionRendererDefinition,
   ExtensionToolDefinition
 } from '../../shared/extension-types'
@@ -129,11 +132,64 @@ function tools(value: unknown): ExtensionToolDefinition[] {
   return result
 }
 
-function networkPermissions(value: unknown): string[] | undefined {
-  const network = object(value)?.network
-  if (!Array.isArray(network)) return undefined
-  const values = network.map(text).filter(Boolean)
-  return values.length ? values : undefined
+const CAPABILITY_KINDS = new Set<ExtensionCapabilityKind>([
+  'network.request',
+  'filesystem.read',
+  'filesystem.write',
+  'process',
+  'secret.read',
+  'agent.tool',
+  'agent.context',
+  'clipboard',
+  'window.notify'
+])
+
+function stringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const values = value.map(text).filter(Boolean)
+  return values.length ? [...new Set(values)] : undefined
+}
+
+function capabilities(value: unknown): ExtensionCapabilityDeclaration | undefined {
+  const item = object(value)
+  if (!item) return undefined
+  const requiredRaw = Array.isArray(item.required) ? item.required : []
+  const required = requiredRaw
+    .map(text)
+    .filter((kind): kind is ExtensionCapabilityKind =>
+      CAPABILITY_KINDS.has(kind as ExtensionCapabilityKind)
+    )
+  if (!required.length) return undefined
+  const declaration: ExtensionCapabilityDeclaration = { required: [...new Set(required)] }
+  const optional = stringList(item.optional)
+  if (optional) {
+    const optionalKinds = optional.filter((kind): kind is ExtensionCapabilityKind =>
+      CAPABILITY_KINDS.has(kind as ExtensionCapabilityKind)
+    )
+    if (optionalKinds.length) declaration.optional = [...new Set(optionalKinds)]
+  }
+  return declaration
+}
+
+/**
+ * Parse the permissions block. Legacy `permissions.network` is accepted and projected in
+ * memory to a required `network.request` capability plus `hostPermissions`; the on-disk
+ * extension.json is never rewritten so the projection stays reversible.
+ */
+function permissions(value: unknown): ExtensionPermissions | undefined {
+  const item = object(value)
+  if (!item) return undefined
+  const network = stringList(item.network)
+  const declaredCapabilities = capabilities(item.capabilities)
+  const hostPermissions = stringList(item.hostPermissions)
+  const pathScopes = stringList(item.pathScopes)
+  if (!network && !declaredCapabilities && !hostPermissions && !pathScopes) return undefined
+  const result: ExtensionPermissions = {}
+  if (declaredCapabilities) result.capabilities = declaredCapabilities
+  if (hostPermissions) result.hostPermissions = hostPermissions
+  if (network) result.network = network
+  if (pathScopes) result.pathScopes = pathScopes
+  return result
 }
 
 function renderers(value: unknown): ExtensionRendererDefinition[] | undefined {
@@ -245,7 +301,7 @@ export function parseExtensionManifest(value: unknown, expectedId?: unknown): Ex
   const manifest: ExtensionManifest = { schemaVersion: 1, id, name, version, tools: manifestTools }
   const description = optionalText(root.description)
   const fields = configSchema(root.configSchema)
-  const network = networkPermissions(root.permissions)
+  const perms = permissions(root.permissions)
   const manifestRenderers = renderers(root.renderers)
   const manifestComponents = components(root.components)
   const manifestViews = views(root.views)
@@ -256,7 +312,7 @@ export function parseExtensionManifest(value: unknown, expectedId?: unknown): Ex
   if (description) manifest.description = description
   if (entry) manifest.entry = entry
   if (fields.length) manifest.configSchema = fields
-  if (network) manifest.permissions = { network }
+  if (perms) manifest.permissions = perms
   if (manifestRenderers) manifest.renderers = manifestRenderers
   if (manifestComponents) manifest.components = manifestComponents
   if (manifestViews) manifest.views = manifestViews

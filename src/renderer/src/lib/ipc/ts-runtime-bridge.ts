@@ -3,12 +3,14 @@ import { awaitPendingSessionCreate } from '../../stores/chat-store'
 import {
   parseRunSpec,
   type RunSnapshot,
+  type RunStatus,
   type RunSummary,
   type RuntimeImage,
   type RuntimeTextMessage
 } from '../../../../shared/runtime/contracts'
 import type { ModelOptions } from '../../../../shared/runtime/model'
 import { invokeMessagePackBinary } from './messagepack-ipc-client'
+import { openTsRuntimeRunStream, type TsRuntimeRunStream } from './ts-runtime-stream'
 import {
   createTsRuntimeProjectionState,
   projectTsRuntimeEvents,
@@ -17,6 +19,10 @@ import {
   type TsRuntimeProjectedEvent
 } from './ts-runtime-projection'
 
+/**
+ * Snapshot polling is now only the degraded path: it is used when Main cannot
+ * push (older runtime, `OLA_RUNTIME_PUSH=0`) and to reconcile after a resync.
+ */
 const POLL_INTERVAL_MS = 40
 
 type RuntimeResult<T> = T & { error?: string }
@@ -286,9 +292,49 @@ export async function* streamTsRuntimeTextTurn(
     throw error
   }
   let submitted = false
-  let afterSeq = 0
+  let lastSeq = 0
   const projectionState = createTsRuntimeProjectionState()
   const emittedInteractions = new Set<string>()
+  /**
+   * Interactions are not part of the event stream, so a snapshot is the only
+   * way to learn about them. Applying a snapshot is idempotent: events are
+   * filtered by `lastSeq` and interactions by `emittedInteractions`.
+   */
+  const applySnapshot = (
+    snapshot: RunSnapshot
+  ): { projected: TsRuntimeProjectedEvent[]; terminal: boolean } => {
+    const events = snapshot.events.filter((event) => event.seq > lastSeq)
+    for (const event of events) lastSeq = Math.max(lastSeq, event.seq)
+    const projected = projectTsRuntimeEvents(events, projectionState)
+    for (const interaction of snapshot.pendingInteractions) {
+      const key = `${interaction.runId}:${interaction.interactionId}`
+      if (emittedInteractions.has(key)) continue
+      emittedInteractions.add(key)
+      projected.push(projectTsRuntimeInteraction(interaction))
+    }
+    return { projected, terminal: isTerminalTsRuntimeStatus(snapshot.run.status) }
+  }
+  const readSnapshot = async (): Promise<RunSnapshot> => {
+    const response = await invokeMessagePackBinary<RuntimeResult<{ snapshot: RunSnapshot | null }>>(
+      runtimeChannel('run-snapshot'),
+      {
+        workspaceId: run.workspaceId,
+        runId: run.runId,
+        afterSeq: lastSeq
+      }
+    )
+    if (response.error) throw new Error(response.error)
+    if (!response.snapshot) throw new Error('RUN_NOT_FOUND')
+    return response.snapshot
+  }
+  let stream: TsRuntimeRunStream | null = null
+  const subscribe = (afterSeq: number): Promise<TsRuntimeRunStream | null> =>
+    openTsRuntimeRunStream({
+      workspaceId: run.workspaceId,
+      runId: run.runId,
+      afterSeq,
+      signal: input.signal
+    })
   try {
     await awaitPendingSessionCreate(run.sessionId)
     const result = await invokeMessagePackBinary<RuntimeResult<{ accepted: boolean }>>(
@@ -298,31 +344,67 @@ export async function* streamTsRuntimeTextTurn(
     if (!result.accepted) throw new Error(result.error ?? 'TS_RUNTIME_UNAVAILABLE')
     submitted = true
     input.onRunIdAssigned?.(run.runId)
+    // Subscribe before the first snapshot so an event committed between the
+    // two is buffered by the runtime instead of being missed.
+    stream = await subscribe(0)
+    const initial = stream ? applySnapshot(stream.snapshot) : null
+    if (initial) {
+      yield* initial.projected
+      if (initial.terminal) return
+    }
+    /**
+     * Set when the caller owes one snapshot reconciliation. A subscription that
+     * cannot be opened leaves `stream` null, which turns the loop into the
+     * previous 40 ms poll — the degraded path for a Main process without push.
+     */
+    let reconcile = !stream
     for (;;) {
       if (input.signal?.aborted) throw new Error('aborted')
-      const response = await invokeMessagePackBinary<
-        RuntimeResult<{ snapshot: RunSnapshot | null }>
-      >(runtimeChannel('run-snapshot'), {
-        workspaceId: run.workspaceId,
-        runId: run.runId,
-        afterSeq
-      })
-      if (response.error) throw new Error(response.error)
-      if (!response.snapshot) throw new Error('RUN_NOT_FOUND')
-      for (const event of response.snapshot.events) {
-        afterSeq = Math.max(afterSeq, event.seq)
-        yield* projectTsRuntimeEvents([event], projectionState)
+      if (reconcile) {
+        const applied = applySnapshot(await readSnapshot())
+        yield* applied.projected
+        if (applied.terminal) return
+        reconcile = false
       }
-      for (const interaction of response.snapshot.pendingInteractions) {
-        const key = `${interaction.runId}:${interaction.interactionId}`
-        if (emittedInteractions.has(key)) continue
-        emittedInteractions.add(key)
-        yield projectTsRuntimeInteraction(interaction)
+      if (!stream) {
+        await pause(input.signal)
+        reconcile = true
+        continue
       }
-      if (isTerminalTsRuntimeStatus(response.snapshot.run.status)) return
-      await pause(input.signal)
+      const item = await stream.next()
+      if (item.kind === 'end') {
+        // A local close ends the turn; anything committed just before it has
+        // already been delivered or will be dropped with the renderer.
+        if (input.signal?.aborted) throw new Error('aborted')
+        return
+      }
+      if (item.kind === 'resync') {
+        // The runtime dropped the subscription. Reopen from the last delivered
+        // sequence, or keep polling if this Main process cannot resubscribe.
+        await stream.close()
+        stream = await subscribe(lastSeq).catch(() => null)
+        if (stream) yield* applySnapshot(stream.snapshot).projected
+        reconcile = true
+        continue
+      }
+      const event = item.event
+      if (event.seq <= lastSeq) continue
+      if (event.seq !== lastSeq + 1) {
+        // A hole means the stream is no longer trustworthy; the journal is.
+        reconcile = true
+        continue
+      }
+      lastSeq = event.seq
+      yield* projectTsRuntimeEvents([event], projectionState)
+      const data = event.data as { status?: unknown } | null
+      if (event.type !== 'run.status' || typeof data?.status !== 'string') continue
+      if (isTerminalTsRuntimeStatus(data.status as RunStatus)) return
+      // A run that starts waiting for an answer published no interaction event;
+      // read the pending set once, then go back to waiting for pushes.
+      if (data.status === 'waiting_interaction') reconcile = true
     }
   } finally {
+    await stream?.close()
     if (submitted && input.signal?.aborted) {
       await invokeMessagePackBinary<RuntimeResult<{ cancelled: boolean }>>(
         runtimeChannel('run-cancel'),

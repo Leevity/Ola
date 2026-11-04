@@ -79,6 +79,35 @@ export interface ExtensionWorkbenchCommandDefinition {
   view: string
 }
 
+export type ExtensionCapabilityKind =
+  | 'network.request' // 联网（legacy permissions.network）
+  | 'filesystem.read' // 读工作区/任意路径
+  | 'filesystem.write' // 写文件
+  | 'process' // 跑命令
+  | 'secret.read' // 读宿主密钥
+  | 'agent.tool' // 注册 agent 工具
+  | 'agent.context' // 向上下文注入
+  | 'clipboard'
+  | 'window.notify'
+
+export interface ExtensionCapabilityDeclaration {
+  /** 装上就要批的能力（审查看到的上界 = required ∪ optional）。 */
+  required: ExtensionCapabilityKind[]
+  /** 运行期可申请的能力。 */
+  optional?: ExtensionCapabilityKind[]
+}
+
+export interface ExtensionPermissions {
+  /** Legacy flat network host whitelist. Projected to capabilities at parse time; not rewritten on disk. */
+  network?: string[]
+  /** Declared capability upper bound. */
+  capabilities?: ExtensionCapabilityDeclaration
+  /** Per-URL network scope whitelist. */
+  hostPermissions?: string[]
+  /** Prefix globs for workspace paths: `docs/*`, `src/**`. */
+  pathScopes?: string[]
+}
+
 export interface ExtensionManifest {
   schemaVersion: 1
   id: string
@@ -87,9 +116,7 @@ export interface ExtensionManifest {
   description?: string
   entry?: string
   configSchema?: ExtensionConfigFieldSchema[]
-  permissions?: {
-    network?: string[]
-  }
+  permissions?: ExtensionPermissions
   tools: ExtensionToolDefinition[]
   renderers?: ExtensionRendererDefinition[]
   components?: ExtensionComponentDefinition[]

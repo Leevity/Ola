@@ -4,7 +4,6 @@
     "placeholderClarify": "اشرحي فكرتك وسأظل أراقبك حتى تكون المتطلبات واضحة",
     "placeholderCowork": "أطلب من المساعد المساعدة في مشروعك",
     "placeholderCode": "صف ما تريد بناءه، مثل إصلاح الحشرات، كتابة النصوص، أو استخدام/التزام لإرتكاب المستودع...",
-    "placeholderAcp": "وصف الأهداف والسياق والمعوقات ومعايير القبول سأصمم وأفوض أولا بدلا من الترميز مباشرة",
     "placeholderPlanReview": "إدخال تنقيح التغذية المرتدة لهذه الخطة، أو نقر البطاقة أعلاه لتنفيذها...",
     "placeholderPendingGoal": "صف الهدف من متابعة...",
     "pendingGoalBanner": "مطاردة الهدف جاهزة رسالتك القادمة ستستخدم كهدف وسترسل عادة",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "افترض السؤال الحاد التالي الذي سأطلبه أن يعلق الطلب بالكامل",
     "recommendationDefaultCowork": "اتوقع العمل التعاوني المقبل الذي سأطبعه بطبيعة الحال.",
     "recommendationDefaultCode": "افترض طلب التغيير الرمزي القادم الذي سأطبعه بشكل طبيعي",
-    "recommendationDefaultAcp": "جهز السؤال التالي لـ (أي بي سي) أو التصميم الذي سأطبعه طبيعياً",
-    "recommendationInitWorkspace": "ولا يوجد أي من هذه الوكالات في ملف العمل الحالي، وتحمل الخطوة الطبيعية التالية، التي من المرجح أن تشرع في وضع سياق المشروع.",
-    "startAcp": "بدء دورة ACP",
-    "startAcpDesc": "أولا توضيح الهدف والخلفية والمعوقات ومعايير القبول، ثم تصميم الهيكل ومهام المندوبين قبل كتابة المدونة.",
-    "homeTitleAcp": "أسلوب الفينول الخماسي الكلور",
-    "homeDescAcp": "In ACP mode, begin by clarifying goals, background, constraints, and acceptance criteria. then proposes an structure and task breakdown before implementation."
+    "recommendationInitWorkspace": "ولا يوجد أي من هذه الوكالات في ملف العمل الحالي، وتحمل الخطوة الطبيعية التالية، التي من المرجح أن تشرع في وضع سياق المشروع."
   },
   "planReview": {
     "awaitingReview": "في انتظار الاستعراض",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "هذا هو أسلوب القانون",
         "description": "استخدامه في مهام التنفيذ المباشر مثل تحرير الملفات، والكتابة، والفحص الجاري، والتعامل مع التفاصيل الهندسية."
-      },
-      "modeAcp": {
-        "title": "هذا هو نمط ACP",
-        "description": "Use it as the control tower for complex work: clarify boundaries and acceptance first, then design the structure, break down tasks, and delegate execution while the main agent stays out of direct coding."
       },
       "leftSidebar": {
         "title": "هذا هو مجال المشروع والدورة",
@@ -654,7 +644,8 @@
     "thinkingFor": "التفكير في {{seconds}} s",
     "pending": "التفكير",
     "thinkingEllipsis": "التفكير...",
-    "thoughts": "الأفكار"
+    "thoughts": "الأفكار",
+    "elapsedSeconds": "{{seconds}} ث"
   },
   "messageList": {
     "startConversation": "ابدأ المحادثة",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "توضيح المهمة أولا",
     "homeTitleCowork": "العمل داخل المشروع",
     "homeTitleCode": "بدء التدوين",
-    "homeTitleAcp": "بدء تعاون برنامج المقارنات الدولية",
-    "homeDescAcp": "البدء في وضعية ACP لتأكيد الهيكل، والإيضاحات المقيدة، وانهيار التنفيذ.",
     "homeDescAutoChat": "بعد أن ترسل، فإنه يختار نموذجا أفضل تلقائيا على أساس تعقيد المهمة.",
     "homeDescAutoClarify": "بعد أن ترسل، فإنه يختار نموذج أفضل تناسب للاستجواب وتضييق الخطة.",
     "homeDescAutoCowork": "بعد أن ترسل، فإنه يختار نموذج أفضل تناسب عمل المشروع، الملفات، والأدوات.",
     "homeDescAutoCode": "بعد أن ترسل، فإنه يختار نموذجا أفضل تناسب الترميز، إعادة التصنيع، والتحليل.",
-    "homeDescAutoAcp": "بعد أن ترسل، فإنه يختار نموذجا أفضل تناسب تأكيد الهيكل، والإيضاحات المقيدة، وانهيار التنفيذ.",
     "homeDescChatGeneral": "جيد للدردشة اليومية، الكتابة، وأسئلة الوزن الخفيف.",
     "homeDescChatVision": "جيد للحديث ويمكن أيضا الاستجابة بسرعة مع سياق الصور.",
     "homeDescClarifyGeneral": "جيد لأسئلة المتابعة، تشكيل الهدف، ملء القيود.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "تغير المرحلة أولا، ثم توليد رسالة",
     "aiCommitEmptyStaged": "لا شيء مهيأ - لا يمكن أن يولد رسالة",
     "aiCommitFailed": "فشل الجيل، تحقق من النظام الآلي للبيانات الجمركية/الإطارات النموذجية وحاول مرة أخرى"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

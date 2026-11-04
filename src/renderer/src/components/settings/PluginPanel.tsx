@@ -631,8 +631,8 @@ function ChannelConfigPanelContent({
                 <div>
                   <div className="flex items-center gap-1.5 px-2 py-1 text-xs uppercase tracking-wider text-muted-foreground/50">
                     {channelWorkspace.kind === 'ola-team'
-                      ? t('channel.olaTeamModels', 'Ola team models')
-                      : t('channel.olaPersonalModels', 'Ola personal models')}
+                      ? t('channel.olaTeamModels', { defaultValue: 'Ola team models' })
+                      : t('channel.olaPersonalModels', { defaultValue: 'Ola personal models' })}
                   </div>
                   {managedResources.map((resource) => {
                     const source: ModelSource = {

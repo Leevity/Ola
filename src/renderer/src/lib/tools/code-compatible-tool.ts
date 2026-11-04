@@ -3,6 +3,10 @@ import { encodeBashToolResult } from './bash-output'
 import { IPC } from '../ipc/channels'
 import { ipcClient } from '../ipc/ipc-client'
 import type { ToolHandler } from './tool-types'
+import {
+  WORKSPACE_PROTOCOL_TOOLS,
+  workspaceToolDefinition
+} from '../../../../shared/tool-catalog/workspace-protocol'
 
 async function executeShellCommand(
   command: string,
@@ -32,18 +36,7 @@ async function executeShellCommand(
 }
 
 const powerShellHandler: ToolHandler = {
-  definition: {
-    name: 'PowerShell',
-    description: 'Execute a command through Windows PowerShell.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'PowerShell command to execute' },
-        timeout: { type: 'number', description: 'Timeout in milliseconds' }
-      },
-      required: ['command']
-    }
-  },
+  definition: workspaceToolDefinition(WORKSPACE_PROTOCOL_TOOLS.PowerShell),
   execute: async (input, ctx) => {
     const command = typeof input.command === 'string' ? input.command.trim() : ''
     const timeout =
@@ -52,27 +45,16 @@ const powerShellHandler: ToolHandler = {
         : undefined
     return executeShellCommand(command, ctx, 'powershell.exe', timeout)
   },
-  requiresApproval: () => true
+  requiresApproval: () => WORKSPACE_PROTOCOL_TOOLS.PowerShell.requiresApproval
 }
 
 const monitorHandler: ToolHandler = {
-  definition: {
-    name: 'Monitor',
-    description: 'Run a background command and monitor its output through Ola background tasks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        command: { type: 'string', description: 'Command to run in the background' },
-        description: { type: 'string', description: 'Short monitor description' }
-      },
-      required: ['command']
-    }
-  },
+  definition: workspaceToolDefinition(WORKSPACE_PROTOCOL_TOOLS.Monitor),
   execute: async (input, ctx) => {
     const command = typeof input.command === 'string' ? input.command.trim() : ''
     return executeShellCommand(command, ctx)
   },
-  requiresApproval: () => true
+  requiresApproval: () => WORKSPACE_PROTOCOL_TOOLS.Monitor.requiresApproval
 }
 
 export function registerCodeCompatibleTools(): void {

@@ -1486,7 +1486,7 @@ export function FileChangeCard({
               {hasCompactError ? (
                 <span
                   className="size-1.5 shrink-0 rounded-full bg-red-500 dark:bg-red-400"
-                  title={error || parsedOutputError || t('error.label', { ns: 'common' })}
+                  title={error || parsedOutputError || t('error.label')}
                 />
               ) : trackedChange ? (
                 <span

@@ -52,6 +52,7 @@ import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { confirm } from '@renderer/components/ui/confirm-dialog'
 import { LANGUAGE_OPTIONS, resolveIntlLocale } from '@renderer/lib/i18n-language'
+import { DEFAULT_MOTION_LEVEL, MOTION_LEVELS } from '@renderer/lib/motion-level'
 import { exportSessionSnapshotFromDb } from '@renderer/lib/utils/export-chat'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
@@ -968,26 +969,37 @@ function GeneralPanel(): React.JSX.Element {
 
       <Separator />
 
-      {/* Animation */}
+      {/* Motion */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between max-w-lg">
-          <div>
-            <label htmlFor="settings-animations" className="text-sm font-medium">
-              {t('general.animations')}
-            </label>
-            <p
-              id="settings-animations-description"
-              className="text-[0.8125rem] text-muted-foreground"
-            >
-              {t('general.animationsDesc')}
-            </p>
-          </div>
-          <Switch
-            id="settings-animations"
-            aria-describedby="settings-animations-description"
-            checked={settings.animationsEnabled}
-            onCheckedChange={(checked) => settings.updateSettings({ animationsEnabled: checked })}
-          />
+        <div className="max-w-lg">
+          <h2 className="text-sm font-medium">{t('general.motionLevel')}</h2>
+          <p className="text-[0.8125rem] text-muted-foreground">{t('general.motionLevelDesc')}</p>
+        </div>
+        <div className="grid max-w-2xl gap-2 sm:grid-cols-3" role="radiogroup">
+          {MOTION_LEVELS.map((level) => {
+            const active = settings.motionLevel === level
+            return (
+              <button
+                key={level}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => settings.updateSettings({ motionLevel: level })}
+                className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                  active
+                    ? 'border-primary/50 bg-primary/10 text-foreground'
+                    : 'border-border/60 bg-background/60 text-muted-foreground hover:bg-background'
+                }`}
+              >
+                <div className="text-sm font-medium">
+                  {t(`general.motionLevels.${level}.label`)}
+                </div>
+                <div className="mt-1 text-[0.8125rem] text-muted-foreground">
+                  {t(`general.motionLevels.${level}.desc`)}
+                </div>
+              </button>
+            )
+          })}
         </div>
         <div className="max-w-2xl space-y-3 rounded-xl border border-border/60 bg-muted/20 p-4">
           <div>
@@ -1269,7 +1281,7 @@ function GeneralPanel(): React.JSX.Element {
               backgroundColor: '',
               fontFamily: '',
               fontSize: 16,
-              animationsEnabled: true,
+              motionLevel: DEFAULT_MOTION_LEVEL,
               liveOutputAnimationStyle: 'agile',
               toolbarCollapsedByDefault: false,
               collapseExecutionRunsByDefault: true,
@@ -2179,7 +2191,7 @@ export function AnalyticsPanel(): React.JSX.Element {
 
   const tokenLocale = resolveIntlLocale(i18n.language)
   const inputTokenLabel = t('analytics.billableInputTokens', {
-    defaultValue: tokenLocale === 'zh-CN' ? '计费输入 Token' : 'Billable Input Tokens'
+    defaultValue: 'Billable Input Tokens'
   })
   const fmtInt = (value: unknown): string =>
     new Intl.NumberFormat(tokenLocale).format(
@@ -2644,11 +2656,6 @@ function ModelPanel(): React.JSX.Element {
       mode: 'execute',
       labelKey: 'model.promptRecommendationModes.execute',
       descKey: 'model.promptRecommendationModesDesc.execute'
-    },
-    {
-      mode: 'acp',
-      labelKey: 'model.promptRecommendationModes.acp',
-      descKey: 'model.promptRecommendationModesDesc.acp'
     }
   ]
   const updatePromptRecommendationModel = (
@@ -3333,11 +3340,6 @@ function AboutPanel(): React.JSX.Element {
       icon: Code2,
       title: t('about.featureCards.execute.title'),
       desc: t('about.featureCards.execute.desc')
-    },
-    {
-      icon: Network,
-      title: t('about.featureCards.acp.title'),
-      desc: t('about.featureCards.acp.desc')
     }
   ]
   return (
@@ -3620,7 +3622,7 @@ export function SettingsPage(): React.JSX.Element {
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-3 py-3 sm:px-5 sm:py-5">
           {/* Content */}
           {isSettingsFullPanelTab(effectiveSettingsTab) ? (
-            <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
               {activePanelContent}
             </div>
           ) : (

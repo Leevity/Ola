@@ -1,6 +1,5 @@
-import type { ToolDefinition, ToolResultContent } from '../api/types'
+import type { ToolDefinition } from '../api/types'
 import type { ToolHandler, ToolContext, ToolCapabilityMeta } from '../tools/tool-types'
-import { encodeToolError } from '../tools/tool-result-format'
 
 function stableStringify(value: unknown): string {
   if (value === null) return 'null'
@@ -202,27 +201,8 @@ export class ToolRegistry {
     return this.stableNamesCache
   }
 
-  async execute(
-    name: string,
-    input: Record<string, unknown>,
-    ctx: ToolContext
-  ): Promise<ToolResultContent> {
-    const handler =
-      ctx.localToolHandlers?.[name] ?? ctx.inlineToolHandlers?.[name] ?? this.tools.get(name)
-    if (!handler) {
-      return encodeToolError(`Unknown tool: ${name}`)
-    }
-    try {
-      return await handler.execute(input, ctx)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      return encodeToolError(message)
-    }
-  }
-
   checkRequiresApproval(name: string, input: Record<string, unknown>, ctx: ToolContext): boolean {
-    const handler =
-      ctx.localToolHandlers?.[name] ?? ctx.inlineToolHandlers?.[name] ?? this.tools.get(name)
+    const handler = this.tools.get(name)
     if (!handler) return true // Unknown tools always require approval
     return handler.requiresApproval?.(input, ctx) ?? false
   }

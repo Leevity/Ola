@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   ChevronDown,
   ChevronRight,
@@ -208,6 +209,7 @@ function ExplorerPane({
   connection: SshConnection
   sessionId: string
 }): React.JSX.Element {
+  const { t } = useTranslation('ssh')
   const currentPath = useSshStore(
     (state) => state.fileExplorerPaths[sessionId] ?? getDefaultExplorerPath(connection)
   )
@@ -260,7 +262,7 @@ function ExplorerPane({
         <div className="flex items-center gap-2">
           <div className="inline-flex items-center gap-2 rounded-[8px] border border-[#3a3a3a] bg-[#121212] px-3 py-1 text-[12px] text-[#6ee787]">
             <FolderTree className="size-3.5" />
-            <span>文件工作区</span>
+            <span>{t('fileExplorer.title', { defaultValue: 'File workspace' })}</span>
             <span className="text-[#9ca3af]">x</span>
           </div>
           <button
@@ -321,11 +323,14 @@ export function SshConnectedWorkspace({
   showStatusPanel: boolean
   onCloseStatus: () => void
 }): React.JSX.Element {
+  const { t } = useTranslation('ssh')
   const [statusPanelWidth, setStatusPanelWidth] = useState(getInitialStatusPanelWidth)
   const [isResizingStatusPanel, setIsResizingStatusPanel] = useState(false)
   const resizeStateRef = useRef({ startX: 0, startWidth: STATUS_PANEL_DEFAULT_WIDTH })
   const centerTitle =
-    activeTab.type === 'file' ? activeTab.filePath?.split('/').pop() || activeTab.title : '终端'
+    activeTab.type === 'file'
+      ? activeTab.filePath?.split('/').pop() || activeTab.title
+      : t('terminal.title', { defaultValue: 'Terminal' })
   const CenterIcon = activeTab.type === 'file' ? FileCode2 : TerminalSquare
 
   useEffect(() => {
@@ -387,7 +392,7 @@ export function SshConnectedWorkspace({
           {showStatusPanel ? (
             <div className="inline-flex items-center gap-2 rounded-[8px] border border-[#373737] bg-[#171717] px-3 py-1 text-[12px] text-[#6ee787]">
               <Monitor className="size-3.5" />
-              <span>监控</span>
+              <span>{t('workspace.terminalStatus.title', { defaultValue: 'Monitor' })}</span>
             </div>
           ) : null}
         </div>

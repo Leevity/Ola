@@ -1,8 +1,19 @@
 ﻿// Launch wrapper for `electron-vite dev` that prepares the TypeScript runtime
 // worker assets before starting Electron.
 
-import { spawn, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { dirname, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import process from 'node:process'
+
+// electron-vite's isolated preload reporter calls terminal cursor methods even
+// when stdout is a pipe. Keep those operations inert for redirected dev logs.
+if (!process.stdout.isTTY) {
+  process.stdout.moveCursor ??= () => false
+  process.stdout.clearLine ??= () => false
+  process.stdout.cursorTo ??= () => false
+}
 
 // The Main bundle resolves SQLite workers by sibling URL at runtime. Vite does
 // not discover those dynamic Worker URLs, so build their explicit assets before
@@ -16,23 +27,7 @@ if (runtimeBuild.status !== 0) {
   process.exit(runtimeBuild.status ?? 1)
 }
 
-const isWin = process.platform === 'win32'
-const command = isWin ? 'node_modules\\.bin\\electron-vite.cmd' : 'node_modules/.bin/electron-vite'
-const args = ['dev']
-
-const child = spawn(command, args, {
-  stdio: 'inherit',
-  env: process.env,
-  shell: isWin
-})
-
-child.on('exit', (code, signal) => {
-  if (signal) {
-    process.kill(process.pid, signal)
-    return
-  }
-  process.exit(code ?? 0)
-})
-
-process.on('SIGINT', () => child.kill('SIGINT'))
-process.on('SIGTERM', () => child.kill('SIGTERM'))
+const require = createRequire(import.meta.url)
+const cli = resolve(dirname(require.resolve('electron-vite/package.json')), 'bin/electron-vite.js')
+process.argv = [process.execPath, cli, 'dev']
+await import(pathToFileURL(cli).href)

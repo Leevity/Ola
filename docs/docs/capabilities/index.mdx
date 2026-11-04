@@ -49,3 +49,16 @@ Capabilities 是 Agent 能实际做事的表面：读写文件、搜索代码、
 ## Tool posture
 
 Ola 默认把高影响操作放进明确的工具和 UI 反馈里。Agent 可以很强，但用户需要知道它在做什么、在哪个工作区做、什么时候需要人工确认。
+
+## Optional workbenches
+
+这些工作台是可选能力，不属于核心工作流，也不会出现在主导航里。它们的状态与设置页「交付状态」一致；状态词表为 Prototype、Internal、Beta、GA、Deprecated。
+
+| Workbench            | Entry point            | Default          | Status    |
+| -------------------- | ---------------------- | ---------------- | --------- |
+| Draw canvas          | 工作区侧栏的 Draw 入口 | 高级画布工具关闭 | Beta      |
+| Pet companion        | 设置页 → Pet           | 关闭             | Beta      |
+| Media / video        | 设置页开关 + 媒体工具  | 关闭             | Prototype |
+| NoVNC remote desktop | 远程页                 | 按连接需求启用   | Beta      |
+
+媒体生成在真实供应商接入并通过媒体协议验收前保持 Prototype，且默认关闭；启用开关不会改变这一状态。

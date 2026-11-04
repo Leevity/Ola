@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid'
-import type { InteractiveAgentEvent } from '../../shared/agent-loop-types'
-import type { AgentTokenUsage } from '../../shared/agent-loop-types'
+import type { RuntimeTokenUsage } from '../../shared/runtime/usage'
+import type { GoalLoopEndReason, GoalRunObservation } from './goal-run-observation'
 import * as goalsDao from '../db/goals-dao'
 import {
   emitGoalContinueRequested,
@@ -14,7 +14,7 @@ type RuntimeMessage = {
   role: 'system' | 'user' | 'assistant' | 'tool'
   content: string | Array<{ type: string; [key: string]: unknown }>
   createdAt: number
-  usage?: AgentTokenUsage
+  usage?: RuntimeTokenUsage
   providerResponseId?: string
   source?: string | null
   meta?: Record<string, unknown>
@@ -36,7 +36,7 @@ interface ActiveRunState {
   pendingPrompts: string[]
   failedToolNames: Set<string>
   unsettledToolNames: Map<string, string>
-  lastLoopEndReason: 'completed' | 'max_iterations' | 'aborted' | 'error' | null
+  lastLoopEndReason: GoalLoopEndReason | null
   aborted: boolean
   enqueueMessages: (messages: RuntimeMessage[]) => void
 }
@@ -236,7 +236,7 @@ function normalizeBlockerSignature(blockers: string[]): string {
     .join(' | ')
 }
 
-function goalTokenDeltaForUsage(usage: AgentTokenUsage): number {
+function goalTokenDeltaForUsage(usage: RuntimeTokenUsage): number {
   const input =
     usage.billableInputTokens ??
     Math.max(
@@ -360,7 +360,7 @@ export class GoalRuntimeService {
       })
   }
 
-  async observeEvent(runId: string, event: InteractiveAgentEvent): Promise<void> {
+  async observeEvent(runId: string, event: GoalRunObservation): Promise<void> {
     const run = this.activeRuns.get(runId)
     if (!run) return
 
@@ -602,7 +602,7 @@ export class GoalRuntimeService {
 
   private async accountRunUsage(
     run: ActiveRunState,
-    usage?: AgentTokenUsage,
+    usage?: RuntimeTokenUsage,
     timeDeltaSeconds = 0
   ): Promise<void> {
     if (run.planMode || !run.goalId) return

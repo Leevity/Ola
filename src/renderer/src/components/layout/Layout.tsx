@@ -356,8 +356,7 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
             value: 'execute' as const,
             shortcut: 'Ctrl+3',
             title: 'switchToExecute'
-          },
-          { id: 'mode.switch-acp', value: 'acp' as const, shortcut: 'Ctrl+4', title: 'switchToAcp' }
+          }
         ] as const
       ).map((item) =>
         registerWorkbenchAction({
@@ -928,14 +927,13 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
         runWorkbenchAction('workspace.open-command-palette')
         return
       }
-      // Ctrl+1/2/3/4: Switch mode
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && ['1', '2', '3', '4'].includes(e.key)) {
+      // Ctrl+1/2/3: Switch mode
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && ['1', '2', '3'].includes(e.key)) {
         e.preventDefault()
         const modeActionId = {
           '1': 'mode.switch-chat',
           '2': 'mode.switch-clarify',
-          '3': 'mode.switch-execute',
-          '4': 'mode.switch-acp'
+          '3': 'mode.switch-execute'
         } as const
         runWorkbenchAction(modeActionId[e.key as keyof typeof modeActionId])
       }

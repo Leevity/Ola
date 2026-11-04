@@ -3,7 +3,6 @@ import {
   MessageSquare,
   CircleHelp,
   Code2,
-  ShieldCheck,
   Pin,
   Cpu,
   Sparkles,
@@ -281,8 +280,6 @@ export function CommandPalette(): React.JSX.Element {
                   <MessageSquare className="size-4" />
                 ) : s.mode === 'clarify' ? (
                   <CircleHelp className="size-4" />
-                ) : s.mode === 'acp' ? (
-                  <ShieldCheck className="size-4" />
                 ) : (
                   <Code2 className="size-4" />
                 )}

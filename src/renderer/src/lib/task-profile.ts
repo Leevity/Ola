@@ -99,5 +99,5 @@ export function profileConfigFor(
 }
 
 export function profileForAppMode(mode: AppMode): TaskProfile {
-  return mode === 'execute' || mode === 'acp' ? 'code' : 'work'
+  return mode === 'execute' ? 'code' : 'work'
 }

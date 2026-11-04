@@ -19,15 +19,18 @@ import {
   TERMINAL_STATUSES,
   type RunEvent,
   type RunSnapshot,
+  type RunStatus,
   type RunSpec
 } from '../../shared/runtime/contracts'
 import type { CronAgentRunOptions, AgentDefinition } from './cron-runtime-types'
 import { resolveCronAgentDefinition } from './cron-agent-definition'
+import { openMainRunStream } from '../runtime/run-stream-consumer'
 
 const CRON_SYSTEM_PROMPT =
   'You are CronAgent, a scheduled task assistant. You execute tasks autonomously on a timer. ' +
   'Be concise and action-oriented. Complete the task, then deliver results as instructed.'
-const POLL_INTERVAL_MS = 250
+/** Only the degraded path polls; a pushed run is event driven. */
+const DEGRADED_POLL_INTERVAL_MS = 250
 
 type ActiveTsCronRun = { controller: AbortController; runId?: string; workspaceId: string }
 type TsExecutionState = {
@@ -440,27 +443,88 @@ async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun
   try {
     await desktopRuntime.request('run.submit', createTsCronRunSpec(options, runId, agentDefinition))
     let afterSeq = 0
-    let snapshot: RunSnapshot | null = null
     let cancellationRequested = false
-    for (;;) {
-      snapshot = await desktopRuntime.request<RunSnapshot | null>('run.snapshot', {
+    /** Terminal status observed from the journal; the loop stops once set. */
+    let finalStatus: RunStatus | null = null
+    const projectSnapshot = async (snapshot: RunSnapshot): Promise<void> => {
+      for (const event of snapshot.events) {
+        if (event.seq <= afterSeq) continue
+        afterSeq = event.seq
+        await projectEvent(event, state, options, runId, startedAt)
+      }
+      // Events after the terminal status still belong to the run, so only a
+      // fully drained terminal snapshot ends the loop.
+      if (TERMINAL_STATUSES.has(snapshot.run.status) && afterSeq >= snapshot.run.seq)
+        finalStatus = snapshot.run.status
+    }
+    const reconcile = async (): Promise<void> => {
+      const snapshot = await desktopRuntime.request<RunSnapshot | null>('run.snapshot', {
         runId,
         workspaceId,
         afterSeq
       })
       if (!snapshot) throw new Error('RUN_NOT_FOUND')
-      for (const event of snapshot.events) {
-        afterSeq = Math.max(afterSeq, event.seq)
-        await projectEvent(event, state, options, runId, startedAt)
-      }
-      if (TERMINAL_STATUSES.has(snapshot.run.status) && afterSeq >= snapshot.run.seq) break
-      if (active.controller.signal.aborted && !cancellationRequested) {
-        cancellationRequested = true
-        await desktopRuntime.request('run.cancel', { runId, workspaceId }).catch(() => undefined)
-      }
-      await new Promise<void>((resolve) => setTimeout(resolve, POLL_INTERVAL_MS))
+      await projectSnapshot(snapshot)
     }
-    const finalStatus = snapshot.run.status
+    const stream = await openMainRunStream({ workspaceId, runId, afterSeq: 0 })
+    if (!stream) {
+      // Degraded path: Main cannot push, so keep the previous polling loop.
+      for (;;) {
+        await reconcile()
+        if (finalStatus) break
+        if (active.controller.signal.aborted && !cancellationRequested) {
+          cancellationRequested = true
+          await desktopRuntime.request('run.cancel', { runId, workspaceId }).catch(() => undefined)
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, DEGRADED_POLL_INTERVAL_MS))
+      }
+    } else {
+      try {
+        await projectSnapshot(stream.snapshot)
+        // The subscribe snapshot is a replay; pushes continue after it.
+        let owed = false
+        while (!finalStatus) {
+          if (owed) {
+            await reconcile()
+            owed = false
+            if (finalStatus) break
+          }
+          const step = await stream.next(
+            cancellationRequested ? undefined : active.controller.signal
+          )
+          if (step.kind === 'closed') throw new Error('RUN_STREAM_CLOSED')
+          if (step.kind === 'aborted') {
+            if (cancellationRequested) continue
+            cancellationRequested = true
+            await desktopRuntime
+              .request('run.cancel', { runId, workspaceId })
+              .catch(() => undefined)
+            continue
+          }
+          if (step.kind === 'resync') {
+            owed = true
+            continue
+          }
+          const event = step.event
+          if (event.seq <= afterSeq) continue
+          if (event.seq !== afterSeq + 1) {
+            // A hole means the stream is no longer trustworthy; the journal is.
+            owed = true
+            continue
+          }
+          afterSeq = event.seq
+          await projectEvent(event, state, options, runId, startedAt)
+          // Only the journal can prove the run finished with every event
+          // applied, so a terminal push always defers to one reconcile.
+          const data = eventObject(event.data)
+          if (event.type === 'run.status' && TERMINAL_STATUSES.has(data.status as RunStatus))
+            owed = true
+        }
+      } finally {
+        await stream.close()
+      }
+    }
+    if (!finalStatus) throw new Error('RUN_NOT_FOUND')
     const status = cronStatus(finalStatus)
     const error =
       finalStatus === 'failed' ? (state.error ?? 'TS runtime execution failed') : undefined

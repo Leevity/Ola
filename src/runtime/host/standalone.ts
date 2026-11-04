@@ -92,8 +92,12 @@ export async function startStandaloneRuntime(options: {
       endpoint,
       token,
       stop,
-      revokeUnavailableWorkspaces: (availableIds) =>
+      revokeUnavailableWorkspaces: (availableIds) => {
+        // Pushed subscriptions must stop before the runs they describe do, so
+        // a revoked workspace cannot keep receiving frames.
+        server?.revokeUnavailableWorkspaces(availableIds)
         scheduler?.revokeUnavailableWorkspaces(availableIds)
+      }
     }
   } catch (error) {
     await stop()

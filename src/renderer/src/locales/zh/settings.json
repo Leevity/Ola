@@ -72,6 +72,10 @@
       "replayFailed": "重放失败，请检查流程和运行记录。",
       "cancelFailed": "取消重放失败。",
       "deleteFailed": "删除桌面流程失败。"
+    },
+    "reviewRequired": "输入类步骤无法重放，请重新录制且不要输入内容。",
+    "runs": {
+      "title": "最近运行"
     }
   },
   "hooks": {
@@ -282,8 +286,22 @@
     },
     "language": "语言",
     "languageDesc": "设置界面显示语言",
-    "animations": "启用动画",
-    "animationsDesc": "默认开启。关闭后将尽可能禁用界面过渡、动效与平滑滚动。",
+    "motionLevel": "动效",
+    "motionLevelDesc": "选择界面动效的强度。若系统要求减少动效，将始终以系统设置为准。",
+    "motionLevels": {
+      "full": {
+        "label": "完整",
+        "desc": "全部过渡与动效。"
+      },
+      "reduced": {
+        "label": "减弱",
+        "desc": "仅保留淡入淡出，不做滑动、缩放或高度变化。"
+      },
+      "off": {
+        "label": "关闭",
+        "desc": "不使用过渡、动效与平滑滚动。"
+      }
+    },
     "liveOutputAnimation": {
       "title": "AI 实时输出动画",
       "desc": "设置 AI 流式输出回答时的动态风格。",
@@ -415,7 +433,12 @@
     "subtitle": "通过 WebDAV 进行 Ola 数据记录级同步。",
     "workspaceUnavailable": {
       "title": "此工作空间暂不支持同步",
-      "description": "旧版 WebDAV 同步无法隔离工作空间，仅在没有活动托管工作空间时用于本地个人数据。个人与团队工作空间的空间化同步仍在迁移中。"
+      "description": "旧版 WebDAV 同步无法隔离工作空间，仅在没有活动托管工作空间时用于本地个人数据。个人与团队工作空间的空间化同步仍在迁移中。",
+      "conflicts": "同步已暂停，有 {{count}} 个冲突。",
+      "result": "工作区同步完成：上传 {{uploaded}} 项，应用 {{downloaded}} 项。",
+      "v2Description": "此工作区使用隔离的 v2 WebDAV 同步，只有在本设备启用 TS 业务接管后才会运行。",
+      "running": "正在同步工作区…",
+      "action": "立即同步工作区"
     },
     "loading": "正在加载同步设置...",
     "provider": {
@@ -713,7 +736,8 @@
     "clearConfirmDescription": "将永久删除 {{date}} 之前的所有日志记录，共 {{count}} 条。此操作不可撤销。",
     "clearSuccess": "已清理 {{count}} 条日志",
     "clearFailed": "清理日志失败",
-    "clearEmpty": "暂无 7 天前的日志可清理"
+    "clearEmpty": "暂无 7 天前的日志可清理",
+    "billableInputTokens": "计费输入 Token"
   },
   "model": {
     "title": "模型配置",
@@ -742,14 +766,12 @@
     "promptRecommendationModes": {
       "chat": "Chat 模式",
       "clarify": "Clarify 模式",
-      "execute": "Execute 模式",
-      "acp": "ACP 模式"
+      "execute": "Execute 模式"
     },
     "promptRecommendationModesDesc": {
       "chat": "用于通用对话与下一问推荐",
       "clarify": "用于需求澄清与追问建议",
-      "execute": "用于实现、研究、运维、调试与任务拆解建议",
-      "acp": "用于 ACP 主控场景下的目标澄清、架构设计与任务分派建议"
+      "execute": "用于实现、研究、运维、调试与任务拆解建议"
     },
     "selectRecommendationModel": "选择推荐模型",
     "useFastModelRecommendation": "使用快速模型（默认）",
@@ -779,7 +801,8 @@
     "creative": "创意",
     "random": "随机",
     "maxTokens": "最大 Token 数",
-    "maxTokensDesc": "单次响应的最大 Token 限制"
+    "maxTokensDesc": "单次响应的最大 Token 限制",
+    "selectProvider": "选择提供方"
   },
   "aiCoding": {
     "title": "AI Coding",
@@ -851,6 +874,7 @@
       "extensionCounts": "已安装 {{installed}} 个，已启用 {{enabled}} 个；启用状态不代表扩展运行正常。",
       "builtinPluginCounts": "已启用 {{enabled}} / {{total}} 个；有 {{needsSetup}} 个需要补齐必要配置（检查范围含图像模型配置）。",
       "mcpCounts": "已启用 {{enabled}} 个，已连接 {{connected}} 个，连接中 {{connecting}} 个，未连接 {{disconnected}} 个，错误 {{failed}} 个；检查于 {{checkedAt}}",
+      "mcpAuthorizationCount": "{{count}} 个需要浏览器授权",
       "channelCounts": "已启用 {{enabled}} 个，运行中 {{running}} 个，已停止 {{stopped}} 个，错误 {{failed}} 个；检查于 {{checkedAt}}",
       "noneEnabled": "当前没有启用项。",
       "statusCheckFailed": "无法读取一个或多个渠道的运行状态。请在消息渠道设置中重试。"
@@ -859,8 +883,11 @@
     "lifecycleDescription": "按实际交付阶段标记能力，确保展示状态与可用范围一致。",
     "lifecyclePolicy": "交付状态",
     "status": {
+      "prototype": "原型",
+      "internal": "内部使用",
+      "beta": "测试中",
       "ga": "正式可用",
-      "beta": "测试中"
+      "deprecated": "已弃用"
     },
     "capabilities": {
       "local-agent-workspace": "本地 Agent 工作区",
@@ -868,7 +895,10 @@
       "channel-automation": "消息渠道自动化",
       "browser-cookie-import": "浏览器 Cookie 导入",
       "media-generation": "媒体生成",
-      "unified-execution-audit": "统一执行审计"
+      "unified-execution-audit": "统一执行审计",
+      "draw-canvas": "Draw 画布",
+      "pet-companion": "桌宠伙伴",
+      "novnc-remote-desktop": "NoVNC 远程桌面"
     },
     "installed": "已安装能力",
     "extensions": "Extension",
@@ -1052,7 +1082,9 @@
       "analytics": "图谱健康度",
       "circularDependencies": "循环依赖：{{count}}",
       "deadCode": "可能未使用的符号：{{count}}",
-      "fileDetails": "{{language}} · {{symbols}} 个符号 · {{size}}"
+      "fileDetails": "{{language}} · {{symbols}} 个符号 · {{size}}",
+      "advancedDiagnostics": "高级诊断",
+      "noSourceFiles": "索引已完成，但没有找到可索引的源文件。"
     },
     "productDesign": {
       "workflowTitle": "工作流插件",
@@ -1206,10 +1238,6 @@
       "execute": {
         "title": "账户与团队工作区",
         "desc": "登录 Ola 后查看所属工作区、设备和已授权的团队模型；也可使用本机自定义模型。资源和操作范围以当前账户权限为准。"
-      },
-      "acp": {
-        "title": "自动化与扩展",
-        "desc": "通过任务、定时运行、技能、插件和 MCP 组织工作。通讯平台、图像和视频能力需启用并配置对应服务。"
       }
     },
     "summary": "此外，Ola 还支持 SSH 与远程桌面工作区、浏览器自动化、记忆、凭据管理、桌面宠物、多语言界面和跨窗口工作台。应用数据优先保存在本机，并通过权限控制管理智能体对工作区和工具的访问。"
@@ -1775,7 +1803,9 @@
     "bound": "已绑定",
     "boundCurrentProject": "已绑定到当前项目",
     "unboundProject": "未绑定项目",
-    "noProjectChannels": "当前项目没有可配置的频道"
+    "noProjectChannels": "当前项目没有可配置的频道",
+    "olaTeamModels": "Ola 团队模型",
+    "olaPersonalModels": "Ola 个人模型"
   },
   "mcp": {
     "title": "MCP 服务器",
@@ -1833,7 +1863,21 @@
     "deleteConfirm": "确定删除 MCP 服务器 \"{{name}}\"？",
     "noTools": "没有可用的工具",
     "noResources": "没有可用的资源",
-    "noPrompts": "没有可用的提示词"
+    "noPrompts": "没有可用的提示词",
+    "authorize": "授权",
+    "authorizeDesc": "在浏览器中授权此服务器",
+    "signOut": "退出登录",
+    "signOutDesc": "删除此服务器已保存的授权",
+    "oauthRequired": "该服务器需要先完成浏览器授权才能使用。",
+    "oauthWaiting": "正在等待浏览器授权完成。",
+    "signedOut": "已删除授权",
+    "status": {
+      "disconnected": "未连接",
+      "connecting": "连接中",
+      "connected": "已连接",
+      "authorization-required": "需要授权",
+      "error": "错误"
+    }
   },
   "skillsmarket": {
     "title": "技能市场",
@@ -1914,7 +1958,8 @@
     "disabledError": "联网搜索已禁用。请在设置中启用。",
     "apiKeyRequired": "此提供商需要 API 密钥。",
     "testSuccess": "联网搜索测试成功！找到 {{count}} 条结果。",
-    "testFailed": "联网搜索测试失败：{{error}}"
+    "testFailed": "联网搜索测试失败：{{error}}",
+    "apiKeySaved": "API 密钥已安全保存"
   },
   "extension": {
     "title": "自定义插件",
@@ -1975,7 +2020,7 @@
     "prevNextSession": "上一个/下一个会话",
     "previousSession": "切换到上一个会话",
     "nextSession": "切换到下一个会话",
-    "switchMode": "切换模式（对话/澄清/执行/ACP）",
+    "switchMode": "切换模式（对话/澄清/执行）",
     "scrollTopBottom": "滚动到顶部/底部",
     "scrollTop": "滚动到对话顶部",
     "scrollBottom": "滚动到对话底部",
@@ -2129,5 +2174,9 @@
     "noProject": "请选择包含工作目录的项目，以使用这两项能力。",
     "wikiTitle": "项目 Wiki",
     "codeGraphTitle": "CodeGraph"
+  },
+  "common": {
+    "save": "保存",
+    "delete": "删除"
   }
 }

@@ -97,7 +97,6 @@
     "placeholder": "Type a message...",
     "placeholderClarify": "Describe your idea and I will keep probing until the requirements are clear...",
     "placeholderExecute": "Describe what you want Ola to build, research, operate, or verify...",
-    "placeholderAcp": "Describe the goal, context, constraints, and acceptance criteria. I will design and delegate first instead of coding directly...",
     "placeholderPlanReview": "Enter revision feedback for this plan, or click the card above to implement it...",
     "placeholderPendingGoal": "Describe the goal to pursue...",
     "pendingGoalBanner": "Goal pursuit is ready. Your next text message will be used as the goal and sent normally.",
@@ -246,12 +245,7 @@
     "recommendationDefaultChat": "Predict the most natural next thing I would type in this chat.",
     "recommendationDefaultClarify": "Predict the next sharp question I would ask to fully pin down the request.",
     "recommendationDefaultExecute": "Predict the next concrete execution request I would naturally type.",
-    "recommendationDefaultAcp": "Predict the next ACP scoping or design question I would naturally type.",
     "recommendationInitWorkspace": "No AGENTS.md found in the current working folder. Predict the natural next step, likely /init to initialize the project context.",
-    "startAcp": "Start an ACP session",
-    "startAcpDesc": "First clarify the goal, background, constraints, and acceptance criteria. Then design the architecture and delegate tasks before writing code.",
-    "homeTitleAcp": "ACP mode",
-    "homeDescAcp": "In ACP mode, begin by clarifying goals, background, constraints, and acceptance criteria. Then propose an architecture and task breakdown before implementation.",
     "noProvider": "No AI provider available",
     "noProviderDescription": "Configure or enable an AI provider in Settings.",
     "noModel": "No AI model available",
@@ -269,7 +263,14 @@
     "imageDownloaded": "Image downloaded",
     "imageDownloadFailed": "Could not download the image. Check the source and try again.",
     "imageCopied": "Image copied to clipboard",
-    "imageCopyFailed": "Could not copy the image. Try downloading it instead."
+    "imageCopyFailed": "Could not copy the image. Try downloading it instead.",
+    "modelResolving": "Model pending",
+    "readOnlyModelWithProvider": "Sub-agent model: {{model}} · {{provider}}",
+    "readOnlyModel": "Sub-agent model: {{model}}",
+    "sendTooltipWhileRunning": "Send after current run",
+    "fileSuggestions": "File suggestions",
+    "loadingFiles": "Searching files...",
+    "noFilesFound": "No matching files"
   },
   "planReview": {
     "awaitingReview": "Awaiting Review",
@@ -286,7 +287,11 @@
     "runningHint": "This session is implementing the plan now.",
     "runningInSession": "This plan is running in session \"{{title}}\".",
     "openExecutionSession": "Open Execution Session",
-    "approvedHint": "This plan has already been approved."
+    "approvedHint": "This plan has already been approved.",
+    "copyPlan": "Copy Markdown",
+    "downloadPlan": "Download Markdown",
+    "openPlanFile": "Open plan file",
+    "executionModel": "Execution model"
   },
   "guide": {
     "title": "Conversation Onboarding",
@@ -311,10 +316,6 @@
       "modeExecute": {
         "title": "This is Execute mode",
         "description": "Use it for hands-on work across code, research, documents, DevOps, files, and connected applications. Tool actions remain visible and auditable."
-      },
-      "modeAcp": {
-        "title": "This is ACP mode",
-        "description": "Use it as the control tower for complex work: clarify boundaries and acceptance first, then design the architecture, break down tasks, and delegate execution while the main agent stays out of direct coding."
       },
       "leftSidebar": {
         "title": "This is the project and session area",
@@ -799,7 +800,9 @@
     "toolCalls": "Tool Calls",
     "summaryEmpty": "No summary yet",
     "openInRunsRunning": "View live progress in the right-side execution list",
-    "openInRunsDone": "View the full record in the right-side execution list"
+    "openInRunsDone": "View the full record in the right-side execution list",
+    "failureUnknown": "Sub-Agent execution failed",
+    "cancel": "Cancel sub-agent"
   },
   "teamEvent": {
     "teamCreated": "Team Created",
@@ -823,7 +826,8 @@
     "deepThinking": "Thinking deeply",
     "deepThought": "Thought deeply",
     "thinkingEllipsis": "Thinking…",
-    "thoughts": "Thoughts"
+    "thoughts": "Thoughts",
+    "elapsedSeconds": "{{seconds}}s"
   },
   "messageList": {
     "startConversation": "Start a conversation",
@@ -840,13 +844,10 @@
     "homeTitleClarify": "Clarify the task first",
     "homeTitleCowork": "Work inside the project",
     "homeTitleCode": "Start coding",
-    "homeTitleAcp": "Start ACP collaboration",
-    "homeDescAcp": "Start ACP mode for architecture confirmation, constraint clarification, and execution breakdown.",
     "homeDescAutoChat": "After you send, it picks a better model automatically based on task complexity.",
     "homeDescAutoClarify": "After you send, it picks a model better suited for questioning and narrowing the plan.",
     "homeDescAutoCowork": "After you send, it picks a model better suited for project work, file edits, and tools.",
     "homeDescAutoCode": "After you send, it picks a model better suited for coding, refactoring, and analysis.",
-    "homeDescAutoAcp": "After you send, it picks a model better suited for architecture confirmation, constraint clarification, and execution breakdown.",
     "homeDescChatGeneral": "Good for everyday chat, writing, and lightweight questions.",
     "homeDescChatVision": "Good for chat and can also respond quickly with image context.",
     "homeDescClarifyGeneral": "Good for follow-up questions, goal shaping, and filling in constraints.",
@@ -975,7 +976,8 @@
         "title": "Daily Memory",
         "description": "Record today's project temporary context, can be organized into MEMORY.md later."
       }
-    }
+    },
+    "teamMemoryHint": "Team memory is stored in a workspace-specific folder. AGENTS.md remains shared by this project."
   },
   "skills": {
     "addActions": "Add actions",
@@ -1047,7 +1049,9 @@
     "selectedFileReadSkipped": "Path reference",
     "selectedFileReadSkippedPdf": "PDF path reference; file was not read directly",
     "selectedFileReadSkippedNonText": "Path reference; binary or document file was not read directly",
-    "selectedFileReadFailed": "Read failed"
+    "selectedFileReadFailed": "Read failed",
+    "hideCommand": "Collapse commands",
+    "showCommand": "Expand commands"
   },
   "assistantMessage": {
     "extensionContent": "Extended content · {{kind}}",
@@ -1163,7 +1167,11 @@
       "messageRequestInvalid": "The request was rejected because its configuration or parameters are invalid. Check the selected model settings.",
       "messageToolFailed": "A tool could not complete its operation. Review its technical details and correct the reported issue.",
       "messageOlaUnavailable": "This Ola model is unavailable. Sign in and refresh your workspace, or select a local model. This conversation will not switch models automatically."
-    }
+    },
+    "editImage": "Edit image",
+    "maskEditImage": "Mask edit",
+    "maskBrush": "Brush",
+    "imageEditPrompt": "Describe the change"
   },
   "messageActions": {
     "fork": "Fork",
@@ -1420,5 +1428,24 @@
         "desc": "Projects and programming"
       }
     }
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
+  },
+  "home": {
+    "recentTitle": "Continue a conversation",
+    "recentDescription": "Jump back into your latest work."
+  },
+  "diffViewer": {
+    "inline": "Inline",
+    "sideBySide": "Split",
+    "before": "Before",
+    "after": "After",
+    "unchangedLines": "Show {{count}} unchanged lines"
+  },
+  "pickRepo": "Select a project to inspect repositories and changes.",
+  "pendingQueue": {
+    "persistFailed": "Queued messages could not be saved. Keep Ola open and try again.",
+    "restoreFailed": "Queued messages could not be restored."
   }
 }

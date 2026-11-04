@@ -2,12 +2,17 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { normalizeExtensionId } from './extension-paths'
+import type { ExtensionCapabilityKind } from '../../shared/extension-types'
 
 export type ExtensionState = {
   enabled: boolean
   installedAt: number
   updatedAt: number
   config: Record<string, string>
+  /** Capabilities granted by the user at runtime. Absent on legacy state → treated as fully granted. */
+  granted?: ExtensionCapabilityKind[]
+  /** The required set at the time of last approval, used for upgrade-escalation comparison. */
+  approvedRequired?: ExtensionCapabilityKind[]
 }
 
 type StateRoot = Record<string, ExtensionState>
@@ -21,15 +26,42 @@ function readStringMap(value: unknown): Record<string, string> {
   )
 }
 
+function readCapabilityKinds(value: unknown): ExtensionCapabilityKind[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const kinds = value
+    .filter((item): item is string => typeof item === 'string')
+    .filter((item): item is ExtensionCapabilityKind =>
+      [
+        'network.request',
+        'filesystem.read',
+        'filesystem.write',
+        'process',
+        'secret.read',
+        'agent.tool',
+        'agent.context',
+        'clipboard',
+        'window.notify'
+      ].includes(item)
+    )
+  // An empty array is meaningful ("granted nothing") and must not be confused with an absent
+  // field, which is the legacy "fully granted" marker. Only non-array → undefined.
+  return kinds.length ? [...new Set(kinds)] : []
+}
+
 function readState(value: unknown, now: number): ExtensionState | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const item = value as Record<string, unknown>
-  return {
+  const state: ExtensionState = {
     enabled: item.enabled === true,
     installedAt: typeof item.installedAt === 'number' ? item.installedAt : now,
     updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : now,
     config: readStringMap(item.config)
   }
+  const granted = readCapabilityKinds(item.granted)
+  if (granted) state.granted = granted
+  const approvedRequired = readCapabilityKinds(item.approvedRequired)
+  if (approvedRequired) state.approvedRequired = approvedRequired
+  return state
 }
 
 function parseRoot(value: string, now: number): StateRoot {
@@ -93,19 +125,29 @@ export class ExtensionStateStore {
 
   async update(
     extensionId: unknown,
-    patch: { enabled?: boolean; config?: Record<string, string> }
+    patch: {
+      enabled?: boolean
+      config?: Record<string, string>
+      granted?: ExtensionCapabilityKind[]
+      approvedRequired?: ExtensionCapabilityKind[]
+    }
   ): Promise<ExtensionState> {
     const id = normalizeExtensionId(extensionId)
     let result: ExtensionState | undefined
     await this.mutate((root) => {
       const now = this.now()
       const current = root[id] ?? { enabled: false, installedAt: now, updatedAt: now, config: {} }
-      result = {
+      const next: ExtensionState = {
         enabled: typeof patch.enabled === 'boolean' ? patch.enabled : current.enabled,
         installedAt: current.installedAt,
         updatedAt: now,
         config: patch.config ? { ...patch.config } : { ...current.config }
       }
+      if (patch.granted) next.granted = [...new Set(patch.granted)]
+      else if (current.granted) next.granted = [...current.granted]
+      if (patch.approvedRequired) next.approvedRequired = [...new Set(patch.approvedRequired)]
+      else if (current.approvedRequired) next.approvedRequired = [...current.approvedRequired]
+      result = next
       root[id] = result
     })
     return { ...result!, config: { ...result!.config } }

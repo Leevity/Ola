@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  CloudSync,
   Code2,
   Copy,
   Download,
@@ -1144,7 +1145,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
     },
     {
       key: 'remote',
-      label: t('navRail.remote', { defaultValue: '远控' }),
+      label: t('navRail.remote', { defaultValue: 'Remote' }),
       icon: <Server className="size-4 shrink-0" />,
       active: false,
       onClick: openRemoteWindow
@@ -1317,7 +1318,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 type: 'session',
                 session: await exportSessionSnapshotFromDb(snapshot)
               } satisfies ExportedSessionPayload)
-              toast.success(t('sidebar.exportedAsJson'))
+              toast.success(t('sidebar_toast.exportedAsJson'))
             }}
           >
             <Download className="size-4" />
@@ -1371,7 +1372,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
         project,
         sessions: snapshotSessions
       } satisfies ExportedProjectPayload)
-      toast.success(t('sidebar.exportedAsJson'))
+      toast.success(t('sidebar_toast.exportedAsJson'))
     },
     [t]
   )
@@ -1459,7 +1460,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
             type="button"
             aria-expanded={taskProfileMenuOpen}
             aria-haspopup="menu"
-            aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: '切换工作方式' })}
+            aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: 'Switch work mode' })}
             onClick={() => setTaskProfileMenuOpen((open) => !open)}
             className="flex w-full items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60"
           >
@@ -1471,15 +1472,15 @@ export function WorkspaceSidebar(): React.JSX.Element {
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm font-semibold">
                 {t(`sidebar.taskProfile.${defaultTaskProfile}.title`, {
-                  defaultValue: defaultTaskProfile === 'work' ? '工作' : '编程'
+                  defaultValue: defaultTaskProfile === 'work' ? 'Work' : 'Code'
                 })}
               </span>
               <span className="block truncate text-[10px] text-muted-foreground">
                 {t(`sidebar.taskProfile.${defaultTaskProfile}.desc`, {
                   defaultValue:
                     defaultTaskProfile === 'work'
-                      ? '日常工作、研究和办公'
-                      : '项目、代码、终端和 Git'
+                      ? 'Daily work, research and office tasks'
+                      : 'Projects, code, terminal and Git'
                 })}
               </span>
             </span>
@@ -1488,7 +1489,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
           {taskProfileMenuOpen && (
             <div
               role="menu"
-              aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: '切换工作方式' })}
+              aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: 'Switch work mode' })}
               className="absolute left-2 right-2 top-full z-50 mt-1 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg"
             >
               {(['work', 'code'] as const).map((profile) => (
@@ -1508,7 +1509,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium">
                       {t(`sidebar.taskProfile.${profile}.title`, {
-                        defaultValue: profile === 'work' ? '工作' : '编程'
+                        defaultValue: profile === 'work' ? 'Work' : 'Code'
                       })}
                       {defaultTaskProfile === profile && (
                         <CheckCircle2 className="ml-auto size-4" />
@@ -1517,7 +1518,9 @@ export function WorkspaceSidebar(): React.JSX.Element {
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {t(`sidebar.taskProfile.${profile}.desc`, {
                         defaultValue:
-                          profile === 'work' ? '日常工作、研究和办公' : '项目、代码、终端和 Git'
+                          profile === 'work'
+                            ? 'Daily work, research and office tasks'
+                            : 'Projects, code, terminal and Git'
                       })}
                     </span>
                   </span>
@@ -1594,6 +1597,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 >
                   <Sparkles className="size-4" />
                   <span>{t('navRail.souls')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openSyncPage()}
+                  className={cn(syncPageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <CloudSync className="size-4" />
+                  <span>{t('navRail.sync')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

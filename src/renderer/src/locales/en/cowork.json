@@ -1,4 +1,4 @@
-﻿{
+{
   "context": {
     "workingFolder": "Working Folder",
     "clickToCopy": "Click to copy path",
@@ -54,6 +54,7 @@
       "noCompressible": "No compressible context was found.",
       "failedTitle": "Compression failed",
       "mergeFailed": "Could not save the compressed context. Try again.",
+      "hookBlocked": "A hook declined this compaction. Adjust the hook policy or retry.",
       "unexpectedFailure": "Check the current session and model configuration, then try again."
     },
     "noContext": "No context loaded",
@@ -222,16 +223,28 @@
     "drafting": "Plan is being drafted...",
     "noPlan": "No plan for this session",
     "noPlanDesc": "Enter Plan Mode to create an implementation plan before coding.",
-    "enterPlanMode": "Enter Plan Mode"
+    "enterPlanMode": "Enter Plan Mode",
+    "content": "Plan Content"
   },
   "cronPanel": {
     "refreshFailed": "Could not refresh scheduled tasks or runs. Existing records are retained; try refreshing again.",
     "runRequested": "Execution requested; follow its progress in run history.",
-    "views": { "tasks": "Tasks", "history": "History", "calendar": "Calendar" },
-    "scheduleKind": { "at": "Once", "every": "Interval", "cron": "Cron" },
+    "views": {
+      "tasks": "Tasks",
+      "history": "History",
+      "calendar": "Calendar"
+    },
+    "scheduleKind": {
+      "at": "Once",
+      "every": "Interval",
+      "cron": "Cron"
+    },
     "every": "Every {{interval}}",
     "autoDelete": "Delete after run",
-    "deliveryMode": { "session": "Session delivery", "none": "No delivery" },
+    "deliveryMode": {
+      "session": "Session delivery",
+      "none": "No delivery"
+    },
     "firedCount": "Triggered {{count}} times",
     "lastFired": "Last: {{time}}",
     "justNow": "Just now",

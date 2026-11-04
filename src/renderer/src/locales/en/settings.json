@@ -72,6 +72,10 @@
       "replayFailed": "Replay failed. Check the flow and run history.",
       "cancelFailed": "Could not cancel replay.",
       "deleteFailed": "Could not delete the desktop flow."
+    },
+    "reviewRequired": "Typing steps cannot be replayed; re-record without typing.",
+    "runs": {
+      "title": "Recent runs"
     }
   },
   "hooks": {
@@ -282,8 +286,22 @@
     },
     "language": "Language",
     "languageDesc": "Set the interface display language",
-    "animations": "Enable animations",
-    "animationsDesc": "Enabled by default. Turning this off disables transitions, motion effects, and smooth scrolling as much as possible.",
+    "motionLevel": "Motion",
+    "motionLevelDesc": "Choose how much interface motion plays. If your system asks for reduced motion, that always applies.",
+    "motionLevels": {
+      "full": {
+        "label": "Full",
+        "desc": "All transitions and animated effects."
+      },
+      "reduced": {
+        "label": "Reduced",
+        "desc": "Fades only; nothing slides, scales, or changes height."
+      },
+      "off": {
+        "label": "Off",
+        "desc": "No transitions, motion effects, or smooth scrolling."
+      }
+    },
     "liveOutputAnimation": {
       "title": "AI live output animation",
       "desc": "Choose the motion style used while the assistant is streaming a reply.",
@@ -415,7 +433,12 @@
     "subtitle": "Record-level Ola data sync with WebDAV.",
     "workspaceUnavailable": {
       "title": "Sync is unavailable here",
-      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated.",
+      "conflicts": "Sync paused with {{count}} conflict(s).",
+      "result": "Workspace sync completed: {{uploaded}} uploaded, {{downloaded}} applied.",
+      "v2Description": "This workspace uses isolated v2 WebDAV sync. It only runs after TS business ownership has been enabled for this device.",
+      "running": "Syncing workspace…",
+      "action": "Sync workspace now"
     },
     "loading": "Loading sync settings...",
     "provider": {
@@ -713,7 +736,8 @@
     "clearConfirmDescription": "Permanently delete {{count}} log entries created before {{date}}. This cannot be undone.",
     "clearSuccess": "Cleared {{count}} log entries",
     "clearFailed": "Failed to clear logs",
-    "clearEmpty": "No logs older than 7 days to clear"
+    "clearEmpty": "No logs older than 7 days to clear",
+    "billableInputTokens": "Billable Input Tokens"
   },
   "model": {
     "title": "Model Configuration",
@@ -733,6 +757,7 @@
     "manualMainCandidate": "Manual main model",
     "manualMainCandidateDesc": "This model is used both as the fixed manual model and as the main branch target when Auto routes to main.",
     "selectModel": "Select model",
+    "selectProvider": "Select provider",
     "noModelsHint": "No models available for this provider, please go to \"AI Providers\" to add models",
     "fastModel": "Fast Model",
     "fastModelDesc": "For Auto routing classification, lightweight main-chat requests, title generation, and sub-agent tasks (cheaper, faster)",
@@ -742,14 +767,12 @@
     "promptRecommendationModes": {
       "chat": "Chat Mode",
       "clarify": "Clarify Mode",
-      "execute": "Execute Mode",
-      "acp": "ACP Mode"
+      "execute": "Execute Mode"
     },
     "promptRecommendationModesDesc": {
       "chat": "For general conversation and next-question suggestions",
       "clarify": "For requirement clarification and follow-up suggestions",
-      "execute": "For implementation, research, operations, debugging, and task breakdown suggestions",
-      "acp": "For goal clarification, architecture design, and delegation suggestions in ACP control flows"
+      "execute": "For implementation, research, operations, debugging, and task breakdown suggestions"
     },
     "selectRecommendationModel": "Select recommendation model",
     "useFastModelRecommendation": "Use fast model (default)",
@@ -851,6 +874,7 @@
       "extensionCounts": "{{installed}} installed, {{enabled}} enabled; enabled does not mean the extension is running correctly.",
       "builtinPluginCounts": "{{enabled}} of {{total}} enabled; {{needsSetup}} need required configuration (this check includes image model setup).",
       "mcpCounts": "{{enabled}} enabled, {{connected}} connected, {{connecting}} connecting, {{disconnected}} disconnected, {{failed}} with errors; checked at {{checkedAt}}",
+      "mcpAuthorizationCount": "{{count}} need browser authorization",
       "channelCounts": "{{enabled}} enabled, {{running}} running, {{stopped}} stopped, {{failed}} with errors; checked at {{checkedAt}}",
       "noneEnabled": "Nothing is enabled in this category.",
       "statusCheckFailed": "Could not read one or more channel statuses. Retry in Channel settings."
@@ -859,8 +883,11 @@
     "lifecycleDescription": "Status labels reflect each capability's actual delivery stage and availability.",
     "lifecyclePolicy": "Delivery status",
     "status": {
+      "prototype": "Prototype",
+      "internal": "Internal",
+      "beta": "In testing",
       "ga": "Generally available",
-      "beta": "In testing"
+      "deprecated": "Deprecated"
     },
     "capabilities": {
       "local-agent-workspace": "Local Agent workspace",
@@ -868,7 +895,10 @@
       "channel-automation": "Channel automation",
       "browser-cookie-import": "Browser cookie import",
       "media-generation": "Media generation",
-      "unified-execution-audit": "Unified execution audit"
+      "unified-execution-audit": "Unified execution audit",
+      "draw-canvas": "Draw canvas",
+      "pet-companion": "Pet companion",
+      "novnc-remote-desktop": "NoVNC remote desktop"
     },
     "installed": "Installed capabilities",
     "extensions": "Extensions",
@@ -1052,7 +1082,9 @@
       "analytics": "Graph health",
       "circularDependencies": "Circular dependencies: {{count}}",
       "deadCode": "Potentially unused symbols: {{count}}",
-      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}",
+      "advancedDiagnostics": "Advanced diagnostics",
+      "noSourceFiles": "Index completed, but no indexable source files were found."
     },
     "productDesign": {
       "workflowTitle": "Workflow plugin",
@@ -1151,7 +1183,28 @@
       "agent": "Agents",
       "mcp": "MCP Servers",
       "instructions": "Instructions / MEMORY"
-    }
+    },
+    "businessHandoverSchemaUnsupported": "The legacy database schema is missing a required business field.",
+    "businessHandoverBackupSpace": "There is not enough free space for a rollback snapshot.",
+    "businessHandoverBackupDirectory": "The rollback directory is unavailable or unsafe.",
+    "businessHandoverSourceUnavailable": "The legacy business database is not available yet.",
+    "businessHandoverPreflightUnknown": "Preflight could not complete: {{reason}}",
+    "businessHandoverConfirm": "Create a rollback snapshot and switch business writes to the TS runtime now?",
+    "businessHandoverSuccess": "Business data is now owned by the TS runtime.",
+    "businessHandoverIncomplete": "The handover did not reach TS ownership. Review the status and retry.",
+    "businessHandoverFailed": "Business handover failed: {{error}}",
+    "businessHandoverTitle": "TS business runtime ownership",
+    "businessHandoverDescription": "Create a verified rollback snapshot, stop legacy writers, and route business data through the offline-first TS runtime.",
+    "businessHandoverActive": "TS active",
+    "businessHandoverPending": "Not promoted",
+    "businessHandoverRunning": "Preparing…",
+    "businessHandoverDone": "Completed",
+    "businessHandoverAction": "Promote to TS",
+    "businessHandoverUnavailable": "Promotion is unavailable until the TS runtime is ready and the handover safety flag is enabled.",
+    "businessHandoverPreflight": "Preflight check: {{reason}}",
+    "businessHandoverWarning": "Existing Native Project Wiki records will be preserved in the TS-owned archive during handover.",
+    "businessHandoverBackup": "Rollback snapshot",
+    "businessHandoverManifest": "Handover manifest"
   },
   "pet": {
     "title": "Desktop Pet",
@@ -1185,10 +1238,6 @@
       "execute": {
         "title": "Account and team workspaces",
         "desc": "Sign in to Ola to view your workspaces, devices, and authorized team models, or use custom models on this device. Resources and actions depend on your account permissions."
-      },
-      "acp": {
-        "title": "Automation and extensions",
-        "desc": "Organize work with tasks, scheduled runs, skills, plugins, and MCP. Messaging, image, and video capabilities require their corresponding services to be enabled and configured."
       }
     },
     "summary": "Ola also supports SSH and remote desktop workspaces, browser automation, memory, credential management, desktop companions, a multilingual interface, and multi-window workflows. App data is stored locally by default, with permissions governing agent access to workspaces and tools."
@@ -1590,6 +1639,8 @@
     "added": "Channel added",
     "removed": "Channel removed",
     "plugin": "Plugin",
+    "olaTeamModels": "Ola team models",
+    "olaPersonalModels": "Ola personal models",
     "botName": "Channel Name",
     "botNameDesc": "Used to identify this chat channel within the project.",
     "systemPrompt": "System Prompt",
@@ -1778,7 +1829,21 @@
     "deleteConfirm": "Delete MCP server \"{{name}}\"?",
     "noTools": "No tools available",
     "noResources": "No resources available",
-    "noPrompts": "No prompts available"
+    "noPrompts": "No prompts available",
+    "authorize": "Authorize",
+    "authorizeDesc": "Open the browser to authorize this server",
+    "signOut": "Sign out",
+    "signOutDesc": "Remove the stored authorization for this server",
+    "oauthRequired": "This server needs a browser authorization before it can be used.",
+    "oauthWaiting": "Waiting for the browser authorization to finish.",
+    "signedOut": "Authorization removed",
+    "status": {
+      "disconnected": "disconnected",
+      "connecting": "connecting",
+      "connected": "connected",
+      "authorization-required": "authorization required",
+      "error": "error"
+    }
   },
   "skillsmarket": {
     "title": "Skills Market",
@@ -1859,7 +1924,8 @@
     "disabledError": "Web search is disabled. Please enable it in settings.",
     "apiKeyRequired": "API key is required for this provider.",
     "testSuccess": "Web search test successful! Found {{count}} results.",
-    "testFailed": "Web search test failed: {{error}}"
+    "testFailed": "Web search test failed: {{error}}",
+    "apiKeySaved": "API key saved securely"
   },
   "extension": {
     "title": "Extensions",
@@ -1920,7 +1986,7 @@
     "prevNextSession": "Previous/next session",
     "previousSession": "Switch to previous session",
     "nextSession": "Switch to next session",
-    "switchMode": "Switch mode (Chat/Clarify/Execute/ACP)",
+    "switchMode": "Switch mode (Chat/Clarify/Execute)",
     "scrollTopBottom": "Scroll to top/bottom",
     "scrollTop": "Scroll to conversation top",
     "scrollBottom": "Scroll to conversation bottom",
@@ -2074,5 +2140,9 @@
     "noProject": "Select a project with a working folder to use both capabilities.",
     "wikiTitle": "Project Wiki",
     "codeGraphTitle": "CodeGraph"
+  },
+  "common": {
+    "save": "Save",
+    "delete": "Delete"
   }
 }

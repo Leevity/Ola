@@ -301,8 +301,13 @@ function HostRow({
   const badges = [
     group?.name ?? t('ungrouped'),
     t(`migration.auth.${connection.authType}`),
-    `${connection.port} 端口`,
-    connection.keepAliveInterval ? `${connection.keepAliveInterval}s 心跳` : null
+    t('list.portBadge', { defaultValue: 'Port {{port}}', port: connection.port }),
+    connection.keepAliveInterval
+      ? t('list.keepAliveBadge', {
+          defaultValue: '{{seconds}}s keepalive',
+          seconds: connection.keepAliveInterval
+        })
+      : null
   ].filter(Boolean) as string[]
 
   return (
@@ -913,7 +918,11 @@ function HostsWorkspace({
               <div>
                 <div className="text-[15px] font-semibold text-white">{activeVaultLabel}</div>
                 <div className="mt-1 text-[12px] text-[#8b8b8b]">
-                  {visibleConnections.length} 台主机 / {onlineCount} 台在线
+                  {t('list.hostsSummary', {
+                    defaultValue: '{{hosts}} hosts / {{online}} online',
+                    hosts: visibleConnections.length,
+                    online: onlineCount
+                  })}
                 </div>
               </div>
 
@@ -956,12 +965,14 @@ function HostsWorkspace({
                   <div className="grid grid-cols-[44px_44px_76px_96px_minmax(170px,1fr)_220px_minmax(230px,280px)_176px] items-center">
                     <div />
                     <div />
-                    <div>系统</div>
-                    <div>延迟</div>
-                    <div>名称</div>
-                    <div>地址</div>
-                    <div>信息</div>
-                    <div className="text-right">操作</div>
+                    <div>{t('list.columns.os', { defaultValue: 'OS' })}</div>
+                    <div>{t('list.columns.latency', { defaultValue: 'Latency' })}</div>
+                    <div>{t('list.columns.name', { defaultValue: 'Name' })}</div>
+                    <div>{t('list.columns.address', { defaultValue: 'Address' })}</div>
+                    <div>{t('list.columns.info', { defaultValue: 'Info' })}</div>
+                    <div className="text-right">
+                      {t('list.columns.actions', { defaultValue: 'Actions' })}
+                    </div>
                   </div>
                 </div>
 

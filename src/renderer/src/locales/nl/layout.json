@@ -76,8 +76,7 @@
       "chat": "Gesprek",
       "clarify": "Verduidelijken",
       "cowork": "Samenwerken",
-      "code": "Code",
-      "acp": "ACP"
+      "code": "Code"
     },
     "deleteAllSessions": "Alle sessies verwijderen",
     "deleteAllConfirm": "Alles verwijderen {{count}} Dit kan niet ongedaan worden gemaakt.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sessie verwijderd",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Automatisch schakelen doelmodus nadat Clarify planmodus is ingevoerd",
     "clarifyPlanModeAutoSwitchOff": "Blijf hier.",
     "clarifyPlanModeAutoSwitchCode": "Coderen",
-    "clarifyPlanModeAutoSwitchAcp": "Aan ACS",
     "autoApproveOn": "Automatisch benaderen is ON",
     "autoApproveOff": "Automatisch benaderen is OFF-toolgesprekken vereisen bevestiging",
     "pendingCount": "{{count}} in behandeling",
@@ -407,7 +406,6 @@
     "switchToClarify": "Overschakelen naar Clarify-modus",
     "switchToCowork": "Overschakelen naar cowork-modus",
     "switchToCode": "Omschakelen naar codemodus",
-    "switchToAcp": "Overschakelen naar ACS-modus",
     "currentSession": "Huidige sessie",
     "exportCurrentChat": "Huidige chat exporteren",
     "copiedConversation": "Conversatie naar klembord gekopieerd",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Hulpmiddelenoproepen",
     "orchestrationToolCallsEmpty": "Dit lid heeft geen gereedschap om weer te geven",
     "orchestrationToolCallCount": "{{count}} oproepen",
-    "acp": "ACS",
-    "acpTitle": "ACS · Architecture Control Planning",
-    "acpDesc": "De belangrijkste agent verduidelijkt eisen, definieert grenzen, ontwerpt de aanpak, ontbindt taken en synthetiseert resultaten; concrete implementatie wordt uitgevoerd door subagents.",
-    "acpRuleNoCode": "De belangrijkste agent schrijft geen implementatiecode of wijzigt bestanden direct. Het verduidelijkt eerst doelen, beperkingen, risico's en acceptatiecriteria.",
-    "acpRuleDelegate": "Implementatietaken moeten worden gedelegeerd door Taak / SubAgent / teamgenoot aan de juiste sub-agent.",
-    "acpRuleReport": "Elke subtaak moet een gestructureerde samenvatting teruggeven zodat de hoofdagent de uitvoering kan beoordelen, synthetiseren en voortzetten.",
-    "acpCurrentPhase": "Huidige fase",
-    "acpNextAction": "Aanbevolen volgende stap",
-    "acpPhaseClarify": "Vereiste verduidelijking",
-    "acpPhasePlan": "Planning",
-    "acpPhaseReview": "Herziening van het plan",
-    "acpPhaseApproved": "Klaar voor uitvoering",
-    "acpPhaseExecute": "Gedelegeerde uitvoering",
-    "acpNextActionClarify": "Vul vóór de planning doelstellingen, beperkingen, grenzen en acceptatiecriteria in.",
-    "acpNextActionPlan": "Doorgaan met het verfijnen van het implementatieplan, opslaan en dan Plan Mode verlaten.",
-    "acpNextActionExecute": "Blijf het goedgekeurde plan ontbinden in taken, delegeer sub-agents en synthetiseer hun outputs.",
-    "acpInProgressCount_one": "{{count}} lopende",
-    "acpInProgressCount_other": "{{count}} lopende",
     "skills": "Hulpmiddelen",
     "cron": "Cron",
     "expand": "Uitvouwen",
@@ -676,14 +656,6 @@
           "Nauwkeurige implementatie: schrijffuncties, fixing bugs, refactoring, of het voltooien van modules met engineering discipline",
           "Wanneer u wilt clean code output met minimale vertelling terse bevestiging in plaats van verbose walk-throughs",
           "Wijzigingen die strikte aandacht vragen voor bestaande overeenkomsten, typen, invoer en API-contracten"
-        ]
-      },
-      "acp": {
-        "summary": "Architecture Control Planning is voor complex werk dat controle nodig heeft voor de implementatie: eerst de doelstellingen en grenzen verduidelijken, dan de architectuur ontwerpen, de uitvoering ontbinden en de levering delegeren. De hoofdagent codeert niet direct.",
-        "solves": [
-          "Complexe taken die achtergrond, toepassingsgebied, beperkingen, afhankelijkheden en acceptatiecriteria vereisen die vóór de uitvoering moeten worden verduidelijkt",
-          "Werk waar de belangrijkste agent zich moet richten op architectuur, orkestratie, en procescontrole in plaats van direct coderen",
-          "Gevallen waarin subtaken parallel moeten verlopen en gestructureerde samenvattingen moeten weergeven voor verdere coördinatie"
         ]
       }
     }

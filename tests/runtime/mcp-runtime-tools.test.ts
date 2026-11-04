@@ -92,7 +92,9 @@ describe('MCP runtime tools', () => {
     expect(calls).toEqual([{ serverId: 'docs', name: 'search', input: { query: 'runtime' } }])
   })
 
-  it('skips unsafe server or tool identifiers and bounds tool inputs', () => {
+  it('sanitizes unsafe identifiers instead of silently dropping tools, and bounds tool inputs', () => {
+    // An unsafe server/tool id no longer vanishes the tool — the name is sanitized and kept,
+    // so the model never silently loses a tool that was actually available.
     const tools = createMcpRuntimeTools(
       {
         getTools: () => [
@@ -103,7 +105,10 @@ describe('MCP runtime tools', () => {
       },
       ['unsafe server']
     )
-    expect(tools).toEqual([])
+    expect(tools.map((tool) => tool.name)).toEqual([
+      'mcp__unsafe_server__safe',
+      'mcp__unsafe_server__not_safe'
+    ])
     const safe = createMcpRuntimeTools(
       { getTools: () => [{ name: 'safe', inputSchema: {} }], callTool: async () => ({}) },
       ['server']

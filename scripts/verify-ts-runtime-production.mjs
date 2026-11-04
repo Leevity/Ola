@@ -20,6 +20,7 @@ const sources = await Promise.all(
     'src/main/index.ts',
     'src/renderer/src/lib/ipc/agent-bridge.ts',
     'src/renderer/src/hooks/use-chat-actions.ts',
+    'src/renderer/src/lib/agent/chat-send-message.ts',
     'src/renderer/src/lib/agent/final-outcome.ts',
     'src/main/ipc/channel-handlers.ts',
     'src/renderer/src/App.tsx',
@@ -65,14 +66,22 @@ assert.match(
   /TS_RUNTIME_TEXT_REQUIRED/,
   'auxiliary text requests must fail through the TS runtime boundary'
 )
-const chatActions = sources.find(
-  ([file]) => file === 'src/renderer/src/hooks/use-chat-actions.ts'
-)[1]
-assert.equal(
-  chatActions.includes('streamSidecarProviderTurn'),
-  false,
-  'production Chat must not invoke the removed sidecar provider turn'
-)
+// The Chat turn lives in two files after the R5 split; both must stay clean.
+const chatSources = sources
+  .filter(([file]) =>
+    [
+      'src/renderer/src/hooks/use-chat-actions.ts',
+      'src/renderer/src/lib/agent/chat-send-message.ts'
+    ].includes(file)
+  )
+  .map(([, source]) => source)
+for (const chatSource of chatSources) {
+  assert.equal(
+    chatSource.includes('streamSidecarProviderTurn'),
+    false,
+    'production Chat must not invoke the removed sidecar provider turn'
+  )
+}
 const channelHandlers = sources.find(([file]) => file === 'src/main/ipc/channel-handlers.ts')[1]
 assert.doesNotMatch(
   channelHandlers,

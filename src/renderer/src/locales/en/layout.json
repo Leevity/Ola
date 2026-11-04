@@ -87,8 +87,7 @@
       "chat": "Chat",
       "clarify": "Clarify",
       "cowork": "Cowork",
-      "code": "Code",
-      "acp": "ACP"
+      "code": "Code"
     },
     "deleteAllSessions": "Delete All Sessions",
     "deleteAllConfirm": "Delete all {{count}} sessions? This cannot be undone.",
@@ -135,7 +134,13 @@
       "center": "Account center",
       "signIn": "Sign in to Ola",
       "signOut": "Sign out"
-    }
+    },
+    "editProjectModel": "Edit project default model",
+    "switchProfile": "Work / Code",
+    "advancedRuntime": "Advanced runtime",
+    "collapse": "Collapse sidebar",
+    "deleteProject": "Delete project",
+    "renameProject": "Rename project"
   },
   "layout": {
     "newModeSession": "New {{mode}} session",
@@ -193,16 +198,14 @@
           "Precise implementation, debugging, project setup, documentation, DevOps, and analysis",
           "Work that needs explicit approval, visible progress, verification, and a structured final result"
         ]
-      },
-      "acp": {
-        "summary": "Architecture Control Planning is for complex work that needs control before implementation: clarify goals and boundaries first, then design the architecture, decompose execution, and delegate delivery. The main agent does not code directly.",
-        "solves": [
-          "Complex tasks that require background, scope, constraints, dependencies, and acceptance criteria to be clarified before implementation",
-          "Work where the main agent should focus on architecture, orchestration, and process control instead of coding directly",
-          "Cases where sub-tasks should run in parallel and return structured Markdown summaries for continued coordination"
-        ]
       }
-    }
+    },
+    "createdAt": "Start time",
+    "updatedAt": "End time",
+    "splitConversation": "Split conversation",
+    "closeSplitConversation": "Close split conversation",
+    "resultReportCopied": "Result report copied",
+    "copyResultReport": "Copy result report"
   },
   "sidebar_toast": {
     "sessionDeleted": "Session deleted",
@@ -223,6 +226,7 @@
     "projectPinned": "Project pinned",
     "projectUnpinned": "Project unpinned",
     "switchedMode": "Switched to {{mode}} mode",
+    "switchedProfile": "Switched to {{profile}}",
     "invalidFile": "Invalid session file",
     "failedParse": "Failed to parse JSON",
     "imported": "Imported {{count}} session(s)",
@@ -237,7 +241,10 @@
     "noProjectSessionsCleared": "No project sessions were cleared",
     "smartRenameNoContent": "No conversation content available for renaming",
     "smartRenameFailed": "Smart rename failed",
-    "smartRenameSuccess": "Session renamed intelligently"
+    "smartRenameSuccess": "Session renamed intelligently",
+    "sessionRenamed": "Session renamed",
+    "sessionUnpinned": "Session unpinned",
+    "sessionPinned": "Session pinned"
   },
   "topbar": {
     "togglePanel": "Toggle Panel",
@@ -247,7 +254,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Auto-switch target mode after Clarify enters Plan Mode",
     "clarifyPlanModeAutoSwitchOff": "Stay",
     "clarifyPlanModeAutoSwitchCode": "To Code",
-    "clarifyPlanModeAutoSwitchAcp": "To ACP",
     "autoApproveOn": "Auto-approve is ON — all tools run without confirmation",
     "autoApproveOff": "Auto-approve is OFF — tool calls require confirmation",
     "pendingCount": "{{count}} pending",
@@ -656,7 +662,8 @@
     "weekdayWed": "Wed",
     "weekdayThu": "Thu",
     "weekdayFri": "Fri",
-    "weekdaySat": "Sat"
+    "weekdaySat": "Sat",
+    "statusSkipped": "Skipped"
   },
   "commandPalette": {
     "title": "Command palette",
@@ -681,7 +688,6 @@
     "switchToChat": "Switch to Chat Mode",
     "switchToClarify": "Switch to Clarify Mode",
     "switchToExecute": "Switch to Execute Mode",
-    "switchToAcp": "Switch to ACP Mode",
     "currentSession": "Current Session",
     "exportCurrentChat": "Export Current Chat",
     "copiedConversation": "Copied conversation to clipboard",
@@ -705,7 +711,8 @@
     },
     "messageCount_one": "{{count}} message",
     "messageCount_other": "{{count}} messages",
-    "sessionsGroup": "Sessions"
+    "sessionsGroup": "Sessions",
+    "toggleTerminal": "Terminal"
   },
   "sectionExecution": "Execution",
   "sectionResources": "Resources",
@@ -763,28 +770,12 @@
     "orchestrationToolCalls": "Tool Calls",
     "orchestrationToolCallsEmpty": "This member has no tool calls to display",
     "orchestrationToolCallCount": "{{count}} calls",
-    "acp": "ACP",
-    "acpTitle": "ACP · Architecture Control Planning",
-    "acpDesc": "Best for architecture-controlled work before implementation. The main agent clarifies requirements, defines boundaries, designs the approach, decomposes tasks, and synthesizes results; concrete implementation is executed by sub-agents.",
-    "acpRuleNoCode": "The main agent does not write implementation code or modify files directly. It first clarifies goals, constraints, risks, and acceptance criteria.",
-    "acpRuleDelegate": "Implementation tasks must be delegated through Task / SubAgent / teammate to the appropriate sub-agent.",
-    "acpRuleReport": "Each sub-task should return a structured Markdown summary so the main agent can review, synthesize, and continue execution.",
-    "acpCurrentPhase": "Current phase",
-    "acpNextAction": "Recommended next step",
-    "acpPhaseClarify": "Requirement clarification",
-    "acpPhasePlan": "Planning",
-    "acpPhaseReview": "Plan review",
-    "acpPhaseApproved": "Ready to execute",
-    "acpPhaseExecute": "Delegated execution",
-    "acpNextActionClarify": "Fill in goals, constraints, boundaries, and acceptance criteria before planning.",
-    "acpNextActionPlan": "Continue refining the implementation plan, save it, then exit Plan Mode.",
-    "acpNextActionExecute": "Keep decomposing the approved plan into tasks, delegate sub-agents, and synthesize their outputs.",
-    "acpInProgressCount_one": "{{count}} in progress",
-    "acpInProgressCount_other": "{{count}} in progress",
     "skills": "Tools",
     "cron": "Cron",
     "expand": "Expand",
-    "collapse": "Collapse"
+    "collapse": "Collapse",
+    "execution": "Execution",
+    "previewEmpty": "No preview content"
   },
   "agentFiles": {
     "files": "Files",
@@ -976,8 +967,30 @@
     "selectDesc": "Use the left side to switch resource type, then choose an item from the list.",
     "kind": {
       "agents": "SubAgents",
-      "commands": "Commands"
-    }
+      "commands": "Commands",
+      "templates": "Templates"
+    },
+    "source": {
+      "bundled": "Built-in",
+      "overridden": "Overridden",
+      "user": "Custom"
+    },
+    "profile": {
+      "both": "Work + Code",
+      "code": "Code",
+      "work": "Work"
+    },
+    "templates": {
+      "title": "Workspace templates",
+      "subtitle": "These files define the Agent working boundaries, personality, user preferences, and long-term context.",
+      "mappingTitle": "Capability boundaries",
+      "mapping": "An Agent is an execution role, a Command is a shortcut workflow, a Skill is a specialized capability, and a template is long-lived workspace configuration."
+    },
+    "recommended": "Recommended",
+    "work": "Work",
+    "code": "Code",
+    "all": "All",
+    "currentProfile": "Current profile: {{profile}}"
   },
   "drawPage": {
     "graph": {
@@ -1019,7 +1032,25 @@
         "video": "Describe the video task",
         "text": "Enter text",
         "config": "Enter configuration"
-      }
+      },
+      "imageProviderRequired": "Configure an enabled image generation model first.",
+      "imageProviderAuthRequired": "Image provider authentication is required.",
+      "multiAngle": "Generate camera angles",
+      "selectAsset": "Select image asset",
+      "maskAttached": "Editable mask attached",
+      "retry": "Retry",
+      "cancel": "Cancel",
+      "generate": "Generate",
+      "generateCount": "Generate {{count}}",
+      "angleInstructions": "Optional continuity or background instructions",
+      "angleCostHint": "Each selected angle creates a separate provider request.",
+      "noAssets": "No saved assets yet.",
+      "maskHint": "Paint the area that the next image edit should regenerate.",
+      "clear": "Clear",
+      "saveMask": "Save mask",
+      "searchPrompts": "Search prompts",
+      "promptEditableHint": "Presets are editable starting points; your changes are used on the canvas.",
+      "usePrompt": "Use prompt"
     },
     "title": "AI Drawing",
     "subtitle": "Aggregates image models across providers and supports official Gemini image generation",
@@ -1233,7 +1264,10 @@
     "unsavedChangesDesc": "You have unsaved changes to {{fileName}}. What would you like to do?",
     "discard": "Discard",
     "openInSystem": "Open in system app",
-    "docxCompatibilityHint": "This preview is converted to web content, so layout may differ from WPS."
+    "docxCompatibilityHint": "This preview is converted to web content, so layout may differ from WPS.",
+    "openFile": "Open file",
+    "diffSplit": "Split",
+    "diffInline": "Inline"
   },
   "skillsPage": {
     "title": "Skills",
@@ -1482,6 +1516,10 @@
     "noVncMacUnreachable": "Cannot reach the macOS VNC bridge. Enable Screen Sharing (System Settings → General → Sharing → Screen Sharing) and confirm the host port (5900 by default). macOS Screen Sharing speaks RFB over TCP only — it does not speak WebSocket. Connect over an SSH tunnel + websockify bridge, or use the external VNC client.",
     "noVncMacRefused": "The macOS VNC server refused the connection. Enable Screen Sharing (System Settings → General → Sharing), allow VNC viewers, and check the firewall allows inbound TCP 5900.",
     "noVncCredentialsRequired": "This VNC server requires credentials. The embedded noVNC viewer cannot reach the stored password safely, so use the external VNC client.",
+    "noVncConnectionTimeout": "The remote desktop did not finish the noVNC handshake in time. Check the host, the bridge port, and the network, then try again.",
+    "noVncMacFailure": "Cannot open the macOS VNC session. Enable Screen Sharing and verify the host port, then try again.",
+    "restoreWorkspace": "Restore workspace size",
+    "maximizeWorkspace": "Maximize workspace",
     "bytes": "bytes",
     "statusIdle": "Idle",
     "statusConnecting": "Connecting",
@@ -1671,7 +1709,9 @@
     "connecting": "Connecting terminal...",
     "terminalExited": "Terminal session ended",
     "terminalExitedWithError": "Terminal session exited",
-    "exitCode": "Exit code: {{code}}"
+    "exitCode": "Exit code: {{code}}",
+    "moveRight": "Move terminal to right",
+    "moveBottom": "Move terminal to bottom"
   },
   "accountAuth": {
     "workspaceEyebrow": "YOUR CONNECTED AI WORKSPACE",
@@ -1778,5 +1818,41 @@
     "signIn": "Sign in or create an account",
     "local": "Use on this device",
     "localDescription": "Local data stays on this device. External model services still require a network connection and model configuration."
+  },
+  "toolCall": {
+    "videoGeneration": {
+      "title": "Video generation",
+      "cancel": "Cancel task"
+    }
+  },
+  "execution": {
+    "loading": "Loading execution history…",
+    "loadFailed": "Could not load execution history",
+    "empty": "No executions in this workspace yet",
+    "emptyHint": "Chat and scheduled runs will appear here.",
+    "started": "Started",
+    "finished": "Finished",
+    "session": "Session",
+    "ssh": "SSH",
+    "local": "local",
+    "fileChanges": "File changes",
+    "artifacts": "Artifacts",
+    "openSession": "Open session"
+  },
+  "rightPanelAction": {
+    "closePanel": "Close panel"
+  },
+  "workspaceTabs": {
+    "label": "Open conversations",
+    "home": "Home",
+    "untitled": "Untitled",
+    "close": "Close {{title}} tab",
+    "busy": "Workspace is busy",
+    "workspaces": "Workspaces",
+    "personal": "Personal"
+  },
+  "profile": {
+    "code": "Code",
+    "work": "Work"
   }
 }

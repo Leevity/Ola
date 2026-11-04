@@ -187,10 +187,10 @@
     "requiresLevel": "Lv.{{level}}"
   },
   "hud": {
-    "level": "Lv.{{level}}",
-    "hunger": "Food",
+    "hunger": "Hunger",
     "clean": "Clean",
-    "mood": "Mood"
+    "mood": "Mood",
+    "level": "Lv.{{level}}"
   },
   "away": {
     "working": "Working… {{time}}",
@@ -302,6 +302,14 @@
     "tooManyEnabled": "Too many pets on desktop. Hide one first.",
     "copyName": "{{name}} copy",
     "copiedToast": "{{name}} copied",
+    "defaultBadge": "Default",
+    "deletedToast": "{{name}} deleted",
+    "delete": {
+      "title": "Delete this companion?",
+      "desc": "This will permanently remove \"{{name}}\" from your collection. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
     "pool": {
       "title": "XP resource pool",
       "hint": "XP from normal chats goes into a shared pool first. Assign it to any companion, or convert it into shared coins.",
@@ -365,12 +373,6 @@
       "max": "Already at the limit.",
       "archived": "This companion is unavailable."
     }
-  },
-  "hud": {
-    "hunger": "Hunger",
-    "clean": "Clean",
-    "mood": "Mood",
-    "level": "Lv.{{level}}"
   },
   "exp": {
     "totalExp": "Total XP",
@@ -457,5 +459,8 @@
     "archiveConfirmTitle": "Archive this pet?",
     "archiveConfirmDesc": "Archiving hides \"{{name}}\" from the desktop and stops its ticks. You can restore it later from the list.",
     "archiveConfirm": "Archive"
+  },
+  "common": {
+    "close": "Close"
   }
 }

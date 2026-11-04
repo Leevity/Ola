@@ -294,6 +294,9 @@ export function CapabilityHealthSummary(): React.JSX.Element {
   const connectingServers = enabledServers.filter(
     (server) => serverStatuses[server.id] === 'connecting'
   )
+  const authorizationServers = enabledServers.filter(
+    (server) => serverStatuses[server.id] === 'authorization-required'
+  )
   const enabledChannels = channels.filter((channel) => channel.enabled)
   const activeWorkspaceChannels = enabledChannels.filter(
     (channel) => (channel.workspaceId ?? 'local-personal') === workspaceId
@@ -374,13 +377,15 @@ export function CapabilityHealthSummary(): React.JSX.Element {
         ? 'unknown'
         : failedServers.length > 0
           ? 'attention'
-          : disconnectedServers.length > 0
+          : authorizationServers.length > 0
             ? 'attention'
-            : enabledServers.length > 0 && connectedServers.length === enabledServers.length
-              ? 'healthy'
-              : enabledServers.length === 0
-                ? 'inventory'
-                : 'unknown'
+            : disconnectedServers.length > 0
+              ? 'attention'
+              : enabledServers.length > 0 && connectedServers.length === enabledServers.length
+                ? 'healthy'
+                : enabledServers.length === 0
+                  ? 'inventory'
+                  : 'unknown'
   const mcpDetail =
     serversError || serverStatusCheckError
       ? t('capabilityCenter.healthDetail.loadFailed')
@@ -398,7 +403,12 @@ export function CapabilityHealthSummary(): React.JSX.Element {
                 hour: '2-digit',
                 minute: '2-digit'
               }).format(serverStatusCheckedAt ?? undefined)
-            })
+            }) +
+            (authorizationServers.length > 0
+              ? ` ${t('capabilityCenter.healthDetail.mcpAuthorizationCount', {
+                  count: authorizationServers.length
+                })}`
+              : '')
 
   const channelTone: HealthTone =
     channelsError || failedChannelStatusChecks.length > 0

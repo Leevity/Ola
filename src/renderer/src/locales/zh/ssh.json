@@ -201,7 +201,18 @@
     "backToList": "返回",
     "viewTable": "表格视图",
     "viewCard": "卡片视图",
-    "search": "搜索连接..."
+    "search": "搜索连接...",
+    "portBadge": "{{port}} 端口",
+    "keepAliveBadge": "{{seconds}}s 心跳",
+    "hostsSummary": "{{hosts}} 台主机 / {{online}} 台在线",
+    "columns": {
+      "os": "系统",
+      "latency": "延迟",
+      "name": "名称",
+      "address": "地址",
+      "info": "信息",
+      "actions": "操作"
+    }
   },
   "dashboard": {
     "totalServers": "服务器",
@@ -446,6 +457,23 @@
       "noUploads": "尚无上传活动。",
       "diagnostics": "连接诊断",
       "noDiagnostics": "暂无诊断记录。"
-    }
+    },
+    "basicInfo": "基本信息",
+    "connectionSettings": "连接设置",
+    "jumpHost": "跳板机",
+    "proxySettings": "代理设置",
+    "otherSettings": "其他设置",
+    "hostMemo": "主机备注",
+    "hostMemoHint": "可填写默认目录或用途说明，方便后续识别。",
+    "initialize": "初始化",
+    "initializeHint": "保存后可直接连接，也可以先测试连接。",
+    "authSummary": "认证摘要",
+    "agentAuthHint": "当前连接会直接使用本机 SSH Agent 完成认证。",
+    "jumpHostHint": "需要通过中间主机接入时，请填写 ProxyJump。",
+    "proxySettingsHint": "这里先保留连接稳定性相关设置。",
+    "runtimeShell": "初始化执行",
+    "advancedCompatibility": "高级兼容性",
+    "advancedCompatibilityHint": "后续可继续扩展 X11、Cipher、Kex 等高级选项。",
+    "initCommandHint": "未设置初始化命令，连接后将直接进入默认 shell。"
   }
 }

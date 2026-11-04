@@ -295,7 +295,7 @@ export function SshImportDialog({
                     <span>{t('migration.columns.address')}</span>
                     <span>{t('migration.columns.details')}</span>
                     <span>{t('migration.columns.conflict')}</span>
-                    <span>{t('migration.columns.action')}</span>
+                    <span>{t('migration.columns.operation')}</span>
                   </div>
 
                   {preview.connections.map((item) => {

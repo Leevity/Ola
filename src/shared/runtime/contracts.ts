@@ -8,7 +8,8 @@ export const RUNTIME_CAPABILITIES = [
   'replay',
   'cancel',
   'interactions',
-  'workspace-switch'
+  'workspace-switch',
+  'stream'
 ] as const
 export type RuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number]
 export type RunStatus =
@@ -125,6 +126,16 @@ export interface RunSnapshot {
   events: RunEvent[]
   pendingInteractions: PendingRuntimeInteraction[]
 }
+
+/**
+ * Server-initiated frames carry no request id. A `run.event` frame mirrors one
+ * persisted journal event; `run.resync` tells the client that the subscription
+ * was dropped (slow consumer or revoked access) and that it must reconcile with
+ * a snapshot instead of assuming the stream is still contiguous.
+ */
+export type RuntimeNotification =
+  | { event: 'run.event'; subscriptionId: string; payload: RunEvent }
+  | { event: 'run.resync'; subscriptionId: string; reason: string }
 
 export class RuntimeError extends Error {
   constructor(readonly code: string) {

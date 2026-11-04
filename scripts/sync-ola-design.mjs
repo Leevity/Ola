@@ -17,6 +17,18 @@ const names = Object.keys(tokens.colors.light)
 if (names.join() !== Object.keys(tokens.colors.dark).join()) {
   throw new Error('Light and dark token names must match')
 }
+// Motion levels are a fixed, ordered ladder: the Renderer maps them one-to-one to
+// `MotionLevel`, so a fourth value or a different order would silently fall through.
+const motionLevels = tokens.motion?.levels
+if (
+  !Array.isArray(motionLevels) ||
+  motionLevels.length !== 3 ||
+  motionLevels[0] !== 'full' ||
+  motionLevels[1] !== 'reduced' ||
+  motionLevels[2] !== 'off'
+) {
+  throw new Error('motion.levels must be exactly ["full", "reduced", "off"]')
+}
 const kebab = (name) => name.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)
 const luminance = (hex) => {
   if (!/^#[0-9a-f]{6}$/i.test(hex)) throw new Error(`Invalid color: ${hex}`)

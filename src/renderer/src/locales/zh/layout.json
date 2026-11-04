@@ -87,8 +87,7 @@
       "chat": "对话",
       "clarify": "澄清",
       "cowork": "协作",
-      "code": "编程",
-      "acp": "ACP"
+      "code": "编程"
     },
     "deleteAllSessions": "删除所有会话",
     "deleteAllConfirm": "删除全部 {{count}} 个会话？此操作不可撤销。",
@@ -135,7 +134,8 @@
       "center": "账户中心",
       "signIn": "登录 Ola",
       "signOut": "退出登录"
-    }
+    },
+    "editProjectModel": "修改项目默认模型"
   },
   "layout": {
     "newModeSession": "新建 {{mode}} 会话",
@@ -193,14 +193,6 @@
           "功能实现、问题排查、项目搭建、文档、DevOps 和分析任务",
           "需要明确审批、实时进度、结果验证和结构化结论的工作"
         ]
-      },
-      "acp": {
-        "summary": "Architecture Control Planning 适合复杂实现前的主控场景：先澄清目标与边界，再做架构设计、任务拆解和执行分派，主 Agent 不直接编码。",
-        "solves": [
-          "需要先明确背景、范围、约束、依赖与验收标准，再进入实现的复杂任务",
-          "希望主 Agent 专注架构设计、任务编排和过程控制，而不是直接下场写代码",
-          "希望子任务并行执行，并以结构化 Markdown 总结回收结果以便持续推进"
-        ]
       }
     }
   },
@@ -247,7 +239,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "澄清进入计划模式后自动切换目标模式",
     "clarifyPlanModeAutoSwitchOff": "不跳转",
     "clarifyPlanModeAutoSwitchCode": "转编程",
-    "clarifyPlanModeAutoSwitchAcp": "转 ACP",
     "autoApproveOn": "自动批准已开启 — 所有工具调用无需确认",
     "autoApproveOff": "自动批准已关闭 — 工具调用需要确认",
     "pendingCount": "{{count}} 个待处理",
@@ -681,7 +672,6 @@
     "switchToChat": "切换到对话模式",
     "switchToClarify": "切换到澄清模式",
     "switchToExecute": "切换到执行模式",
-    "switchToAcp": "切换到 ACP 模式",
     "currentSession": "当前会话",
     "exportCurrentChat": "导出当前对话",
     "copiedConversation": "已复制对话到剪贴板",
@@ -762,24 +752,6 @@
     "orchestrationToolCalls": "工具调用",
     "orchestrationToolCallsEmpty": "当前成员还没有可展示的工具调用",
     "orchestrationToolCallCount": "{{count}} 次调用",
-    "acp": "ACP",
-    "acpTitle": "ACP · Architecture Control Planning",
-    "acpDesc": "适合复杂实现前的架构控制场景。主 Agent 负责澄清需求、定义边界、制定方案、拆解任务与汇总结果；具体实现交由子 Agent 执行。",
-    "acpRuleNoCode": "主 Agent 不直接写实现代码或修改文件，必须先澄清目标、约束、风险与验收标准。",
-    "acpRuleDelegate": "实现类任务必须通过 Task / SubAgent / teammate 分派给合适的子 Agent 执行。",
-    "acpRuleReport": "每个子任务完成后应返回结构化 Markdown 总结，用于主 Agent 汇总、复核和继续推进。",
-    "acpCurrentPhase": "当前阶段",
-    "acpNextAction": "建议下一步",
-    "acpPhaseClarify": "需求澄清",
-    "acpPhasePlan": "规划中",
-    "acpPhaseReview": "方案评审",
-    "acpPhaseApproved": "待执行",
-    "acpPhaseExecute": "分派执行",
-    "acpNextActionClarify": "先补齐目标、约束、边界与验收标准，再进入计划。",
-    "acpNextActionPlan": "继续完善实施计划，保存后退出 Plan Mode。",
-    "acpNextActionExecute": "继续把已批准计划拆成任务，分派子代理执行，并汇总结果。",
-    "acpInProgressCount_one": "{{count}} 进行中",
-    "acpInProgressCount_other": "{{count}} 进行中",
     "skills": "工具",
     "cron": "定时",
     "expand": "展开",

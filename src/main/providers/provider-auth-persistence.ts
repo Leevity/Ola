@@ -80,23 +80,42 @@ export function splitProviderCredentials(raw: unknown): {
 /** Restores only fields explicitly marked in public metadata, so deletions stay deleted. */
 export function hydrateProviderCredentials(
   raw: unknown,
-  credentials: Record<string, StoredProviderCredentials>
+  credentials: Record<string, StoredProviderCredentials>,
+  options: { allowMissingCredentials?: boolean } = {}
 ): unknown {
   return withProviders(raw, (provider) => {
     if (typeof provider.id !== 'string') return provider
     const secret = credentials[provider.id]
     const hydrated: ObjectRecord = { ...provider }
     if (hydrated.apiKeyStored === true) {
-      if (!secret?.apiKey) throw new Error('Provider credential bundle is missing an API key')
-      hydrated.apiKey = secret.apiKey
+      if (!secret?.apiKey) {
+        if (!options.allowMissingCredentials) {
+          throw new Error('Provider credential bundle is missing an API key')
+        }
+        delete hydrated.apiKeyStored
+      } else {
+        hydrated.apiKey = secret.apiKey
+      }
     }
     if (hydrated.oauthStored === true) {
-      if (!secret?.oauth) throw new Error('Provider credential bundle is missing an OAuth token')
-      hydrated.oauth = secret.oauth
+      if (!secret?.oauth) {
+        if (!options.allowMissingCredentials) {
+          throw new Error('Provider credential bundle is missing an OAuth token')
+        }
+        delete hydrated.oauthStored
+      } else {
+        hydrated.oauth = secret.oauth
+      }
     }
     if (hydrated.channelStored === true) {
-      if (!secret?.channel) throw new Error('Provider credential bundle is missing channel auth')
-      hydrated.channel = secret.channel
+      if (!secret?.channel) {
+        if (!options.allowMissingCredentials) {
+          throw new Error('Provider credential bundle is missing channel auth')
+        }
+        delete hydrated.channelStored
+      } else {
+        hydrated.channel = secret.channel
+      }
     }
     delete hydrated.apiKeyStored
     delete hydrated.oauthStored
@@ -108,7 +127,13 @@ export function hydrateProviderCredentials(
         const next: ObjectRecord = { ...account }
         if (account.oauthStored === true && typeof account.id === 'string') {
           const token = secret?.accounts?.[account.id]
-          if (!token) throw new Error('Provider credential bundle is missing an account token')
+          if (!token) {
+            if (!options.allowMissingCredentials) {
+              throw new Error('Provider credential bundle is missing an account token')
+            }
+            delete next.oauthStored
+            return next
+          }
           next.oauth = token
         }
         delete next.oauthStored

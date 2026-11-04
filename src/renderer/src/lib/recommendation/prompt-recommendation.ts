@@ -158,7 +158,7 @@ function buildSystemPrompt(language: AppLanguage, hasDraft: boolean): string {
       ? 'If a current draft exists, your suggestion MUST start with the draft text exactly as-is, character for character.'
       : 'If the draft is empty, predict the most likely next thing the user would type.',
     `Use the same language as the current draft when it exists. Otherwise use ${fallbackLanguage}.`,
-    'Respect the current mode, but only as a constraint on the prediction: chat = natural follow-up, clarify = sharper requirement question, cowork = next collaborative action, code = next concrete implementation/debugging request, acp = next clarification or planning request.',
+    'Respect the current mode, but only as a constraint on the prediction: chat = natural follow-up, clarify = sharper requirement question, execute = next concrete implementation or debugging request.',
     'If a skill is selected, align the prediction with that skill.',
     'If images are attached and visible to you, incorporate them naturally when relevant.',
     'Stay silent if the next step is not obvious from the conversation.',

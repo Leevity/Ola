@@ -34,14 +34,7 @@ assert.ok(
 )
 assert.ok(!registry.includes("id: 'aiCoding'"), 'disabled AI Coding cannot be visible')
 assert.ok(!registry.includes("id: 'hooks'"), 'disabled Hooks cannot be visible')
-for (const section of [
-  'common',
-  'models',
-  'execution',
-  'integrations',
-  'personalization',
-  'advanced'
-]) {
+for (const section of ['common', 'models', 'execution', 'integrations', 'personalization']) {
   assert.ok(registry.includes(`id: '${section}'`), `missing settings section: ${section}`)
 }
 console.log('settings registry verification passed')

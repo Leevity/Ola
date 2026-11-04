@@ -8,6 +8,8 @@ import {
   resolveExtensionPath
 } from './extension-paths'
 import { ExtensionStateStore, type ExtensionState } from './extension-state-store'
+import { executeExtensionHttpTool, type ExtensionFetch } from './extension-http-tool'
+import type { ExtensionToolResult } from '../../shared/extension-types'
 
 export interface ExtensionSecretStore {
   get(extensionId: string, key: string): Promise<string>
@@ -148,6 +150,26 @@ export class ExtensionService {
     const result = { ...defaults(manifest), ...state.config }
     for (const key of secretKeys(manifest)) result[key] = await this.secrets.get(manifest.id, key)
     return result
+  }
+
+  /**
+   * Execute a single HTTP tool call against a runtime extension. The capability gates in
+   * ExtensionManager are enforced before this is reached; this performs the actual request
+   * with the extension's live config (secrets resolved here, never exposed to the caller).
+   */
+  async executeHttpRequest(
+    runtime: RuntimeExtension,
+    params: { toolName?: string; input?: Record<string, unknown>; url?: string },
+    fetch?: ExtensionFetch
+  ): Promise<ExtensionToolResult> {
+    return await executeExtensionHttpTool({
+      manifest: runtime.manifest,
+      enabled: runtime.enabled,
+      config: runtime.config,
+      toolName: params.toolName ?? '',
+      input: params.input,
+      ...(fetch ? { fetch } : {})
+    })
   }
 
   getPath(extensionId: unknown): string {

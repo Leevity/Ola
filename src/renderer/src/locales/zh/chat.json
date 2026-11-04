@@ -97,7 +97,6 @@
     "placeholder": "输入消息...",
     "placeholderClarify": "描述你的想法，我会先不断追问把需求问透...",
     "placeholderExecute": "描述你希望 Ola 构建、研究、操作或验证的任务...",
-    "placeholderAcp": "描述目标、背景、约束和验收标准；我会先做设计与分派，不会直接写代码...",
     "placeholderPlanReview": "输入计划审阅反馈，或点击上方卡片以实施...",
     "placeholderPendingGoal": "描述要追求的目标...",
     "pendingGoalBanner": "追求目标已就绪。下一条文本消息会作为目标，并照常发送。",
@@ -246,12 +245,7 @@
     "recommendationDefaultChat": "预测我在这个聊天里下一步最自然会输入什么。",
     "recommendationDefaultClarify": "预测我会继续追问的下一个尖锐问题，直到把需求完全问透。",
     "recommendationDefaultExecute": "预测我接下来最自然会输入的具体执行请求。",
-    "recommendationDefaultAcp": "预测我接下来最自然会输入的 ACP 目标澄清或设计问题。",
     "recommendationInitWorkspace": "当前工作目录还没有 AGENTS.md。预测自然下一步，大概率是先执行 /init 初始化项目上下文。",
-    "startAcp": "开始 ACP 会话",
-    "startAcpDesc": "先澄清目标、背景、约束和验收标准，再做架构设计与任务分派，最后再进入实现。",
-    "homeTitleAcp": "ACP 模式",
-    "homeDescAcp": "ACP 模式下先把目标、背景、约束和验收标准问清楚，再进行架构设计与任务拆分，最后才进入编码。",
     "noProvider": "没有可用的 AI 供应商",
     "noProviderDescription": "请在设置中配置或启用 AI 供应商。",
     "noModel": "没有可用的 AI 模型",
@@ -311,10 +305,6 @@
       "modeExecute": {
         "title": "这是“执行”模式",
         "description": "适合编码、研究、文档、DevOps、文件和跨应用操作；所有工具动作都会保留可见、可审计的记录。"
-      },
-      "modeAcp": {
-        "title": "这是“ACP”模式",
-        "description": "适合复杂任务的主控推进：先澄清边界和验收标准，再做架构设计、任务拆解和执行分派，主 Agent 不直接编码。"
       },
       "leftSidebar": {
         "title": "这是左侧项目与会话区",
@@ -823,7 +813,8 @@
     "deepThinking": "正在深度思考",
     "deepThought": "已深度思考",
     "thinkingEllipsis": "思考中…",
-    "thoughts": "思考过程"
+    "thoughts": "思考过程",
+    "elapsedSeconds": "{{seconds}} 秒"
   },
   "messageList": {
     "startConversation": "开始对话",
@@ -840,13 +831,10 @@
     "homeTitleClarify": "先把需求说清楚",
     "homeTitleCowork": "进入项目一起处理",
     "homeTitleCode": "开始写代码",
-    "homeTitleAcp": "开始 ACP 协作",
-    "homeDescAcp": "开始 ACP 模式，聚焦架构确认、约束澄清和执行拆分。",
     "homeDescAutoChat": "发送后会按内容复杂度自动选择更合适的模型来回复。",
     "homeDescAutoClarify": "发送后会自动挑选更适合追问、澄清和收敛方案的模型。",
     "homeDescAutoCowork": "发送后会自动挑选更适合读项目、改文件和调用工具的模型。",
     "homeDescAutoCode": "发送后会自动挑选更适合写代码、重构和分析问题的模型。",
-    "homeDescAutoAcp": "发送后会自动挑选更适合架构确认、约束澄清和执行拆分的模型。",
     "homeDescChatGeneral": "适合日常对话、写作整理和轻量问题。",
     "homeDescChatVision": "适合日常对话，也能结合图片内容快速回答。",
     "homeDescClarifyGeneral": "适合连续提问、梳理目标和补齐约束。",
@@ -1420,5 +1408,8 @@
         "desc": "项目与编程"
       }
     }
+  },
+  "extensionToolResult": {
+    "originalPrice": "原价 {{price}}"
   }
 }

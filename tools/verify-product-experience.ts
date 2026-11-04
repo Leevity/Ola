@@ -14,6 +14,7 @@ const [
   workspaceHome,
   settingsPage,
   capabilityCenter,
+  capabilityLifecycle,
   settingsResolver,
   settingsRegistry,
   workspaceSidebar,
@@ -51,6 +52,7 @@ const [
   read('src/renderer/src/components/chat/WorkspaceHome.tsx'),
   read('src/renderer/src/components/settings/SettingsPage.tsx'),
   read('src/renderer/src/components/settings/CapabilityCenterPanel.tsx'),
+  read('src/shared/capability-lifecycle.ts'),
   read('src/renderer/src/components/settings/settings-panel-resolver.tsx'),
   read('src/renderer/src/components/settings/settings-registry.ts'),
   read('src/renderer/src/components/layout/WorkspaceSidebar.tsx'),
@@ -83,8 +85,10 @@ const [
 ])
 
 assert(
-  uiStore.includes("export type AppMode = 'chat' | 'clarify' | 'execute' | 'acp'") &&
-    uiStore.includes("mode === 'cowork' || mode === 'code' || mode === 'execute'"),
+  uiStore.includes("export type AppMode = 'chat' | 'clarify' | 'execute'") &&
+    uiStore.includes("mode === 'cowork' || mode === 'code' || mode === 'execute'") &&
+    uiStore.includes('export type LegacyAppMode = ') &&
+    uiStore.includes("mode === 'acp'"),
   'App mode migration to Execute is incomplete'
 )
 assert(
@@ -260,8 +264,10 @@ assert(
   'WebContentsView browser lifecycle must have a Main-owned secure service'
 )
 assert(
-  chatStore.includes("export type SessionMode = 'chat' | 'clarify' | 'execute' | 'acp'") &&
-    chatStore.includes("mode === 'cowork' || mode === 'code' || mode === 'execute'"),
+  chatStore.includes("export type SessionMode = 'chat' | 'clarify' | 'execute'") &&
+    chatStore.includes("mode === 'cowork' || mode === 'code' || mode === 'execute'") &&
+    chatStore.includes('export type LegacySessionMode = ') &&
+    chatStore.includes("mode === 'acp'"),
   'legacy session modes are not normalized to Execute'
 )
 assert(
@@ -278,6 +284,26 @@ assert(navRail.includes('aria-current={item.active'), 'primary navigation curren
 assert(
   navRail.includes("openSettingsPage('plugin')"),
   'capability center is not directly reachable'
+)
+
+assert(
+  capabilityLifecycle.includes("{ id: 'draw-canvas', status: 'beta', highImpact: false }") &&
+    capabilityLifecycle.includes("{ id: 'pet-companion', status: 'beta', highImpact: false }") &&
+    capabilityLifecycle.includes(
+      "{ id: 'media-generation', status: 'prototype', highImpact: true }"
+    ) &&
+    capabilityLifecycle.includes(
+      "{ id: 'novnc-remote-desktop', status: 'beta', highImpact: true }"
+    ) &&
+    capabilityLifecycle.includes(
+      "CapabilityLifecycleStatus = 'prototype' | 'internal' | 'beta' | 'ga' | 'deprecated'"
+    ),
+  'optional workbenches must keep an explicit lifecycle grade'
+)
+assert(
+  capabilityCenter.includes('t(`capabilityCenter.status.${capability.status}`)') &&
+    capabilityCenter.includes("capability.status === 'prototype'"),
+  'capability center must render the full lifecycle vocabulary'
 )
 
 assert(

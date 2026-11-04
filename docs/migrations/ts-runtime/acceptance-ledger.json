@@ -81,7 +81,11 @@
         "tests/runtime/runtime-tool-authorization.test.ts",
         "tests/runtime/hooks-config-paths.test.ts",
         "tests/runtime/mcp-runtime-tools.test.ts",
-        "tests/runtime/ask-user-runtime-tool.test.ts"
+        "tests/runtime/ask-user-runtime-tool.test.ts",
+        "tools/verify-extension-capability-gates.ts",
+        "tools/verify-extension-upgrade-escalation.ts",
+        "tools/verify-extension-lifecycle.ts",
+        "tools/verify-tool-namer-stability.ts"
       ],
       "status": "通过"
     },
@@ -2893,8 +2897,20 @@
       "tsImplementation": "src/main/ipc/extension-handlers.ts",
       "productionCallPath": "src/main/ipc/extension-handlers.ts",
       "legacyPathRemoved": true,
-      "contractEvidence": ["tests/runtime/extension-ipc.test.ts"],
-      "e2eEvidence": ["tests/runtime/extension-ipc.test.ts"],
+      "contractEvidence": [
+        "tests/runtime/extension-ipc.test.ts",
+        "tools/verify-extension-capability-gates.ts",
+        "tools/verify-extension-upgrade-escalation.ts",
+        "tools/verify-extension-lifecycle.ts",
+        "tools/verify-tool-namer-stability.ts"
+      ],
+      "e2eEvidence": [
+        "tests/runtime/extension-ipc.test.ts",
+        "tools/verify-extension-capability-gates.ts",
+        "tools/verify-extension-upgrade-escalation.ts",
+        "tools/verify-extension-lifecycle.ts",
+        "tools/verify-tool-namer-stability.ts"
+      ],
       "status": "通过"
     },
     {

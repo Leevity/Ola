@@ -76,8 +76,7 @@
       "chat": "Chat",
       "clarify": "Klarstellen",
       "cowork": "Zusammenarbeit",
-      "code": "Code",
-      "acp": "ACP"
+      "code": "Code"
     },
     "deleteAllSessions": "Alle Sitzungen löschen",
     "deleteAllConfirm": "Alle löschen {{count}} Sitzungen? Das kann nicht rückgängig gemacht werden.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sitzung gelöscht",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Auto-Switch Zielmodus nach Clarify geht in Plan-Modus",
     "clarifyPlanModeAutoSwitchOff": "Aufenthalt",
     "clarifyPlanModeAutoSwitchCode": "Zum Code",
-    "clarifyPlanModeAutoSwitchAcp": "Zu den AKP-Staaten",
     "autoApproveOn": "Auto-Approve ist ON – alle Tools laufen ohne Bestätigung",
     "autoApproveOff": "Auto-Genehmigung ist AUS - Tool-Aufrufe erfordern Bestätigung",
     "pendingCount": "{{count}} anhängig",
@@ -407,7 +406,6 @@
     "switchToClarify": "Wechsel zum Klarstellungsmodus",
     "switchToCowork": "Wechsel in den Cowork Mode",
     "switchToCode": "Wechsel in den Codemodus",
-    "switchToAcp": "Wechsel in den AKP-Modus",
     "currentSession": "Aktuelle Sitzung",
     "exportCurrentChat": "Export aktueller Chat",
     "copiedConversation": "Kopierte Konversation zum Clipboard",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Tool Calls",
     "orchestrationToolCallsEmpty": "Dieses Mitglied hat keine Tool Calls zum Anzeigen",
     "orchestrationToolCallCount": "{{count}} Anrufe",
-    "acp": "AKP",
-    "acpTitle": "ACP · Architekturkontrollplanung",
-    "acpDesc": "Der Hauptagent klärt Anforderungen, definiert Grenzen, entwirft den Ansatz, zerlegt Aufgaben und synthetisiert Ergebnisse; die konkrete Umsetzung wird von Subagenten ausgeführt.",
-    "acpRuleNoCode": "Der Hauptagent schreibt keinen Implementierungscode oder ändert Dateien direkt, sondern klärt zunächst Ziele, Einschränkungen, Risiken und Akzeptanzkriterien.",
-    "acpRuleDelegate": "Implementierungsaufgaben müssen über Task / SubAgent / Teamkollege an den entsprechenden Subagent delegiert werden.",
-    "acpRuleReport": "Jede Teilaufgabe sollte eine strukturierte Markdown-Zusammenfassung zurückgeben, damit der Hauptagent die Ausführung überprüfen, synthetisieren und fortsetzen kann.",
-    "acpCurrentPhase": "Aktuelle Phase",
-    "acpNextAction": "Empfohlen nächster Schritt",
-    "acpPhaseClarify": "Anforderungsklärung",
-    "acpPhasePlan": "Planung",
-    "acpPhaseReview": "Planüberprüfung",
-    "acpPhaseApproved": "Bereit zur Ausführung",
-    "acpPhaseExecute": "Delegierte Ausführung",
-    "acpNextActionClarify": "Füllen Sie Ziele, Einschränkungen, Grenzen und Akzeptanzkriterien aus, bevor Sie planen.",
-    "acpNextActionPlan": "Verfeinern Sie den Implementierungsplan weiter, speichern Sie ihn und beenden Sie dann den Planmodus.",
-    "acpNextActionExecute": "Zerlegen Sie den genehmigten Plan in Aufgaben, delegieren Sie Subagenten und synthetisieren Sie deren Outputs.",
-    "acpInProgressCount_one": "{{count}} im Gange",
-    "acpInProgressCount_other": "{{count}} im Gange",
     "skills": "Werkzeuge",
     "cron": "Cron",
     "expand": "Expansion",
@@ -676,14 +656,6 @@
           "Präzise Implementierung: Schreiben von Features, Beheben von Fehlern, Refactoring oder Vervollständigen von Modulen mit Ingenieurdisziplin",
           "Wenn Sie eine saubere Codeausgabe mit minimaler Narration wünschen - eine knappe Bestätigung anstelle von ausführlichen Walk-throughs",
           "Änderungen, die strenge Aufmerksamkeit auf bestehende Konventionen, Typen, Importe und API-Verträge erfordern"
-        ]
-      },
-      "acp": {
-        "summary": "Architektursteuerung Planung ist für komplexe Arbeit, die Kontrolle vor der Implementierung benötigt: zuerst Ziele und Grenzen klären, dann die Architektur entwerfen, die Ausführung zerlegen und die Lieferung delegieren. Der Hauptagent kodiert nicht direkt.",
-        "solves": [
-          "Komplexe Aufgaben, bei denen Hintergrund, Umfang, Einschränkungen, Abhängigkeiten und Akzeptanzkriterien vor der Implementierung geklärt werden müssen",
-          "Arbeiten, bei denen sich der Hauptagent auf Architektur, Orchestrierung und Prozesskontrolle konzentrieren sollte, anstatt direkt zu codieren",
-          "Fälle, in denen Teilaufgaben parallel ausgeführt werden sollten und strukturierte Markdown-Zusammenfassungen für die fortgesetzte Koordination zurückgegeben werden sollten"
         ]
       }
     }

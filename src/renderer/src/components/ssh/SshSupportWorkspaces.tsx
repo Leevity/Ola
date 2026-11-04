@@ -415,7 +415,7 @@ export function SshKnownHostsWorkspace(): React.JSX.Element {
                 onClick={() => void handleDelete()}
                 disabled={saving}
               >
-                {t('delete')}
+                {t('action.delete', { ns: 'common' })}
               </Button>
             ) : null}
             <Button
@@ -424,7 +424,7 @@ export function SshKnownHostsWorkspace(): React.JSX.Element {
               disabled={saving}
             >
               {saving ? <Loader2 className="size-4 animate-spin" /> : null}
-              {t('save')}
+              {t('action.save', { ns: 'common' })}
             </Button>
           </div>
         </div>
@@ -750,7 +750,7 @@ export function SshPortForwardingWorkspace(): React.JSX.Element {
               disabled={!commandPreview}
             >
               <Copy className="size-4" />
-              {t('copy')}
+              {t('action.copy', { ns: 'common' })}
             </Button>
           </SectionCard>
         </div>
@@ -763,14 +763,14 @@ export function SshPortForwardingWorkspace(): React.JSX.Element {
                 className="h-11 flex-1 rounded-[14px] border-border bg-card text-foreground hover:bg-accent"
                 onClick={handleDelete}
               >
-                {t('delete')}
+                {t('action.delete', { ns: 'common' })}
               </Button>
             ) : null}
             <Button
               className="h-11 flex-1 rounded-[14px] bg-primary text-[0.88rem] font-semibold text-primary-foreground hover:bg-primary/90"
               onClick={handleSave}
             >
-              {t('save')}
+              {t('action.save', { ns: 'common' })}
             </Button>
           </div>
         </div>
@@ -1031,7 +1031,7 @@ export function SshSnippetsWorkspace(): React.JSX.Element {
               disabled={!form.command.trim()}
             >
               <Copy className="size-4" />
-              {t('copy')}
+              {t('action.copy', { ns: 'common' })}
             </Button>
           </SectionCard>
         </div>
@@ -1044,14 +1044,14 @@ export function SshSnippetsWorkspace(): React.JSX.Element {
                 className="h-11 flex-1 rounded-[14px] border-border bg-background text-muted-foreground hover:bg-muted"
                 onClick={handleDelete}
               >
-                {t('delete')}
+                {t('action.delete', { ns: 'common' })}
               </Button>
             ) : null}
             <Button
               className="h-11 flex-1 rounded-[14px] bg-primary text-[0.88rem] font-semibold text-primary-foreground hover:bg-primary/90"
               onClick={handleSave}
             >
-              {t('save')}
+              {t('action.save', { ns: 'common' })}
             </Button>
           </div>
         </div>

@@ -41,6 +41,10 @@ interface McpStore {
   refreshServerInfo: (id: string) => Promise<void>
   refreshAllServers: () => Promise<void>
 
+  // OAuth (HTTP transports)
+  authorizeServer: (id: string) => Promise<{ success: boolean; error?: string }>
+  signOutServer: (id: string) => Promise<void>
+
   // Per-project activation
   toggleActiveMcp: (id: string, projectId?: string | null) => void
   clearActiveMcps: (projectId?: string | null) => void
@@ -173,6 +177,7 @@ export const useMcpStore = create<McpStore>((set, get) => ({
     try {
       const res = (await ipcClient.invoke(IPC.MCP_CONNECT, id)) as {
         success: boolean
+        status?: McpServerStatus
         error?: string
       }
       if (!res.success) {
@@ -182,11 +187,14 @@ export const useMcpStore = create<McpStore>((set, get) => ({
         }))
         return res.error ?? 'Unknown error'
       }
-      // Refresh info after connect
+      // Refresh info after connect. Main distinguishes `connected` from
+      // `authorization-required`; its answer wins over the optimistic `connecting`.
       await get().refreshServerInfo(id)
-      set((s) => ({
-        serverStatuses: { ...s.serverStatuses, [id]: 'connected' }
-      }))
+      if (get().serverStatuses[id] === 'connecting') {
+        set((s) => ({
+          serverStatuses: { ...s.serverStatuses, [id]: res.status ?? 'connected' }
+        }))
+      }
       return undefined
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -264,6 +272,63 @@ export const useMcpStore = create<McpStore>((set, get) => ({
         serverStatusCheckError: error instanceof Error ? error.message : String(error)
       })
     }
+  },
+
+  /**
+   * Start a browser authorization for an HTTP server. Main owns the loopback
+   * listener and spends the code there, so only a status comes back.
+   */
+  authorizeServer: async (id) => {
+    set((s) => ({
+      serverStatuses: { ...s.serverStatuses, [id]: 'connecting' },
+      serverErrors: { ...s.serverErrors, [id]: undefined }
+    }))
+    try {
+      const res = (await ipcClient.invoke(IPC.MCP_OAUTH_START, id)) as {
+        success: boolean
+        status?: McpServerStatus
+        error?: string
+      }
+      if (!res.success) {
+        await get().refreshServerInfo(id)
+        if (!get().serverErrors[id]) {
+          set((s) => ({
+            serverStatuses: { ...s.serverStatuses, [id]: 'error' },
+            serverErrors: { ...s.serverErrors, [id]: res.error }
+          }))
+        }
+        return { success: false, error: res.error }
+      }
+      await get().refreshServerInfo(id)
+      if (get().serverStatuses[id] === 'connecting') {
+        set((s) => ({ serverStatuses: { ...s.serverStatuses, [id]: res.status ?? 'connected' } }))
+      }
+      return { success: true }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      set((s) => ({
+        serverStatuses: { ...s.serverStatuses, [id]: 'error' },
+        serverErrors: { ...s.serverErrors, [id]: msg }
+      }))
+      return { success: false, error: msg }
+    }
+  },
+
+  signOutServer: async (id) => {
+    try {
+      await ipcClient.invoke(IPC.MCP_OAUTH_SIGNOUT, id)
+    } catch {
+      // Signing out must not strand the UI on a stale "authorized" state.
+    }
+    // Main drops the client along with the credentials, so there is nothing left
+    // to refresh: force the row back to disconnected locally.
+    set((s) => ({
+      serverStatuses: { ...s.serverStatuses, [id]: 'disconnected' },
+      serverTools: { ...s.serverTools, [id]: [] },
+      serverResources: { ...s.serverResources, [id]: [] },
+      serverPrompts: { ...s.serverPrompts, [id]: [] },
+      serverErrors: { ...s.serverErrors, [id]: undefined }
+    }))
   },
 
   getActiveMcpIds: (projectId) => {
@@ -344,3 +409,34 @@ export const useMcpStore = create<McpStore>((set, get) => ({
 
   setSelectedServer: (id) => set({ selectedServerId: id })
 }))
+
+interface McpOAuthCallbackPayload {
+  serverId?: string
+  ok?: boolean
+  status?: McpServerStatus
+  error?: string
+}
+
+/**
+ * The browser round trip finishes long after the click, so the outcome arrives as an
+ * event rather than as the reply to `mcp:oauth-start`. Main has already exchanged the
+ * code; the Renderer only needs to pick up the resulting status and capabilities.
+ */
+if (typeof window !== 'undefined') {
+  ipcClient.on(IPC.MCP_OAUTH_CALLBACK, (payload: unknown) => {
+    const result = payload as McpOAuthCallbackPayload
+    const serverId = result?.serverId
+    if (!serverId) return
+    if (result.status) {
+      useMcpStore.setState((s) => ({
+        serverStatuses: { ...s.serverStatuses, [serverId]: result.status as McpServerStatus }
+      }))
+    }
+    if (!result.ok && result.error) {
+      useMcpStore.setState((s) => ({
+        serverErrors: { ...s.serverErrors, [serverId]: result.error }
+      }))
+    }
+    void useMcpStore.getState().refreshServerInfo(serverId)
+  })
+}

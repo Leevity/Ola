@@ -58,8 +58,8 @@ import {
 import { copySessionAsImageToClipboard } from '@renderer/lib/utils/export-session-image'
 import { cn } from '@renderer/lib/utils'
 import { useChatStore } from '@renderer/stores/chat-store'
-import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useUIStore } from '@renderer/stores/ui-store'
+import { useMotionProfile } from '@renderer/hooks/use-motion-level'
 import { toast } from 'sonner'
 
 interface SessionConversationPaneProps {
@@ -123,7 +123,9 @@ export function SessionConversationPane({
   )
   const conversationPanelFullWidth = useUIStore((state) => state.conversationPanelFullWidth)
   const setConversationPanelFullWidth = useUIStore((state) => state.setConversationPanelFullWidth)
-  const animationsEnabled = useSettingsStore((state) => state.animationsEnabled)
+  // The dock animates height and offset, so it only takes the animated branch when
+  // transforms are allowed; `reduced` and `off` mount it directly instead.
+  const motionProfile = useMotionProfile()
   const isStreaming = Boolean(streamingMessageId)
   const {
     sendMessage,
@@ -663,7 +665,7 @@ export function SessionConversationPane({
             isStreaming={isStreaming}
             fullWidth={conversationPanelFullWidth}
           />
-          {terminalDockLayout.effectiveArea === 'bottom' && animationsEnabled ? (
+          {terminalDockLayout.effectiveArea === 'bottom' && motionProfile.transform ? (
             <AnimatePresence initial={false}>
               {showTerminalDock ? (
                 <motion.div

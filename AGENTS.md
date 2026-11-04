@@ -38,7 +38,11 @@ src/
   boundary is fail-closed and must not start an external worker; the exact exit state is tracked
   in the migration acceptance ledger.
 - **Tool system:** Tools in `src/renderer/src/lib/tools/`, registered in phases (core → skills → sub-agents → teams).
-- **Session modes:** `chat`, `clarify`, `cowork`, `code`, `acp` — each with distinct prompts/tools/UI.
+- **Session modes:** `chat`, `clarify`, `cowork`, `code` — each with distinct prompts/tools/UI.
+- **Run events:** `RunEvent` (`src/shared/runtime/contracts.ts`) is the single source of truth for
+  runtime events. `TsRuntimeProjectedEvent` may only project those into UI vocabulary; never invent a
+  runtime event name that duplicates or diverges from `RunEvent`. Main-owned consumers (goals, cron)
+  declare their own narrow input type instead of importing renderer event unions.
 - **SQLite schema:** The TS BusinessRepository owns desktop writes. Preserve historical data and
   use versioned, tested migrations.
 - **Data directory:** `~/.ola/` — never commit its contents.

@@ -76,8 +76,7 @@
       "chat": "Chat",
       "clarify": "Aclarar",
       "cowork": "Colaborar",
-      "code": "Código",
-      "acp": "ACP"
+      "code": "Código"
     },
     "deleteAllSessions": "Suprímase todas las sesiones",
     "deleteAllConfirm": "Eliminar todo {{count}} Esto no se puede deshacer.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Período de sesiones suprimido",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Modo de destino de arranque automático después de que Clarify entre en modo de plan",
     "clarifyPlanModeAutoSwitchOff": "Quédate.",
     "clarifyPlanModeAutoSwitchCode": "Código",
-    "clarifyPlanModeAutoSwitchAcp": "ACP",
     "autoApproveOn": "Autoaprobar es ON — todas las herramientas funcionan sin confirmación",
     "autoApproveOff": "Autoaprobar es OFF — llamadas de herramientas requieren confirmación",
     "pendingCount": "{{count}} pendientes",
@@ -407,7 +406,6 @@
     "switchToClarify": "Cambiar a modo Clarify",
     "switchToCowork": "Cambiar al modo Cowork",
     "switchToCode": "Cambiar al modo Código",
-    "switchToAcp": "Cambiar a modo ACP",
     "currentSession": "Sesión actual",
     "exportCurrentChat": "Exportar Chat actual",
     "copiedConversation": "Conversación copiada al portapapeles",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Llamadas de herramienta",
     "orchestrationToolCallsEmpty": "Este miembro no tiene llamadas para mostrar",
     "orchestrationToolCallCount": "{{count}} llamadas",
-    "acp": "ACP",
-    "acpTitle": "ACP · Planificación del Control de Arquitectura",
-    "acpDesc": "El principal agente aclara los requisitos, define los límites, diseña el enfoque, descompone las tareas y sintetiza los resultados; la ejecución concreta es ejecutada por subagentes.",
-    "acpRuleNoCode": "El agente principal no escribe código de implementación o modifica archivos directamente. Primero aclara objetivos, limitaciones, riesgos y criterios de aceptación.",
-    "acpRuleDelegate": "Las tareas de implementación deben ser delegadas a través de Task / SubAgent / compañero de equipo al subagente apropiado.",
-    "acpRuleReport": "Cada sub-tarea debe devolver un resumen de marcado estructurado para que el agente principal pueda revisar, sintetizar y continuar la ejecución.",
-    "acpCurrentPhase": "Fase actual",
-    "acpNextAction": "Próximo paso recomendado",
-    "acpPhaseClarify": "Requirement clarification",
-    "acpPhasePlan": "Planificación",
-    "acpPhaseReview": "Examen del plan",
-    "acpPhaseApproved": "Listo para ejecutar",
-    "acpPhaseExecute": "Ejecución delegada",
-    "acpNextActionClarify": "Llenar objetivos, limitaciones, límites y criterios de aceptación antes de la planificación.",
-    "acpNextActionPlan": "Continuar refinando el plan de aplicación, guardarlo, luego salir del Modo Plan.",
-    "acpNextActionExecute": "Mantener la descomposición del plan aprobado en tareas, delegar subagentes y sintetizar sus productos.",
-    "acpInProgressCount_one": "{{count}} en curso",
-    "acpInProgressCount_other": "{{count}} en curso",
     "skills": "Herramientas",
     "cron": "Cron",
     "expand": "Ampliación",
@@ -676,14 +656,6 @@
           "Implementación precisa: características de escritura, corrección de errores, refactorización o completar módulos con disciplina de ingeniería",
           "Cuando usted desea la salida del código limpio con la narración mínima — confirmación del terse en lugar de verbose walk-throughs",
           "Cambios que exigen una atención estricta a los convenios, tipos, importaciones y contratos de API existentes"
-        ]
-      },
-      "acp": {
-        "summary": "La planificación del control de arquitectura es para un trabajo complejo que necesita control antes de la implementación: aclarar objetivos y límites primero, luego diseñar la arquitectura, la ejecución descompuesta y la entrega de delegado.",
-        "solves": [
-          "Antes de la aplicación se aclararán las tareas complejas que requieren antecedentes, alcance, limitaciones, dependencias y criterios de aceptación",
-          "Trabajar donde el agente principal debe centrarse en la arquitectura, orquestación y control de procesos en lugar de codificación directamente",
-          "Casos en que las sub-tareas deben presentarse en paralelo y devolver resúmenes estructurados de marcado para una coordinación continua"
         ]
       }
     }

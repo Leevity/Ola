@@ -58,12 +58,24 @@ describe('TS runtime Execute eligibility', () => {
     [{ hasPlugin: true }, 'PLUGIN_NOT_MIGRATED'],
     [{ hasChannels: true }, 'CHANNELS_NOT_MIGRATED'],
     [{ toolNames: ['UnknownTool'] }, 'TOOLS_NOT_MIGRATED'],
-    [{ workingDirectory: null }, 'TOOLS_NOT_MIGRATED'],
-    [{ mode: 'acp' }, 'MODE_NOT_MIGRATED']
+    [{ workingDirectory: null }, 'TOOLS_NOT_MIGRATED']
   ] as const)('rejects unsupported runtime capabilities: %s', (patch, reason) => {
     expect(assessTsRuntimeAgentEligibility({ ...baseline, ...patch })).toEqual({
       eligible: false,
       reason
+    })
+  })
+
+  // `acp` is retired; the mode allowlist keeps rejecting it so a stale persisted
+  // value can never start an unattended run instead of being normalized first.
+  it('unknown modes fail closed', () => {
+    expect(assessTsRuntimeAgentEligibility({ ...baseline, mode: 'acp' })).toEqual({
+      eligible: false,
+      reason: 'MODE_NOT_MIGRATED'
+    })
+    expect(assessTsRuntimeAgentEligibility({ ...baseline, mode: 'cowork' })).toEqual({
+      eligible: false,
+      reason: 'MODE_NOT_MIGRATED'
     })
   })
 

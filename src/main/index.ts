@@ -58,9 +58,10 @@ import { registerGoalRuntimeHandlers } from './ipc/goal-runtime-handlers'
 import { registerMemoryAutomationHandlers } from './ipc/memory-automation-handlers'
 import { readConfig, registerConfigHandlers } from './ipc/secure-key-store'
 import { registerExtensionHandlers } from './ipc/extension-handlers'
+import { getExtensionManager } from './extensions/extension-runtime'
 import { registerChannelHandlers, autoStartChannels } from './ipc/channel-handlers'
 import { ChannelManager } from './channels/channel-manager'
-import { autoConnectMcpServers, registerMcpHandlers } from './ipc/mcp-handlers'
+import { autoConnectMcpServers, registerMcpHandlers, stopMcpOAuthFlows } from './ipc/mcp-handlers'
 import { registerCronHandlers } from './ipc/cron-handlers'
 import { registerInputHandlers } from './ipc/input-handlers'
 import { registerInputDraftHandlers } from './ipc/input-draft-handlers'
@@ -1465,8 +1466,10 @@ let quitStateFlushed = false
 let quitStateFlushStarted = false
 
 function stopBackgroundServicesForQuit(): void {
+  getExtensionManager().stopIdleSweep()
   channelManager.stopAll()
   mcpManager.disconnectAll()
+  stopMcpOAuthFlows()
   killAllManagedProcesses()
   killAllTerminalSessions()
   closeAllSshSessions()
@@ -1605,6 +1608,9 @@ if (gotSingleInstanceLock) {
     // the window so startup cannot race handler installation.
     registerAgentsHandlers()
     registerExtensionHandlers()
+    // Lazy-activation idle sweep: hibernates extension contexts that have been idle past the
+    // timeout. Started once at startup; torn down on quit.
+    getExtensionManager().startIdleSweep()
     // The first renderer paint hydrates several independent panes in parallel.
     // Install every synchronous IPC surface before creating the window so a
     // fast renderer cannot observe a partially registered Main process.

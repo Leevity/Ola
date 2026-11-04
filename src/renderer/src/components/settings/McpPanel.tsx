@@ -13,7 +13,8 @@ import {
   Globe,
   Wrench,
   FileText,
-  MessageSquare
+  MessageSquare,
+  KeyRound
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { isImeCommitKey } from '@renderer/lib/keyboard-composition'
@@ -117,6 +118,8 @@ function ServerConfigPanel({
   const connectServer = useMcpStore((s) => s.connectServer)
   const disconnectServer = useMcpStore((s) => s.disconnectServer)
   const refreshServerInfo = useMcpStore((s) => s.refreshServerInfo)
+  const authorizeServer = useMcpStore((s) => s.authorizeServer)
+  const signOutServer = useMcpStore((s) => s.signOutServer)
   const serverStatuses = useMcpStore((s) => s.serverStatuses)
   const serverTools = useMcpStore((s) => s.serverTools)
   const serverResources = useMcpStore((s) => s.serverResources)
@@ -258,12 +261,38 @@ function ServerConfigPanel({
       const err = await connectServer(server.id)
       if (err) {
         toast.error(t('mcp.connectionFailed'), { description: err })
-      } else {
+        return
+      }
+      // The server may be waiting for a browser authorization instead of serving.
+      if (useMcpStore.getState().serverStatuses[server.id] === 'authorization-required') {
+        toast.info(t('mcp.oauthRequired'))
+        return
+      }
+      toast.success(t('mcp.connectedTo', { name: server.name }))
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  const handleAuthorize = async (): Promise<void> => {
+    setConnecting(true)
+    try {
+      const result = await authorizeServer(server.id)
+      if (!result.success) {
+        toast.error(t('mcp.connectionFailed'), { description: result.error })
+      } else if (useMcpStore.getState().serverStatuses[server.id] === 'connected') {
         toast.success(t('mcp.connectedTo', { name: server.name }))
+      } else {
+        toast.info(t('mcp.oauthWaiting'))
       }
     } finally {
       setConnecting(false)
     }
+  }
+
+  const handleSignOut = async (): Promise<void> => {
+    await signOutServer(server.id)
+    toast.success(t('mcp.signedOut'))
   }
 
   const handleDisconnect = async (): Promise<void> => {
@@ -466,7 +495,7 @@ function ServerConfigPanel({
       <Separator className="mb-4" />
 
       {/* Connection control */}
-      <section className="flex items-center gap-2 mb-4">
+      <section className="flex flex-wrap items-center gap-2 mb-4">
         {status === 'connected' ? (
           <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleDisconnect}>
             <Square className="size-3 mr-1" />
@@ -484,6 +513,30 @@ function ServerConfigPanel({
             {connecting || status === 'connecting' ? t('mcp.connecting') : t('mcp.connect')}
           </Button>
         )}
+        {isHttp && status !== 'connected' && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={handleAuthorize}
+            disabled={connecting || status === 'connecting'}
+            title={t('mcp.authorizeDesc')}
+          >
+            <KeyRound className="size-3 mr-1" />
+            {t('mcp.authorize')}
+          </Button>
+        )}
+        {isHttp && (status === 'connected' || status === 'authorization-required') && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={handleSignOut}
+            title={t('mcp.signOutDesc')}
+          >
+            {t('mcp.signOut')}
+          </Button>
+        )}
         {status === 'connected' && (
           <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleRefresh}>
             <RefreshCw className="size-3 mr-1" />
@@ -496,9 +549,11 @@ function ServerConfigPanel({
               ? 'text-emerald-600 dark:text-emerald-400'
               : status === 'error'
                 ? 'text-destructive'
-                : status === 'connecting'
-                  ? 'text-yellow-600 dark:text-yellow-400'
-                  : 'text-muted-foreground'
+                : status === 'authorization-required'
+                  ? 'text-amber-600 dark:text-amber-400'
+                  : status === 'connecting'
+                    ? 'text-yellow-600 dark:text-yellow-400'
+                    : 'text-muted-foreground'
           }`}
         >
           <span
@@ -507,14 +562,23 @@ function ServerConfigPanel({
                 ? 'bg-emerald-500'
                 : status === 'error'
                   ? 'bg-destructive'
-                  : status === 'connecting'
-                    ? 'bg-yellow-500 animate-pulse'
-                    : 'bg-muted-foreground/30'
+                  : status === 'authorization-required'
+                    ? 'bg-amber-500'
+                    : status === 'connecting'
+                      ? 'bg-yellow-500 animate-pulse'
+                      : 'bg-muted-foreground/30'
             }`}
           />
-          {status}
+          {t(`mcp.status.${status}`, { defaultValue: status })}
         </span>
       </section>
+
+      {/* Browser authorization hint */}
+      {status === 'authorization-required' && (
+        <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 mb-4">
+          <p className="text-xs text-amber-700 dark:text-amber-400">{t('mcp.oauthRequired')}</p>
+        </div>
+      )}
 
       {/* Error display */}
       {error && (
@@ -898,7 +962,9 @@ export function McpPanel({
                             ? 'bg-emerald-500'
                             : status === 'error'
                               ? 'bg-destructive'
-                              : 'bg-muted-foreground/30'
+                              : status === 'authorization-required'
+                                ? 'bg-amber-500'
+                                : 'bg-muted-foreground/30'
                         }`}
                       />
                     </button>

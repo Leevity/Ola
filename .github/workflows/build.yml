@@ -88,6 +88,100 @@ jobs:
           npm run verify:ci-core
           cd server && go test ./...
 
+  # 真实 Electron 冒烟：需要构建产物与显示服务器，因此不与 verify:ci-core 同 job。
+  # 这三个门禁此前只在人工验收时执行，改动后一旦回归没有 CI 反馈。
+  # 固定 ubuntu-22.04：Electron 的系统库在 noble 上全部改名为 t64 变体，jammy 的包名稳定。
+  desktop-smoke:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Cache build dependencies
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ola-build-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ola-build-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Install Linux runtime dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libx11-dev libxtst-dev libpng++-dev \
+            xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 \
+            libgtk-3-0 libasound2 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxrandr2 libxfixes3 libpango-1.0-0 libcairo2 libxss1 libatspi2.0-0 \
+            libsecret-1-0
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Reject legacy runtime artifacts in the build output
+        run: npm run verify:legacy-artifacts
+
+      - name: Electron startup, routes, feature surfaces and translate flow
+        run: xvfb-run --auto-servernum npm run verify:electron-startup
+
+      - name: Detached session delete broadcasts to its window
+        run: xvfb-run --auto-servernum npm run verify:session-delete-electron
+
+      - name: Upload smoke evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ola-desktop-smoke-evidence
+          path: |
+            docs/migrations/ts-runtime/evidence/electron-startup-*
+          if-no-files-found: warn
+          retention-days: 7
+
+  # 迁移台账 --exit 必须保持失败：P1/P3/P10/P12 与 5 个 release target 尚无证据。
+  # 这里显式校验「失败原因就是台账未收口」，避免有人改台账或改脚本让它假通过。
+  migration-exit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Require the migration ledger to stay honest
+        run: |
+          set +e
+          output=$(npm run verify:ts-migration-exit 2>&1)
+          status=$?
+          set -e
+          echo "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "::error::verify:ts-migration-exit unexpectedly passed; close P1/P3/P10/P12 and the release targets with evidence before letting this gate go green."
+            exit 1
+          fi
+          if ! printf '%s' "$output" | grep -q "acceptance entries remain open (first: P1, P3, P10, P12"; then
+            echo "::error::verify:ts-migration-exit failed for a reason other than the open ledger entries; fix the failure instead of accepting it."
+            exit 1
+          fi
+          echo "Ledger exit gate failed for the expected open entries."
+
   # ── 准备阶段：提取版本号与发布内容 ──
   prepare:
     if: github.event_name == 'workflow_dispatch'
@@ -349,6 +443,19 @@ jobs:
           if (-not (Test-Path (Join-Path $installRoot 'ola.exe'))) {
             throw "Installed Ola executable was not found under $installRoot"
           }
+
+      # verify:packaged-startup 此前只在人工验收时执行：它需要一个已经装好的产物，
+      # 而只有本 job 有。验证对象是安装目录里的可执行文件，而不是 dist 里的副本。
+      - name: Packaged app starts and renders after install
+        if: matrix.platform == 'win'
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $executable = Join-Path (Join-Path $env:TEMP "ola-install-smoke-${{ matrix.artifact_arch }}") 'ola.exe'
+          if (-not (Test-Path $executable)) {
+            throw "Installed Ola executable was not found at $executable"
+          }
+          npm run verify:packaged-startup -- $executable
 
       - name: Verify Windows release artifacts
         if: matrix.platform == 'win'

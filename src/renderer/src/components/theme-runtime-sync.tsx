@@ -2,13 +2,14 @@ import { useEffect } from 'react'
 import { useTheme } from 'next-themes'
 import { applyThemePresetCssVars, resolveAppThemeMode } from '@renderer/lib/theme-presets'
 import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useMotionLevel } from '@renderer/hooks/use-motion-level'
 
 export function ThemeRuntimeSync(): null {
   const theme = useSettingsStore((state) => state.theme)
   const backgroundColor = useSettingsStore((state) => state.backgroundColor)
   const fontFamily = useSettingsStore((state) => state.fontFamily)
   const fontSize = useSettingsStore((state) => state.fontSize)
-  const animationsEnabled = useSettingsStore((state) => state.animationsEnabled)
+  const motionLevel = useMotionLevel()
   const themePreset = useSettingsStore((state) => state.themePreset)
   const { theme: activeTheme, resolvedTheme, setTheme } = useTheme()
 
@@ -42,8 +43,11 @@ export function ThemeRuntimeSync(): null {
       root.style.removeProperty('--app-font-size')
     }
 
-    root.dataset.animations = animationsEnabled ? 'enabled' : 'disabled'
-  }, [animationsEnabled, backgroundColor, fontFamily, fontSize, resolvedTheme, themePreset])
+    // `data-animations` keeps the coarse on/off contract used by `main.css`;
+    // `data-motion-level` carries the three-level ladder for opacity-only reductions.
+    root.dataset.motionLevel = motionLevel
+    root.dataset.animations = motionLevel === 'off' ? 'disabled' : 'enabled'
+  }, [motionLevel, backgroundColor, fontFamily, fontSize, resolvedTheme, themePreset])
 
   return null
 }

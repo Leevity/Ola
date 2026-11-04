@@ -49,6 +49,7 @@ export function buildCapabilityDiagnosticSnapshot(input: CapabilityDiagnosticInp
     enabled: enabledServers.length,
     connected: 0,
     connecting: 0,
+    authorizationRequired: 0,
     disconnected: 0,
     error: 0,
     unknown: 0
@@ -57,6 +58,7 @@ export function buildCapabilityDiagnosticSnapshot(input: CapabilityDiagnosticInp
     const status = input.mcp.statuses[server.id]
     if (status === 'connected') mcpCounts.connected += 1
     else if (status === 'connecting') mcpCounts.connecting += 1
+    else if (status === 'authorization-required') mcpCounts.authorizationRequired += 1
     else if (status === 'disconnected') mcpCounts.disconnected += 1
     else if (status === 'error') mcpCounts.error += 1
     else mcpCounts.unknown += 1

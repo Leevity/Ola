@@ -4,7 +4,6 @@ import { BrainCircuit, ChevronRight, ChevronDown } from 'lucide-react'
 import Markdown from 'react-markdown'
 import { MONO_FONT } from '@renderer/lib/constants'
 import { useSettingsStore } from '@renderer/stores/settings-store'
-import { normalizeLanguageCode } from '@renderer/lib/i18n-language'
 import {
   getLiveOutputComponentClass,
   getLiveOutputCursorClass,
@@ -35,7 +34,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   startedAt,
   completedAt
 }: ThinkingBlockProps): React.JSX.Element | null {
-  const { t, i18n } = useTranslation('chat')
+  const { t } = useTranslation('chat')
   const liveOutputAnimationStyle = useSettingsStore((s) => s.liveOutputAnimationStyle)
   const isThinking = isStreaming && !completedAt
   const renderPool = useStreamingRenderPool(thinking, isThinking, liveOutputAnimationStyle)
@@ -68,7 +67,6 @@ export const ThinkingBlock = memo(function ThinkingBlock({
   }
 
   const expanded = isThinking || (hasThinkingContent && !collapsed)
-  const compactLanguage = normalizeLanguageCode(i18n.language)
 
   // Compute duration label from persisted timestamps
   const persistedDuration =
@@ -87,13 +85,7 @@ export const ThinkingBlock = memo(function ThinkingBlock({
     : t('thinking.deepThought', { defaultValue: 'Thought deeply' })
 
   const compactElapsedLabel =
-    liveElapsed > 0
-      ? compactLanguage === 'ko'
-        ? `${liveElapsed}초`
-        : compactLanguage === 'zh' || compactLanguage === 'ja'
-          ? `${liveElapsed} 秒`
-          : `${liveElapsed}s`
-      : ''
+    liveElapsed > 0 ? t('thinking.elapsedSeconds', { seconds: liveElapsed }) : ''
 
   return (
     <div className={`my-4 min-w-0${liveComponentClassName ? ` ${liveComponentClassName}` : ''}`}>

@@ -45,7 +45,9 @@
     "globalScope": "Global",
     "saving": "Saving…",
     "saved": "Saved",
-    "back": "Back"
+    "back": "Back",
+    "failed": "Save failed",
+    "retrySave": "Retry saving settings"
   },
   "profile": {
     "title": "プロフィール",
@@ -146,6 +148,10 @@
         "dawn": {
           "label": "暖かい夜明け",
           "desc": "軽いモードおよび基づいた暗モードのより多くの温度の暖かい銅オレンジパレット。"
+        },
+        "connected": {
+          "label": "Ola Connected Workspace",
+          "desc": "A calm blue-violet workspace shared across Ola desktop, mobile and the console."
         }
       },
       "remoteHint": "Remote"
@@ -165,8 +171,22 @@
     },
     "language": "言語",
     "languageDesc": "インターフェースの表示言語を設定します",
-    "animations": "アニメーションを有効化",
-    "animationsDesc": "既定で有効です。無効にすると、できる限りトランジション、モーション、スムーズスクロールを停止します。",
+    "motionLevel": "モーション",
+    "motionLevelDesc": "インターフェースの動きの量を選びます。システムが動きの低減を求めている場合は常にそちらが優先されます。",
+    "motionLevels": {
+      "full": {
+        "label": "フル",
+        "desc": "すべてのトランジションとアニメーション効果。"
+      },
+      "reduced": {
+        "label": "控えめ",
+        "desc": "フェードのみ。スライドや拡大縮小、高さの変化は行いません。"
+      },
+      "off": {
+        "label": "オフ",
+        "desc": "トランジション、モーション効果、スムーズスクロールを使用しません。"
+      }
+    },
     "liveOutputAnimation": {
       "title": "AI ライブ出力アニメーション",
       "desc": "アシスタントが応答を配信している間に使うモーションスタイルを選択します。",
@@ -297,7 +317,12 @@
     "title": "同期",
     "workspaceUnavailable": {
       "title": "Sync is unavailable here",
-      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated.",
+      "conflicts": "同期を一時停止しました（競合 {{count}} 件）。",
+      "result": "ワークスペース同期が完了しました：アップロード {{uploaded}} 件、適用 {{downloaded}} 件。",
+      "v2Description": "このワークスペースは分離された v2 WebDAV 同期を使用します。このデバイスで TS ビジネス所有権が有効になった後でのみ実行されます。",
+      "running": "ワークスペースを同期中…",
+      "action": "今すぐワークスペースを同期"
     },
     "subtitle": "WebDAVと記録レベルのOlaデータ同期。",
     "loading": "同期設定をロードする...",
@@ -330,7 +355,14 @@
       "remoteUpdated": "リモート更新",
       "downloaded": "ダウンロード",
       "conflicts": "コンプリット",
-      "success": "データが同期されます。"
+      "success": "データが同期されます。",
+      "state": {
+        "idle": "Idle",
+        "running": "Syncing",
+        "success": "Synced",
+        "conflict": "Needs conflict resolution",
+        "error": "Sync failed"
+      }
     },
     "confirm": {
       "pushTitle": "ローカルデータをWebDAVにアップロードしますか?",
@@ -589,7 +621,8 @@
     "clearFailed": "ログをクリアできなかった",
     "clearEmpty": "クリアする7日以上ログなし",
     "cacheTokenShare": "Cached Token Share",
-    "cacheReadRatio": "Cache Read Ratio"
+    "cacheReadRatio": "Cache Read Ratio",
+    "billableInputTokens": "課金対象の入力トークン"
   },
   "model": {
     "title": "モデル構成",
@@ -620,7 +653,6 @@
       "clarify": "モードの明確化",
       "cowork": "作業モード",
       "code": "コードモード",
-      "acp": "ACPモード",
       "execute": "Execute Mode"
     },
     "promptRecommendationModesDesc": {
@@ -628,7 +660,6 @@
       "clarify": "要件の明確化とフォローアップ提案のため",
       "cowork": "共同実行とタスクのブレイクダウンの提案のために",
       "code": "実装、修正、デバッグ提案のため",
-      "acp": "ACP制御の流れの目標の明確化、建築設計および委任の提案のため",
       "execute": "For implementation, research, operations, debugging, and task breakdown suggestions"
     },
     "selectRecommendationModel": "推奨モデルを選択",
@@ -659,7 +690,8 @@
     "creative": "クリエイティブ",
     "random": "ランダム",
     "maxTokens": "最高のトークン",
-    "maxTokensDesc": "応答ごとの最大トークン上限"
+    "maxTokensDesc": "応答ごとの最大トークン上限",
+    "selectProvider": "プロバイダーを選択"
   },
   "plugin": {
     "title": "プラグイン",
@@ -834,7 +866,9 @@
       "analytics": "Graph health",
       "circularDependencies": "Circular dependencies: {{count}}",
       "deadCode": "Potentially unused symbols: {{count}}",
-      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}",
+      "advancedDiagnostics": "詳細診断",
+      "noSourceFiles": "インデックスは完了しましたが、インデックス可能なソースファイルが見つかりませんでした。"
     },
     "productDesign": {
       "workflowTitle": "Workflow plugin",
@@ -933,7 +967,28 @@
       "agent": "エージェント",
       "mcp": "MCP サーバー",
       "instructions": "指示/記憶"
-    }
+    },
+    "businessHandoverSchemaUnsupported": "旧データベーススキーマに必要な業務フィールドがありません。",
+    "businessHandoverBackupSpace": "ロールバックスナップショット用の空き容量が不足しています。",
+    "businessHandoverBackupDirectory": "ロールバック用ディレクトリが利用できないか安全ではありません。",
+    "businessHandoverSourceUnavailable": "旧業務データベースはまだ利用できません。",
+    "businessHandoverPreflightUnknown": "事前チェックを完了できませんでした：{{reason}}",
+    "businessHandoverConfirm": "今すぐロールバックスナップショットを作成し、業務データの書き込みを TS ランタイムに切り替えますか？",
+    "businessHandoverSuccess": "業務データは TS ランタイムが所有するようになりました。",
+    "businessHandoverIncomplete": "引き継ぎは TS 所有に到達しませんでした。状態を確認して再試行してください。",
+    "businessHandoverFailed": "業務データの引き継ぎに失敗しました：{{error}}",
+    "businessHandoverTitle": "TS 業務ランタイムの所有権",
+    "businessHandoverDescription": "検証済みのロールバックスナップショットを作成し、旧書き込みを停止して、業務データをオフラインファーストの TS ランタイム経由で処理します。",
+    "businessHandoverActive": "TS 稼働中",
+    "businessHandoverPending": "未昇格",
+    "businessHandoverRunning": "準備中…",
+    "businessHandoverDone": "完了",
+    "businessHandoverAction": "TS に昇格",
+    "businessHandoverUnavailable": "TS ランタイムの準備と引き継ぎの安全フラグが有効になるまで昇格できません。",
+    "businessHandoverPreflight": "事前チェック：{{reason}}",
+    "businessHandoverWarning": "引き継ぎ中、既存の Native Project Wiki レコードは TS 管理のアーカイブに保持されます。",
+    "businessHandoverBackup": "ロールバックスナップショット",
+    "businessHandoverManifest": "引き継ぎマニフェスト"
   },
   "about": {
     "title": "お問い合わせ",
@@ -975,10 +1030,6 @@
       "execute": {
         "title": "Execute Mode",
         "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
-      },
-      "acp": {
-        "title": "ACP Mode",
-        "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
       }
     },
     "summary": "Olaは、マルチモデルのワークフロー、MCPサーバー、スキル、カスタムチャンヌルを1つのデスクトップエクスペリエンス内で統一することで、チャット、コワーキング、またはコードモードを切り替えながらコントロールできます。"
@@ -1041,7 +1092,8 @@
         "exportFailed": "輸出失敗:{{error}}",
         "refreshSuccess": "トークン更新",
         "refreshFailed": "{{error}}を新たにして下さい",
-        "removeSuccess": "削除されたアカウント"
+        "removeSuccess": "削除されたアカウント",
+        "clipboardUnavailable": "Clipboard is unavailable"
       }
     },
     "title": "AIプロバイダー",
@@ -1356,7 +1408,11 @@
     "modelCategoryVideo": "Video",
     "seedanceVideo": "Seedance video",
     "cacheTtl": "Cache TTL (anthropic)",
-    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level."
+    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level.",
+    "credentialVaultUnavailable": {
+      "title": "Provider credentials are unavailable",
+      "description": "Encrypted storage could not be read. Editing is paused to protect saved accounts. Quit and reopen Ola; if this continues, keep your local data and check the logs."
+    }
   },
   "channel": {
     "title": "チャンネル",
@@ -1502,7 +1558,12 @@
       "FeishuBitableCreateRecords": "ビット可能なテーブルでレコードを作成する",
       "FeishuBitableUpdateRecords": "ビットテーブルでレコードを更新する",
       "FeishuBitableDeleteRecords": "ビット可能なテーブルからレコードを削除"
-    }
+    },
+    "narrowPaneLabel": "Channel view",
+    "narrowList": "Channel list",
+    "narrowConfig": "Channel settings",
+    "olaTeamModels": "Ola チームモデル",
+    "olaPersonalModels": "Ola 個人モデル"
   },
   "mcp": {
     "title": "MCP サーバー",
@@ -1560,7 +1621,21 @@
     "deleteConfirm": "MCPサーバー「{{name}}」を削除しますか?",
     "noTools": "利用可能なツールはありません",
     "noResources": "利用可能なリソースなし",
-    "noPrompts": "利用可能なプロンプトはありません"
+    "noPrompts": "利用可能なプロンプトはありません",
+    "authorize": "認証",
+    "authorizeDesc": "ブラウザでこのサーバーを認証します",
+    "signOut": "サインアウト",
+    "signOutDesc": "このサーバーの保存済み認証を削除します",
+    "oauthRequired": "このサーバーを使うにはブラウザでの認証が必要です。",
+    "oauthWaiting": "ブラウザでの認証完了を待っています。",
+    "signedOut": "認証を削除しました",
+    "status": {
+      "disconnected": "未接続",
+      "connecting": "接続中",
+      "connected": "接続済み",
+      "authorization-required": "認証が必要",
+      "error": "エラー"
+    }
   },
   "skillsmarket": {
     "title": "スキルマーケット",
@@ -1641,7 +1716,8 @@
     "disabledError": "Web検索は無効です。 設定を有効にしてください。",
     "apiKeyRequired": "このプロバイダではAPIキーが必要です。",
     "testSuccess": "Web検索テスト成功! {{count}}の結果を見つけました。",
-    "testFailed": "Web検索テスト失敗:{{error}}"
+    "testFailed": "Web検索テスト失敗:{{error}}",
+    "apiKeySaved": "API キーを安全に保存しました"
   },
   "shortcuts": {
     "title": "キーボードショートカット",
@@ -1677,7 +1753,11 @@
     "exportConversation": "会話のエクスポート",
     "copyConversation": "会話をコピーする",
     "allowTool": "ツールの実行を許可する",
-    "denyTool": "Denyツールの実行"
+    "denyTool": "Denyツールの実行",
+    "previousSession": "Switch to previous session",
+    "nextSession": "Switch to next session",
+    "scrollTop": "Scroll to conversation top",
+    "scrollBottom": "Scroll to conversation bottom"
   },
   "wiki": {
     "title": "Project Wiki",
@@ -1724,7 +1804,22 @@
     "cancelReplay": "Cancel replay",
     "flowSummary": "{{name}} · {{count}} steps",
     "run": "Run",
-    "delete": "Delete {{name}}"
+    "delete": "Delete {{name}}",
+    "errors": {
+      "workspaceUnavailable": "This workspace is temporarily unavailable. Desktop flows could not be loaded.",
+      "loadFailed": "Could not load desktop flows. Try again.",
+      "retry": "Retry loading",
+      "startFailed": "Could not start recording. Check desktop recording permissions and try again.",
+      "stopFailed": "Could not stop or save the recording. Check the current recording state.",
+      "saveFailed": "Could not save the desktop flow.",
+      "replayFailed": "Replay failed. Check the flow and run history.",
+      "cancelFailed": "Could not cancel replay.",
+      "deleteFailed": "Could not delete the desktop flow."
+    },
+    "reviewRequired": "入力ステップは再生できません。入力せずに録画し直してください。",
+    "runs": {
+      "title": "最近の実行"
+    }
   },
   "permission": {
     "title": "Permissions",
@@ -1809,7 +1904,67 @@
     "channels": "Channels",
     "enabledCount": "{{enabled}} of {{total}} enabled",
     "healthyCount": "{{healthy}} of {{total}} healthy",
-    "installedCount": "{{total}} installed"
+    "installedCount": "{{total}} installed",
+    "refreshFailed": "Some capabilities could not be checked. Review the affected row and open its settings to repair.",
+    "healthTitle": "Capability connection and installation status",
+    "healthDescription": "Summarizes states that have been read. Unchecked, no request history, and load failures remain distinct and are never inferred as healthy.",
+    "refreshHealth": "Refresh status",
+    "openSettings": "Settings",
+    "diagnostics": {
+      "export": "Export redacted diagnostics",
+      "exportSuccess": "Redacted diagnostics saved.",
+      "exportFailed": "Could not export diagnostics.",
+      "privacyHint": "Exports aggregate states, counts, and time only; names, identifiers, paths, configuration, credentials, messages, and raw errors are excluded."
+    },
+    "health": {
+      "providers": "Model providers",
+      "skills": "Skills",
+      "extensions": "Extensions",
+      "builtinPlugins": "Built-in plugin setup",
+      "mcp": "MCP servers",
+      "channels": "Channels in the current workspace"
+    },
+    "healthTone": {
+      "healthy": "Healthy",
+      "attention": "Needs attention",
+      "unknown": "Unconfirmed",
+      "inventory": "Inventoried"
+    },
+    "healthDetail": {
+      "loadFailed": "Could not read status. Retry from the corresponding settings page.",
+      "notChecked": "Status has not been read yet.",
+      "noProviderRequests": "No request history is available to assess provider health.",
+      "providerCounts": "{{healthy}} of {{total}} providers have healthy recent requests; read at {{checkedAt}}",
+      "skillCount": "{{count}} Skills installed; installation does not mean every Skill fits the current task.",
+      "extensionCounts": "{{installed}} installed, {{enabled}} enabled; enabled does not mean the extension is running correctly.",
+      "builtinPluginCounts": "{{enabled}} of {{total}} enabled; {{needsSetup}} need required configuration (this check includes image model setup).",
+      "mcpCounts": "{{enabled}} enabled, {{connected}} connected, {{connecting}} connecting, {{disconnected}} disconnected, {{failed}} with errors; checked at {{checkedAt}}",
+      "mcpAuthorizationCount": "{{count}} 件はブラウザ認証が必要です",
+      "channelCounts": "{{enabled}} enabled, {{running}} running, {{stopped}} stopped, {{failed}} with errors; checked at {{checkedAt}}",
+      "noneEnabled": "Nothing is enabled in this category.",
+      "statusCheckFailed": "Could not read one or more channel statuses. Retry in Channel settings."
+    },
+    "lifecycleTitle": "Capability delivery status",
+    "lifecycleDescription": "Status labels reflect each capability's actual delivery stage and availability.",
+    "lifecyclePolicy": "Delivery status",
+    "status": {
+      "prototype": "Prototype",
+      "internal": "Internal",
+      "beta": "In testing",
+      "ga": "Generally available",
+      "deprecated": "Deprecated"
+    },
+    "capabilities": {
+      "local-agent-workspace": "Local Agent workspace",
+      "remote-ssh-operations": "Remote SSH operations",
+      "channel-automation": "Channel automation",
+      "browser-cookie-import": "Browser cookie import",
+      "media-generation": "Media generation",
+      "unified-execution-audit": "Unified execution audit",
+      "draw-canvas": "Draw canvas",
+      "pet-companion": "Pet companion",
+      "novnc-remote-desktop": "NoVNC remote desktop"
+    }
   },
   "pet": {
     "title": "Desktop Pet",
@@ -1845,7 +2000,10 @@
     "loading": "Loading extensions...",
     "emptyTitle": "No extensions installed",
     "emptyDesc": "Choose a folder containing extension.json to add custom tools to Ola.",
-    "noRenderers": "No custom renderers"
+    "noRenderers": "No custom renderers",
+    "workbenchViews": "Workbench views",
+    "workbenchCommands": "Commands",
+    "workbenchCommandsHint": "Enabled commands are available in the command palette."
   },
   "workModes": {
     "title": "Work modes",
@@ -1946,7 +2104,9 @@
           "team": "Ola team workspace",
           "localModels": "Local models",
           "resourceCount": "{{count}} managed models",
-          "localName": "Local workspace"
+          "localName": "Local workspace",
+          "current": "Current workspace",
+          "switchFailed": "Could not switch workspaces. Please try again."
         },
         "resources": {
           "title": "Managed model resources",
@@ -1954,7 +2114,12 @@
           "refresh": "Refresh",
           "available": "Available",
           "unavailable": "Unavailable",
-          "empty": "No Ola-managed models are available in this workspace."
+          "empty": "No Ola-managed models are available in this workspace.",
+          "workspace": "Current workspace: {{name}}",
+          "loading": "Syncing",
+          "notVerified": "Status unverified",
+          "localDescription": "Configure custom models under AI providers. Sign in and select a team workspace to view its authorized models.",
+          "localAction": "Manage custom device models"
         },
         "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
         "deviceRegistered": "Registered device: {{name}}",
@@ -1978,5 +2143,26 @@
     "noProject": "Select a project with a working folder to use both capabilities.",
     "wikiTitle": "Project Wiki",
     "codeGraphTitle": "CodeGraph"
+  },
+  "providerHealth": {
+    "title": "Model provider health",
+    "description": "Tracks temporary request outcomes without reading or showing request credentials.",
+    "lastChecked": "Last checked: {{time}}",
+    "notChecked": "Provider status has not been checked",
+    "loadFailed": "Status check failed",
+    "retryHint": "Provider status could not be loaded. Refresh to retry; failures are never shown as healthy.",
+    "refresh": "Refresh provider status",
+    "requestCounts": "Successful requests / total requests",
+    "reset": "Reset health statistics for {{provider}}",
+    "empty": "No requests have been recorded, so provider health is unknown.",
+    "status": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Unavailable"
+    }
+  },
+  "common": {
+    "save": "保存",
+    "delete": "削除"
   }
 }

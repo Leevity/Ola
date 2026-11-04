@@ -25,7 +25,8 @@
     "unpin": "Unpin",
     "showMore": "Show more",
     "showLess": "Show less",
-    "more": "More"
+    "more": "More",
+    "generate": "Generate"
   },
   "status": {
     "running": "running",
@@ -83,13 +84,12 @@
     "chat": "Chat",
     "clarify": "Clarify",
     "execute": "Execute",
-    "acp": "ACP",
     "descriptions": {
       "chat": "Quick conversation, no project tools",
       "clarify": "Turn ambiguity into a reviewable plan",
-      "execute": "Use tools to build, research, operate, and verify",
-      "acp": "Architect and delegate to sub-agents"
-    }
+      "execute": "Use tools to build, research, operate, and verify"
+    },
+    "cowork": "Chat"
   },
   "onboarding": {
     "start": "Start",
@@ -289,7 +289,40 @@
       "failed": "Update failed"
     },
     "errors": {
-      "unhandledTitle": "Unhandled Error"
+      "unhandledTitle": "Unhandled Error",
+      "settingsHydrationTimeout": "Settings could not be loaded from the desktop process.",
+      "settingsHydrationTitle": "Ola is taking too long to start",
+      "settingsHydrationRetry": "Retry",
+      "settingsHydrationReload": "Reload window"
     }
-  }
+  },
+  "fileChange": {
+    "openFile": "Open file",
+    "reviewButton": "Review",
+    "loadDiffFailed": "Failed to load the full diff"
+  },
+  "preview": {
+    "openFile": "Open file"
+  },
+  "rightPanel": {
+    "execution": "Execution",
+    "browser": "Browser",
+    "reviewEmptyTitle": "No file changes yet",
+    "reviewEmptyDesc": "Latest diffs are unavailable. File changes for this session will appear here.",
+    "reviewSessionDesc": "Review the latest file changes captured in the current session. Expand a file to inspect the diff."
+  },
+  "rightPanelAction": {
+    "closePanel": "Close panel"
+  },
+  "common": {
+    "loading": "Loading..."
+  },
+  "subAgentsPanel": {
+    "groupToday": "Today",
+    "groupYesterday": "Yesterday"
+  },
+  "fileTree": {
+    "selectFolder": "Select a working folder to view files"
+  },
+  "somethingWrong": "Commit failed"
 }

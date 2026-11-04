@@ -98,10 +98,9 @@ import { clampLeftSidebarWidth, LEFT_SIDEBAR_DEFAULT_WIDTH } from './right-panel
 const modeIcons: Record<SessionMode, React.ReactNode> = {
   chat: <MessageSquare className="size-4" />,
   clarify: <CircleHelp className="size-4" />,
-  execute: <Code2 className="size-4" />,
-  acp: <ShieldCheck className="size-4" />
+  execute: <Code2 className="size-4" />
 }
-const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'execute', 'acp']
+const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'execute']
 const taskProfileIcons: Record<TaskProfile, React.ReactNode> = {
   work: <BriefcaseBusiness className="size-4" />,
   code: <Code2 className="size-4" />
@@ -1824,7 +1823,8 @@ export function SessionListPanel(): React.JSX.Element {
         <DialogContent className="p-4 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm">
-              修改项目默认模型{projectModelDialog ? ` · ${projectModelDialog.projectName}` : ''}
+              {t('sidebar.editProjectModel', { defaultValue: 'Edit project default model' })}
+              {projectModelDialog ? ` · ${projectModelDialog.projectName}` : ''}
             </DialogTitle>
           </DialogHeader>
           <div className="max-h-80 space-y-2 overflow-y-auto">

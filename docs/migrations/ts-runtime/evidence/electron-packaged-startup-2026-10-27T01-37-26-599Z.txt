@@ -1,0 +1,79 @@
+
+[Browser] Browser profile reuse enabled, but no supported profile was found
+[credentials] sanity tests passed
+[DB][TS] initialized {
+  dbPath: 'C:\\Users\\80663\\AppData\\Local\\Temp\\ola-packaged-startup-iMITzM/data.db'
+}
+Checking for update
+[Updater] Checking for updates...
+[TS] settings startup ready
+Generated new staging user ID: 5f1d8a5c-0385-5f29-af8a-e67617faeb6c
+[Main] Using system proxy settings
+[CrashLogger] Logs will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-iMITzM\logs
+[CrashLogger] Native crash dumps will be written to C:\Users\80663\AppData\Local\Temp\ola-packaged-startup-iMITzM\crash-dumps
+[TS] legacy runtime global startup skipped; compatibility routes are lazy
+[TsRuntime] desktop host ready
+[TS] TypeScript runtime is authoritative; legacy executable startup is removed
+[CronScheduler] Loaded 0/0 persisted cron jobs
+[Pet] Installed built-in pet files: aniya (+13)
+[Main] Renderer finished loading: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/AppData/Local/Temp/ola%20install%20smoke%20win%20amd64/app/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4
+}
+[Pet] Installed built-in pet files: penguin (+13)
+
+
+DevTools listening on ws://127.0.0.1:9433/devtools/browser/de7c7055-02ec-4578-a76f-8762d0bacb6c
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: '',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4,
+  level: 3,
+  message: 'Electron sandboxed_renderer.bundle.js script failed to run',
+  line: 2,
+  sourceId: 'node:electron/js2c/sandbox_bundle'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: '',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4,
+  level: 3,
+  message: "TypeError: Cannot destructure property 'preloadScripts' of 'binding.startupData' as it is null.",
+  line: 2,
+  sourceId: 'node:electron/js2c/sandbox_bundle'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/AppData/Local/Temp/ola%20install%20smoke%20win%20amd64/app/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '🌐 i18next is maintained with support from Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙',
+  line: 1962,
+  sourceId: 'file:///C:/Users/80663/AppData/Local/Temp/ola%20install%20smoke%20win%20amd64/app/resources/app.asar/out/renderer/assets/theme-provider-CmYxBHQD.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///C:/Users/80663/AppData/Local/Temp/ola%20install%20smoke%20win%20amd64/app/resources/app.asar/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '[PluginAutoReply] Listener initialized',
+  line: 248352,
+  sourceId: 'file:///C:/Users/80663/AppData/Local/Temp/ola%20install%20smoke%20win%20amd64/app/resources/app.asar/out/renderer/assets/App-CWp6Vkrc.js'
+}

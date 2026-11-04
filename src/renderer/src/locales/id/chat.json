@@ -4,7 +4,6 @@
     "placeholderClarify": "Jelaskan ide Anda dan saya akan terus menyelidiki sampai persyaratan jelas...",
     "placeholderCowork": "Mintalah asisten untuk membantu proyek Anda...",
     "placeholderCode": "Jelaskan apa yang ingin Anda bangun, seperti memperbaiki bug, menulis skrip, atau menggunakan / commit untuk melakukan repositori...",
-    "placeholderAcp": "Jelaskan tujuan, konteks, batasan, dan kriteria penerimaan aku akan merancang dan mendelegasikan pertama bukan coding secara langsung...",
     "placeholderPlanReview": "Masukkan umpan balik revisi bagi rencana ini, atau klik kartu di atas untuk mengimplementasikannya...",
     "placeholderPendingGoal": "Jelaskan tujuan untuk mengejar...",
     "pendingGoalBanner": "Gol mengejar siap. Pesan teks berikutnya akan digunakan sebagai tujuan dan dikirim normal.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "Menduga pertanyaan tajam berikutnya Aku akan meminta untuk sepenuhnya pin bawah permintaan.",
     "recommendationDefaultCowork": "Menduga tindakan kolaboratif berikutnya Aku secara alami akan mengetik.",
     "recommendationDefaultCode": "Menduga permintaan perubahan kode konkret berikutnya akan kuketik secara alami.",
-    "recommendationDefaultAcp": "Diduga ACP berikutnya scoping atau pertanyaan desain saya secara alami akan mengetik.",
-    "recommendationInitWorkspace": "Tidak ada AGENTS.md yang ditemukan dalam folder kerja saat ini. Diduga langkah selanjutnya secara alami, mungkin / init untuk menginisialisasi konteks projek.",
-    "startAcp": "Mulai sesi ACP",
-    "startAcpDesc": "Pertama klarifikasi tujuan, latar belakang, batasan, dan kriteria penerimaan.",
-    "homeTitleAcp": "Mode ACP",
-    "homeDescAcp": "Dalam mode ACP, dimulai dengan mengklarifikasi tujuan, latar belakang, batasan, dan kriteria penerimaan. Kemudian mengusulkan arsitektur dan kegagalan tugas sebelum implementasi."
+    "recommendationInitWorkspace": "Tidak ada AGENTS.md yang ditemukan dalam folder kerja saat ini. Diduga langkah selanjutnya secara alami, mungkin / init untuk menginisialisasi konteks projek."
   },
   "planReview": {
     "awaitingReview": "Menunggu Ulasan",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "Ini adalah mode Kode",
         "description": "Gunakan itu untuk tugas implementasi langsung seperti menyunting berkas, menulis kode, menjalankan pemeriksaan, dan menangani rincian rekayasa."
-      },
-      "modeAcp": {
-        "title": "Ini adalah mode ACP",
-        "description": "Gunakan sebagai menara kontrol untuk pekerjaan yang kompleks: klarifikasi batas-batas dan penerimaan pertama, kemudian desain arsitektur, memecah tugas, dan hapus eksekusi sementara agen utama tetap keluar dari coding langsung."
       },
       "leftSidebar": {
         "title": "Ini adalah area projek dan sesi",
@@ -654,7 +644,8 @@
     "thinkingFor": "Berpikir untuk {{seconds}} s",
     "pending": "Berpikir",
     "thinkingEllipsis": "Berpikir...",
-    "thoughts": "Pikiran"
+    "thoughts": "Pikiran",
+    "elapsedSeconds": "{{seconds}} dtk"
   },
   "messageList": {
     "startConversation": "Mulai percakapan",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "Perjelas dulu tugas",
     "homeTitleCowork": "Bekerja di dalam proyek",
     "homeTitleCode": "Mulai coding",
-    "homeTitleAcp": "Mulai kolaborasi ACP",
-    "homeDescAcp": "Mulai mode ACP untuk konfirmasi arsitektur, batasan klarifikasi, dan eksekusi terputus.",
     "homeDescAutoChat": "Setelah Anda mengirim, itu memilih model yang lebih baik otomatis berdasarkan kompleksitas tugas.",
     "homeDescAutoClarify": "Setelah Anda mengirim, itu memilih model yang lebih cocok untuk ditanyai dan mempersempit rencana.",
     "homeDescAutoCowork": "Setelah Anda mengirim, itu memilih model yang lebih cocok untuk pekerjaan proyek, file edits, dan alat.",
     "homeDescAutoCode": "Setelah Anda mengirim, itu memilih model yang lebih cocok untuk coding, refactoring, dan analisis.",
-    "homeDescAutoAcp": "Setelah Anda mengirim, itu memilih model yang lebih cocok untuk konfirmasi arsitektur, pembatasan klarifikasi, dan eksekusi terputus.",
     "homeDescChatGeneral": "Baik untuk obrolan sehari-hari, menulis, dan pertanyaan ringan.",
     "homeDescChatVision": "Baik untuk mengobrol dan juga dapat merespon dengan cepat dengan konteks gambar.",
     "homeDescClarifyGeneral": "Bagus untuk menjawab pertanyaan, membentuk tujuan, dan mengisi kendala.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "Perubahan tahap pertama, kemudian menghasilkan pesan",
     "aiCommitEmptyStaged": "Tidak ada yang dipentaskan - tidak dapat menghasilkan pesan",
     "aiCommitFailed": "Generation gagal. Periksa pengaturan API / model dan coba lagi"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

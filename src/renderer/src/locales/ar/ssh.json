@@ -200,7 +200,18 @@
     "backToList": "العودة",
     "viewTable": "الجدول",
     "viewCard": "وجهة نظر البطاقات",
-    "search": "باحثاً"
+    "search": "باحثاً",
+    "portBadge": "Port {{port}}",
+    "keepAliveBadge": "{{seconds}}s keepalive",
+    "hostsSummary": "{{hosts}} hosts / {{online}} online",
+    "columns": {
+      "os": "OS",
+      "latency": "Latency",
+      "name": "Name",
+      "address": "Address",
+      "info": "Info",
+      "actions": "Actions"
+    }
   },
   "dashboard": {
     "totalServers": "خادم",
@@ -416,6 +427,23 @@
       "noConnections": "لا علاقة تاريخية.",
       "uploads": "نشاط تحميل",
       "noUploads": "لا نشاط تحميل بعد"
-    }
+    },
+    "basicInfo": "Basic info",
+    "connectionSettings": "Connection",
+    "jumpHost": "Jump host",
+    "proxySettings": "Proxy",
+    "otherSettings": "Other settings",
+    "hostMemo": "Host notes",
+    "hostMemoHint": "Optional note about the default directory or purpose.",
+    "initialize": "Initialize",
+    "initializeHint": "Save to connect right away, or test the connection first.",
+    "authSummary": "Authentication summary",
+    "agentAuthHint": "This connection authenticates through the local SSH agent.",
+    "jumpHostHint": "Fill in ProxyJump when the host is reached through an intermediate host.",
+    "proxySettingsHint": "Connection-stability options live here.",
+    "runtimeShell": "Init command",
+    "advancedCompatibility": "Advanced compatibility",
+    "advancedCompatibilityHint": "X11, cipher and KEX options can be added here later.",
+    "initCommandHint": "No init command is set; the session opens the default shell."
   }
 }

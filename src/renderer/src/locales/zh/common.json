@@ -83,12 +83,10 @@
     "chat": "对话",
     "clarify": "澄清",
     "execute": "执行",
-    "acp": "ACP",
     "descriptions": {
       "chat": "快速对话，不调用项目工具",
       "clarify": "厘清需求，先产出可评审计划",
-      "execute": "调用工具完成编码、研究、运维并验证结果",
-      "acp": "负责架构设计并委派子代理"
+      "execute": "调用工具完成编码、研究、运维并验证结果"
     }
   },
   "onboarding": {

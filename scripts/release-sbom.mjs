@@ -20,15 +20,21 @@ function normalizeArchivePath(entry) {
 
 /** @param {string} archivePath @param {string} original @param {string} normalized */
 function extractManifest(archivePath, original, normalized) {
-  try {
-    return asar.extractFile(archivePath, original)
-  } catch {
+  // @electron/asar lists entries with a leading separator and, on Windows,
+  // backslash separators that extraction rejects; try each accepted spelling.
+  for (const candidate of [
+    original,
+    normalized,
+    normalized.split('/').join('\\'),
+    `/${normalized}`
+  ]) {
     try {
-      return asar.extractFile(archivePath, normalized)
+      return asar.extractFile(archivePath, candidate)
     } catch {
-      return undefined
+      continue
     }
   }
+  return undefined
 }
 
 /** @param {string} root @returns {string[]} */

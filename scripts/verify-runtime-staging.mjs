@@ -37,9 +37,13 @@ for (const path of required) {
   if (!info.isFile() && !info.isDirectory()) throw new Error(`Invalid staging artifact: ${path}`)
 }
 
-const archiveEntries = asar.listPackage(join(resourceRoot, 'app.asar'))
+const archiveEntries = asar
+  .listPackage(join(resourceRoot, 'app.asar'))
+  // @electron/asar emits slash-separated entries on Unix and backslash-separated
+  // entries on Windows; staging rules are platform-neutral.
+  .map((entry) => entry.replaceAll('\\', '/').replace(/^\/+/, ''))
 const developmentEntries = archiveEntries.filter((path) =>
-  /^\/?(?:tools|tests|scripts|docs)\//.test(path)
+  /^(?:tools|tests|scripts|docs)\//.test(path)
 )
 if (developmentEntries.length > 0) {
   throw new Error(

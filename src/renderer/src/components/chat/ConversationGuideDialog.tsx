@@ -58,12 +58,6 @@ export function ConversationGuideDialog({
         description: t('guide.steps.modeExecute.description')
       },
       {
-        key: 'modeAcp',
-        selector: '[data-tour="mode-acp"]',
-        title: t('guide.steps.modeAcp.title'),
-        description: t('guide.steps.modeAcp.description')
-      },
-      {
         key: 'leftSidebar',
         selector: '[data-tour="left-sidebar"]',
         title: t('guide.steps.leftSidebar.title'),

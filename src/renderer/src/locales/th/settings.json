@@ -45,7 +45,9 @@
     "globalScope": "Global",
     "saving": "Saving…",
     "saved": "Saved",
-    "back": "Back"
+    "back": "Back",
+    "failed": "Save failed",
+    "retrySave": "Retry saving settings"
   },
   "profile": {
     "title": "โพรไฟล์",
@@ -146,6 +148,10 @@
         "dawn": {
           "label": "รุ่งอรุณที่อบอุ่น",
           "desc": "เครื่องราชอิสริยาภรณ์ทองแดงที่อบอุ่น มีอุณหภูมิในโหมดแสงและโหมดมืด"
+        },
+        "connected": {
+          "label": "Ola Connected Workspace",
+          "desc": "A calm blue-violet workspace shared across Ola desktop, mobile and the console."
         }
       },
       "remoteHint": "Remote"
@@ -165,8 +171,22 @@
     },
     "language": "ภาษา",
     "languageDesc": "ตั้งค่าภาษาที่ใช้แสดงส่วนติดต่อ",
-    "animations": "เปิดใช้งานการเคลื่อนไหว",
-    "animationsDesc": "เปิดใช้งานโดยปริยาย ปิดการใช้งานการเปลี่ยนแปลง, ลูกเล่นการย้าย, และการเลื่อนแบบนุ่มนวลให้มากที่สุดเท่าที่จะทําได้",
+    "motionLevel": "การเคลื่อนไหว",
+    "motionLevelDesc": "เลือกปริมาณการเคลื่อนไหวของอินเทอร์เฟซ หากระบบขอให้ลดการเคลื่อนไหว จะมีผลเสมอ",
+    "motionLevels": {
+      "full": {
+        "label": "เต็ม",
+        "desc": "ทรานซิชันและเอฟเฟกต์แอนิเมชันทั้งหมด"
+      },
+      "reduced": {
+        "label": "ลดลง",
+        "desc": "เฉพาะการจางหาย ไม่มีการเลื่อน ย่อขยาย หรือเปลี่ยนความสูง"
+      },
+      "off": {
+        "label": "ปิด",
+        "desc": "ไม่มีทรานซิชัน เอฟเฟกต์การเคลื่อนไหว หรือการเลื่อนแบบนุ่มนวล"
+      }
+    },
     "liveOutputAnimation": {
       "title": "ภาพเคลื่อนไหวของ AI",
       "desc": "เลือกรูปแบบการเคลื่อนไหวที่ใช้ในระหว่างการรับข้อมูลจดหมาย",
@@ -297,7 +317,12 @@
     "title": "ปรับเทียบข้อมูล",
     "workspaceUnavailable": {
       "title": "Sync is unavailable here",
-      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated.",
+      "conflicts": "หยุดการซิงค์ชั่วคราวเนื่องจากมีความขัดแย้ง {{count}} รายการ",
+      "result": "ซิงค์เวิร์กสเปซเสร็จสิ้น: อัปโหลด {{uploaded}} รายการ นำไปใช้ {{downloaded}} รายการ",
+      "v2Description": "เวิร์กสเปซนี้ใช้การซิงค์ WebDAV v2 แบบแยกส่วน จะทำงานหลังเปิดใช้ความเป็นเจ้าของธุรกิจ TS บนอุปกรณ์นี้เท่านั้น",
+      "running": "กำลังซิงค์เวิร์กสเปซ…",
+      "action": "ซิงค์เวิร์กสเปซตอนนี้"
     },
     "subtitle": "บันทึกระดับ Ola ตรงกับเว็บไซต์",
     "loading": "กําลังโหลดการตั้งค่าการปรับเทียบข้อมูล...",
@@ -330,7 +355,14 @@
       "remoteUpdated": "ปรับปรุงทางไกล",
       "downloaded": "ดาวน์โหลดแล้ว",
       "conflicts": "ความขัดแย้ง",
-      "success": "ข้อมูลตรงกัน"
+      "success": "ข้อมูลตรงกัน",
+      "state": {
+        "idle": "Idle",
+        "running": "Syncing",
+        "success": "Synced",
+        "conflict": "Needs conflict resolution",
+        "error": "Sync failed"
+      }
     },
     "confirm": {
       "pushTitle": "อัปโหลดข้อมูลภายในไปยังเว็บไซต์ DAV หรือไม่?",
@@ -589,7 +621,8 @@
     "clearFailed": "ล้มเหลวในการล้างปูมบันทึก",
     "clearEmpty": "ไม่มีปูมบันทึกที่เก่ากว่า 7 วันเพื่อล้าง",
     "cacheTokenShare": "Cached Token Share",
-    "cacheReadRatio": "Cache Read Ratio"
+    "cacheReadRatio": "Cache Read Ratio",
+    "billableInputTokens": "โทเค็นอินพุตที่คิดค่าใช้จ่าย"
   },
   "model": {
     "title": "ปรับแต่งโมเดล",
@@ -620,7 +653,6 @@
       "clarify": "โหมดตรวจสอบ",
       "cowork": "โหมดงาน",
       "code": "โหมดรหัส",
-      "acp": "โหมด ACP",
       "execute": "Execute Mode"
     },
     "promptRecommendationModesDesc": {
@@ -628,7 +660,6 @@
       "clarify": "สําหรับความจําเป็นในการทําให้ชัดเจนและติดตามคําแนะนํา",
       "cowork": "สําหรับความร่วมมือในการประมวลผลและการยกเลิกงาน",
       "code": "สําหรับ การ จัด ระเบียบ, การ ปรับ ปรุง, และ ข้อ เสนอ แนะ ใน การ ดีบั๊ก",
-      "acp": "สําหรับ ความ กระจ่าง เกี่ยว กับ เป้า หมาย, การ ออก แบบ ทาง สถาปัตยกรรม, และ คํา แนะ นํา ที่ เป็น ตัว แทน ใน การ ควบคุม กระแส น้ํา",
       "execute": "For implementation, research, operations, debugging, and task breakdown suggestions"
     },
     "selectRecommendationModel": "เลือกรุ่นที่แนะนํา",
@@ -659,7 +690,8 @@
     "creative": "สร้าง",
     "random": "สุ่ม",
     "maxTokens": "ขนาดสูงสุด",
-    "maxTokensDesc": "ค่าจํากัดของสัญลักษณ์สูงสุดต่อการตอบสนอง"
+    "maxTokensDesc": "ค่าจํากัดของสัญลักษณ์สูงสุดต่อการตอบสนอง",
+    "selectProvider": "เลือกผู้ให้บริการ"
   },
   "plugin": {
     "title": "ส่วนเสริม",
@@ -834,7 +866,9 @@
       "analytics": "Graph health",
       "circularDependencies": "Circular dependencies: {{count}}",
       "deadCode": "Potentially unused symbols: {{count}}",
-      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}",
+      "advancedDiagnostics": "การวินิจฉัยขั้นสูง",
+      "noSourceFiles": "จัดทำดัชนีเสร็จแล้ว แต่ไม่พบไฟล์ต้นฉบับที่จัดทำดัชนีได้"
     },
     "productDesign": {
       "workflowTitle": "Workflow plugin",
@@ -933,7 +967,28 @@
       "agent": "เจ้าหน้าที่",
       "mcp": "เซิร์ฟเวอร์ MCP",
       "instructions": "คํา แนะ นํา / หมายเหตุ"
-    }
+    },
+    "businessHandoverSchemaUnsupported": "สคีมาฐานข้อมูลเดิมขาดฟิลด์ธุรกิจที่จำเป็น",
+    "businessHandoverBackupSpace": "พื้นที่ว่างไม่พอสำหรับสแนปช็อตสำหรับย้อนกลับ",
+    "businessHandoverBackupDirectory": "ไดเรกทอรีสำหรับย้อนกลับไม่พร้อมใช้งานหรือไม่ปลอดภัย",
+    "businessHandoverSourceUnavailable": "ฐานข้อมูลธุรกิจเดิมยังไม่พร้อมใช้งาน",
+    "businessHandoverPreflightUnknown": "ตรวจสอบล่วงหน้าไม่สำเร็จ: {{reason}}",
+    "businessHandoverConfirm": "สร้างสแนปช็อตสำหรับย้อนกลับและย้ายการเขียนข้อมูลธุรกิจไปยังรันไทม์ TS ตอนนี้หรือไม่",
+    "businessHandoverSuccess": "ข้อมูลธุรกิจอยู่ในความดูแลของรันไทม์ TS แล้ว",
+    "businessHandoverIncomplete": "การโอนย้ายยังไม่ถึงความเป็นเจ้าของ TS ตรวจสอบสถานะแล้วลองอีกครั้ง",
+    "businessHandoverFailed": "การโอนย้ายข้อมูลธุรกิจล้มเหลว: {{error}}",
+    "businessHandoverTitle": "ความเป็นเจ้าของรันไทม์ธุรกิจ TS",
+    "businessHandoverDescription": "สร้างสแนปช็อตสำหรับย้อนกลับที่ตรวจสอบแล้ว หยุดตัวเขียนเดิม และส่งข้อมูลธุรกิจผ่านรันไทม์ TS ที่เน้นออฟไลน์ก่อน",
+    "businessHandoverActive": "TS ทำงานอยู่",
+    "businessHandoverPending": "ยังไม่เลื่อนระดับ",
+    "businessHandoverRunning": "กำลังเตรียม…",
+    "businessHandoverDone": "เสร็จสิ้น",
+    "businessHandoverAction": "เลื่อนระดับเป็น TS",
+    "businessHandoverUnavailable": "ไม่สามารถเลื่อนระดับได้จนกว่ารันไทม์ TS จะพร้อมและเปิดแฟล็กความปลอดภัยของการโอนย้าย",
+    "businessHandoverPreflight": "ตรวจสอบล่วงหน้า: {{reason}}",
+    "businessHandoverWarning": "ระเบียน Native Project Wiki ที่มีอยู่จะถูกเก็บไว้ในคลังที่ TS จัดการระหว่างการโอนย้าย",
+    "businessHandoverBackup": "สแนปช็อตสำหรับย้อนกลับ",
+    "businessHandoverManifest": "รายการโอนย้าย"
   },
   "about": {
     "title": "เกี่ยวกับ",
@@ -975,10 +1030,6 @@
       "execute": {
         "title": "Execute Mode",
         "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
-      },
-      "acp": {
-        "title": "ACP Mode",
-        "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
       }
     },
     "summary": "OpenColorwork (Offication) Unknown (in อังกฤษ), server, Server, ทักษะ, และ Khannles ที่ปรับแต่งเองภายในประสบการณ์พื้นที่ทํางานหนึ่งเครื่อง เพื่อให้คุณสามารถสลับไปมาระหว่าง Chat, Cork, หรือ Code Model ในขณะที่ยังควบคุมอยู่"
@@ -1041,7 +1092,8 @@
         "exportFailed": "การส่งออกล้มเหลว: {{error}}",
         "refreshSuccess": "ทําความสดชื่นใหม่",
         "refreshFailed": "การเรียกปรับปรุงล้มเหลว: {{error}}",
-        "removeSuccess": "ลบบัญชีผู้ใช้"
+        "removeSuccess": "ลบบัญชีผู้ใช้",
+        "clipboardUnavailable": "Clipboard is unavailable"
       }
     },
     "title": "ผู้จัดทํา AI",
@@ -1356,7 +1408,11 @@
     "modelCategoryVideo": "Video",
     "seedanceVideo": "Seedance video",
     "cacheTtl": "Cache TTL (anthropic)",
-    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level."
+    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level.",
+    "credentialVaultUnavailable": {
+      "title": "Provider credentials are unavailable",
+      "description": "Encrypted storage could not be read. Editing is paused to protect saved accounts. Quit and reopen Ola; if this continues, keep your local data and check the logs."
+    }
   },
   "channel": {
     "title": "ช่อง",
@@ -1502,7 +1558,12 @@
       "FeishuBitableCreateRecords": "สร้างบันทึกในตารางที่เขียนได้",
       "FeishuBitableUpdateRecords": "ปรับปรุงบันทึกในตารางที่อ่านได้",
       "FeishuBitableDeleteRecords": "ลบรายการบันทึกจากตารางที่อ่านได้"
-    }
+    },
+    "narrowPaneLabel": "Channel view",
+    "narrowList": "Channel list",
+    "narrowConfig": "Channel settings",
+    "olaTeamModels": "โมเดลทีม Ola",
+    "olaPersonalModels": "โมเดลส่วนตัว Ola"
   },
   "mcp": {
     "title": "เซิร์ฟเวอร์ MCP",
@@ -1560,7 +1621,21 @@
     "deleteConfirm": "ลบเซิร์ฟเวอร์ MCP \" {{name}} \"?",
     "noTools": "ไม่มีเครื่องมืออยู่",
     "noResources": "ไม่มีทรัพยากร",
-    "noPrompts": "ไม่มีพร้อม"
+    "noPrompts": "ไม่มีพร้อม",
+    "authorize": "Authorize",
+    "authorizeDesc": "Open the browser to authorize this server",
+    "signOut": "Sign out",
+    "signOutDesc": "Remove the stored authorization for this server",
+    "oauthRequired": "This server needs a browser authorization before it can be used.",
+    "oauthWaiting": "Waiting for the browser authorization to finish.",
+    "signedOut": "Authorization removed",
+    "status": {
+      "disconnected": "disconnected",
+      "connecting": "connecting",
+      "connected": "connected",
+      "authorization-required": "authorization required",
+      "error": "error"
+    }
   },
   "skillsmarket": {
     "title": "ตลาดทักษะ",
@@ -1641,7 +1716,8 @@
     "disabledError": "การค้นหาบนเว็บถูกปิดการใช้งาน โปรดเปิดใช้งานในการตั้งค่า",
     "apiKeyRequired": "ต้องการกุญแจ API สําหรับผู้ให้บริการนี้",
     "testSuccess": "ทดสอบการค้นหาบนเว็บสําเร็จ! {{count}} ผล",
-    "testFailed": "การทดสอบการค้นหาบนเว็บล้มเหลว: {{error}}"
+    "testFailed": "การทดสอบการค้นหาบนเว็บล้มเหลว: {{error}}",
+    "apiKeySaved": "บันทึกคีย์ API อย่างปลอดภัยแล้ว"
   },
   "shortcuts": {
     "title": "ปุ่มพิมพ์ลัด",
@@ -1677,7 +1753,11 @@
     "exportConversation": "ส่งออกการสนทนา",
     "copyConversation": "คัดลอกการสนทนา",
     "allowTool": "อนุญาตให้ประมวลผลเครื่องมือ",
-    "denyTool": "ประมวลผลเครื่องมือปฏิเสธ"
+    "denyTool": "ประมวลผลเครื่องมือปฏิเสธ",
+    "previousSession": "Switch to previous session",
+    "nextSession": "Switch to next session",
+    "scrollTop": "Scroll to conversation top",
+    "scrollBottom": "Scroll to conversation bottom"
   },
   "wiki": {
     "title": "Project Wiki",
@@ -1724,7 +1804,22 @@
     "cancelReplay": "Cancel replay",
     "flowSummary": "{{name}} · {{count}} steps",
     "run": "Run",
-    "delete": "Delete {{name}}"
+    "delete": "Delete {{name}}",
+    "errors": {
+      "workspaceUnavailable": "This workspace is temporarily unavailable. Desktop flows could not be loaded.",
+      "loadFailed": "Could not load desktop flows. Try again.",
+      "retry": "Retry loading",
+      "startFailed": "Could not start recording. Check desktop recording permissions and try again.",
+      "stopFailed": "Could not stop or save the recording. Check the current recording state.",
+      "saveFailed": "Could not save the desktop flow.",
+      "replayFailed": "Replay failed. Check the flow and run history.",
+      "cancelFailed": "Could not cancel replay.",
+      "deleteFailed": "Could not delete the desktop flow."
+    },
+    "reviewRequired": "ไม่สามารถเล่นขั้นตอนการพิมพ์ซ้ำได้ ให้บันทึกใหม่โดยไม่พิมพ์",
+    "runs": {
+      "title": "การเรียกใช้ล่าสุด"
+    }
   },
   "permission": {
     "title": "Permissions",
@@ -1809,7 +1904,67 @@
     "channels": "Channels",
     "enabledCount": "{{enabled}} of {{total}} enabled",
     "healthyCount": "{{healthy}} of {{total}} healthy",
-    "installedCount": "{{total}} installed"
+    "installedCount": "{{total}} installed",
+    "refreshFailed": "Some capabilities could not be checked. Review the affected row and open its settings to repair.",
+    "healthTitle": "Capability connection and installation status",
+    "healthDescription": "Summarizes states that have been read. Unchecked, no request history, and load failures remain distinct and are never inferred as healthy.",
+    "refreshHealth": "Refresh status",
+    "openSettings": "Settings",
+    "diagnostics": {
+      "export": "Export redacted diagnostics",
+      "exportSuccess": "Redacted diagnostics saved.",
+      "exportFailed": "Could not export diagnostics.",
+      "privacyHint": "Exports aggregate states, counts, and time only; names, identifiers, paths, configuration, credentials, messages, and raw errors are excluded."
+    },
+    "health": {
+      "providers": "Model providers",
+      "skills": "Skills",
+      "extensions": "Extensions",
+      "builtinPlugins": "Built-in plugin setup",
+      "mcp": "MCP servers",
+      "channels": "Channels in the current workspace"
+    },
+    "healthTone": {
+      "healthy": "Healthy",
+      "attention": "Needs attention",
+      "unknown": "Unconfirmed",
+      "inventory": "Inventoried"
+    },
+    "healthDetail": {
+      "loadFailed": "Could not read status. Retry from the corresponding settings page.",
+      "notChecked": "Status has not been read yet.",
+      "noProviderRequests": "No request history is available to assess provider health.",
+      "providerCounts": "{{healthy}} of {{total}} providers have healthy recent requests; read at {{checkedAt}}",
+      "skillCount": "{{count}} Skills installed; installation does not mean every Skill fits the current task.",
+      "extensionCounts": "{{installed}} installed, {{enabled}} enabled; enabled does not mean the extension is running correctly.",
+      "builtinPluginCounts": "{{enabled}} of {{total}} enabled; {{needsSetup}} need required configuration (this check includes image model setup).",
+      "mcpCounts": "{{enabled}} enabled, {{connected}} connected, {{connecting}} connecting, {{disconnected}} disconnected, {{failed}} with errors; checked at {{checkedAt}}",
+      "mcpAuthorizationCount": "{{count}} need browser authorization",
+      "channelCounts": "{{enabled}} enabled, {{running}} running, {{stopped}} stopped, {{failed}} with errors; checked at {{checkedAt}}",
+      "noneEnabled": "Nothing is enabled in this category.",
+      "statusCheckFailed": "Could not read one or more channel statuses. Retry in Channel settings."
+    },
+    "lifecycleTitle": "Capability delivery status",
+    "lifecycleDescription": "Status labels reflect each capability's actual delivery stage and availability.",
+    "lifecyclePolicy": "Delivery status",
+    "status": {
+      "prototype": "Prototype",
+      "internal": "Internal",
+      "beta": "In testing",
+      "ga": "Generally available",
+      "deprecated": "Deprecated"
+    },
+    "capabilities": {
+      "local-agent-workspace": "Local Agent workspace",
+      "remote-ssh-operations": "Remote SSH operations",
+      "channel-automation": "Channel automation",
+      "browser-cookie-import": "Browser cookie import",
+      "media-generation": "Media generation",
+      "unified-execution-audit": "Unified execution audit",
+      "draw-canvas": "Draw canvas",
+      "pet-companion": "Pet companion",
+      "novnc-remote-desktop": "NoVNC remote desktop"
+    }
   },
   "pet": {
     "title": "Desktop Pet",
@@ -1845,7 +2000,10 @@
     "loading": "Loading extensions...",
     "emptyTitle": "No extensions installed",
     "emptyDesc": "Choose a folder containing extension.json to add custom tools to Ola.",
-    "noRenderers": "No custom renderers"
+    "noRenderers": "No custom renderers",
+    "workbenchViews": "Workbench views",
+    "workbenchCommands": "Commands",
+    "workbenchCommandsHint": "Enabled commands are available in the command palette."
   },
   "workModes": {
     "title": "Work modes",
@@ -1946,7 +2104,9 @@
           "team": "Ola team workspace",
           "localModels": "Local models",
           "resourceCount": "{{count}} managed models",
-          "localName": "Local workspace"
+          "localName": "Local workspace",
+          "current": "Current workspace",
+          "switchFailed": "Could not switch workspaces. Please try again."
         },
         "resources": {
           "title": "Managed model resources",
@@ -1954,7 +2114,12 @@
           "refresh": "Refresh",
           "available": "Available",
           "unavailable": "Unavailable",
-          "empty": "No Ola-managed models are available in this workspace."
+          "empty": "No Ola-managed models are available in this workspace.",
+          "workspace": "Current workspace: {{name}}",
+          "loading": "Syncing",
+          "notVerified": "Status unverified",
+          "localDescription": "Configure custom models under AI providers. Sign in and select a team workspace to view its authorized models.",
+          "localAction": "Manage custom device models"
         },
         "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
         "deviceRegistered": "Registered device: {{name}}",
@@ -1978,5 +2143,26 @@
     "noProject": "Select a project with a working folder to use both capabilities.",
     "wikiTitle": "Project Wiki",
     "codeGraphTitle": "CodeGraph"
+  },
+  "providerHealth": {
+    "title": "Model provider health",
+    "description": "Tracks temporary request outcomes without reading or showing request credentials.",
+    "lastChecked": "Last checked: {{time}}",
+    "notChecked": "Provider status has not been checked",
+    "loadFailed": "Status check failed",
+    "retryHint": "Provider status could not be loaded. Refresh to retry; failures are never shown as healthy.",
+    "refresh": "Refresh provider status",
+    "requestCounts": "Successful requests / total requests",
+    "reset": "Reset health statistics for {{provider}}",
+    "empty": "No requests have been recorded, so provider health is unknown.",
+    "status": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Unavailable"
+    }
+  },
+  "common": {
+    "save": "บันทึก",
+    "delete": "ลบ"
   }
 }

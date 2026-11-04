@@ -449,32 +449,32 @@ export function SshConnectionInspector({
   const navItems: Array<{ key: InspectorPanel; label: string; icon: React.ReactNode }> = [
     {
       key: 'basic',
-      label: t('workspace.basicInfo', { defaultValue: '基本信息' }),
+      label: t('workspace.basicInfo', { defaultValue: 'Basic info' }),
       icon: <Link2 className="size-4" />
     },
     {
       key: 'auth',
-      label: t('workspace.connectionSettings', { defaultValue: '连接设置' }),
+      label: t('workspace.connectionSettings', { defaultValue: 'Connection' }),
       icon: <Server className="size-4" />
     },
     {
       key: 'jump',
-      label: t('workspace.jumpHost', { defaultValue: '跳板机' }),
+      label: t('workspace.jumpHost', { defaultValue: 'Jump host' }),
       icon: <ArrowUpRight className="size-4" />
     },
     {
       key: 'proxy',
-      label: t('workspace.proxySettings', { defaultValue: '代理设置' }),
+      label: t('workspace.proxySettings', { defaultValue: 'Proxy' }),
       icon: <Network className="size-4" />
     },
     {
       key: 'other',
-      label: t('workspace.otherSettings', { defaultValue: '其他设置' }),
+      label: t('workspace.otherSettings', { defaultValue: 'Notes' }),
       icon: <Settings2 className="size-4" />
     },
     {
       key: 'init',
-      label: t('workspace.initialize', { defaultValue: '初始化' }),
+      label: t('workspace.initialize', { defaultValue: 'Initialize' }),
       icon: <Wrench className="size-4" />
     }
   ]
@@ -539,7 +539,7 @@ export function SshConnectionInspector({
           <div className="space-y-4">
             {activePanel === 'basic' ? (
               <>
-                <PanelShell title={t('workspace.basicInfo', { defaultValue: '基本信息' })}>
+                <PanelShell title={t('workspace.basicInfo', { defaultValue: 'Basic info' })}>
                   <div className="space-y-4">
                     <Field label={t('form.name')}>
                       <Input
@@ -584,9 +584,9 @@ export function SshConnectionInspector({
 
                     <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_96px]">
                       <Field
-                        label={t('workspace.addressTitle', { defaultValue: '地址' })}
+                        label={t('workspace.addressTitle', { defaultValue: 'Address' })}
                         hint={t('workspace.addressHint', {
-                          defaultValue: '填写目标 SSH 地址和端口。'
+                          defaultValue: 'Hostname or public IP address of the target host.'
                         })}
                       >
                         <Input
@@ -609,9 +609,9 @@ export function SshConnectionInspector({
                 </PanelShell>
 
                 <PanelShell
-                  title={t('workspace.otherSettings', { defaultValue: '主机备注' })}
+                  title={t('workspace.hostMemo', { defaultValue: 'Host notes' })}
                   description={t('workspace.hostMemoHint', {
-                    defaultValue: '可填写默认目录或用途说明，方便后续识别。'
+                    defaultValue: 'Optional note about the default directory or purpose.'
                   })}
                 >
                   <textarea
@@ -626,9 +626,9 @@ export function SshConnectionInspector({
 
             {activePanel === 'auth' ? (
               <PanelShell
-                title={t('workspace.connectionSettings', { defaultValue: '连接设置' })}
+                title={t('workspace.connectionSettings', { defaultValue: 'Connection' })}
                 description={t('workspace.credentialsHint', {
-                  defaultValue: '使用登录用户和认证方式完成连接。'
+                  defaultValue: 'Sign in with the account and auth method you choose.'
                 })}
               >
                 <div className="space-y-4">
@@ -741,14 +741,14 @@ export function SshConnectionInspector({
                   {formState.authType === 'agent' ? (
                     <div className="rounded-[10px] border border-[#3d3d3d] bg-[#2b2b2b] px-3 py-3 text-[13px] text-[#b6b6b6]">
                       {t('workspace.agentAuthHint', {
-                        defaultValue: '当前连接会直接使用本机 SSH Agent 完成认证。'
+                        defaultValue: 'This connection authenticates through the local SSH agent.'
                       })}
                     </div>
                   ) : null}
 
                   <div className="rounded-[10px] border border-[#3d3d3d] bg-[#2b2b2b] px-3 py-3 text-[13px]">
                     <div className="text-[#8b8b8b]">
-                      {t('workspace.authSummary', { defaultValue: '认证摘要' })}
+                      {t('workspace.authSummary', { defaultValue: 'Authentication summary' })}
                     </div>
                     <div className="mt-1 text-[#f5f5f5]">
                       {formState.username || 'root'} / {authSummary}
@@ -760,9 +760,10 @@ export function SshConnectionInspector({
 
             {activePanel === 'jump' ? (
               <PanelShell
-                title={t('workspace.jumpHost', { defaultValue: '跳板机' })}
+                title={t('workspace.jumpHost', { defaultValue: 'Jump host' })}
                 description={t('workspace.jumpHostHint', {
-                  defaultValue: '需要通过中间主机接入时，请填写 ProxyJump。'
+                  defaultValue:
+                    'Fill in ProxyJump when the host is reached through an intermediate host.'
                 })}
               >
                 <Field label={t('form.proxyJump')}>
@@ -778,9 +779,9 @@ export function SshConnectionInspector({
 
             {activePanel === 'proxy' ? (
               <PanelShell
-                title={t('workspace.proxySettings', { defaultValue: '代理设置' })}
+                title={t('workspace.proxySettings', { defaultValue: 'Proxy' })}
                 description={t('workspace.proxySettingsHint', {
-                  defaultValue: '这里先保留连接稳定性相关设置。'
+                  defaultValue: 'Connection-stability options live here.'
                 })}
               >
                 <Field label={t('form.keepAlive')}>
@@ -796,7 +797,7 @@ export function SshConnectionInspector({
 
             {activePanel === 'other' ? (
               <>
-                <PanelShell title={t('workspace.otherSettings', { defaultValue: '其他设置' })}>
+                <PanelShell title={t('workspace.otherSettings', { defaultValue: 'Notes' })}>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Field label={t('form.defaultDirectory')}>
                       <Input
@@ -806,7 +807,7 @@ export function SshConnectionInspector({
                         className="h-11 border-[#525252] bg-[#2d2d2d] text-[#f5f5f5] shadow-none placeholder:text-[#71717a]"
                       />
                     </Field>
-                    <Field label={t('workspace.runtimeShell', { defaultValue: '初始化执行' })}>
+                    <Field label={t('workspace.runtimeShell', { defaultValue: 'Init command' })}>
                       <Input
                         value={formState.startupCommand}
                         onChange={(event) => setField('startupCommand', event.target.value)}
@@ -818,9 +819,11 @@ export function SshConnectionInspector({
                 </PanelShell>
 
                 <PanelShell
-                  title={t('workspace.advancedCompatibility', { defaultValue: '高级兼容性' })}
+                  title={t('workspace.advancedCompatibility', {
+                    defaultValue: 'Advanced compatibility'
+                  })}
                   description={t('workspace.advancedCompatibilityHint', {
-                    defaultValue: '后续可继续扩展 X11、Cipher、Kex 等高级选项。'
+                    defaultValue: 'X11, cipher and KEX options can be added here later.'
                   })}
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
@@ -837,9 +840,9 @@ export function SshConnectionInspector({
 
             {activePanel === 'init' ? (
               <PanelShell
-                title={t('workspace.initialize', { defaultValue: '初始化' })}
+                title={t('workspace.initialize', { defaultValue: 'Initialize' })}
                 description={t('workspace.initializeHint', {
-                  defaultValue: '保存后可直接连接，也可以先测试连接。'
+                  defaultValue: 'Save to connect right away, or test the connection first.'
                 })}
               >
                 <div className="space-y-4">
@@ -853,7 +856,7 @@ export function SshConnectionInspector({
                   <div className="rounded-[10px] border border-[#3d3d3d] bg-[#2b2b2b] px-3 py-3 text-[13px] text-[#b6b6b6]">
                     {formState.startupCommand.trim() ||
                       t('workspace.initCommandHint', {
-                        defaultValue: '未设置初始化命令，连接后将直接进入默认 shell。'
+                        defaultValue: 'No init command is set; the session opens the default shell.'
                       })}
                   </div>
                 </div>
@@ -899,7 +902,7 @@ export function SshConnectionInspector({
             disabled={!canSubmit || saving || (!isDirty && isEditing)}
           >
             <Save className="size-4" />
-            {isEditing ? t('form.save') : t('groupDialog.create', { defaultValue: '创建' })}
+            {isEditing ? t('form.save') : t('groupDialog.create', { defaultValue: 'Create' })}
           </Button>
           <Button
             size="sm"

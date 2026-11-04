@@ -669,7 +669,7 @@
 ::-webkit-scrollbar-thumb {
   background: oklch(0.7 0 0 / 0.15);
   border-radius: 999px;
-  transition: background 0.2s;
+  transition: background var(--ola-motion-transition) ease;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: oklch(0.6 0 0 / 0.4);
@@ -716,6 +716,11 @@
   background: oklch(0.65 0.15 250 / 0.3);
 }
 
+/*
+ * Motion levels: `off` kills every animation and transition; `reduced` keeps fades
+ * and colour changes but drops anything that moves or resizes. `full` is the
+ * default and needs no rule. Both attrs are written by `ThemeRuntimeSync`.
+ */
 /* Smooth global transitions */
 * {
   scroll-behavior: smooth;
@@ -734,6 +739,24 @@
 }
 
 :root[data-animations='disabled'] .animate-pulse {
+  animation: var(--animate-pulse) !important;
+}
+
+:root[data-motion-level='reduced'] *,
+:root[data-motion-level='reduced'] *::before,
+:root[data-motion-level='reduced'] *::after {
+  animation: none !important;
+  scroll-behavior: auto !important;
+  transition-property:
+    opacity, color, background-color, border-color, outline-color, box-shadow, fill, stroke !important;
+  transition-duration: var(--ola-motion-feedback) !important;
+}
+
+:root[data-motion-level='reduced'] .animate-spin {
+  animation: var(--animate-spin) !important;
+}
+
+:root[data-motion-level='reduced'] .animate-pulse {
   animation: var(--animate-pulse) !important;
 }
 

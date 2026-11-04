@@ -60,7 +60,6 @@ import { isCronWorkspaceEventFor } from './lib/cron-workspace-event'
 import { ipcClient } from './lib/ipc/ipc-client'
 import { waitForSettingsWriteIdle } from './lib/ipc/ipc-storage'
 import { IPC } from './lib/ipc/channels'
-import { attachRendererToolBridge } from './lib/ipc/renderer-tool-bridge'
 import { reattachActiveTsRuntimeRuns } from './lib/agent/runtime-reattach'
 import {
   ensureWindowWorkspaceRegistered,
@@ -88,7 +87,6 @@ import {
 registerAllViewers()
 initProviderStore()
 initAppPluginStore()
-attachRendererToolBridge()
 
 // Register tools (async because SubAgents are loaded from .md files via IPC)
 initExtensionStore()
@@ -373,7 +371,7 @@ function App(): React.JSX.Element {
 
       if (rendererOomRecoveryRef.current) {
         const recoverySessionId = useChatStore.getState().activeSessionId
-        useSettingsStore.getState().updateSettings({ animationsEnabled: false })
+        useSettingsStore.getState().updateSettings({ motionLevel: 'off' })
         useUIStore.setState({
           detailPanelOpen: false,
           detailPanelContent: null,

@@ -1,18 +1,37 @@
-import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron'
+import { BrowserWindow, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { IPC } from '../../shared/ipc/contract'
 import { isTrustedRendererIpcEvent } from '../renderer-security'
 import { McpAutoConnectCoordinator } from '../mcp/autoconnect-coordinator'
 import { McpConfigStore } from '../mcp/mcp-config-store'
 import { McpManager } from '../mcp/mcp-manager'
-import type { McpServerConfig } from '../mcp/mcp-types'
+import { getMcpOAuthCredentialStore } from '../mcp/mcp-oauth-store'
+import {
+  closeAllMcpOAuthLoopbacks,
+  closeMcpOAuthLoopback,
+  DEFAULT_MCP_OAUTH_PORT,
+  startMcpOAuthLoopback,
+  type McpOAuthCallbackResult,
+  type McpOAuthCallbackVerdict
+} from '../mcp/mcp-oauth-loopback'
+import type { McpServerConfig, McpServerStatus } from '../mcp/mcp-types'
 import {
   decodeMessagePackPayload,
   encodeMessagePackPayload,
   toMessagePackChannel
 } from '../../shared/messagepack/binary-ipc'
+import { safeSendMessagePackToWindow } from '../window-ipc'
 
 let activeMcpManager: McpManager | null = null
 const mcpAutoConnectCoordinator = new McpAutoConnectCoordinator()
 const mcpConfigStore = new McpConfigStore()
+const mcpOAuthStore = getMcpOAuthCredentialStore()
+
+/**
+ * Window that started each pending authorization. The callback event goes back to
+ * that window only, and a flow started elsewhere cannot be finished from here.
+ */
+const mcpOAuthWindows = new Map<string, BrowserWindow>()
+const mcpOAuthWindowBindings = new WeakSet<BrowserWindow>()
 
 type McpCallToolArgs = {
   serverId: string
@@ -24,6 +43,20 @@ type McpReadResourceArgs = {
   serverId: string
   uri?: string
   resourceName?: string
+}
+
+type McpOAuthStartResult = {
+  success: boolean
+  status?: McpServerStatus
+  authorizationUrl?: string
+  error?: string
+}
+
+type McpOAuthCallbackPayload = {
+  serverId: string
+  ok: boolean
+  status: McpServerStatus
+  error?: string
 }
 
 // ── Native config persistence ──
@@ -60,15 +93,78 @@ function isTrustedMcpIpcSender(event: IpcMainInvokeEvent): boolean {
 
 function registerMcpMessagePackHandler<TArgs>(
   channel: string,
-  handler: (args: TArgs) => Promise<unknown> | unknown
+  handler: (args: TArgs, event: IpcMainInvokeEvent) => Promise<unknown> | unknown
 ): void {
   ipcMain.handle(toMessagePackChannel(channel), async (event, bytes: Uint8Array) => {
     if (!isTrustedMcpIpcSender(event)) {
       throw new Error('Unauthorized MCP IPC sender')
     }
     const args = decodeMessagePackPayload<TArgs>(bytes)
-    return encodeMessagePackPayload(await handler(args))
+    return encodeMessagePackPayload(await handler(args, event))
   })
+}
+
+// ── OAuth for HTTP MCP servers ──
+
+/** Drop the pending flow for a window that closed before the browser came back. */
+function bindMcpOAuthWindowLifecycle(win: BrowserWindow): void {
+  if (mcpOAuthWindowBindings.has(win)) return
+  mcpOAuthWindowBindings.add(win)
+  win.on('closed', () => {
+    for (const [serverId, pending] of mcpOAuthWindows) {
+      if (pending === win) mcpOAuthWindows.delete(serverId)
+    }
+  })
+}
+
+function notifyMcpOAuthCallback(serverId: string, payload: McpOAuthCallbackPayload): void {
+  const win = mcpOAuthWindows.get(serverId)
+  if (!win || win.isDestroyed()) return
+  safeSendMessagePackToWindow(win, IPC.MCP_OAUTH_CALLBACK, payload)
+}
+
+/**
+ * Turn a loopback callback into a token exchange. The authorization code arrives
+ * here and is spent here: it is never forwarded to the Renderer, and the Renderer
+ * only learns whether the server is now usable.
+ */
+async function completeMcpOAuth(
+  mcpManager: McpManager,
+  serverId: string,
+  result: McpOAuthCallbackResult
+): Promise<McpOAuthCallbackVerdict> {
+  const fail = (message: string): McpOAuthCallbackVerdict => {
+    notifyMcpOAuthCallback(serverId, {
+      serverId,
+      ok: false,
+      status: mcpManager.getStatus(serverId),
+      error: message
+    })
+    return { accepted: false, message }
+  }
+
+  if (result.error) return fail(result.errorDescription ?? result.error)
+  if (!result.code) return fail('The authorization server did not return a code')
+
+  // CSRF check: the state was persisted when the SDK built the authorization URL.
+  const expectedState = (await mcpOAuthStore.read(serverId)).state
+  if (expectedState && result.state !== expectedState) {
+    return fail('Authorization state mismatch')
+  }
+
+  try {
+    const status = await mcpManager.completeAuthorization(serverId, result.code)
+    notifyMcpOAuthCallback(serverId, { serverId, ok: true, status })
+    return { accepted: true }
+  } catch (error) {
+    return fail(error instanceof Error ? error.message : String(error))
+  }
+}
+
+/** App shutdown: no browser authorization can complete once the windows are gone. */
+export function stopMcpOAuthFlows(): void {
+  closeAllMcpOAuthLoopbacks()
+  mcpOAuthWindows.clear()
 }
 
 export async function autoConnectMcpServers(mcpManager: McpManager): Promise<void> {
@@ -116,9 +212,13 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
 
   // Remove an MCP server config
   registerMcpMessagePackHandler<string>('mcp:remove', async (id) => {
+    closeMcpOAuthLoopback(id)
+    mcpOAuthWindows.delete(id)
     await mcpManager.disconnectServer(id)
     mcpAutoConnectCoordinator.reset(id)
-    return await removeServer(id)
+    const removed = await removeServer(id)
+    if (removed.success) await mcpOAuthStore.forget([id])
+    return removed
   })
 
   // Connect to an MCP server
@@ -130,7 +230,9 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
     try {
       await mcpManager.connectServer(config)
       mcpAutoConnectCoordinator.reset(id)
-      return { success: true }
+      // `authorization-required` is a successful connect: the server answered, it
+      // just wants a browser authorization before it will serve requests.
+      return { success: true, status: mcpManager.getStatus(id) }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       return { success: false, error: msg }
@@ -218,6 +320,75 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
       const msg = err instanceof Error ? err.message : String(err)
       return { success: false, error: msg }
     }
+  })
+
+  /**
+   * Start (or resume) a browser authorization for an HTTP MCP server.
+   *
+   * The loopback listener has to exist before the connection attempt: the SDK embeds
+   * the redirect URI in both the authorization request and the dynamic client
+   * registration, and offers no hook to change it mid-flow.
+   */
+  registerMcpMessagePackHandler<string>('mcp:oauth-start', async (id, event) => {
+    const result: McpOAuthStartResult = { success: false }
+    const config = (await readServers()).find((server) => server.id === id)
+    if (!config) return { ...result, error: 'Server not found' }
+    if (config.transport === 'stdio') {
+      return { ...result, error: 'OAuth is only available for HTTP MCP servers' }
+    }
+
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return { ...result, error: 'Unauthorized MCP IPC sender' }
+
+    try {
+      const loopback = await startMcpOAuthLoopback({
+        serverId: id,
+        preferredPort: DEFAULT_MCP_OAUTH_PORT,
+        onCallback: async (callback) => await completeMcpOAuth(mcpManager, id, callback)
+      })
+      // A new attempt invalidates whatever state/verifier the previous one left.
+      await mcpOAuthStore.patch(id, {
+        redirectUri: loopback.redirectUri,
+        state: undefined,
+        codeVerifier: undefined
+      })
+
+      mcpOAuthWindows.set(id, win)
+      bindMcpOAuthWindowLifecycle(win)
+
+      await mcpManager.connectServer(config)
+      mcpAutoConnectCoordinator.reset(id)
+
+      const status = mcpManager.getStatus(id)
+      const authorizationUrl = mcpManager.getPendingAuthorizationUrl(id)
+      if (authorizationUrl) {
+        // Headless test runs must not pop a real browser window.
+        if (process.env.OLA_E2E_DATA_ROOT === undefined) {
+          await shell.openExternal(authorizationUrl)
+        }
+      } else if (status !== 'connected') {
+        closeMcpOAuthLoopback(id)
+        mcpOAuthWindows.delete(id)
+        return { ...result, status, error: 'The server did not request an authorization' }
+      }
+
+      return { success: true, status, authorizationUrl }
+    } catch (err) {
+      closeMcpOAuthLoopback(id)
+      mcpOAuthWindows.delete(id)
+      return { ...result, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  /**
+   * Forget the stored credentials and drop the client. The next connect (or
+   * `mcp:oauth-start`) begins a fresh authorization from scratch.
+   */
+  registerMcpMessagePackHandler<string>('mcp:oauth-signout', async (id) => {
+    closeMcpOAuthLoopback(id)
+    mcpOAuthWindows.delete(id)
+    await mcpManager.signOut(id)
+    return { success: true, status: mcpManager.getStatus(id) }
   })
 }
 

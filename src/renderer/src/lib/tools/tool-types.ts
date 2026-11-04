@@ -12,8 +12,6 @@ export interface ToolContext {
   ipc: IPCClient
   /** Files read during this run, keyed by normalized resolved path. */
   readFileHistory?: Map<string, FileReadSnapshot>
-  /** Per-run inline tool handlers that should shadow the global registry. */
-  inlineToolHandlers?: Record<string, ToolHandler>
   /** The tool_use block id currently being executed by the active agent runtime. */
   currentToolUseId?: string
   /** Current top-level agent run id, reused for post-run change review and rollback. */
@@ -38,8 +36,6 @@ export interface ToolContext {
   channelPermissions?: ChannelPermissions
   /** Channel working home dir for path-based access control */
   channelHomedir?: string
-  /** Per-run local tool handlers that should not be exposed globally */
-  localToolHandlers?: Record<string, ToolHandler>
 }
 
 export interface FileReadSnapshot {

@@ -4,7 +4,6 @@
     "placeholderClarify": "Mô tả ý tưởng của anh và tôi sẽ tiếp tục điều tra cho đến khi các yêu cầu rõ ràng...",
     "placeholderCowork": "Bảo trợ lý giúp dự án của anh...",
     "placeholderCode": "Mô tả những gì bạn muốn xây dựng, như sửa lỗi, viết chữ, hoặc sử dụng / cam kết để thực hiện kho...",
-    "placeholderAcp": "Tôi sẽ thiết kế và giao phó trước thay vì lập trình trực tiếp...",
     "placeholderPlanReview": "Hãy nhập thông tin phản hồi sửa đổi cho kế hoạch này, hoặc nhắp vào lá bài ở trên để thực hiện nó...",
     "placeholderPendingGoal": "Mô tả mục tiêu để theo đuổi...",
     "pendingGoalBanner": "Việc theo đuổi mục tiêu đã sẵn sàng. Thông điệp tiếp theo sẽ được dùng làm mục tiêu và gửi đi bình thường.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "Dự đoán câu hỏi sắc sảo tiếp theo tôi sẽ yêu cầu kiểm tra lại yêu cầu.",
     "recommendationDefaultCowork": "Dự đoán hành động hợp tác tiếp theo tôi sẽ tự nhiên đánh máy.",
     "recommendationDefaultCode": "Dự đoán các mã bê tông tiếp theo thay đổi yêu cầu tôi sẽ gõ tự nhiên.",
-    "recommendationDefaultAcp": "Dự đoán câu hỏi dựa trên ACP tiếp theo hoặc thiết kế tôi sẽ gõ một cách tự nhiên.",
-    "recommendationInitWorkspace": "Không tìm thấy đặc vụ nào trong thư mục làm việc hiện thời. Dự đoán bước kế tiếp tự nhiên, có khả năng / khởi tạo ngữ cảnh dự án.",
-    "startAcp": "Khởi động một phiên chạy ACP",
-    "startAcpDesc": "Trước hết, hãy làm rõ mục tiêu, gốc gác, hạn chế và tiêu chuẩn chấp nhận.",
-    "homeTitleAcp": "Chế độ ACP",
-    "homeDescAcp": "Trong chế độ ACP, bắt đầu bằng cách làm rõ mục tiêu, nền tảng, hạn chế và tiêu chuẩn chấp nhận."
+    "recommendationInitWorkspace": "Không tìm thấy đặc vụ nào trong thư mục làm việc hiện thời. Dự đoán bước kế tiếp tự nhiên, có khả năng / khởi tạo ngữ cảnh dự án."
   },
   "planReview": {
     "awaitingReview": "Chờ đợi ôn lại",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "Đây là chế độ mã hóa",
         "description": "Dùng nó để trực tiếp thực hiện các công việc như soạn thảo tập tin, mã ghi, kiểm tra và xử lý chi tiết kỹ thuật."
-      },
-      "modeAcp": {
-        "title": "Đây là chế độ ACP",
-        "description": "Dùng nó làm tháp kiểm soát cho công việc phức tạp: làm rõ ranh giới và sự chấp nhận trước tiên, sau đó thiết kế kiến trúc, phá vỡ các nhiệm vụ, và giao phó việc thực hiện trong khi đại lý chính không trực tiếp lập trình."
       },
       "leftSidebar": {
         "title": "Đây là khu vực dự án và phiên điều trị",
@@ -654,7 +644,8 @@
     "thinkingFor": "Suy nghĩ {{seconds}} s",
     "pending": "Suy nghĩ",
     "thinkingEllipsis": "Suy nghĩ...",
-    "thoughts": "Suy nghĩ"
+    "thoughts": "Suy nghĩ",
+    "elapsedSeconds": "{{seconds}} giây"
   },
   "messageList": {
     "startConversation": "Name",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "Làm sáng tỏ nhiệm vụ trước",
     "homeTitleCowork": "Làm việc bên trong dự án",
     "homeTitleCode": "Bắt đầu lập trình",
-    "homeTitleAcp": "Bắt đầu hợp tác ACP",
-    "homeDescAcp": "Khởi động chế độ ACP để xác nhận cấu trúc, thẩm định và thực hiện sụp đổ.",
     "homeDescAutoChat": "Sau khi bạn gửi, nó chọn một mô hình tốt hơn tự động dựa trên tính phức tạp của nhiệm vụ.",
     "homeDescAutoClarify": "Sau khi gửi, nó sẽ chọn một mô hình phù hợp hơn để thẩm vấn và thu hẹp kế hoạch.",
     "homeDescAutoCowork": "Sau khi bạn gửi, nó chọn một mô hình thích hợp hơn cho công việc, biên tập và công cụ.",
     "homeDescAutoCode": "Sau khi bạn gửi, nó sẽ chọn một mô hình phù hợp hơn cho việc lập trình, phục hồi và phân tích.",
-    "homeDescAutoAcp": "Sau khi gửi, nó sẽ chọn một mô hình phù hợp hơn cho việc xác nhận kiến trúc, hạn chế làm sáng tỏ, và thực hiện bị hỏng.",
     "homeDescChatGeneral": "Tốt cho việc trò chuyện, viết lách và hỏi nhẹ.",
     "homeDescChatVision": "Tốt cho việc trò chuyện và cũng có thể phản ứng nhanh với ngữ cảnh hình ảnh.",
     "homeDescClarifyGeneral": "Tốt cho những câu hỏi tiếp theo, định hình mục tiêu và điền vào những hạn chế.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "Thay đổi giai đoạn trước, sau đó tạo ra một thông điệp",
     "aiCommitEmptyStaged": "Không có gì được sắp xếp — không thể tạo ra thông điệp",
     "aiCommitFailed": "Thế hệ bị lỗi. Hãy kiểm tra thiết lập kiểu ADI / Thử lại"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

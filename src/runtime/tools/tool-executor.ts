@@ -39,6 +39,10 @@ export interface ToolDefinition {
   /** Serialize stateful reads, such as inspecting one shared Browser tab. */
   serializeReads?: boolean
   validate: (input: unknown) => unknown
+  /** Runs after validate() and before authorize(); may replace the model input. */
+  prepare?: (input: unknown, context: ToolContext) => Promise<unknown>
+  /** Runs after a successful execute(); may replace the model-visible output. */
+  after?: (input: unknown, output: unknown, context: ToolContext) => Promise<unknown>
   /** Canonical resource ids come from the host, never directly from model arguments. */
   resources: (input: unknown, context: ToolContext) => Promise<string[]>
   execute: (input: unknown, context: ToolContext) => Promise<unknown>
@@ -340,6 +344,25 @@ export class ToolExecutor {
     } catch {
       return { id: call.id, name: call.name, output: 'INVALID_TOOL_INPUT', isError: true }
     }
+    // A host policy hook may rewrite the model input before authorization, so
+    // approval and resource locks are computed from the input that will run.
+    if (tool.prepare) {
+      try {
+        input = await tool.prepare(input, { ...context, toolCallId: call.id })
+      } catch (error) {
+        context.signal.throwIfAborted()
+        // A veto reads as the ordinary permission denial; a rewrite that breaks
+        // the tool's own contract reads as invalid input, so the model can fix it.
+        const invalidInput = error instanceof RuntimeError && error.code === 'INVALID_TOOL_INPUT'
+        return {
+          id: call.id,
+          name: call.name,
+          output: invalidInput ? 'INVALID_TOOL_INPUT' : 'PERMISSION_DENIED',
+          isError: true
+        }
+      }
+      context.signal.throwIfAborted()
+    }
     const authorized = await this.authorize(tool, input, context, call)
     context.signal.throwIfAborted()
     if (!authorized)
@@ -354,7 +377,12 @@ export class ToolExecutor {
       context.signal.throwIfAborted()
       let result: ToolResult
       try {
-        const output = await tool.execute(input, { ...context, toolCallId: call.id })
+        const rawOutput = await tool.execute(input, { ...context, toolCallId: call.id })
+        // A policy hook's post-processing is model-visible output, so it must
+        // run before the result is recorded and before artifacts are derived.
+        const output = tool.after
+          ? await tool.after(input, rawOutput, { ...context, toolCallId: call.id })
+          : rawOutput
         const imageOutput = parseRuntimeToolImageOutput(output)
         result = {
           id: call.id,

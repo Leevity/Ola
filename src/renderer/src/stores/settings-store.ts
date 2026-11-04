@@ -5,6 +5,12 @@ import { ipcStorage } from '../lib/ipc/ipc-storage'
 import { DEFAULT_THEME_MODE, normalizeThemePreferences } from '../lib/theme-preferences'
 export { DEFAULT_THEME_MODE } from '../lib/theme-preferences'
 import {
+  DEFAULT_MOTION_LEVEL,
+  isMotionLevel,
+  normalizeMotionLevel,
+  type MotionLevel
+} from '../lib/motion-level'
+import {
   DEFAULT_APP_THEME_PRESET,
   DEFAULT_SSH_TERMINAL_THEME_PRESET,
   type AppThemePreset,
@@ -48,14 +54,14 @@ export interface SessionDefaultModelBinding extends ModelBinding {
 export type PromptRecommendationModelBinding = ModelBinding | 'disabled' | null
 
 export type PromptRecommendationModelBindings = Record<
-  'chat' | 'clarify' | 'execute' | 'acp',
+  'chat' | 'clarify' | 'execute',
   PromptRecommendationModelBinding
 >
 
 export type MainModelSelectionMode = 'auto' | 'manual'
 export type MemoryAutomationWritePolicy = 'auto'
 export type MemoryScopeMode = 'hybrid'
-export type ClarifyPlanModeAutoSwitchTarget = 'off' | 'execute' | 'acp'
+export type ClarifyPlanModeAutoSwitchTarget = 'off' | 'execute'
 export type ProjectDefaultDirectoryMode = 'last-used' | 'custom'
 export type FileDiffViewMode = 'split' | 'inline'
 export type LiveOutputAnimationStyle = 'agile' | 'elegant'
@@ -314,7 +320,7 @@ interface SettingsStore {
   backgroundColor: string
   fontFamily: string
   fontSize: number
-  animationsEnabled: boolean
+  motionLevel: MotionLevel
   liveOutputAnimationStyle: LiveOutputAnimationStyle
   toolbarCollapsedByDefault: boolean
   collapseExecutionRunsByDefault: boolean
@@ -441,7 +447,7 @@ export const useSettingsStore = create<SettingsStore>()(
       backgroundColor: '',
       fontFamily: '',
       fontSize: 16,
-      animationsEnabled: true,
+      motionLevel: DEFAULT_MOTION_LEVEL,
       liveOutputAnimationStyle: 'agile',
       toolbarCollapsedByDefault: false,
       collapseExecutionRunsByDefault: true,
@@ -467,8 +473,7 @@ export const useSettingsStore = create<SettingsStore>()(
       promptRecommendationModels: {
         chat: null,
         clarify: null,
-        execute: null,
-        acp: null
+        execute: null
       },
       newSessionDefaultModel: null,
       mainModelSelectionMode: 'auto',
@@ -518,7 +523,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'ola-settings',
-      version: 29,
+      version: 30,
       storage: createJSONStorage(() => ipcStorage),
       migrate: (persisted: unknown) => {
         const state = persisted as Record<string, unknown>
@@ -568,18 +573,19 @@ export const useSettingsStore = create<SettingsStore>()(
           state.promptRecommendationModels = {
             chat: null,
             clarify: null,
-            execute: null,
-            acp: null
+            execute: null
           }
         } else {
           const bindings = state.promptRecommendationModels as Record<
             string,
             PromptRecommendationModelBinding
           >
-          bindings.execute = bindings.execute ?? bindings.code ?? bindings.cowork ?? null
-          bindings.acp = bindings.acp ?? null
+          // Retired modes fold into `execute` so a saved binding keeps working.
+          bindings.execute =
+            bindings.execute ?? bindings.code ?? bindings.cowork ?? bindings.acp ?? null
           delete bindings.code
           delete bindings.cowork
+          delete bindings.acp
         }
         if (state.clarifyPlanModeAutoSwitchTarget === 'code') {
           state.clarifyPlanModeAutoSwitchTarget = 'execute'
@@ -610,9 +616,13 @@ export const useSettingsStore = create<SettingsStore>()(
         if (state.fontSize === undefined || typeof state.fontSize !== 'number') {
           state.fontSize = 16
         }
-        if (state.animationsEnabled === undefined) {
-          state.animationsEnabled = true
+        // The old boolean switch folds into the three-level ladder: an explicit opt-out
+        // becomes `off`, everything else starts at `full` (which is also the default).
+        if (!isMotionLevel(state.motionLevel)) {
+          state.motionLevel =
+            state.animationsEnabled === false ? 'off' : normalizeMotionLevel(state.motionLevel)
         }
+        delete state.animationsEnabled
         if (
           state.liveOutputAnimationStyle === undefined ||
           (state.liveOutputAnimationStyle !== 'agile' &&
@@ -851,7 +861,7 @@ export const useSettingsStore = create<SettingsStore>()(
         backgroundColor: state.backgroundColor,
         fontFamily: state.fontFamily,
         fontSize: state.fontSize,
-        animationsEnabled: state.animationsEnabled,
+        motionLevel: state.motionLevel,
         liveOutputAnimationStyle: state.liveOutputAnimationStyle,
         toolbarCollapsedByDefault: state.toolbarCollapsedByDefault,
         collapseExecutionRunsByDefault: state.collapseExecutionRunsByDefault,

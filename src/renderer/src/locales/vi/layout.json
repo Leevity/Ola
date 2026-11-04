@@ -76,8 +76,7 @@
       "chat": "Trò chuyện",
       "clarify": "Làm rõ",
       "cowork": "Hợp tác",
-      "code": "Mã",
-      "acp": "ACP"
+      "code": "Mã"
     },
     "deleteAllSessions": "Xoá mọi phiên chạy",
     "deleteAllConfirm": "Xoá tất cả {{count}} Không thể làm lại được.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Phiên chạy đã xoá",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Chế độ ngắm mục tiêu tự động điều khiển sau khi tự động làm sáng tỏ chế độ lên kế hoạch",
     "clarifyPlanModeAutoSwitchOff": "Ở lại",
     "clarifyPlanModeAutoSwitchCode": "Để mã",
-    "clarifyPlanModeAutoSwitchAcp": "Tới ACP",
     "autoApproveOn": "Comment",
     "autoApproveOff": "Comment",
     "pendingCount": "{{count}} Đang đợi",
@@ -407,7 +406,6 @@
     "switchToClarify": "Chuyển tới chế độ làm sáng",
     "switchToCowork": "Chế độ đồng nghiệp",
     "switchToCode": "Chuyển sang chế độ mã hóa",
-    "switchToAcp": "Chuyển sang chế độ ACP",
     "currentSession": "Phiên chạy hiện thời",
     "exportCurrentChat": "Chèn",
     "copiedConversation": "Name",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Gọi công cụ",
     "orchestrationToolCallsEmpty": "Thành viên này không có cuộc gọi công cụ cần hiển thị",
     "orchestrationToolCallCount": "{{count}} cuộc gọi",
-    "acp": "ACP",
-    "acpTitle": "Kế hoạch điều khiển kiến trúc ACP",
-    "acpDesc": "Tốt nhất cho công việc điều khiển kiến trúc trước khi thực hiện.",
-    "acpRuleNoCode": "Tác nhân chính không viết mã hoặc sửa đổi tập tin trực tiếp. Trước tiên, nó làm sáng tỏ mục tiêu, hạn chế, rủi ro và tiêu chuẩn chấp nhận.",
-    "acpRuleDelegate": "Nhiệm vụ hoàn thành phải được giao thông qua tác vụ / SubAgent / đồng đội để các đặc vụ phụ thích hợp.",
-    "acpRuleReport": "Mỗi đặc vụ nên trả lại một bản tóm tắt cấu trúc Markdown để đặc vụ chính có thể xem xét, tổng hợp, và tiếp tục thực hiện.",
-    "acpCurrentPhase": "Giai đoạn hiện tại",
-    "acpNextAction": "Khuyên bước kế",
-    "acpPhaseClarify": "Yêu cầu làm sáng tỏ",
-    "acpPhasePlan": "Lên kế hoạch",
-    "acpPhaseReview": "Xem lại kế hoạch",
-    "acpPhaseApproved": "Sẵn sàng thực hiện",
-    "acpPhaseExecute": "Name",
-    "acpNextActionClarify": "Hãy điền vào mục tiêu, hạn chế, ranh giới và tiêu chuẩn chấp nhận trước khi lên kế hoạch.",
-    "acpNextActionPlan": "Tiếp tục thực hiện kế hoạch, lưu nó, rồi thoát khỏi chế độ Kế hoạch.",
-    "acpNextActionExecute": "Tiếp tục phân phối kế hoạch thành các nhiệm vụ, giao phó các đặc vụ phụ, và tổng hợp sản lượng của họ.",
-    "acpInProgressCount_one": "{{count}} đang tiến hành",
-    "acpInProgressCount_other": "{{count}} đang tiến hành",
     "skills": "Công cụ",
     "cron": "Cron",
     "expand": "Mở rộng",
@@ -676,14 +656,6 @@
           "Thực hiện chuẩn: ghi tính năng, sửa lỗi, sửa chữa lại mô- đun, hoặc hoàn thành mô-đun với kỷ luật kỹ thuật",
           "Khi bạn muốn mã sạch xuất ra với ít thông tin — hãy xác nhận lỗi chính tả thay vì đi qua động từsese",
           "Thay đổi đó đòi hỏi sự chú ý chặt chẽ đến các quy ước, loại, nhập khẩu, và các hợp đồng của CN"
-        ]
-      },
-      "acp": {
-        "summary": "Kế hoạch Kiểm soát Kiến trúc là để làm công việc phức tạp cần kiểm soát trước khi thực hiện: làm rõ mục tiêu và ranh giới trước tiên, sau đó thiết kế kiến trúc, phân hủy việc giao hàng và đại diện.",
-        "solves": [
-          "Những công việc phức tạp cần thiết nền, phạm vi, hạn chế, phụ thuộc và tiêu chuẩn chấp nhận cần được làm rõ trước khi thực hiện",
-          "Làm việc nơi mà tác nhân chính nên tập trung vào kiến trúc, dàn xếp và xử lý thay vì lập trình trực tiếp",
-          "Các trường hợp mà sub-tasks nên chạy song song và trở lại cấu trúc Markdown tóm tắt cho tiếp tục phối hợp"
         ]
       }
     }

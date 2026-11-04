@@ -76,8 +76,7 @@
       "chat": "Obrolan",
       "clarify": "Klarifikasi",
       "cowork": "Berkolaborasi",
-      "code": "Kode",
-      "acp": "ACP"
+      "code": "Kode"
     },
     "deleteAllSessions": "Hapus Semua Sesi",
     "deleteAllConfirm": "Hapus semua {{count}} Ini tidak bisa dibatalkan.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sesi dihapus",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Modus target otomatis setelah Clarify memasuki Mode Rencana",
     "clarifyPlanModeAutoSwitchOff": "Tinggal",
     "clarifyPlanModeAutoSwitchCode": "Ke Kode",
-    "clarifyPlanModeAutoSwitchAcp": "Ke ACP",
     "autoApproveOn": "Persetujuan otomatis adalah AKTIF - semua alat dijalankan tanpa konfirmasi",
     "autoApproveOff": "Persetujuan otomatis OFF - panggilan alat membutuhkan konfirmasi",
     "pendingCount": "{{count}} tertunda",
@@ -407,7 +406,6 @@
     "switchToClarify": "Pindah ke Mode Clarify",
     "switchToCowork": "Pindah ke Mode Kowork",
     "switchToCode": "Pindah ke Mode Kode",
-    "switchToAcp": "Pindah ke Mode ACP",
     "currentSession": "Sesi Kini",
     "exportCurrentChat": "Ekspor Percakapan Saat Ini",
     "copiedConversation": "Salin percakapan ke papan klip",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Panggilan Alat",
     "orchestrationToolCallsEmpty": "Anggota ini tidak memiliki panggilan alat untuk ditampilkan",
     "orchestrationToolCallCount": "{{count}} panggilan",
-    "acp": "ACP",
-    "acpTitle": "ACP",
-    "acpDesc": "Terbaik untuk pekerjaan arsitektur-dikendalikan sebelum implementasi. Agen utama mengklarifikasi persyaratan, mendefinisikan batas-batas, merancang pendekatan, membongkar tugas, dan hasil sintesis; implementasi beton dijalankan oleh agen-agen sub-.",
-    "acpRuleNoCode": "Agen utama tidak menulis kode implementasi atau memodifikasi berkas secara langsung. Ini pertama kali mengklarifikasi tujuan, batasan, risiko, dan kriteria penerimaan.",
-    "acpRuleDelegate": "Tugas implimentasi harus didelegasikan melalui Task / SubAgent / rekan satu tim ke sub- agen yang sesuai.",
-    "acpRuleReport": "Setiap sub- tugas harus kembali ringkasan terstruktur Markdown sehingga agen utama dapat mengulas, mensintesis, dan melanjutkan eksekusi.",
-    "acpCurrentPhase": "Tahap saat ini",
-    "acpNextAction": "Langkah selanjutnya yang direkomendasikan",
-    "acpPhaseClarify": "Klarifikasi permintaan",
-    "acpPhasePlan": "Perencanaan",
-    "acpPhaseReview": "Ulasan rencana",
-    "acpPhaseApproved": "Siap untuk mengeksekusi",
-    "acpPhaseExecute": "Eksekusi terdelegasikan",
-    "acpNextActionClarify": "Isi tujuan, batasan, batas, dan kriteria penerimaan sebelum perencanaan.",
-    "acpNextActionPlan": "Lanjutkan penyulingan rencana implementasi, menyimpannya, kemudian keluar Mode Rencana.",
-    "acpNextActionExecute": "Terus dekomposisi rencana yang disetujui menjadi tugas, delegasi sub- agen, dan mensintesis hasil mereka.",
-    "acpInProgressCount_one": "{{count}} dalam proses",
-    "acpInProgressCount_other": "{{count}} dalam proses",
     "skills": "Perkakas",
     "cron": "Cron",
     "expand": "Ekspansi",
@@ -677,14 +657,6 @@
           "Ketika Anda ingin keluaran kode bersih dengan narasi minimal - terse konfirmasi bukannya berjalan verbose - melalui",
           "Perubahan yang membutuhkan perhatian ketat terhadap konvensi yang ada, tipe, impor, dan kontrak API"
         ]
-      },
-      "acp": {
-        "summary": "Perencanaan Kontrol Arsitektur adalah untuk pekerjaan yang kompleks yang membutuhkan kendali sebelum implementasi: mengklarifikasi tujuan dan batas pertama, kemudian merancang arsitektur, membongkar eksekusi, dan delegasi. Agen utama tidak mengkode secara langsung.",
-        "solves": [
-          "Kompleks tugas yang memerlukan latar belakang, scope, batasan, ketergantungan, dan kriteria penerimaan yang akan diklarifikasi sebelum implementasi",
-          "Bekerja di mana agen utama harus fokus pada arsitektur, orkestra, dan proses kontrol daripada coding secara langsung",
-          "Kasus di mana sub- tugas harus berjalan dalam paralel dan kembali terstruktur Markdown rangkuman untuk melanjutkan koordinasi"
-        ]
       }
     }
   },
@@ -694,7 +666,7 @@
     "resources": "Sumber Daya",
     "skills": "Keterampilan",
     "souls": "SOUL",
-    "sync": "Selaraskan",
+    "sync": "Sinkronisasi",
     "draw": "Gambar",
     "translate": "Terjemahkan",
     "ssh": "SSH",

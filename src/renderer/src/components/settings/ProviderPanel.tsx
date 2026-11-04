@@ -2302,7 +2302,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
   }
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b shrink-0">
         <div className="flex items-center gap-3">
@@ -3080,7 +3080,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 )
               }}
             >
-              {t('provider.resetToDefault', { defaultValue: '恢复默认' })}
+              {t('provider.resetToDefault', { defaultValue: 'Reset to default' })}
             </Button>
           </div>
           <Input
@@ -3112,7 +3112,7 @@ function ProviderConfigPanel({ provider }: { provider: AIProvider }): React.JSX.
                 )
               }}
             >
-              {t('provider.resetToDefault', { defaultValue: '恢复默认' })}
+              {t('provider.resetToDefault', { defaultValue: 'Reset to default' })}
             </Button>
           </div>
           <Input
@@ -4491,7 +4491,7 @@ export function ProviderPanel(): React.JSX.Element {
   }
 
   return (
-    <div className="provider-settings-container flex h-full flex-col overflow-hidden bg-background">
+    <div className="provider-settings-container flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {credentialVaultUnavailable && (
         <div
           role="alert"
@@ -4507,12 +4507,9 @@ export function ProviderPanel(): React.JSX.Element {
         </div>
       )}
       <ProviderHealthPanel />
-      <div
-        className="provider-settings-panels flex min-h-0 flex-1 overflow-hidden"
-        inert={credentialVaultUnavailable}
-      >
+      <div className="provider-settings-panels flex min-h-0 flex-1 overflow-hidden">
         {/* Left: Provider list */}
-        <div className="provider-settings-list flex shrink-0 flex-col bg-muted/10">
+        <div className="provider-settings-list flex min-h-0 shrink-0 flex-col bg-muted/10">
           {/* Search + Add */}
           <div className="flex items-center gap-1.5 border-b p-2.5">
             <div className="relative flex-1">
@@ -4565,7 +4562,7 @@ export function ProviderPanel(): React.JSX.Element {
         </div>
 
         {/* Right: Config panel */}
-        <div className="flex-1 min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1">
           {selectedProvider ? (
             <ProviderConfigPanel provider={selectedProvider} />
           ) : (

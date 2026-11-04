@@ -6,6 +6,7 @@ import { ExtensionService } from './extension-service'
 import { ExtensionStateStore } from './extension-state-store'
 import { ExtensionStorageStore } from './extension-storage-store'
 import { ExtensionPackageManager } from './extension-package-manager'
+import { ExtensionManager } from './extension-manager'
 
 const olaDirectory = olaDataRoot()
 const configStore = new ConfigStore(join(olaDirectory, 'config.json'))
@@ -34,9 +35,14 @@ const extensionPackageManager = new ExtensionPackageManager(
   extensionStorage,
   secrets
 )
+const extensionManager = new ExtensionManager(extensionService, extensionState)
 
 export function getExtensionService(): ExtensionService {
   return extensionService
+}
+
+export function getExtensionManager(): ExtensionManager {
+  return extensionManager
 }
 
 export function getExtensionStorage(): ExtensionStorageStore {

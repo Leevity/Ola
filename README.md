@@ -51,12 +51,11 @@ Most AI chat interfaces are isolated from your actual work environment. You spen
 
 Every conversation picks the right mode:
 
-| Mode      | Purpose                                                                                           |
-| --------- | ------------------------------------------------------------------------------------------------- |
-| `clarify` | Ask grounded questions, resolve ambiguity, produce a reviewable plan before any code is written.  |
-| `cowork`  | Full agent: code search, file I/O, shell, browser, sub-agent delegation, and more.                |
-| `code`    | Pair programming — focused code generation and surgical editing with Monaco Editor integration.   |
-| `acp`     | Architecture-control lead: clarify, design, decompose, and delegate implementation to sub-agents. |
+| Mode      | Purpose                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------ |
+| `clarify` | Ask grounded questions, resolve ambiguity, produce a reviewable plan before any code is written. |
+| `cowork`  | Full agent: code search, file I/O, shell, browser, sub-agent delegation, and more.               |
+| `code`    | Pair programming — focused code generation and surgical editing with Monaco Editor integration.  |
 
 ### 🧰 Tool System
 

@@ -3,9 +3,19 @@ import { basename, join } from 'path'
 import { olaDataRoot } from '../lib/ola-data-root'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { SSEClientTransport, SseError } from '@modelcontextprotocol/sdk/client/sse.js'
+import {
+  StreamableHTTPClientTransport,
+  StreamableHTTPError
+} from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
 import type { McpServerConfig, McpServerStatus, McpTool, McpResource, McpPrompt } from './mcp-types'
+import { getMcpOAuthCredentialStore, McpOAuthCredentialStore } from './mcp-oauth-store'
+import { McpOAuthProvider, serverScopedBackend } from './mcp-oauth-provider'
+import { DEFAULT_MCP_OAUTH_PORT, redirectUriForPort } from './mcp-oauth-loopback'
+
+/** Both HTTP transports can exchange a pending authorization code for tokens. */
+type AuthorizableTransport = { finishAuth(code: string): Promise<void> }
 
 function buildProcessEnv(): Record<string, string> {
   const base: Record<string, string> = {}
@@ -49,10 +59,32 @@ function buildStdioEnv(
 }
 
 /**
+ * Whether a failure means "the server wants a browser authorization" rather than
+ * "this server is broken". The SDK signals it with `UnauthorizedError`, or with a
+ * transport-level 401 when the server answers before the auth flow can start.
+ */
+function isAuthorizationPending(error: unknown): boolean {
+  if (error instanceof UnauthorizedError) return true
+  if (error instanceof StreamableHTTPError) return error.code === 401
+  // The SSE transport reports the status on its own error type.
+  return error instanceof SseError && error.code === 401
+}
+
+/** Both HTTP transports expose `finishAuth`; stdio has no authorization at all. */
+function isAuthorizable(transport: unknown): transport is AuthorizableTransport {
+  return (
+    typeof transport === 'object' &&
+    transport !== null &&
+    typeof (transport as AuthorizableTransport).finishAuth === 'function'
+  )
+}
+
+/**
  * McpClientWrapper — wraps @modelcontextprotocol/sdk Client for a single MCP server.
  *
  * Handles transport creation (stdio / SSE / Streamable HTTP),
- * auto-fallback from Streamable HTTP → SSE, and capability caching.
+ * auto-fallback from Streamable HTTP → SSE, OAuth for HTTP transports,
+ * and capability caching.
  */
 export class McpClientWrapper {
   private client: Client | null = null
@@ -61,6 +93,7 @@ export class McpClientWrapper {
     | InstanceType<typeof SSEClientTransport>
     | InstanceType<typeof StreamableHTTPClientTransport>
     | null = null
+  private provider: McpOAuthProvider | undefined
 
   private _status: McpServerStatus = 'disconnected'
   private _error: string | undefined
@@ -69,7 +102,10 @@ export class McpClientWrapper {
   private _prompts: McpPrompt[] = []
   private _usedFallback = false
 
-  constructor(private config: McpServerConfig) {}
+  constructor(
+    private config: McpServerConfig,
+    private readonly credentials: McpOAuthCredentialStore = getMcpOAuthCredentialStore()
+  ) {}
 
   get status(): McpServerStatus {
     return this._status
@@ -90,6 +126,11 @@ export class McpClientWrapper {
     return this._usedFallback
   }
 
+  /** The authorization URL the server redirected to, once the SDK produced one. */
+  get pendingAuthorizationUrl(): URL | undefined {
+    return this.provider?.pendingAuthorizationUrl
+  }
+
   /** Connect to the MCP server using the configured transport */
   async connect(): Promise<void> {
     if (this._status === 'connected' || this._status === 'connecting') return
@@ -101,6 +142,13 @@ export class McpClientWrapper {
     try {
       await this.tryConnect(this.config.transport)
     } catch (err) {
+      // A 401 is not a failure: the server is waiting for a browser authorization.
+      // Neither retrying nor falling back to SSE can succeed before that happens.
+      if (isAuthorizationPending(err)) {
+        this.enterAuthorizationRequired()
+        return
+      }
+
       // Auto-fallback: Streamable HTTP → SSE
       if (
         this.config.transport === 'streamable-http' &&
@@ -113,6 +161,10 @@ export class McpClientWrapper {
           this._usedFallback = true
           return
         } catch (fallbackErr) {
+          if (isAuthorizationPending(fallbackErr)) {
+            this.enterAuthorizationRequired()
+            return
+          }
           const msg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)
           this._status = 'error'
           this._error = `Streamable HTTP and SSE fallback both failed: ${msg}`
@@ -127,6 +179,34 @@ export class McpClientWrapper {
     }
   }
 
+  /**
+   * Exchange the authorization code the loopback listener received. The code is
+   * handed to Main directly and never reaches the Renderer.
+   */
+  async completeAuthorization(code: string): Promise<void> {
+    if (this._status !== 'authorization-required' || !isAuthorizable(this.transport)) {
+      throw new Error(`MCP server "${this.config.name}" has no pending authorization`)
+    }
+    await this.transport.finishAuth(code)
+    // The OAuth round trip is over: the authorized transport is not reusable,
+    // a fresh connect picks up the stored bearer token.
+    await this.cleanupClient()
+    this._status = 'disconnected'
+    await this.connect()
+  }
+
+  /**
+   * Keep the transport that received the 401: it carries the resource metadata and
+   * scope the server advertised, which `finishAuth` needs. The Client that owned it
+   * is discarded — its only resource is that transport.
+   */
+  private enterAuthorizationRequired(): void {
+    this.client = null
+    this._status = 'authorization-required'
+    this._error = undefined
+    console.log(`[MCP:${this.config.name}] Authorization required`)
+  }
+
   /** Internal: attempt connection with a specific transport type */
   private async tryConnect(transportType: string): Promise<void> {
     // Clean up any existing client
@@ -134,6 +214,7 @@ export class McpClientWrapper {
 
     this.client = new Client({ name: 'Ola', version: '1.0.0' }, { capabilities: {} })
 
+    this.provider = await this.createAuthProvider(transportType)
     this.transport = this.createTransport(transportType)
     await this.client.connect(this.transport)
 
@@ -147,6 +228,28 @@ export class McpClientWrapper {
       `[MCP:${this.config.name}] Connected via ${transportType} — ` +
         `${this._tools.length} tools, ${this._resources.length} resources, ${this._prompts.length} prompts`
     )
+  }
+
+  /**
+   * HTTP transports get an auth provider so a 401 becomes a discoverable
+   * authorization request instead of a connection failure. stdio servers are
+   * authenticated by their own environment, never by OAuth.
+   *
+   * Building the provider never navigates a browser: `redirectToAuthorization` only
+   * records the URL, and the IPC layer decides what to do with it.
+   */
+  private async createAuthProvider(transportType: string): Promise<McpOAuthProvider | undefined> {
+    if (transportType !== 'sse' && transportType !== 'streamable-http') return undefined
+
+    const stored = await this.credentials.read(this.config.id)
+    const redirectUri = stored.redirectUri ?? redirectUriForPort(DEFAULT_MCP_OAUTH_PORT)
+    return new McpOAuthProvider({
+      redirectUri,
+      clientName: 'Ola',
+      scope: this.config.auth?.scope,
+      clientId: this.config.auth?.clientId,
+      backend: serverScopedBackend(this.credentials, this.config.id)
+    })
   }
 
   /** Create the transport instance based on type */
@@ -176,7 +279,8 @@ export class McpClientWrapper {
           throw new Error('SSE transport requires a URL')
         }
         return new SSEClientTransport(new URL(this.config.url), {
-          requestInit: this.config.headers ? { headers: this.config.headers } : undefined
+          requestInit: this.config.headers ? { headers: this.config.headers } : undefined,
+          authProvider: this.provider
         })
 
       case 'streamable-http':
@@ -184,7 +288,8 @@ export class McpClientWrapper {
           throw new Error('Streamable HTTP transport requires a URL')
         }
         return new StreamableHTTPClientTransport(new URL(this.config.url), {
-          requestInit: this.config.headers ? { headers: this.config.headers } : undefined
+          requestInit: this.config.headers ? { headers: this.config.headers } : undefined,
+          authProvider: this.provider
         })
 
       default:

@@ -89,7 +89,13 @@ export function CapabilityCenterPanel(): React.JSX.Element {
                       {t(`capabilityCenter.capabilities.${capability.id}`)}
                     </span>
                     <Badge
-                      variant={capability.status === 'ga' ? 'default' : 'secondary'}
+                      variant={
+                        capability.status === 'ga'
+                          ? 'default'
+                          : capability.status === 'prototype' || capability.status === 'deprecated'
+                            ? 'outline'
+                            : 'secondary'
+                      }
                       className="h-5 px-1.5 text-xs"
                     >
                       {t(`capabilityCenter.status.${capability.status}`)}

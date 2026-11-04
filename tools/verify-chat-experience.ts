@@ -125,8 +125,8 @@ const finalOutcomeCard = await readFile(
   path.join(root, 'src/renderer/src/components/chat/FinalOutcomeCard.tsx'),
   'utf8'
 )
-const chatActions = await readFile(
-  path.join(root, 'src/renderer/src/hooks/use-chat-actions.ts'),
+const chatSendMessage = await readFile(
+  path.join(root, 'src/renderer/src/lib/agent/chat-send-message.ts'),
   'utf8'
 )
 const providerStore = await readFile(
@@ -156,7 +156,11 @@ assert(
     messageList.includes("t('messageList.assistantRail.toolOnlyPreview'"),
   'tool-use locator summary is missing'
 )
-assert(collapsiblePanel.includes('useReducedMotion'), 'reduced-motion handling is missing')
+assert(
+  collapsiblePanel.includes('useMotionProfile') &&
+    collapsiblePanel.includes('enabled && profile.transform'),
+  'reduced-motion handling is missing'
+)
 assert(
   collapsiblePanel.includes('new ResizeObserver(measure)'),
   'dynamic height observer is missing'
@@ -258,9 +262,11 @@ assert(
   'tool presentation registry adapters are incomplete'
 )
 assert(
-  chatActions.includes('modelExplicitlyRejectsVision(healthyProvider.modelConfig') &&
-    chatActions.includes('throw new VisionInputUnsupportedError()') &&
-    chatActions.includes('content: buildUserMessageContent(textForUserBlock, images, textBlocks)'),
+  chatSendMessage.includes('modelExplicitlyRejectsVision(healthyProvider.modelConfig') &&
+    chatSendMessage.includes('throw new VisionInputUnsupportedError()') &&
+    chatSendMessage.includes(
+      'content: buildUserMessageContent(textForUserBlock, images, textBlocks)'
+    ),
   'image input must be rejected before a text-only model receives it and preserved for vision models'
 )
 assert(

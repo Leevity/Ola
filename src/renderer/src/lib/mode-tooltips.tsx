@@ -30,10 +30,6 @@ export const modeTooltipConfigs: Record<SelectableMode, ModeTooltipConfig> = {
       'modeTooltip.execute.solves.1',
       'modeTooltip.execute.solves.2'
     ]
-  },
-  acp: {
-    summaryKey: 'modeTooltip.acp.summary',
-    solvesKeys: ['modeTooltip.acp.solves.0', 'modeTooltip.acp.solves.1', 'modeTooltip.acp.solves.2']
   }
 }
 

@@ -419,7 +419,7 @@ function classifyByHeuristics(options: {
     /\b(architecture|system design|routing|router|scheduler|orchestration|strategy)\b/,
     /架构|系统设计|路由|调度|编排|策略|机制|原理/
   ])
-  const modeIsAgentic = options.mode === 'execute' || options.mode === 'acp'
+  const modeIsAgentic = options.mode === 'execute'
   const modeIsConservative = modeIsAgentic || options.mode === 'clarify'
   const requiresTools = toolIntent.requiresTools
 
@@ -621,7 +621,7 @@ function resolveLowConfidenceRoute(options: {
     }
   }
 
-  const conservativeMode = options.mode === 'execute' || options.mode === 'acp'
+  const conservativeMode = options.mode === 'execute'
   const clarifyNeedsMain =
     options.mode === 'clarify' &&
     !(options.signals.complexity === 'simple' && options.signals.risk === 'low')

@@ -76,8 +76,7 @@
       "chat": "Conversa",
       "clarify": "Esclarecer",
       "cowork": "Colaborar",
-      "code": "Código",
-      "acp": "ACP"
+      "code": "Código"
     },
     "deleteAllSessions": "Apagar todas as sessões",
     "deleteAllConfirm": "Apagar tudo {{count}} Isto não pode ser desfeito.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sessão apagada",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Mudar automaticamente o modo alvo após a Clarify entrar no Modo Plano",
     "clarifyPlanModeAutoSwitchOff": "Fica.",
     "clarifyPlanModeAutoSwitchCode": "Para o Código",
-    "clarifyPlanModeAutoSwitchAcp": "Aos ACP",
     "autoApproveOn": "Auto-aprovação está ligada — todas as ferramentas são executadas sem confirmação",
     "autoApproveOff": "Auto-aprovação está desligada — chamadas de ferramenta requerem confirmação",
     "pendingCount": "{{count}} pendente",
@@ -407,7 +406,6 @@
     "switchToClarify": "Mudar para o modo de limpeza",
     "switchToCowork": "Mudar para o Modo de Cowork",
     "switchToCode": "Mudar para o Modo de Código",
-    "switchToAcp": "Mudar para o Modo ACP",
     "currentSession": "Sessão Actual",
     "exportCurrentChat": "Exportar a Conversa Actual",
     "copiedConversation": "Copiada a conversa para a área de transferência",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Chamadas de Ferramentas",
     "orchestrationToolCallsEmpty": "Este membro não tem chamadas para mostrar",
     "orchestrationToolCallCount": "{{count}} chamadas",
-    "acp": "ACP",
-    "acpTitle": "ACP · Planejamento de Controle de Arquitetura",
-    "acpDesc": "O melhor para o trabalho controlado pela arquitetura antes da implementação. O principal agente esclarece os requisitos, define os limites, projeta a abordagem, decompõe as tarefas e sintetiza os resultados; a implementação do concreto é executada por subagentes.",
-    "acpRuleNoCode": "O agente principal não escreve código de implementação ou modifica arquivos diretamente. Primeiro esclarece objetivos, restrições, riscos e critérios de aceitação.",
-    "acpRuleDelegate": "As tarefas de implementação devem ser delegadas através de Tarefa / SubAgente / companheiro de equipe para o subagente apropriado.",
-    "acpRuleReport": "Cada subtarefa deve retornar um resumo de Markdown estruturado para que o agente principal possa revisar, sintetizar e continuar a execução.",
-    "acpCurrentPhase": "Fase atual",
-    "acpNextAction": "Recomendado o próximo passo",
-    "acpPhaseClarify": "Esclarecimento do requisito",
-    "acpPhasePlan": "Planejamento",
-    "acpPhaseReview": "Revisão do plano",
-    "acpPhaseApproved": "Pronto para executar",
-    "acpPhaseExecute": "Execução delegada",
-    "acpNextActionClarify": "Preencha metas, restrições, limites e critérios de aceitação antes de planejar.",
-    "acpNextActionPlan": "Continue refinando o plano de implementação, salve-o e saia do Modo Plano.",
-    "acpNextActionExecute": "Continue decompondo o plano aprovado em tarefas, delegar subagentes e sintetizar suas saídas.",
-    "acpInProgressCount_one": "{{count}} em curso",
-    "acpInProgressCount_other": "{{count}} em curso",
     "skills": "Ferramentas",
     "cron": "Cron",
     "expand": "Expandir",
@@ -676,14 +656,6 @@
           "Implementação precisa: recursos de escrita, correção de bugs, refatoração ou completar módulos com disciplina de engenharia",
           "Quando você deseja saída de código limpo com narração mínima — confirmação terse em vez de verbose walk-throughs",
           "Alterações que exigem atenção estrita às convenções, tipos, importações e contratos de API existentes"
-        ]
-      },
-      "acp": {
-        "summary": "Planejamento de Controle de Arquitetura é para trabalhos complexos que precisam de controle antes da implementação: esclarecer objetivos e fronteiras primeiro, em seguida, projetar a arquitetura, decompor execução e delegar entrega.",
-        "solves": [
-          "Tarefas complexas que exigem antecedentes, escopo, restrições, dependências e critérios de aceitação a serem esclarecidos antes da implementação",
-          "Trabalhar onde o agente principal deve focar na arquitetura, orquestração e controle de processo em vez de codificação diretamente",
-          "Casos em que as subtarefas devem ser realizadas em paralelo e reenviar resumos de marcação estruturados para uma coordenação continuada"
         ]
       }
     }

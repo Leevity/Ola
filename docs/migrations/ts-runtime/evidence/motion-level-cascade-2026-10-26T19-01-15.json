@@ -1,0 +1,275 @@
+{
+  "capturedAt": "2026-10-26T19:01:39.741Z",
+  "url": "#/settings/common/general",
+  "hostPrefersReducedMotion": true,
+  "levels": [
+    {
+      "mediaState": "no-preference",
+      "level": "full",
+      "probe": {
+        "motionLevel": "full",
+        "animations": "enabled",
+        "transitionProperty": "transform, opacity",
+        "transitionDuration": "0.4s, 0.4s",
+        "animationName": "ola-probe-spin",
+        "scrollBehavior": "smooth",
+        "feedbackVar": ".14s",
+        "transitionVar": ".22s",
+        "prefersReducedMotion": false
+      },
+      "selected": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "true"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "false"
+        }
+      ],
+      "radios": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "screenshotPath": "C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\docs\\migrations\\ts-runtime\\evidence\\motion-level-no-preference-full-2026-10-26T19-01-15.png"
+    },
+    {
+      "mediaState": "no-preference",
+      "level": "reduced",
+      "probe": {
+        "motionLevel": "reduced",
+        "animations": "enabled",
+        "transitionProperty": "opacity, color, background-color, border-color, outline-color, box-shadow, fill, stroke",
+        "transitionDuration": "0.14s",
+        "animationName": "none",
+        "scrollBehavior": "auto",
+        "feedbackVar": ".14s",
+        "transitionVar": ".22s",
+        "prefersReducedMotion": false
+      },
+      "selected": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "true"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "false"
+        }
+      ],
+      "radios": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "screenshotPath": "C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\docs\\migrations\\ts-runtime\\evidence\\motion-level-no-preference-reduced-2026-10-26T19-01-15.png"
+    },
+    {
+      "mediaState": "no-preference",
+      "level": "off",
+      "probe": {
+        "motionLevel": "off",
+        "animations": "disabled",
+        "transitionProperty": "none",
+        "transitionDuration": "0s",
+        "animationName": "none",
+        "scrollBehavior": "auto",
+        "feedbackVar": ".14s",
+        "transitionVar": ".22s",
+        "prefersReducedMotion": false
+      },
+      "selected": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "radios": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "screenshotPath": "C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\docs\\migrations\\ts-runtime\\evidence\\motion-level-no-preference-off-2026-10-26T19-01-15.png"
+    },
+    {
+      "mediaState": "reduce",
+      "level": "full",
+      "probe": {
+        "motionLevel": "reduced",
+        "animations": "enabled",
+        "transitionProperty": "opacity, color, background-color, border-color, outline-color, box-shadow, fill, stroke",
+        "transitionDuration": "0.14s",
+        "animationName": "none",
+        "scrollBehavior": "auto",
+        "feedbackVar": ".14s",
+        "transitionVar": ".22s",
+        "prefersReducedMotion": true
+      },
+      "selected": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "true"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "false"
+        }
+      ],
+      "radios": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "screenshotPath": "C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\docs\\migrations\\ts-runtime\\evidence\\motion-level-reduce-full-2026-10-26T19-01-15.png"
+    },
+    {
+      "mediaState": "reduce",
+      "level": "reduced",
+      "probe": {
+        "motionLevel": "reduced",
+        "animations": "enabled",
+        "transitionProperty": "opacity, color, background-color, border-color, outline-color, box-shadow, fill, stroke",
+        "transitionDuration": "0.14s",
+        "animationName": "none",
+        "scrollBehavior": "auto",
+        "feedbackVar": ".14s",
+        "transitionVar": ".22s",
+        "prefersReducedMotion": true
+      },
+      "selected": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "true"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "false"
+        }
+      ],
+      "radios": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "screenshotPath": "C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\docs\\migrations\\ts-runtime\\evidence\\motion-level-reduce-reduced-2026-10-26T19-01-15.png"
+    },
+    {
+      "mediaState": "reduce",
+      "level": "off",
+      "probe": {
+        "motionLevel": "off",
+        "animations": "disabled",
+        "transitionProperty": "none",
+        "transitionDuration": "0s",
+        "animationName": "none",
+        "scrollBehavior": "auto",
+        "feedbackVar": ".14s",
+        "transitionVar": ".22s",
+        "prefersReducedMotion": true
+      },
+      "selected": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "radios": [
+        {
+          "text": "完整全部过渡与动效。",
+          "checked": "false"
+        },
+        {
+          "text": "减弱仅保留淡入淡出，不做滑动、缩放或高度变化。",
+          "checked": "false"
+        },
+        {
+          "text": "关闭不使用过渡、动效与平滑滚动。",
+          "checked": "true"
+        }
+      ],
+      "screenshotPath": "C:\\Users\\80663\\Desktop\\vibecoding\\Ola\\docs\\migrations\\ts-runtime\\evidence\\motion-level-reduce-off-2026-10-26T19-01-15.png"
+    }
+  ],
+  "electronLogBytes": {
+    "stdout": 1527,
+    "stderr": 3113
+  }
+}

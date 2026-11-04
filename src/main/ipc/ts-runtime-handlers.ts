@@ -1,7 +1,8 @@
-import { BrowserWindow, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { lstat } from 'node:fs/promises'
 import { isAbsolute, posix, win32 } from 'node:path'
 import { desktopRuntime } from '../runtime/desktop-runtime'
+import { RunStreamRegistry } from '../runtime/run-stream-registry'
 import { registerMessagePackHandler } from './messagepack-handler'
 import {
   RUNTIME_CAPABILITIES,
@@ -16,7 +17,7 @@ import {
 } from './ssh-handlers'
 import { beginCronWorkspaceSwitch, hasActiveOrFinishingCronRuns } from '../cron/cron-scheduler'
 import { beginDesktopFlowWorkspaceSwitch } from './desktop-flow-handlers'
-import { getRegisteredWindowWorkspace } from '../window-ipc'
+import { getRegisteredWindowWorkspace, safeSendMessagePackToWindow } from '../window-ipc'
 import { hasActiveLocalTerminalSessions } from './terminal-handlers'
 import { getSession } from '../db/sessions-dao'
 import { getTask } from '../db/tasks-dao'
@@ -324,6 +325,28 @@ export function acquireRuntimeProjectDeletion(
 
 export function registerTsRuntimeHandlers(): void {
   const admission = new TsRuntimeWorkspaceAdmission()
+  // A window owns its own runtime subscription so a closed or navigated window
+  // cannot keep a run streaming into a frame that no longer exists.
+  const runStreams = new RunStreamRegistry(
+    (options) => desktopRuntime.openRunStream(options),
+    (targetId, channel, workspaceId, payload) => {
+      const win = BrowserWindow.fromId(Number(targetId))
+      if (!win || win.isDestroyed() || getRegisteredWindowWorkspace(win) !== workspaceId)
+        return false
+      return safeSendMessagePackToWindow(win, channel, payload)
+    }
+  )
+  const bindRunStreamLifecycle = (win: BrowserWindow): void => {
+    win.on('closed', () => {
+      void runStreams.releaseTarget(String(win.id))
+    })
+    win.webContents.on('did-start-navigation', (_event, _url, isInPlace, isMainFrame) => {
+      // A main-frame navigation drops the renderer that owned the subscription.
+      if (isMainFrame && !isInPlace) void runStreams.releaseTarget(String(win.id))
+    })
+  }
+  for (const win of BrowserWindow.getAllWindows()) bindRunStreamLifecycle(win)
+  app.on('browser-window-created', (_event, win) => bindRunStreamLifecycle(win))
   registerMessagePackHandler<void>('worker:memory', (_args, event) => {
     if (!trusted(event)) return { memory: null, error: 'UNAUTHORIZED_IPC_SENDER' }
     return { memory: process.memoryUsage(), runtime: 'typescript' }
@@ -334,6 +357,8 @@ export function registerTsRuntimeHandlers(): void {
       routes: [
         'run.submit',
         'run.snapshot',
+        'run.subscribe',
+        'run.unsubscribe',
         'run.list',
         'run.cancel',
         'run.cancel-session',
@@ -913,6 +938,48 @@ export function registerTsRuntimeHandlers(): void {
     } catch (error) {
       return {
         snapshot: null,
+        error: error instanceof Error ? error.message : 'RUNTIME_UNAVAILABLE'
+      }
+    }
+  })
+  registerMessagePackHandler<unknown>('ts-runtime:run-subscribe', async (args, event) => {
+    if (!trusted(event)) return { snapshot: null, error: 'UNAUTHORIZED_IPC_SENDER' }
+    try {
+      const { workspaceId, runId, afterSeq } = parseRuntimeRunSnapshotLocator(args)
+      // Authorize before reporting capability: a rejected sender must learn
+      // nothing about whether this Main process can push.
+      assertWindowWorkspace(event, workspaceId)
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window) throw new Error('WINDOW_WORKSPACE_MISMATCH')
+      // The caller falls back to the snapshot loop when push is unavailable.
+      if (!desktopRuntime.supportsRunStream) return { snapshot: null, error: 'PUSH_DISABLED' }
+      const targetId = String(window.id)
+      const subscribed = await runStreams.subscribe({ targetId, workspaceId, runId, afterSeq })
+      // The window may have switched workspace while the subscription opened.
+      if (getRegisteredWindowWorkspace(window) !== workspaceId) {
+        await runStreams.unsubscribe(targetId, runId)
+        throw new Error('WINDOW_WORKSPACE_MISMATCH')
+      }
+      return { subscriptionId: subscribed.subscriptionId, snapshot: subscribed.snapshot }
+    } catch (error) {
+      return {
+        snapshot: null,
+        error: error instanceof Error ? error.message : 'RUNTIME_UNAVAILABLE'
+      }
+    }
+  })
+  registerMessagePackHandler<unknown>('ts-runtime:run-unsubscribe', async (args, event) => {
+    if (!trusted(event)) return { unsubscribed: false, error: 'UNAUTHORIZED_IPC_SENDER' }
+    try {
+      const { workspaceId, runId } = parseRuntimeRunLocator(args)
+      assertWindowWorkspace(event, workspaceId)
+      const window = BrowserWindow.fromWebContents(event.sender)
+      if (!window) throw new Error('WINDOW_WORKSPACE_MISMATCH')
+      await runStreams.unsubscribe(String(window.id), runId)
+      return { unsubscribed: true }
+    } catch (error) {
+      return {
+        unsubscribed: false,
         error: error instanceof Error ? error.message : 'RUNTIME_UNAVAILABLE'
       }
     }

@@ -136,11 +136,12 @@ If a working folder exists but no relevant workspace context is available, clari
 
 Start by inspecting enough context to ask useful questions, state what is already known, then either call AskUserQuestion for remaining material ambiguity or proceed directly to EnterPlanMode when the scope is clear.`
 
-export type AgentModePromptMode = 'clarify' | 'execute' | 'acp'
+export type AgentModePromptMode = 'clarify' | 'execute'
 
 function buildModePromptBody(
   mode: AgentModePromptMode,
-  environmentContext: PromptEnvironmentContext
+  environmentContext: PromptEnvironmentContext,
+  delegateImplementation: boolean
 ): string {
   if (mode === 'clarify') {
     return [
@@ -158,7 +159,7 @@ function buildModePromptBody(
   }
 
   if (mode === 'execute') {
-    return [
+    const lines = [
       `## Mode: Execute`,
       `You are a collaborative execution partner. Your scope covers coding, research, DevOps, documentation, analysis, project setup, and cross-application tasks. Adapt engineering discipline and reporting depth to the task.`,
       environmentContext.target === 'ssh'
@@ -176,19 +177,19 @@ function buildModePromptBody(
       `- If a task has multiple parts, decompose it and track progress.`,
       `- Use the Edit tool for precise changes - never rewrite entire files unless creating new ones.`,
       `- For code tasks, follow the repository's conventions, complete all imports and error handling, and verify the change proportionally to risk.`
-    ].join('\n')
-  }
-
-  if (mode === 'acp') {
-    return [
-      `## Mode: ACP`,
-      `You are the architecture-control lead. Your responsibility is to clarify requirements, build architecture and execution design, decompose work, and delegate implementation to sub-agents.`,
-      `The main agent must not write code, must not modify files, and must not directly execute implementation work.`,
-      `For direct implementation requests, first clarify the goal, background, constraints, boundaries, and acceptance criteria. Only after sufficient context and architecture design may you delegate execution.`,
-      `Implementation tasks must be executed through Task/sub-agents/teammates. The main agent may read files, inspect context, ask clarifying questions, write plans, assign work, and summarize results.`,
-      `Before each execution decision, provide enough background and architecture reasoning. If requirements are unclear, continue asking focused questions instead of rushing to act.`,
-      `Be explicit about what you are doing, why you are doing it, what has been clarified, what remains uncertain, and which sub-agent will handle each implementation task.`
-    ].join('\n')
+    ]
+    // Retired architecture-control mode: the same read-only/delegate posture is
+    // opt-in through an active team instead of being a separate session mode.
+    if (delegateImplementation) {
+      lines.push(
+        `\n**Delegation (ACTIVE):**`,
+        `- Act as the architecture-control lead: clarify requirements, design the approach, decompose the work, and delegate implementation to sub-agents.`,
+        `- Do not write code or modify files yourself. Use Task/sub-agents/teammates for all implementation.`,
+        `- You may read files, inspect context, ask clarifying questions, write plans, assign work, and summarize results.`,
+        `- State what has been clarified, what remains uncertain, and which sub-agent handles each implementation task.`
+      )
+    }
+    return lines.join('\n')
   }
 
   return ''
@@ -210,7 +211,7 @@ function buildSkillsReminder(): string | null {
 
 export function buildSystemPrompt(options: {
   taskProfile?: TaskProfile
-  mode: 'clarify' | 'execute' | 'acp'
+  mode: 'clarify' | 'execute'
   workingFolder?: string
   sessionId?: string
   userRules?: string
@@ -276,7 +277,7 @@ export function buildSystemPrompt(options: {
     `\n**IMPORTANT: You MUST respond in ${resolveLanguageName(language)} unless the user explicitly requests otherwise.**`
   )
 
-  parts.push(`\n${buildModePromptBody(options.mode, environmentContext)}`)
+  parts.push(`\n${buildModePromptBody(options.mode, environmentContext, Boolean(hasActiveTeam))}`)
 
   parts.push(
     options.taskProfile === 'code'
@@ -391,8 +392,8 @@ export function buildSystemPrompt(options: {
         ? `You can run terminal commands on the selected SSH remote host.`
         : `You can run terminal commands on the user's machine.`,
       environmentContext.target === 'ssh'
-        ? `- Use the Bash tool to run terminal commands; never include \`cd\` in the command. Set \`cwd\` instead so it resolves on the remote host.`
-        : `- Use the Bash tool to run terminal commands; never include \`cd\` in the command. Set \`cwd\` instead.`,
+        ? `- Use the Bash tool to run terminal commands; never include \`cd\` in the command. The tool already runs in the working folder on the remote host.`
+        : `- Use the Bash tool to run terminal commands; never include \`cd\` in the command. The tool already runs in the working folder.`,
       `- The Bash tool name does not guarantee bash syntax; follow the shell shown in the Environment section.`,
       `- Check for existing dev servers before starting new ones.`,
       `- Unsafe commands require explicit user approval.`,
@@ -406,8 +407,8 @@ export function buildSystemPrompt(options: {
     parts.push(`\n## Working Folder\n\`${workingFolder}\``)
     parts.push(
       environmentContext.target === 'ssh'
-        ? `All relative paths should be resolved against this remote folder. Use this as the default cwd for terminal commands run via the Bash tool on the remote host.`
-        : `All relative paths should be resolved against this folder. Use this as the default cwd for terminal commands run via the Bash tool.`
+        ? `All relative paths should be resolved against this remote folder. The Bash tool already runs there on the remote host.`
+        : `All relative paths should be resolved against this folder. The Bash tool already runs there.`
     )
   } else {
     parts.push(

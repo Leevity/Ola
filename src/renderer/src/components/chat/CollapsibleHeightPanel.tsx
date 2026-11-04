@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { AnimatePresence, motion } from 'motion/react'
+import { useMotionProfile } from '@renderer/hooks/use-motion-level'
 
 interface CollapsibleHeightPanelProps {
   open: boolean
@@ -40,12 +41,16 @@ export function CollapsibleHeightPanel({
   enabled = true,
   collapseMotion = 'clip'
 }: CollapsibleHeightPanelProps): React.JSX.Element {
-  const reduceMotion = useReducedMotion()
+  // `useMotionProfile` folds in the system `prefers-reduced-motion` preference, so a
+  // height transition only runs at `full`; `reduced` keeps the fade but snaps the height.
+  const profile = useMotionProfile()
   const contentRef = React.useRef<HTMLDivElement>(null)
   const panelRef = React.useRef<HTMLDivElement>(null)
   const [contentHeight, setContentHeight] = React.useState(0)
 
-  const canAnimate = enabled && !reduceMotion
+  const canAnimate = enabled && profile.transform
+  const canFade = enabled && profile.opacity
+  const fadeSeconds = profile.feedbackMs / 1000
 
   React.useLayoutEffect(() => {
     if (!open || !contentRef.current) return
@@ -69,7 +74,7 @@ export function CollapsibleHeightPanel({
       {open ? (
         <motion.div
           ref={panelRef}
-          initial={canAnimate ? { height: 0, opacity: 0 } : false}
+          initial={canAnimate ? { height: 0, opacity: 0 } : canFade ? { opacity: 0 } : false}
           animate={{ height: canAnimate ? contentHeight : 'auto', opacity: 1 }}
           exit={
             canAnimate
@@ -77,9 +82,14 @@ export function CollapsibleHeightPanel({
                   height: 0,
                   opacity: collapseMotion === 'scroll-up' ? 0.65 : 0
                 }
-              : undefined
+              : canFade
+                ? { opacity: 0 }
+                : undefined
           }
-          transition={{ duration: canAnimate ? duration : 0, ease: 'easeOut' }}
+          transition={{
+            duration: canAnimate ? duration : canFade ? fadeSeconds : 0,
+            ease: 'easeOut'
+          }}
           className={className}
           style={{ overflow: 'hidden' }}
           onAnimationComplete={() => notifyExecutionResize(panelRef.current)}
@@ -90,9 +100,16 @@ export function CollapsibleHeightPanel({
             initial={false}
             animate={{ y: 0, opacity: 1 }}
             exit={
-              canAnimate && collapseMotion === 'scroll-up' ? { y: '-18%', opacity: 0 } : undefined
+              canAnimate && collapseMotion === 'scroll-up'
+                ? { y: '-18%', opacity: 0 }
+                : canFade
+                  ? { opacity: 0 }
+                  : undefined
             }
-            transition={{ duration: canAnimate ? duration : 0, ease: 'easeOut' }}
+            transition={{
+              duration: canAnimate ? duration : canFade ? fadeSeconds : 0,
+              ease: 'easeOut'
+            }}
           >
             {children}
           </motion.div>
@@ -104,13 +121,18 @@ export function CollapsibleHeightPanel({
 
 /** Keep a live thinking block mounted until its scroll-up exit animation has completed. */
 export function ScrollUpExitItem({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const reduceMotion = useReducedMotion()
+  const profile = useMotionProfile()
+  const slide = profile.transform
+  const fade = profile.opacity
   return (
     <motion.div
       initial={false}
       animate={{ y: 0, opacity: 1 }}
-      exit={reduceMotion ? undefined : { y: '-18%', opacity: 0 }}
-      transition={{ duration: reduceMotion ? 0 : 0.2, ease: 'easeOut' }}
+      exit={slide ? { y: '-18%', opacity: 0 } : fade ? { opacity: 0 } : undefined}
+      transition={{
+        duration: slide ? 0.2 : fade ? profile.feedbackMs / 1000 : 0,
+        ease: 'easeOut'
+      }}
     >
       {children}
     </motion.div>

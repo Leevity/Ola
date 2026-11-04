@@ -69,6 +69,17 @@ describe('provider authentication persistence projection', () => {
     expect(hydrateProviderCredentials(noProviders, {})).toBe(noProviders)
   })
 
+  it('can recover stale credential markers without exposing missing secrets', () => {
+    const publicState = splitProviderCredentials({
+      state: {
+        providers: [{ id: 'deepseek', apiKey: 'removed-secret', apiKeyStored: true }]
+      }
+    }).publicState
+    expect(hydrateProviderCredentials(publicState, {}, { allowMissingCredentials: true })).toEqual({
+      state: { providers: [{ id: 'deepseek', apiKey: '' }] }
+    })
+  })
+
   it('fails closed when public metadata references a missing credential bundle', () => {
     const publicState = splitProviderCredentials({
       state: {

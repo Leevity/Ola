@@ -54,6 +54,7 @@
       "noCompressible": "没有找到可压缩的上下文。",
       "failedTitle": "压缩失败",
       "mergeFailed": "无法保存压缩后的上下文，请重试。",
+      "hookBlocked": "Hook 策略拒绝了本次压缩，请调整 Hook 规则后重试。",
       "unexpectedFailure": "请检查当前会话与模型配置后重试。"
     },
     "noContext": "未加载上下文",

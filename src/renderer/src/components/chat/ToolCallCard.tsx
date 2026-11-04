@@ -1548,7 +1548,7 @@ function GlobOutputBlock({ output }: { output: string }): React.JSX.Element {
     <div>
       <div className="mb-1 flex items-center gap-1.5">
         <span className="text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
-          {t('Glob')}
+          {t('permission.toolLabels.Glob')}
         </span>
         <SearchStateBadge state={visualState} />
         <span className="text-[9px] text-muted-foreground">
@@ -2365,7 +2365,7 @@ function StructuredInput({
       <div className="space-y-1">
         <div className="flex items-center gap-1.5 text-xs">
           <span className="shrink-0 text-[10px] font-medium text-zinc-500 dark:text-zinc-400">
-            {t('Glob')}
+            {t('permission.toolLabels.Glob')}
           </span>
           <span
             className="font-mono text-[11px] text-sky-600 dark:text-sky-300"

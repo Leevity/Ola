@@ -1,7 +1,7 @@
 import { AnimatePresence, motion, HTMLMotionProps } from 'motion/react'
 import { ReactNode, ElementType, forwardRef, type JSX } from 'react'
 import { cn } from '@renderer/lib/utils'
-import { useSettingsStore } from '@renderer/stores/settings-store'
+import { useMotionProfile } from '@renderer/hooks/use-motion-level'
 
 // ─── Types ───
 
@@ -43,15 +43,18 @@ export const FadeIn = forwardRef<HTMLDivElement, BaseTransitionProps>(
     { children, className, delay = 0, duration = 0.2, as: Component = motion.div, ...props },
     ref
   ) => {
-    const animationsEnabled = useSettingsStore((s) => s.animationsEnabled)
+    const profile = useMotionProfile()
+    // A fade is already the reduced form, so `reduced` keeps it; only `off` drops it.
+    const animated = profile.opacity
+    const fadeDuration = profile.transform ? duration : profile.feedbackMs / 1000
 
     return (
       <Component
         ref={ref}
-        initial={animationsEnabled ? { opacity: 0 } : false}
+        initial={animated ? { opacity: 0 } : false}
         animate={{ opacity: 1 }}
-        exit={animationsEnabled ? { opacity: 0 } : undefined}
-        transition={animationsEnabled ? { duration, delay, ease: ease.out } : { duration: 0 }}
+        exit={animated ? { opacity: 0 } : undefined}
+        transition={animated ? { duration: fadeDuration, delay, ease: ease.out } : { duration: 0 }}
         className={className}
         {...props}
       >
@@ -78,9 +81,12 @@ export const SlideIn = forwardRef<HTMLDivElement, SlideProps>(
     },
     ref
   ) => {
-    const animationsEnabled = useSettingsStore((s) => s.animationsEnabled)
+    const profile = useMotionProfile()
 
+    // `reduced` keeps the fade but drops the travel: the offset is only applied when
+    // transforms are allowed, so nothing moves sideways or vertically.
     const getInitial = (): { opacity: number; x?: number; y?: number } => {
+      if (!profile.transform) return { opacity: 0 }
       switch (direction) {
         case 'up':
           return { opacity: 0, y: offset }
@@ -93,17 +99,18 @@ export const SlideIn = forwardRef<HTMLDivElement, SlideProps>(
       }
     }
 
+    const animated = profile.opacity
+    const slideTransition = profile.transform
+      ? { type: 'spring' as const, stiffness: 400, damping: 30, delay }
+      : { duration: profile.feedbackMs / 1000, delay }
+
     return (
       <Component
         ref={ref}
-        initial={animationsEnabled ? getInitial() : false}
+        initial={animated ? getInitial() : false}
         animate={{ opacity: 1, x: 0, y: 0 }}
-        exit={animationsEnabled ? getInitial() : undefined}
-        transition={
-          animationsEnabled
-            ? { type: 'spring', stiffness: 400, damping: 30, delay }
-            : { duration: 0 }
-        }
+        exit={animated ? getInitial() : undefined}
+        transition={animated ? slideTransition : { duration: 0 }}
         className={className}
         {...props}
       >
@@ -119,15 +126,20 @@ SlideIn.displayName = 'SlideIn'
  */
 export const ScaleIn = forwardRef<HTMLDivElement, BaseTransitionProps>(
   ({ children, className, delay = 0, as: Component = motion.div, ...props }, ref) => {
-    const animationsEnabled = useSettingsStore((s) => s.animationsEnabled)
+    const profile = useMotionProfile()
+    const animated = profile.opacity
+    const hidden = profile.transform ? { opacity: 0, scale: 0.95 } : { opacity: 0 }
+    const scaleTransition = profile.transform
+      ? { ...spring.smooth, delay }
+      : { duration: profile.feedbackMs / 1000, delay }
 
     return (
       <Component
         ref={ref}
-        initial={animationsEnabled ? { opacity: 0, scale: 0.95 } : false}
+        initial={animated ? hidden : false}
         animate={{ opacity: 1, scale: 1 }}
-        exit={animationsEnabled ? { opacity: 0, scale: 0.95 } : undefined}
-        transition={animationsEnabled ? { ...spring.smooth, delay } : { duration: 0 }}
+        exit={animated ? hidden : undefined}
+        transition={animated ? scaleTransition : { duration: 0 }}
         className={className}
         {...props}
       >
@@ -228,13 +240,31 @@ export const PanelTransition = forwardRef<
     },
     ref
   ) => {
-    const animationsEnabled = useSettingsStore((s) => s.animationsEnabled)
-    const shouldDisable = disabled || !animationsEnabled
+    const profile = useMotionProfile()
+    // `off` keeps the panel mounted without any entry animation; `reduced` still gets a
+    // fade but no width/x travel, which is what a width spring would do to the sibling layout.
+    const shouldDisable = disabled || !profile.opacity
     const xInitial = side === 'right' ? 20 : -20
 
     if (shouldDisable) {
       return (
         <Component ref={ref} className={cn('overflow-hidden', className)} {...props}>
+          <div className="h-full w-max">{children}</div>
+        </Component>
+      )
+    }
+
+    if (!profile.transform) {
+      return (
+        <Component
+          ref={ref}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: profile.feedbackMs / 1000, delay }}
+          className={cn('overflow-hidden', className)}
+          {...props}
+        >
           <div className="h-full w-max">{children}</div>
         </Component>
       )

@@ -1,5 +1,6 @@
 import { McpClientWrapper } from './mcp-client'
-import type { McpServerConfig, McpServerInfo } from './mcp-types'
+import { getMcpOAuthCredentialStore } from './mcp-oauth-store'
+import type { McpServerConfig, McpServerInfo, McpServerStatus } from './mcp-types'
 
 /**
  * McpManager — manages multiple MCP server connections with lifecycle control.
@@ -8,6 +9,7 @@ import type { McpServerConfig, McpServerInfo } from './mcp-types'
  */
 export class McpManager {
   private clients = new Map<string, McpClientWrapper>()
+  private readonly oauthStore = getMcpOAuthCredentialStore()
 
   /** Connect to an MCP server */
   async connectServer(config: McpServerConfig): Promise<void> {
@@ -16,11 +18,15 @@ export class McpManager {
       await this.disconnectServer(config.id)
     }
 
-    const client = new McpClientWrapper(config)
+    const client = new McpClientWrapper(config, this.oauthStore)
     this.clients.set(config.id, client)
 
     try {
       await client.connect()
+      if (client.status === 'authorization-required') {
+        console.log(`[McpManager] Authorization required: ${config.name} (${config.id})`)
+        return
+      }
       console.log(`[McpManager] Connected: ${config.name} (${config.id})`)
     } catch (err) {
       console.error(`[McpManager] Failed to connect ${config.name}:`, err)
@@ -41,6 +47,28 @@ export class McpManager {
     } finally {
       this.clients.delete(id)
     }
+  }
+
+  /** Get pending authorization URL for a server awaiting browser authorization. */
+  getPendingAuthorizationUrl(id: string): string | undefined {
+    return this.clients.get(id)?.pendingAuthorizationUrl?.toString()
+  }
+
+  /**
+   * Exchange an authorization code received by the loopback listener, then
+   * reconnect. Runs entirely in Main: the code never reaches the Renderer.
+   */
+  async completeAuthorization(id: string, code: string): Promise<McpServerStatus> {
+    const client = this.clients.get(id)
+    if (!client) throw new Error(`MCP server ${id} is not connected`)
+    await client.completeAuthorization(code)
+    return client.status
+  }
+
+  /** Drop every stored credential for a server and disconnect it. */
+  async signOut(id: string): Promise<void> {
+    await this.disconnectServer(id)
+    await this.oauthStore.clear(id, 'all')
   }
 
   /** Reconnect an MCP server */
@@ -65,7 +93,7 @@ export class McpManager {
   }
 
   /** Get status for a server */
-  getStatus(id: string): string {
+  getStatus(id: string): McpServerStatus {
     const client = this.clients.get(id)
     return client?.status ?? 'disconnected'
   }

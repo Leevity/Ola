@@ -601,6 +601,7 @@ function LuckinProductListComponent({
 }: {
   props: Record<string, unknown>
 }): React.JSX.Element {
+  const { t } = useTranslation('chat')
   const products = readArrayProp(props, ['products', 'items', 'rows'])
   const title = readStringProp(props, ['title']) || 'Luckin products'
   const subtitle = readStringProp(props, ['subtitle'])
@@ -659,7 +660,12 @@ function LuckinProductListComponent({
                     {productId ? <Badge variant="outline">productId: {productId}</Badge> : null}
                     {tags ? <Badge variant="outline">{tags}</Badge> : null}
                     {initialPrice && initialPrice !== price ? (
-                      <Badge variant="outline">原价 {initialPrice}</Badge>
+                      <Badge variant="outline">
+                        {t('extensionToolResult.originalPrice', {
+                          defaultValue: 'Was {{price}}',
+                          price: initialPrice
+                        })}
+                      </Badge>
                     ) : null}
                   </div>
                   {details.length ? (

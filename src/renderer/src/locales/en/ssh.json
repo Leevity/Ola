@@ -91,7 +91,8 @@
     "copyFailed": "Failed to copy",
     "pasteFailed": "Failed to paste",
     "disconnectedMessage": "SSH session disconnected",
-    "errorMessage": "Connection error"
+    "errorMessage": "Connection error",
+    "title": "Terminal"
   },
   "fileExplorer": {
     "title": "File Explorer",
@@ -183,7 +184,8 @@
       "password": "Password",
       "privateKey": "Private Key",
       "agent": "Agent"
-    }
+    },
+    "exportTitle": "Export connections"
   },
   "list": {
     "host": "Host",
@@ -201,7 +203,18 @@
     "backToList": "Back",
     "viewTable": "Table view",
     "viewCard": "Card view",
-    "search": "Search connections..."
+    "search": "Search connections...",
+    "portBadge": "Port {{port}}",
+    "keepAliveBadge": "{{seconds}}s keepalive",
+    "hostsSummary": "{{hosts}} hosts / {{online}} online",
+    "columns": {
+      "os": "OS",
+      "latency": "Latency",
+      "name": "Name",
+      "address": "Address",
+      "info": "Info",
+      "actions": "Actions"
+    }
   },
   "dashboard": {
     "totalServers": "Servers",
@@ -293,7 +306,50 @@
       "pauseTask": "Pause",
       "remaining": "{{duration}} remaining",
       "retryCount_one": "{{count}} retry",
-      "retryCount_other": "{{count}} retries"
+      "retryCount_other": "{{count}} retries",
+      "directory": "Directory",
+      "paneEmpty": "Select a host to start browsing remote files.",
+      "paneTitle": "Remote file pane",
+      "paneMeta": "Pick a host and connect to start.",
+      "downloadSelected": "Download selected",
+      "selected": "selected",
+      "columns": {
+        "type": "Type",
+        "modified": "Modified",
+        "size": "Size"
+      },
+      "file": "File",
+      "preview": "Preview",
+      "code": "Code",
+      "sidebarTitle": "Remote Workbench",
+      "sidebarBody": "Assign hosts to the active pane, then add a second pane only when you need compare or transfer.",
+      "noTasks": "No transfer tasks yet.",
+      "cancelTask": "Cancel",
+      "clearTask": "Clear",
+      "detailsTab": "Details",
+      "tasksTab": "Tasks",
+      "activePane": "Active pane",
+      "activeHost": "Current host",
+      "noHostSelected": "No host selected",
+      "noPath": "No directory selected yet.",
+      "selection": "Selection",
+      "selectionEmpty": "Select files or folders in either pane to inspect or move them.",
+      "singleSelectionEmpty": "Select files or folders in the current pane to inspect or move them.",
+      "itemsSelected": "items selected",
+      "transferBridge": "Transfer bridge",
+      "conflict": {
+        "skip": "Skip conflict",
+        "overwrite": "Overwrite",
+        "duplicate": "Duplicate copy"
+      },
+      "sendToRight": "A to B",
+      "sendToLeft": "B to A",
+      "compareSubtitle": "Browse two remote hosts side by side, then move files with one transfer model.",
+      "disableCompare": "Single-pane mode",
+      "enableCompare": "Add second pane",
+      "panel": "Details and tasks",
+      "cancel": "Cancel",
+      "confirm": "Confirm"
     },
     "uploads": {
       "title": "Uploads",
@@ -341,7 +397,23 @@
       "latency": "Latency",
       "copy": "Copy IP",
       "copied": "Copied to clipboard",
-      "expand": "Expand process monitor"
+      "expand": "Expand process monitor",
+      "installed": "Remote monitor runtime installed",
+      "installTitle": "Install monitor runtime",
+      "installBody": "Deploy the remote collector to ~/.ola/xterminal, then Ola will read output.stats on demand.",
+      "installAction": "Install monitor commands",
+      "os": "OS",
+      "timezone": "Timezone",
+      "used": "Used",
+      "cached": "Cache",
+      "free": "Free",
+      "upload": "Upload",
+      "download": "Download",
+      "mount": "Mount",
+      "fsType": "Type",
+      "activity": "Activity",
+      "running": "Running",
+      "sleeping": "Sleeping"
     },
     "processMonitor": {
       "title": "Process monitor",
@@ -417,7 +489,8 @@
       "remoteHost": "Remote host",
       "note": "Description",
       "command": "Command preview",
-      "copied": "Forwarding command copied."
+      "copied": "Forwarding command copied.",
+      "subtitle": "Save reusable SSH port forwarding templates."
     },
     "snippets": {
       "required": "Please fill in name and command.",
@@ -447,6 +520,28 @@
       "noUploads": "No upload activity yet.",
       "diagnostics": "Connection diagnostics",
       "noDiagnostics": "No diagnostics recorded."
-    }
+    },
+    "basicInfo": "Basic info",
+    "connectionSettings": "Connection",
+    "jumpHost": "Jump host",
+    "proxySettings": "Proxy",
+    "otherSettings": "Other settings",
+    "hostMemo": "Host notes",
+    "hostMemoHint": "Optional note about the default directory or purpose.",
+    "initialize": "Initialize",
+    "initializeHint": "Save to connect right away, or test the connection first.",
+    "authSummary": "Authentication summary",
+    "agentAuthHint": "This connection authenticates through the local SSH agent.",
+    "jumpHostHint": "Fill in ProxyJump when the host is reached through an intermediate host.",
+    "proxySettingsHint": "Connection-stability options live here.",
+    "runtimeShell": "Init command",
+    "advancedCompatibility": "Advanced compatibility",
+    "advancedCompatibilityHint": "X11, cipher and KEX options can be added here later.",
+    "initCommandHint": "No init command is set; the session opens the default shell.",
+    "more": "More",
+    "cancel": "Cancel"
+  },
+  "common": {
+    "more": "More"
   }
 }

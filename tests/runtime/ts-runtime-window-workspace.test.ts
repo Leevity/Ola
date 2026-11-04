@@ -22,14 +22,26 @@ const webContents = { mainFrame: {} }
 const window = { webContents, isDestroyed: () => false }
 const event = { sender: webContents, senderFrame: webContents.mainFrame }
 
-vi.mock('electron', () => ({ BrowserWindow: { fromWebContents: () => window } }))
+vi.mock('electron', () => ({
+  app: { on: () => undefined },
+  BrowserWindow: {
+    fromWebContents: () => window,
+    fromId: () => null,
+    getAllWindows: () => []
+  }
+}))
 vi.mock('../../src/main/window-ipc', () => ({
-  getRegisteredWindowWorkspace: () => state.registeredWorkspace
+  getRegisteredWindowWorkspace: () => state.registeredWorkspace,
+  safeSendMessagePackToWindow: () => true
 }))
 vi.mock('../../src/main/runtime/desktop-runtime', () => ({
   desktopRuntime: {
     get isAvailable() {
       return state.runtimeAvailable
+    },
+    // Push is unavailable in this harness, so subscribers take the snapshot path.
+    get supportsRunStream() {
+      return false
     },
     request: state.request
   }
@@ -985,7 +997,7 @@ it('discards a delayed list response after the window switches workspace', async
 it('reports TS-owned runtime routes and process memory without a Worker', async () => {
   expect(await invoke('worker:routes', undefined)).toMatchObject({
     runtime: 'typescript',
-    routes: expect.arrayContaining(['run.submit', 'run.cancel']),
+    routes: expect.arrayContaining(['run.submit', 'run.cancel', 'run.subscribe']),
     capabilities: expect.arrayContaining(['runs', 'cancel'])
   })
   expect(await invoke('worker:memory', undefined)).toMatchObject({
@@ -1028,4 +1040,19 @@ it('routes legacy reverse responses through the TS interaction scheduler', async
     interactionId: 'interaction-a',
     response: { approved: true }
   })
+})
+
+it('rejects a run subscription for a workspace the window does not own', async () => {
+  await expect(
+    invoke('ts-runtime:run-subscribe', { workspaceId: 'team-b', runId: 'run-a', afterSeq: 0 })
+  ).resolves.toMatchObject({ snapshot: null, error: 'WINDOW_WORKSPACE_MISMATCH' })
+  expect(state.request).not.toHaveBeenCalled()
+})
+
+it('tells the renderer to keep polling when Main cannot push', async () => {
+  // `supportsRunStream` is false in this harness, which stands in for a runtime
+  // that did not negotiate the `stream` capability.
+  await expect(
+    invoke('ts-runtime:run-subscribe', { workspaceId: 'team-a', runId: 'run-a', afterSeq: 0 })
+  ).resolves.toEqual({ snapshot: null, error: 'PUSH_DISABLED' })
 })

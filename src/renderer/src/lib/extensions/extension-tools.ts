@@ -6,8 +6,11 @@ import { useExtensionStore } from '@renderer/stores/extension-store'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { refreshExtensionWorkbenchContributions } from './extension-workbench'
 import type { ToolDefinition } from '@renderer/lib/api/types'
+import { ToolNamer, sanitizeDescription } from '../../../../shared/tool-naming'
 
 const EXTENSION_TOOL_PREFIX = 'extension__'
+/** Stable, never-reused external-name allocator so tool cards render and transcripts pair. */
+const extensionToolNamer = new ToolNamer()
 let registeredExtensionToolNames: string[] = []
 let refreshPromise: Promise<void> | null = null
 
@@ -17,7 +20,10 @@ type ObjectInputSchema = Extract<
 >
 
 export function extensionToolName(extensionId: string, toolName: string): string {
-  return `${EXTENSION_TOOL_PREFIX}${extensionId}__${toolName}`
+  return extensionToolNamer.nameFor(
+    `extension:${extensionId}:${toolName}`,
+    `${EXTENSION_TOOL_PREFIX}${extensionId}__${toolName}`
+  )
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -71,7 +77,9 @@ function createExtensionToolHandler(
   return {
     definition: {
       name: extensionToolName(extension.id, tool.name),
-      description: `[Extension: ${extension.manifest.name}] ${tool.description}`,
+      description: sanitizeDescription(
+        `[Extension: ${extension.manifest.name}] ${tool.description}`
+      ),
       inputSchema: normalizeToolInputSchema(tool.inputSchema)
     },
     execute: async () => nativeOnlyExtensionResult(extensionToolName(extension.id, tool.name)),

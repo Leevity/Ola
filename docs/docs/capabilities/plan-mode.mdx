@@ -18,7 +18,7 @@ Plan Mode 是 Ola 用来处理复杂任务的“先规划、后执行”流程�
 
 ```mermaid
 flowchart TD
-  A["进入 Clarify / Code / ACP"] --> B["EnterPlanMode"]
+  A["进入 Clarify / Execute"] --> B["EnterPlanMode"]
   B --> C["创建或恢复 .plan 文件"]
   C --> D["Write / Edit 仅允许当前计划文件"]
   D --> E["ExitPlanMode"]
@@ -94,14 +94,14 @@ Plan Mode 不是“完全禁用工具”，而是**限制工具边界**：
 
 其中 `Write` / `Edit` 只能作用于当前 plan 文件。
 
-## ACP 和 Plan Mode 的区别 / ACP vs Plan Mode
+## Execute + 团队 和 Plan Mode 的区别 / Delegated Execute vs Plan Mode
 
 - **Plan Mode**：允许写计划文件，面向“执行前审阅”
-- **ACP**：不直接改代码，面向“架构控制和委派”
+- **Execute + 团队**：主 Agent 转为架构控制角色，不直接改代码，通过子 Agent 和团队成员分派实现
 
 ## 实际建议 / Practical advice
 
-- 小任务可以直接 Code
+- 小任务可以直接 Execute
 - 不清楚需求时先 Clarify，再 Plan Mode
 - 复杂功能、多人协作功能、风险较高的改动，优先 Plan Mode
 - 写完计划后，不要急着执行，先让用户看一眼

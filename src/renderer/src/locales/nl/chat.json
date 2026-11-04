@@ -4,7 +4,6 @@
     "placeholderClarify": "Beschrijf je idee en ik blijf onderzoeken tot de eisen duidelijk zijn...",
     "placeholderCowork": "Vraag de assistent om te helpen met uw project...",
     "placeholderCode": "Beschrijf wat je wilt bouwen, zoals bugs repareren, scripts schrijven of /commit gebruiken om de repository te committen...",
-    "placeholderAcp": "Beschrijf het doel, context, beperkingen, en acceptatie criteria. Ik zal ontwerpen en delegeren eerste in plaats van direct coderen...",
     "placeholderPlanReview": "Voer revisie feedback in voor dit plan, of klik op de kaart hierboven om het te implementeren...",
     "placeholderPendingGoal": "Beschrijf het doel om...",
     "pendingGoalBanner": "Doel achtervolging is klaar. Uw volgende sms zal worden gebruikt als het doel en normaal verzonden.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "Voorspel de volgende scherpe vraag die ik zou willen stellen om het verzoek volledig vast te stellen.",
     "recommendationDefaultCowork": "Voorspel de volgende gezamenlijke actie die ik natuurlijk zou typen.",
     "recommendationDefaultCode": "Voorspel de volgende concrete code wijziging verzoek Ik zou natuurlijk typen.",
-    "recommendationDefaultAcp": "Voorspel de volgende ACP scoping of ontwerp vraag die ik natuurlijk zou typen.",
-    "recommendationInitWorkspace": "Geen AGENTS.md gevonden in de huidige werkmap. Voorspel de natuurlijke volgende stap, waarschijnlijk /init om de projectcontext te initialiseren.",
-    "startAcp": "Start een ACS-zitting",
-    "startAcpDesc": "Verduidelijk eerst het doel, achtergrond, beperkingen en acceptatiecriteria. Ontwerp vervolgens de architectuur en delegeer taken alvorens code te schrijven.",
-    "homeTitleAcp": "ACS-modus",
-    "homeDescAcp": "In de ACS-modus, begin met het verduidelijken van doelstellingen, achtergrond, beperkingen, en acceptatie criteria. Vervolgens voorstellen een architectuur en taak uitsplitsing voor de uitvoering."
+    "recommendationInitWorkspace": "Geen AGENTS.md gevonden in de huidige werkmap. Voorspel de natuurlijke volgende stap, waarschijnlijk /init om de projectcontext te initialiseren."
   },
   "planReview": {
     "awaitingReview": "In afwachting van de evaluatie",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "Dit is Code mode",
         "description": "Gebruik het voor directe implementatietaken zoals het bewerken van bestanden, het schrijven van code, het uitvoeren van controles, en het omgaan met engineering details."
-      },
-      "modeAcp": {
-        "title": "Dit is ACS-modus",
-        "description": "Gebruik het als de controletoren voor complex werk: verduidelijk eerst grenzen en acceptatie, ontwerp dan de architectuur, breek taken af en delegeer de uitvoering terwijl de hoofdagent uit directe codering blijft."
       },
       "leftSidebar": {
         "title": "Dit is het project- en sessiegebied",
@@ -654,7 +644,8 @@
     "thinkingFor": "Denken voor {{seconds}} s",
     "pending": "Denken",
     "thinkingEllipsis": "Denken...",
-    "thoughts": "Gedachten"
+    "thoughts": "Gedachten",
+    "elapsedSeconds": "{{seconds}} s"
   },
   "messageList": {
     "startConversation": "Een gesprek starten",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "De taak eerst verduidelijken",
     "homeTitleCowork": "Werk in het project",
     "homeTitleCode": "Begin met coderen",
-    "homeTitleAcp": "Samenwerking ACS starten",
-    "homeDescAcp": "Start de ACS-modus voor architectuurbevestiging, beperkingsverduidelijking en uitvoeringsuitsplitsing.",
     "homeDescAutoChat": "Na het verzenden kiest het een beter model automatisch op basis van taakcomplexiteit.",
     "homeDescAutoClarify": "Na het verzenden kiest hij een model dat beter geschikt is voor ondervraging en vernauwing van het plan.",
     "homeDescAutoCowork": "Na het verzenden kiest het een model dat beter geschikt is voor projectwerk, bestandsbewerkingen en gereedschappen.",
     "homeDescAutoCode": "Na het verzenden kiest het een model dat beter geschikt is voor codering, refactoring en analyse.",
-    "homeDescAutoAcp": "Na het verzenden kiest het een model dat beter geschikt is voor architectuurbevestiging, beperkingsverduidelijking en uitvoeringsafbraak.",
     "homeDescChatGeneral": "Goed voor dagelijks praten, schrijven en lichtgewicht vragen.",
     "homeDescChatVision": "Goed voor chat en kan ook snel reageren met beeldcontext.",
     "homeDescClarifyGeneral": "Goed voor vervolgvragen, doelvorming en het invullen van beperkingen.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "Stap verandert eerst, dan een bericht genereren",
     "aiCommitEmptyStaged": "Niets geënsceneerd kan een bericht genereren",
     "aiCommitFailed": "Generatie mislukt. Controleer API / modelinstellingen en probeer het opnieuw"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

@@ -76,8 +76,7 @@
       "chat": "Sohbet",
       "clarify": "Netleştir",
       "cowork": "Birlikte Çalış",
-      "code": "Kod",
-      "acp": "ACP"
+      "code": "Kod"
     },
     "deleteAllSessions": "Delete All Sessions",
     "deleteAllConfirm": "Bütün bunları {{count}} seanslar? Bu geri alınamaz.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Oturum silindi",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Auto-switch hedef modunda Clarify Plan Mode",
     "clarifyPlanModeAutoSwitchOff": "Stay Stay Stay Stay Stay",
     "clarifyPlanModeAutoSwitchCode": "Kod için",
-    "clarifyPlanModeAutoSwitchAcp": "ACP",
     "autoApproveOn": "Auto-approve şu anda - tüm araçlar onay olmadan çalışır",
     "autoApproveOff": "Auto-approve OFF - araç aramaları onay gerektirir",
     "pendingCount": "{{count}} Beklemek için bekleyen bekleme",
@@ -407,7 +406,6 @@
     "switchToClarify": "Clarify Mode",
     "switchToCowork": "Cowork Mode",
     "switchToCode": "Kod Mode",
-    "switchToAcp": "ACP Mode'ye geçiş",
     "currentSession": "Şimdiki Oturum",
     "exportCurrentChat": "Export Current Chat",
     "copiedConversation": "Copied conversation to klibi",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Tool Calls",
     "orchestrationToolCallsEmpty": "Bu üyenin görüntülemek için araç aramaları yok",
     "orchestrationToolCallCount": "{{count}} Arama çağrıları",
-    "acp": "ACP",
-    "acpTitle": "ACP · Mimari Kontrol Planlaması",
-    "acpDesc": "Uygulamadan önce mimarlık kontrollü çalışma için en iyisi. Ana ajan gereksinimleri açıklar, sınırları tanımlar, yaklaşımları tanımlar, atama görevleri yapar ve sentezler yapar; beton uygulama alt sınıflar tarafından yapılır.",
-    "acpRuleNoCode": "Ana ajan uygulama kodu yazmaz veya dosyaları doğrudan değiştirir. İlk olarak hedefleri, kısıtlamaları, riskleri ve kabul kriterlerini açıklar.",
-    "acpRuleDelegate": "Uygulama görevleri görev / SubAgent / takım arkadaşı aracılığıyla uygun sub-agent ile delemelidir.",
-    "acpRuleReport": "Her sub-task, yapılandırılmış bir Markdown özetini geri getirmelidir, böylece ana ajan inceleyebilir, sentezleyebilir ve yürütmeye devam etmelidir.",
-    "acpCurrentPhase": "Şimdiki aşama",
-    "acpNextAction": "Bir sonraki adım önerilen",
-    "acpPhaseClarify": "Gereklilik",
-    "acpPhasePlan": "Planlama Planlama Planlama Planlama Planlama Planlama Planlama Planlama",
-    "acpPhaseReview": "Plan incelemesi",
-    "acpPhaseApproved": "idam etmeye hazır",
-    "acpPhaseExecute": "Delegated execution",
-    "acpNextActionClarify": "Hedeflerde, kısıtlamalar, sınırlar ve planlamadan önce kabul kriterlerini doldurun.",
-    "acpNextActionPlan": "Uygulama planını geliştirmeye devam edin, onu kurtar, sonra Plan Mode'den çıkın.",
-    "acpNextActionExecute": "Onaylanan planı görevleri, delege alt sınıfları ve çıktılarını sentezleyin.",
-    "acpInProgressCount_one": "{{count}} İlerleme Raporu",
-    "acpInProgressCount_other": "{{count}} İlerleme Raporu",
     "skills": "Araçlar",
     "cron": "Cron",
     "expand": "Genişletilmiş Genişleme",
@@ -677,14 +657,6 @@
           "Asgari anlatımla temiz kod çıktısını istediğinizde - fiilose yürüyüşleri yerine onaylayın",
           "Mevcut sözleşmelere, türlere, ithalata ve API sözleşmelerine sıkı dikkat gerektiren değişiklikler"
         ]
-      },
-      "acp": {
-        "summary": "Mimari Kontrol Planlama, uygulamadan önce kontrol gerektiren karmaşık çalışmalar içindir: önce hedefler ve sınırları açıklayın, sonra mimarlık, decompose execution ve delege teslimatını tasarlayın. ana ajan doğrudan kod yapmaz.",
-        "solves": [
-          "Arka plan gerektiren karmaşık görevler, kapsamı, kısıtlamalar, bağımlılıklar ve uygulama kriterleri uygulamadan önce açıklanacaktır.",
-          "Ana ajanın mimariye, orkestrasyona ve kodlama yerine doğrudan kontrole odaklanması gerektiği iş.",
-          "Sub-tasksların paralel olarak çalışabilmesi ve devam eden koordinasyon için yapılandırılmış Markdown Summaries geri dönmeleri gereken durumlar"
-        ]
       }
     }
   },
@@ -694,7 +666,7 @@
     "resources": "Kaynaklar Kaynakları Kaynaklar",
     "skills": "Beceri becerisi",
     "souls": "SOUL",
-    "sync": "Sen",
+    "sync": "Eşitleme",
     "draw": "Çizim",
     "translate": "çeviri çevirisi",
     "ssh": "SSH",

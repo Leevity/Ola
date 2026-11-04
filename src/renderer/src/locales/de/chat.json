@@ -4,7 +4,6 @@
     "placeholderClarify": "Beschreiben Sie Ihre Idee und ich werde weiterforschen, bis die Anforderungen klar sind...",
     "placeholderCowork": "Bitten Sie den Assistenten, bei Ihrem Projekt zu helfen...",
     "placeholderCode": "Beschreiben Sie, was Sie erstellen möchten, wie das Beheben von Fehlern, das Schreiben von Skripten oder die Verwendung von /commit zum Begehen des Repositorys.",
-    "placeholderAcp": "Beschreiben Sie das Ziel, den Kontext, die Einschränkungen und Akzeptanzkriterien.",
     "placeholderPlanReview": "Geben Sie Revisions-Feedback für diesen Plan ein oder klicken Sie auf die Karte oben, um ihn zu implementieren...",
     "placeholderPendingGoal": "Beschreiben Sie das Ziel zu verfolgen...",
     "pendingGoalBanner": "Ihre nächste Textnachricht wird als Ziel verwendet und normal gesendet.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "Prognostizieren Sie die nächste scharfe Frage, die ich stellen würde, um den Antrag vollständig festzuhalten.",
     "recommendationDefaultCowork": "Prognostizieren Sie die nächste kollaborative Aktion, die ich natürlich tippen würde.",
     "recommendationDefaultCode": "Prognostizieren Sie die nächste konkrete Codeänderungsanforderung, die ich natürlich eingeben würde.",
-    "recommendationDefaultAcp": "Prognostizieren Sie die nächste ACP-Scoping- oder Designfrage, die ich natürlich eingeben würde.",
-    "recommendationInitWorkspace": "Prognostizieren Sie den natürlichen nächsten Schritt, wahrscheinlich /init, um den Projektkontext zu initialisieren.",
-    "startAcp": "Beginn einer AKP-Sitzung",
-    "startAcpDesc": "Zuerst klären Sie Ziel, Hintergrund, Einschränkungen und Akzeptanzkriterien, dann entwerfen Sie die Architektur und delegieren Sie Aufgaben, bevor Sie Code schreiben.",
-    "homeTitleAcp": "AKP-Modus",
-    "homeDescAcp": "Beginnen Sie im AKP-Modus mit der Klärung von Zielen, Hintergründen, Einschränkungen und Akzeptanzkriterien, und schlagen Sie vor der Umsetzung eine Architektur und Aufgabenaufteilung vor."
+    "recommendationInitWorkspace": "Prognostizieren Sie den natürlichen nächsten Schritt, wahrscheinlich /init, um den Projektkontext zu initialisieren."
   },
   "planReview": {
     "awaitingReview": "Awaiting Review",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "Dies ist Code-Modus",
         "description": "Verwenden Sie es für direkte Implementierungsaufgaben wie das Bearbeiten von Dateien, das Schreiben von Code, das Ausführen von Prüfungen und das Handling von technischen Details."
-      },
-      "modeAcp": {
-        "title": "Das ist der AKP-Modus",
-        "description": "Verwenden Sie es als Kontrollturm für komplexe Arbeit: klären Sie zuerst Grenzen und Akzeptanz, entwerfen Sie dann die Architektur, brechen Sie Aufgaben auf und delegieren Sie die Ausführung, während der Hauptagent sich von der direkten Codierung fernhält."
       },
       "leftSidebar": {
         "title": "Dies ist der Projekt- und Sitzungsbereich",
@@ -654,7 +644,8 @@
     "thinkingFor": "Nachdenken für {{seconds}} s",
     "pending": "Denken",
     "thinkingEllipsis": "Denken...",
-    "thoughts": "Gedanken"
+    "thoughts": "Gedanken",
+    "elapsedSeconds": "{{seconds}} s"
   },
   "messageList": {
     "startConversation": "Starten Sie ein Gespräch",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "Die Aufgabe zuerst klären",
     "homeTitleCowork": "Arbeiten innerhalb des Projekts",
     "homeTitleCode": "Startcode",
-    "homeTitleAcp": "Start der AKP-Zusammenarbeit",
-    "homeDescAcp": "Starten Sie den ACP-Modus für Architekturbestätigung, Einschränkungsklärung und Ausführungsaufschlüsselung.",
     "homeDescAutoChat": "Nach dem senden wählt es automatisch ein besseres modell aus, das auf der komplexität der aufgaben basiert.",
     "homeDescAutoClarify": "Nach dem senden wählt es ein modell aus, das besser geeignet ist, den plan zu hinterfragen und einzugrenzen.",
     "homeDescAutoCowork": "Nach dem Senden wählt es ein Modell aus, das besser für Projektarbeiten, Dateibearbeitungen und Tools geeignet ist.",
     "homeDescAutoCode": "Nach dem senden wählt es ein modell aus, das besser für codierung, refactoring und analyse geeignet ist.",
-    "homeDescAutoAcp": "Nach dem senden wählt es ein modell aus, das besser für die architekturbestätigung, die einschränkungsklärung und die ausführung geeignet ist.",
     "homeDescChatGeneral": "Gut für den täglichen chat, schreiben und leichte fragen.",
     "homeDescChatVision": "Gut für den chat und kann auch schnell mit dem bildkontext reagieren.",
     "homeDescClarifyGeneral": "Gut für Folgefragen, Zielgestaltung und das Ausfüllen von Einschränkungen.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "Phase wechselt zuerst und generiert dann eine Nachricht",
     "aiCommitEmptyStaged": "Nichts inszeniert — kann keine Nachricht erzeugen",
     "aiCommitFailed": "Generation fehlgeschlagen. API / Modelleinstellungen überprüfen und erneut versuchen"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

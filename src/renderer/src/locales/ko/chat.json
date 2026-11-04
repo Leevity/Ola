@@ -4,7 +4,6 @@
     "placeholderClarify": "아이디어를 적어 주세요. 요구 사항이 명확해질 때까지 계속 확인하겠습니다...",
     "placeholderCowork": "프로젝트를 돕기 위해 조수를 요청하세요...",
     "placeholderCode": "버그를 수정하거나 스크립트를 작성하거나 /commit 을 사용해 저장소에 반영할 내용을 설명하세요.",
-    "placeholderAcp": "목표, 배경, 제약 및 수용 기준을 설명합니다. 직접 코딩 대신 먼저 설계하고 위임합니다...",
     "placeholderPlanReview": "이 계획에 대한 수정 피드백을 입력하거나 위의 카드를 클릭해 실행하세요.",
     "placeholderPendingGoal": "추구할 목표를 설명하세요...",
     "pendingGoalBanner": "목표 추적을 시작할 준비가 되었습니다. 다음 텍스트 메시지는 목표로 사용되어 정상적으로 전송됩니다.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "다음 날의 날카로운 질문을 나는 완전히 요청에 넣어.",
     "recommendationDefaultCowork": "다음 협업 작업을 예측하는 것은 자연스럽게 유형입니다.",
     "recommendationDefaultCode": "다음 콘크리트 코드 변경 요청을 예측합니다.",
-    "recommendationDefaultAcp": "다음 ACP scoping 또는 디자인 질문을 예측하여 자연스럽게 입력 할 것입니다.",
-    "recommendationInitWorkspace": "AGENTS.md는 현재 작업 폴더에서 찾을 수 없습니다. /init가 프로젝트 컨텍스트를 초기화하기 위해 자연스러운 다음 단계를 예측합니다.",
-    "startAcp": "ACP 세션 시작",
-    "startAcpDesc": "먼저 목표, 배경, 제약 및 수용 기준을 명확히 합니다. 그런 다음 코드를 작성하기 전에 아키텍처와 작업 분해를 설계합니다.",
-    "homeTitleAcp": "ACP 모드",
-    "homeDescAcp": "ACP 모드에서는 먼저 목표, 배경, 제약 및 수용 기준을 명확히 합니다. 그런 다음 구현 전에 아키텍처와 작업 분해를 제안합니다."
+    "recommendationInitWorkspace": "AGENTS.md는 현재 작업 폴더에서 찾을 수 없습니다. /init가 프로젝트 컨텍스트를 초기화하기 위해 자연스러운 다음 단계를 예측합니다."
   },
   "planReview": {
     "awaitingReview": "검토 대기 중",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "코드 모드",
         "description": "편집 파일, 쓰기 코드, 실행 체크 및 엔지니어링 세부 사항과 같은 직접 구현 작업에 사용됩니다."
-      },
-      "modeAcp": {
-        "title": "ACP 모드",
-        "description": "복잡한 작업에 대한 제어 타워로 사용하십시오. 경계를 명확하게하고 먼저 합격 한 다음 아키텍처를 설계하고 작업을 중단하고 주요 에이전트가 직접 코딩을 유지하면서 delegate 실행을 파괴하십시오."
       },
       "leftSidebar": {
         "title": "프로젝트 및 세션 영역",
@@ -654,7 +644,8 @@
     "thinkingFor": "{{seconds}}s에 대한 생각",
     "pending": "관련 기사",
     "thinkingEllipsis": "사고 ...",
-    "thoughts": "한국어"
+    "thoughts": "한국어",
+    "elapsedSeconds": "{{seconds}}초"
   },
   "messageList": {
     "startConversation": "대화 시작",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "Clarify 작업 먼저",
     "homeTitleCowork": "프로젝트 내부 작업",
     "homeTitleCode": "시작 코딩",
-    "homeTitleAcp": "ACP 협업 시작",
-    "homeDescAcp": "건축 확인을 위한 ACP 모드를 시작하십시오, constraint 명확화 및 실행 고장.",
     "homeDescAutoChat": "보낸 후, 작업 복잡성에 따라 더 나은 모델을 자동으로 선택합니다.",
     "homeDescAutoClarify": "당신이 보낸 후, 그것은 질문 하 고 계획을 좁은에 대 한 더 나은 모델을 선택.",
     "homeDescAutoCowork": "보낸 후, 프로젝트 작업, 파일 편집 및 도구에 적합한 모델을 더 잘 선택합니다.",
     "homeDescAutoCode": "전송 후, 코딩, 재구성 및 분석에 적합한 모델을 더 잘 선택합니다.",
-    "homeDescAutoAcp": "전송 후, 그것은 건축 확인, 제약 선명, 및 고장 실행에 대 한 더 나은 모델을 선택.",
     "homeDescChatGeneral": "일상 채팅, 쓰기 및 경량 질문을위한 좋은.",
     "homeDescChatVision": "채팅을 위해 좋은 또한 이미지 상황에 신속하게 대응할 수 있습니다.",
     "homeDescClarifyGeneral": "후속 질문에 대한 좋은, 목표 형성, 그리고 제약에서 채우기.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "단계 변경 첫째, 다음 메시지를 생성",
     "aiCommitEmptyStaged": "아무것도 staged - 메시지를 생성 할 수 없습니다",
     "aiCommitFailed": "생성 실패. API / 모델 설정 확인 및 다시 시도"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

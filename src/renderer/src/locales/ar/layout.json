@@ -76,8 +76,7 @@
       "chat": "دردشة",
       "clarify": "توضيح",
       "cowork": "تعاون",
-      "code": "كود",
-      "acp": "ACP"
+      "code": "كود"
     },
     "deleteAllSessions": "تحذف جميع الدورات",
     "deleteAllConfirm": "تحذف جميع {{count}} جلسات؟",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "الجلسة حذفت",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "أسلوب الهدف للمتفجرات الآليّة بعد أن يُوضّح أنّه يدخل خطة (مود)",
     "clarifyPlanModeAutoSwitchOff": "ابقى مكانك",
     "clarifyPlanModeAutoSwitchCode": "القانون",
-    "clarifyPlanModeAutoSwitchAcp": "إلى ACP",
     "autoApproveOn": "الموافقة الذاتية تعمل - جميع الأدوات تعمل بدون تأكيد",
     "autoApproveOff": "الموافقة المسبقة عن علم - تتطلب المكالمات بالأدوات تأكيدا",
     "pendingCount": "{{count}} معلقة",
@@ -407,7 +406,6 @@
     "switchToClarify": "تحويل إلى توضيح Mode",
     "switchToCowork": "التحول إلى أسلوب العمل",
     "switchToCode": "تحويل إلى رمز موديل",
-    "switchToAcp": "تحويل إلى ACP Mode",
     "currentSession": "الدورة الحالية",
     "exportCurrentChat": "Export Current Chat",
     "copiedConversation": "مُحادثة مُتكَبَّرة للوحة",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "نداءات",
     "orchestrationToolCallsEmpty": "هذا العضو ليس لديه نداءات للأداة",
     "orchestrationToolCallCount": "{{count}} المكالمات",
-    "acp": "ACP",
-    "acpTitle": "ACP · Architecture Control Planning",
-    "acpDesc": "أفضل الأعمال التي تخضع لسيطرة الهيكل قبل التنفيذ - يوضح الوكيل الرئيسي المتطلبات، ويحدد الحدود، ويصمم النهج، ويلغي المهام، ويجمع النتائج؛ وينفذ التنفيذ الفعلي من جانب العناصر الفرعية.",
-    "acpRuleNoCode": "ولا يكتب العامل الرئيسي مدونة التنفيذ أو يعدل الملفات مباشرة، بل يوضح أولا الأهداف والقيود والمخاطر ومعايير القبول.",
-    "acpRuleDelegate": "ويجب تفويض مهام التنفيذ عن طريق فرقة العمل/الفرقة الفرعية/ زميل الفريق إلى الفريق الفرعي المختص.",
-    "acpRuleReport": "وينبغي لكل مكتب فرعي أن يعيد موجزاً منظماً للتركيز حتى يتمكن العميل الرئيسي من استعراضه وتوليفه ومواصلة تنفيذه.",
-    "acpCurrentPhase": "المرحلة الحالية",
-    "acpNextAction": "الخطوة التالية الموصى بها",
-    "acpPhaseClarify": "توضيح الاحتياجات",
-    "acpPhasePlan": "التخطيط",
-    "acpPhaseReview": "استعراض الخطة",
-    "acpPhaseApproved": "جاهز للإعدام",
-    "acpPhaseExecute": "الإعدام المندوب",
-    "acpNextActionClarify": "الوفاء بالأهداف والقيود والحدود ومعايير القبول قبل التخطيط.",
-    "acpNextActionPlan": "مواصلة تنقيح خطة التنفيذ، وإنقاذها، ثم الخروج من الخطة.",
-    "acpNextActionExecute": "الاستمرار في إزالة الخطة المعتمدة إلى المهام، والمندوبون الفرعيون، وتجميع نواتجهم.",
-    "acpInProgressCount_one": "{{count}} قيد التنفيذ",
-    "acpInProgressCount_other": "{{count}} قيد التنفيذ",
     "skills": "الأدوات",
     "cron": "Cron",
     "expand": "التوسع",
@@ -677,14 +657,6 @@
           "عندما تريد إنتاج شفرة نظيفة مع الحد الأدنى من التخدير - تأكيد اثبات اثبات بدلاً من انجاز الشفرات",
           "التغييرات التي تتطلب اهتماماً صارماً بالاتفاقيات والأنواع والواردات والعقود القائمة"
         ]
-      },
-      "acp": {
-        "summary": "تخطيط تنظيم الهندسة المعمارية من أجل العمل المعقد الذي يحتاج إلى السيطرة قبل التنفيذ: توضيح الأهداف والحدود أولا، ثم تصميم الهيكل، وإلغاء التنفيذ، والتفويض.",
-        "solves": [
-          "المهام المعقدة التي تتطلب معلومات أساسية، ونطاق، وقيود، وعوامل، ومعايير قبول يتعين توضيحها قبل التنفيذ",
-          "العمل الذي ينبغي أن يركز فيه العامل الرئيسي على الهندسة المعمارية، ومراقبة العمليات بدلا من الترميز مباشرة",
-          "الحالات التي ينبغي أن تكون فيها المكاتب الفرعية متوازية وأن تُعاد إليها موجزات مُحكمة هيكلية لمواصلة التنسيق"
-        ]
       }
     }
   },
@@ -694,7 +666,7 @@
     "resources": "الموارد",
     "skills": "المهارات",
     "souls": "SOUL",
-    "sync": "الرمز",
+    "sync": "المزامنة",
     "draw": "Draw",
     "translate": "التحويل",
     "ssh": "SSH",

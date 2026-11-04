@@ -2,12 +2,19 @@ import type { ExtensionToolDefinition } from '../../shared/extension-types'
 import type { ToolDefinition } from '../../runtime/tools/tool-executor'
 import { executeExtensionHttpTool } from './extension-http-tool'
 import type { ExtensionService, RuntimeExtension } from './extension-service'
+import { ToolNamer, sanitizeDescription } from '../../shared/tool-naming'
 
 const EXTENSION_TOOL_PREFIX = 'extension__'
 const MAX_INPUT_BYTES = 128 * 1024
 
+/** Stable, never-reused external-name allocator for extension tools across agent-run restarts. */
+const extensionToolNamer = new ToolNamer()
+
 export function extensionRuntimeToolName(extensionId: string, toolName: string): string {
-  return `${EXTENSION_TOOL_PREFIX}${extensionId}__${toolName}`
+  return extensionToolNamer.nameFor(
+    `extension:${extensionId}:${toolName}`,
+    `${EXTENSION_TOOL_PREFIX}${extensionId}__${toolName}`
+  )
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -44,7 +51,7 @@ function definition(
   const name = extensionRuntimeToolName(extension.id, tool.name)
   return {
     name,
-    description: `[Extension: ${extension.manifest.name}] ${tool.description}`,
+    description: sanitizeDescription(`[Extension: ${extension.manifest.name}] ${tool.description}`),
     inputSchema: tool.inputSchema,
     effect: isReadOnly(tool) ? 'read' : 'write',
     validate: (input) => validateInput(input, tool.inputSchema),

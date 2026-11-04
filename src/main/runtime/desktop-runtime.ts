@@ -70,7 +70,14 @@ import { isAuthorizedDesktopRuntimeTool } from './runtime-tool-authorization'
 import { readPermissionPolicySnapshot } from '../ipc/settings-handlers'
 import { startStandaloneRuntime } from '../../runtime/host/standalone'
 import { RuntimeClient } from '../../runtime/host/runtime-client'
-import { RuntimeError, type RunSpec } from '../../shared/runtime/contracts'
+import {
+  RUNTIME_CAPABILITIES,
+  RuntimeError,
+  type RunEvent,
+  type RunSnapshot,
+  type RunSpec,
+  type RuntimeCapability
+} from '../../shared/runtime/contracts'
 import type { ModelProtocol } from '../../shared/runtime/model'
 import {
   resolveMainProviderModel,
@@ -91,6 +98,8 @@ import { isAbsolute, join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { businessWriteCanary } from '../db/business-write-canary'
 import { assertScenarioToolPolicy, type ScenarioSessionPolicy } from './scenario-tool-policy'
+import { withToolHooks } from './tool-hook-lifecycle'
+import { hooksService } from '../hooks/hooks-service'
 import type { ScenarioPolicy } from '../../shared/scenario-policy'
 import {
   clearDesktopRuntimeConnection,
@@ -105,6 +114,20 @@ const protocols = new Set<ModelProtocol>([
   'gemini',
   'vertex-ai'
 ])
+
+/**
+ * A rollback switch, not a mode: with push disabled Main never asks for the
+ * streaming capability, so the renderer keeps its snapshot loop.
+ */
+function runtimePushEnabled(): boolean {
+  return process.env.OLA_RUNTIME_PUSH !== '0'
+}
+
+function requestedRuntimeCapabilities(): readonly RuntimeCapability[] {
+  return runtimePushEnabled()
+    ? RUNTIME_CAPABILITIES
+    : RUNTIME_CAPABILITIES.filter((capability) => capability !== 'stream')
+}
 
 function protocol(value: unknown): ModelProtocol {
   if (typeof value === 'string' && protocols.has(value as ModelProtocol))
@@ -123,11 +146,16 @@ async function approvedLocalWorkingDirectory(run: RunSpec): Promise<string> {
   return directory
 }
 
-async function enforceScenarioToolPolicy(run: RunSpec): Promise<ScenarioPolicy | null> {
+async function loadRunSession(run: RunSpec): Promise<ScenarioSessionPolicy | null> {
   const writer = businessWriteCanary()
   if (!writer) throw new RuntimeError('TS_BUSINESS_REPOSITORY_UNAVAILABLE')
   const session = await writer.session<ScenarioSessionPolicy>(run.sessionId, run.workspaceId)
   await assertScenarioToolPolicy(run, session)
+  return session
+}
+
+async function enforceScenarioToolPolicy(run: RunSpec): Promise<ScenarioPolicy | null> {
+  const session = await loadRunSession(run)
   return session?.scenario_policy ?? null
 }
 
@@ -244,7 +272,13 @@ export class DesktopRuntime {
         bundledDirectoryCandidates: getBundledResourceDirCandidates('agents')
       })
       const tools = async (run: RunSpec): Promise<ToolExecutor> => {
-        const scenarioPolicy = await enforceScenarioToolPolicy(run)
+        const session = await loadRunSession(run)
+        const scenarioPolicy = session?.scenario_policy ?? null
+        // The hook project root comes from the persisted session, never from the
+        // run spec, so a window cannot point policy hooks at another directory.
+        const hookProjectPath = session?.ssh_connection_id
+          ? undefined
+          : (session?.working_folder ?? undefined)
         const skillTool = scenarioPolicy ? null : await createSkillRuntimeTool()
         const subAgents = scenarioPolicy ? [] : await agentCatalog.list()
         const extensionTools = scenarioPolicy
@@ -307,38 +341,46 @@ export class DesktopRuntime {
                   })()
                 : Promise.resolve([])
         return new ToolExecutor(
-          selectExplicitTools(
-            [
-              createWebFetchRuntimeTool(),
-              createWebSearchRuntimeTool(),
-              createLegacyWebFetchRuntimeTool(),
-              createLegacyWebSearchRuntimeTool(),
-              createDesktopNotificationTool(showSystemNotification),
-              ...createTaskRuntimeTools(),
-              ...createGoalRuntimeTools(),
-              createSubAgentRuntimeTool('Task', subAgents),
-              createSubAgentRuntimeTool('Agent', subAgents),
-              ...(skillTool ? [skillTool] : []),
-              ...createCronRuntimeTools(),
-              ...createMemoryRuntimeTools(),
-              ...createBrowserRuntimeTools(),
-              createAskUserRuntimeTool(),
-              createWidgetRuntimeTool(),
-              ...(run.translationContext ? createTranslationRuntimeTools() : []),
-              createPromptOptimizerRuntimeTool(),
-              createImageRuntimeTool(),
-              createVideoRuntimeTool(),
-              ...createTeamRuntimeTools(),
-              ...createPlanRuntimeTools(),
-              ...createChannelReadRuntimeTools(),
-              ...createChannelWriteRuntimeTools(),
-              ...createChannelProviderReadRuntimeTools(),
-              ...createChannelProviderWriteRuntimeTools(),
-              ...mcpTools,
-              ...(await localTools),
-              ...extensionTools
-            ],
-            run.toolNames
+          withToolHooks(
+            selectExplicitTools(
+              [
+                createWebFetchRuntimeTool(),
+                createWebSearchRuntimeTool(),
+                createLegacyWebFetchRuntimeTool(),
+                createLegacyWebSearchRuntimeTool(),
+                createDesktopNotificationTool(showSystemNotification),
+                ...createTaskRuntimeTools(),
+                ...createGoalRuntimeTools(),
+                createSubAgentRuntimeTool('Task', subAgents),
+                createSubAgentRuntimeTool('Agent', subAgents),
+                ...(skillTool ? [skillTool] : []),
+                ...createCronRuntimeTools(),
+                ...createMemoryRuntimeTools(),
+                ...createBrowserRuntimeTools(),
+                createAskUserRuntimeTool(),
+                createWidgetRuntimeTool(),
+                ...(run.translationContext ? createTranslationRuntimeTools() : []),
+                createPromptOptimizerRuntimeTool(),
+                createImageRuntimeTool(),
+                createVideoRuntimeTool(),
+                ...createTeamRuntimeTools(),
+                ...createPlanRuntimeTools(),
+                ...createChannelReadRuntimeTools(),
+                ...createChannelWriteRuntimeTools(),
+                ...createChannelProviderReadRuntimeTools(),
+                ...createChannelProviderWriteRuntimeTools(),
+                ...mcpTools,
+                ...(await localTools),
+                ...extensionTools
+              ],
+              run.toolNames
+            ),
+            {
+              sessionId: run.sessionId,
+              ...(hookProjectPath ? { projectPath: hookProjectPath } : {}),
+              isPolicySession: scenarioPolicy !== null,
+              emit: (event, invocation) => hooksService.emit(event, invocation)
+            }
           ),
           async (tool, input, context, call) => {
             if (
@@ -376,7 +418,7 @@ export class DesktopRuntime {
       })
       const client = new RuntimeClient()
       try {
-        await client.connect(service.endpoint, service.token)
+        await client.connect(service.endpoint, service.token, requestedRuntimeCapabilities())
         await publishDesktopRuntimeConnection(
           { endpoint: service.endpoint, token: service.token },
           this.connectionDescriptorPath
@@ -458,6 +500,30 @@ export class DesktopRuntime {
   async request<T>(method: string, params: unknown = {}): Promise<T> {
     if (!this.client) throw new RuntimeError('RUNTIME_DISCONNECTED')
     return await this.client.request<T>(method, params)
+  }
+
+  /**
+   * Pushes a run's committed events to a Main-owned consumer. Main stays the
+   * only party that speaks to the runtime socket; callers receive plain events.
+   */
+  get supportsRunStream(): boolean {
+    return this.client?.capabilities.has('stream') === true
+  }
+
+  async openRunStream(options: {
+    workspaceId: string
+    runId: string
+    afterSeq: number
+    onEvent: (event: RunEvent) => void
+    onResync: (reason: string) => void
+  }): Promise<{ subscriptionId: string; snapshot: RunSnapshot; close: () => Promise<void> }> {
+    if (!this.client) throw new RuntimeError('RUNTIME_DISCONNECTED')
+    return await this.client.openRunStream(options)
+  }
+
+  /** Drops run subscriptions for workspaces the account can no longer see. */
+  revokeUnavailableWorkspaces(availableIds: ReadonlySet<string>): void {
+    this.service?.revokeUnavailableWorkspaces(availableIds)
   }
 }
 

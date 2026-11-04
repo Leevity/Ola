@@ -84,12 +84,13 @@ import {
   type ActiveCompactArtifacts
 } from '../lib/agent/context-compression'
 
-export type SessionMode = 'chat' | 'clarify' | 'execute' | 'acp'
-export type LegacySessionMode = 'cowork' | 'code'
+export type SessionMode = 'chat' | 'clarify' | 'execute'
+/** Modes persisted by earlier releases; `acp` is read back as `execute`. */
+export type LegacySessionMode = 'cowork' | 'code' | 'acp'
 
 export function normalizeSessionMode(mode: unknown): SessionMode {
-  if (mode === 'cowork' || mode === 'code' || mode === 'execute') return 'execute'
-  if (mode === 'clarify' || mode === 'acp') return mode
+  if (mode === 'cowork' || mode === 'code' || mode === 'execute' || mode === 'acp') return 'execute'
+  if (mode === 'clarify') return 'clarify'
   return 'chat'
 }
 export type SessionModelSelectionMode = 'inherit' | 'auto' | 'manual'
@@ -4122,8 +4123,7 @@ export const useChatStore = create<ChatStore>()(
         if (session) {
           const shouldClearPromptSnapshot =
             session.mode !== normalizedMode ||
-            (session.mode === 'chat') !== (normalizedMode === 'chat') ||
-            (session.mode === 'acp') !== (normalizedMode === 'acp')
+            (session.mode === 'chat') !== (normalizedMode === 'chat')
           session.mode = normalizedMode
           if (shouldClearPromptSnapshot) {
             delete session.promptSnapshot

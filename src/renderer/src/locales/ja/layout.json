@@ -76,8 +76,7 @@
       "chat": "チャット",
       "clarify": "Clarify",
       "cowork": "コワーキング",
-      "code": "コード",
-      "acp": "ACP"
+      "code": "コード"
     },
     "deleteAllSessions": "すべてのセッションを削除",
     "deleteAllConfirm": "すべての{{count}}セッションを削除しますか? これは元に戻すことができません。",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "セッション削除",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Clarifyの後の自動スイッチ ターゲット モードはプラン モードに入ります",
     "clarifyPlanModeAutoSwitchOff": "アクセス",
     "clarifyPlanModeAutoSwitchCode": "コードへ",
-    "clarifyPlanModeAutoSwitchAcp": "ACPへ",
     "autoApproveOn": "自動承認はONです — 確認なしで実行されるすべてのツール",
     "autoApproveOff": "自動承認はオフです。ツールコールは確認が必要です",
     "pendingCount": "{{count}} の pending",
@@ -407,7 +406,6 @@
     "switchToClarify": "モードを明確にするスイッチ",
     "switchToCowork": "作業モードへの切り替え",
     "switchToCode": "コードモードへの切り替え",
-    "switchToAcp": "ACPモードへの切り替え",
     "currentSession": "現在のセッション",
     "exportCurrentChat": "輸出現在のチャット",
     "copiedConversation": "クリップボードへのコピアード会話",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "ツールコール",
     "orchestrationToolCallsEmpty": "このメンバーは表示するツールの呼び出しはありません",
     "orchestrationToolCallCount": "{{count}}コール",
-    "acp": "ACPの特長",
-    "acpTitle": "ACP・建築制御計画",
-    "acpDesc": "実装前のアーキテクチャ制御作業に最適です。 メインエージェントは、要件を明確にし、境界を定義し、アプローチを設計し、タスクを分解し、結果を合成します。 具体的な実装は、サブエージェントによって実行されます。",
-    "acpRuleNoCode": "メインエージェントは、実装コードを記述したり、ファイルを直接変更したりしません。 目標、制約、リスク、受容基準を明らかにします。",
-    "acpRuleDelegate": "実装タスクは、タスク/サブエージェント/チームメイトを適切なサブエージェントに委任する必要があります。",
-    "acpRuleReport": "各サブタスクは構造化されたMarkdownの要約を返すべきなので、メインエージェントはレビュー、合成、実行を続行できます。",
-    "acpCurrentPhase": "現在のフェーズ",
-    "acpNextAction": "おすすめの次のステップ",
-    "acpPhaseClarify": "要件の明確化",
-    "acpPhasePlan": "プランニング",
-    "acpPhaseReview": "プランレビュー",
-    "acpPhaseApproved": "実行する準備",
-    "acpPhaseExecute": "委任された実行",
-    "acpNextActionClarify": "計画する前に目標、制約、境界、受諾基準を満たします。",
-    "acpNextActionPlan": "実装計画の精査を続け、保存してからプランモードを終了します。",
-    "acpNextActionExecute": "承認された計画をタスクに分解し、サブエージェントを委任し、出力を合成します。",
-    "acpInProgressCount_one": "{{count}} 進行中",
-    "acpInProgressCount_other": "{{count}} 進行中",
     "skills": "ツール",
     "cron": "ログイン",
     "expand": "プロモーション",
@@ -676,14 +656,6 @@
           "精密な実装: 機能の書き込み、バグの修正、リファクタリング、またはエンジニアリングの規準でモジュールのコンパイル",
           "最小限のナレーションでコードアウトプットをクリーンにしたいとき — 動詞のウォークスルーの代わりに確認をterse",
           "既存の慣行、タイプ、インポート、およびAPI契約に厳しい注意を要求する変更"
-        ]
-      },
-      "acp": {
-        "summary": "アーキテクチャ・コントロール・プランニングは、実装前にコントロールが必要な複雑な作業です。まず目標と境界を明確にし、アーキテクチャの設計、実行を分解し、配信を解除します。 メインエージェントは直接コードしません。",
-        "solves": [
-          "実装前に、バックグラウンド、スコープ、制約、依存性、受容基準を必要とする複雑なタスク",
-          "主要なエージェントが直接コーディングではなくアーキテクチャ、オーケストレーション、プロセス制御に焦点を合わせるべきである作業",
-          "サブタスクが並行して実行し、継続的調整のためのMarkdownの要約を返すケース"
         ]
       }
     }

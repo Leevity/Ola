@@ -29,3 +29,11 @@ __pycache__/
 # Local release smoke artifacts (built ad hoc, never commit)
 dist-local-release-smoke/
 release-local-smoke/
+# Local training/eval drafts: never published, never committed
+/docs/llm-training/
+# Non-npm lockfiles and build residue must not compete with the npm toolchain
+bun.lock
+pnpm-lock.yaml
+*.tsbuildinfo
+# Scratch space for one-off local scripts and captures
+/tmp/

@@ -76,8 +76,7 @@
       "chat": "Chat",
       "clarify": "Chiarire",
       "cowork": "Collaborare",
-      "code": "Codice",
-      "acp": "ACP"
+      "code": "Codice"
     },
     "deleteAllSessions": "Elimina tutte le sessioni",
     "deleteAllConfirm": "Cancella tutto {{count}} Questo non può essere annullato.",
@@ -108,7 +107,8 @@
     "workspaceSwitcher": "Switch workspace",
     "localWorkspace": "Local workspace",
     "workspaceBusy": "Wait for running tasks to finish or stop them before switching workspace.",
-    "localModelSource": "Local"
+    "localModelSource": "Local",
+    "editProjectModel": "Edit project default model"
   },
   "sidebar_toast": {
     "sessionDeleted": "Sessione cancellata",
@@ -143,7 +143,6 @@
     "clarifyPlanModeAutoSwitchTooltip": "Modalità di destinazione automatica dopo che Clarify entra in modalità Piano",
     "clarifyPlanModeAutoSwitchOff": "Resta qui.",
     "clarifyPlanModeAutoSwitchCode": "Codice",
-    "clarifyPlanModeAutoSwitchAcp": "Agli ACP",
     "autoApproveOn": "L'approvazione automatica è ON — tutti gli strumenti eseguiti senza conferma",
     "autoApproveOff": "L'approvazione automatica è OFF — le chiamate degli strumenti richiedono la conferma",
     "pendingCount": "{{count}} in attesa",
@@ -407,7 +406,6 @@
     "switchToClarify": "Passare alla modalità Clarify",
     "switchToCowork": "Passare alla modalità di lavoro",
     "switchToCode": "Passare alla modalità Codice",
-    "switchToAcp": "Passare alla modalità ACP",
     "currentSession": "Sessione attuale",
     "exportCurrentChat": "Esportare Chat corrente",
     "copiedConversation": "conversazione riparata a clipboard",
@@ -459,24 +457,6 @@
     "orchestrationToolCalls": "Chiamate degli strumenti",
     "orchestrationToolCallsEmpty": "Questo membro non ha chiamate di strumento da visualizzare",
     "orchestrationToolCallCount": "{{count}} chiamate",
-    "acp": "ACP",
-    "acpTitle": "ACP · Architettura Controllo Pianificazione",
-    "acpDesc": "Il principale agente chiarisce i requisiti, definisce i confini, progetta l'approccio, decompone i compiti e sintetizza i risultati; l'implementazione concreta viene eseguita da sotto-agenti.",
-    "acpRuleNoCode": "L'agente principale non scrive il codice di implementazione o modifica i file direttamente.",
-    "acpRuleDelegate": "I compiti di attuazione devono essere delegati tramite Task / SubAgent / compagno di squadra al sub-agente appropriato.",
-    "acpRuleReport": "Ogni sub-task dovrebbe restituire un riepilogo Markdown strutturato in modo che l'agente principale può rivedere, sintetizzare e continuare l'esecuzione.",
-    "acpCurrentPhase": "Fase attuale",
-    "acpNextAction": "Prossimo passo consigliato",
-    "acpPhaseClarify": "Richiesta chiarificazione",
-    "acpPhasePlan": "Pianificazione",
-    "acpPhaseReview": "Recensione del piano",
-    "acpPhaseApproved": "Pronti ad eseguire",
-    "acpPhaseExecute": "Esecuzione delegata",
-    "acpNextActionClarify": "Riempire obiettivi, vincoli, confini e criteri di accettazione prima di pianificare.",
-    "acpNextActionPlan": "Continuare a raffinare il piano di implementazione, salvarlo, quindi uscire Modalità Piano.",
-    "acpNextActionExecute": "Continua a decomporsi il piano approvato in compiti, delegati sub-agenti e sintetizzare le loro uscite.",
-    "acpInProgressCount_one": "{{count}} in corso",
-    "acpInProgressCount_other": "{{count}} in corso",
     "skills": "Strumenti",
     "cron": "Cron",
     "expand": "Espulsione",
@@ -677,14 +657,6 @@
           "Quando si desidera l'output di codice pulito con la narrazione minima — conferma terse invece di verbose walk-throughs",
           "Modifiche che richiedono una rigorosa attenzione ai contratti di convenzioni, tipi, importazioni e API esistenti"
         ]
-      },
-      "acp": {
-        "summary": "Architettura Control Planning è per lavori complessi che necessitano di controllo prima dell'implementazione: chiarire obiettivi e confini prima, poi progettare l'architettura, decomporre l'esecuzione e delegare la consegna.",
-        "solves": [
-          "Complessi compiti che richiedono sfondo, portata, vincoli, dipendenze e criteri di accettazione da chiarire prima dell'implementazione",
-          "Lavoro dove l'agente principale dovrebbe concentrarsi su architettura, orchestrazione e controllo del processo invece di codificare direttamente",
-          "Casi in cui i sub-taschi devono essere eseguiti in parallelo e tornare strutturati summari Markdown per un coordinamento continuo"
-        ]
       }
     }
   },
@@ -694,7 +666,7 @@
     "resources": "Risorse",
     "skills": "Competenze",
     "souls": "Quindi...",
-    "sync": "Traduzione:",
+    "sync": "Sincronizzazione",
     "draw": "Disegno",
     "translate": "Traduttore",
     "ssh": "SSH",

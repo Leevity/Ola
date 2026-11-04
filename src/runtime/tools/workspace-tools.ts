@@ -1,4 +1,8 @@
 import { RuntimeError } from '../../shared/runtime/contracts'
+import {
+  WORKSPACE_PROTOCOL_TOOLS,
+  type WorkspaceProtocolTool
+} from '../../shared/tool-catalog/workspace-protocol'
 import { lstat, readFile } from 'node:fs/promises'
 import { relative } from 'node:path'
 import { globLocalFiles, readLocalFile } from '../host/local-file-service'
@@ -44,16 +48,14 @@ function legacyPath(value: LegacyRecord): string {
  * reaches a filesystem or shell operation unvalidated.
  */
 function legacyAlias(
-  name: string,
-  description: string,
-  inputSchema: Record<string, unknown>,
+  spec: WorkspaceProtocolTool,
   target: ToolDefinition,
   normalize: (input: unknown) => unknown
 ): ToolDefinition {
   return {
-    name,
-    description,
-    inputSchema,
+    name: spec.name,
+    description: spec.description,
+    inputSchema: spec.inputSchema,
     effect: target.effect,
     validate: (input) => target.validate(normalize(input)),
     resources: (input, context) => target.resources(input, context),
@@ -90,18 +92,7 @@ function legacyReadInput(input: unknown): LegacyReadInput {
 export function createLegacyReadTool(root: string | WorkspaceRootResolver): ToolDefinition {
   const confined = createLocalReadFileTool(root)
   return {
-    name: 'Read',
-    description: 'Read a UTF-8 text file inside the configured workspace.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_path: { type: 'string' },
-        path: { type: 'string' },
-        offset: { type: 'integer', minimum: 1 },
-        limit: { type: 'integer', minimum: 1, maximum: 2_000 }
-      },
-      additionalProperties: false
-    },
+    ...WORKSPACE_PROTOCOL_TOOLS.Read,
     effect: 'read',
     validate: legacyReadInput,
     resources: (input, context) =>
@@ -127,77 +118,32 @@ export function createLegacyReadTool(root: string | WorkspaceRootResolver): Tool
 export function createLegacyListDirectoryTool(
   root: string | WorkspaceRootResolver
 ): ToolDefinition {
-  return legacyAlias(
-    'LS',
-    'List entries inside the configured workspace directory.',
-    {
-      type: 'object',
-      properties: {
-        path: { type: 'string' },
-        limit: { type: 'integer', minimum: 1, maximum: 500 }
-      },
-      additionalProperties: false
-    },
-    createLocalListDirectoryTool(root),
-    (input) => {
-      const value = record(input)
-      only(value, ['path', 'limit'])
-      return value
-    }
-  )
+  return legacyAlias(WORKSPACE_PROTOCOL_TOOLS.LS, createLocalListDirectoryTool(root), (input) => {
+    const value = record(input)
+    only(value, ['path', 'limit'])
+    return value
+  })
 }
 
 /** Legacy `Glob` name backed by the bounded TS glob implementation. */
 export function createLegacyGlobTool(root: string | WorkspaceRootResolver): ToolDefinition {
-  return legacyAlias(
-    'Glob',
-    'Find workspace files with a glob pattern.',
-    {
-      type: 'object',
-      properties: {
-        pattern: { type: 'string' },
-        path: { type: 'string' },
-        limit: { type: 'integer', minimum: 1, maximum: 200 },
-        hidden: { type: 'boolean' },
-        respectGitignore: { type: 'boolean' },
-        maxDepth: { type: ['integer', 'null'], minimum: 0, maximum: 50 }
-      },
-      required: ['pattern'],
-      additionalProperties: false
-    },
-    createLocalGlobFilesTool(root),
-    (input) => {
-      const value = record(input)
-      only(value, ['pattern', 'path', 'limit', 'hidden', 'respectGitignore', 'maxDepth'])
-      return value
-    }
-  )
+  return legacyAlias(WORKSPACE_PROTOCOL_TOOLS.Glob, createLocalGlobFilesTool(root), (input) => {
+    const value = record(input)
+    only(value, ['pattern', 'path', 'limit', 'hidden', 'respectGitignore', 'maxDepth'])
+    return value
+  })
 }
 
 /** Legacy `Bash` name backed by the Main-approved workspace shell executor. */
 export function createLegacyBashTool(root: string | WorkspaceRootResolver): ToolDefinition {
-  return legacyAlias(
-    'Bash',
-    'Run an approved shell command in the configured workspace.',
-    {
-      type: 'object',
-      properties: {
-        command: { type: 'string' },
-        timeout: { type: 'integer', minimum: 1, maximum: 120000 }
-      },
-      required: ['command'],
-      additionalProperties: false
-    },
-    createLocalShellCommandTool(root),
-    (input) => {
-      const value = record(input)
-      only(value, ['command', 'timeout'])
-      return {
-        command: value.command,
-        ...(value.timeout === undefined ? {} : { timeoutMs: value.timeout })
-      }
+  return legacyAlias(WORKSPACE_PROTOCOL_TOOLS.Bash, createLocalShellCommandTool(root), (input) => {
+    const value = record(input)
+    only(value, ['command', 'timeout'])
+    return {
+      command: value.command,
+      ...(value.timeout === undefined ? {} : { timeoutMs: value.timeout })
     }
-  )
+  })
 }
 
 /** Windows PowerShell alias backed by Main's approved, workspace-confined shell executor. */
@@ -207,28 +153,14 @@ export function createLegacyPowerShellTool(root: string | WorkspaceRootResolver)
     defaultTimeoutMs: 600_000,
     maxTimeoutMs: 3_600_000
   })
-  return legacyAlias(
-    'PowerShell',
-    'Execute a command through Windows PowerShell in the configured workspace.',
-    {
-      type: 'object',
-      properties: {
-        command: { type: 'string' },
-        timeout: { type: 'integer', minimum: 1, maximum: 3_600_000 }
-      },
-      required: ['command'],
-      additionalProperties: false
-    },
-    target,
-    (input) => {
-      const value = record(input)
-      only(value, ['command', 'timeout'])
-      return {
-        command: value.command,
-        ...(value.timeout === undefined ? {} : { timeoutMs: value.timeout })
-      }
+  return legacyAlias(WORKSPACE_PROTOCOL_TOOLS.PowerShell, target, (input) => {
+    const value = record(input)
+    only(value, ['command', 'timeout'])
+    return {
+      command: value.command,
+      ...(value.timeout === undefined ? {} : { timeoutMs: value.timeout })
     }
-  )
+  })
 }
 
 /** Matches the existing Monitor implementation, which runs a foreground command. */
@@ -237,30 +169,16 @@ export function createLegacyMonitorTool(root: string | WorkspaceRootResolver): T
     defaultTimeoutMs: 600_000,
     maxTimeoutMs: 600_000
   })
-  return legacyAlias(
-    'Monitor',
-    'Run and monitor a command in the configured workspace.',
-    {
-      type: 'object',
-      properties: {
-        command: { type: 'string' },
-        description: { type: 'string', maxLength: 512 }
-      },
-      required: ['command'],
-      additionalProperties: false
-    },
-    target,
-    (input) => {
-      const value = record(input)
-      only(value, ['command', 'description'])
-      if (
-        value.description !== undefined &&
-        (typeof value.description !== 'string' || value.description.length > 512)
-      )
-        throw new RuntimeError('INVALID_TOOL_INPUT')
-      return { command: value.command }
-    }
-  )
+  return legacyAlias(WORKSPACE_PROTOCOL_TOOLS.Monitor, target, (input) => {
+    const value = record(input)
+    only(value, ['command', 'description'])
+    if (
+      value.description !== undefined &&
+      (typeof value.description !== 'string' || value.description.length > 512)
+    )
+      throw new RuntimeError('INVALID_TOOL_INPUT')
+    return { command: value.command }
+  })
 }
 
 type LegacyWriteInput = { path: string; content: string }
@@ -280,18 +198,7 @@ export function createLegacyWriteTool(root: string | WorkspaceRootResolver): Too
   const create = createLocalCreateFileTool(root)
   const replace = createLocalWriteFileTool(root)
   return {
-    name: 'Write',
-    description: 'Create or replace a UTF-8 text file inside the configured workspace.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_path: { type: 'string' },
-        path: { type: 'string' },
-        content: { type: 'string' }
-      },
-      required: ['content'],
-      additionalProperties: false
-    },
+    ...WORKSPACE_PROTOCOL_TOOLS.Write,
     effect: 'write',
     validate: (input) => {
       const value = legacyWriteInput(input)
@@ -341,20 +248,7 @@ export function createLegacyEditTool(root: string | WorkspaceRootResolver): Tool
   const read = createLocalReadFileTool(root)
   const write = createLegacyWriteTool(root)
   return {
-    name: 'Edit',
-    description: 'Replace an exact string in a UTF-8 workspace file.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        file_path: { type: 'string' },
-        path: { type: 'string' },
-        old_string: { type: 'string' },
-        new_string: { type: 'string' },
-        replace_all: { type: 'boolean' }
-      },
-      required: ['old_string', 'new_string'],
-      additionalProperties: false
-    },
+    ...WORKSPACE_PROTOCOL_TOOLS.Edit,
     effect: 'write',
     validate: legacyEditInput,
     resources: (input, context) =>
@@ -444,22 +338,7 @@ export function createLegacyNotebookEditTool(root: string | WorkspaceRootResolve
   const read = createLocalReadFileTool(root)
   const write = createLegacyWriteTool(root)
   return {
-    name: 'NotebookEdit',
-    description: 'Edit a Jupyter notebook cell by index or cell_id inside the workspace.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        notebook_path: { type: 'string' },
-        file_path: { type: 'string' },
-        cell_id: { type: 'string' },
-        cell_index: { type: 'integer', minimum: 0, maximum: 100_000 },
-        mode: { type: 'string', enum: ['replace', 'insert', 'delete'] },
-        new_source: { type: 'string' },
-        source: { type: 'string' },
-        cell_type: { type: 'string', enum: ['code', 'markdown', 'raw'] }
-      },
-      additionalProperties: false
-    },
+    ...WORKSPACE_PROTOCOL_TOOLS.NotebookEdit,
     effect: 'write',
     validate: legacyNotebookEditInput,
     resources: (input, context) =>
@@ -662,33 +541,7 @@ async function resolveLegacyWorkspacePath(
  */
 export function createLegacyGrepTool(root: string | WorkspaceRootResolver): ToolDefinition {
   return {
-    name: 'Grep',
-    description: 'Search UTF-8 workspace files using a bounded regular expression.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        pattern: { type: 'string' },
-        path: { type: 'string' },
-        glob: { type: 'string' },
-        limit: { type: 'integer', minimum: 1, maximum: 200 },
-        head_limit: { type: 'integer', minimum: 1, maximum: 200 },
-        maxResults: { type: 'integer', minimum: 1, maximum: 200 },
-        maxCount: { type: 'integer', minimum: 1, maximum: 200 },
-        ignoreCase: { type: 'boolean' },
-        caseSensitive: { type: 'boolean' },
-        smartCase: { type: 'boolean' },
-        literal: { type: 'boolean' },
-        fixed: { type: 'boolean' },
-        fixedStrings: { type: 'boolean' },
-        word: { type: 'boolean' },
-        line: { type: 'boolean' },
-        invertMatch: { type: 'boolean' },
-        output_mode: { enum: ['files_with_matches', 'content', 'count'] },
-        outputMode: { enum: ['files_with_matches', 'matches', 'content', 'count'] }
-      },
-      required: ['pattern'],
-      additionalProperties: false
-    },
+    ...WORKSPACE_PROTOCOL_TOOLS.Grep,
     effect: 'read',
     validate: legacyGrepInput,
     resources: async (input, context) => [

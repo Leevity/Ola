@@ -8,7 +8,12 @@ import {
   resolveCompressionThreshold,
   type CompressionConfig
 } from './context-compression'
-import type { AgentLoopConfig } from './types'
+
+/** Compresses the loop's messages using the configured compression model. */
+export type CompressFn = (
+  messages: UnifiedMessage[],
+  options?: { preserveCount?: number }
+) => Promise<UnifiedMessage[]>
 
 function findModelConfig(providerConfig: ProviderConfig): AIModelConfig | null {
   const { providers } = useProviderStore.getState()
@@ -51,7 +56,7 @@ export function buildRuntimeCompressionConfig(
 export function buildRuntimeCompression(
   providerConfig: ProviderConfig,
   signal: AbortSignal
-): AgentLoopConfig['contextCompression'] | undefined {
+): { config: CompressionConfig; compressFn: CompressFn } | undefined {
   const config = buildRuntimeCompressionConfig(providerConfig)
   if (!config) return undefined
 

@@ -45,7 +45,9 @@
     "globalScope": "Global",
     "saving": "Saving…",
     "saved": "Saved",
-    "back": "Back"
+    "back": "Back",
+    "failed": "Save failed",
+    "retrySave": "Retry saving settings"
   },
   "profile": {
     "title": "Profil",
@@ -146,6 +148,10 @@
         "dawn": {
           "label": "Warm Dawn",
           "desc": "Sebuah palet jeruk hangat dengan suhu lebih dalam mode cahaya dan gelap didasarkan."
+        },
+        "connected": {
+          "label": "Ola Connected Workspace",
+          "desc": "A calm blue-violet workspace shared across Ola desktop, mobile and the console."
         }
       },
       "remoteHint": "Remote"
@@ -165,8 +171,22 @@
     },
     "language": "Bahasa",
     "languageDesc": "Atur antar muka menampilkan bahasa",
-    "animations": "Aktifkan animasi",
-    "animationsDesc": "Diaktifkan secara baku. Mematikan ini mematikan transisi, efek gerak, dan scrolling halus sebanyak mungkin.",
+    "motionLevel": "Gerakan",
+    "motionLevelDesc": "Pilih seberapa banyak gerakan antarmuka. Jika sistem meminta gerakan dikurangi, itu selalu berlaku.",
+    "motionLevels": {
+      "full": {
+        "label": "Penuh",
+        "desc": "Semua transisi dan efek animasi."
+      },
+      "reduced": {
+        "label": "Dikurangi",
+        "desc": "Hanya pudar; tidak ada geser, skala, atau perubahan tinggi."
+      },
+      "off": {
+        "label": "Mati",
+        "desc": "Tanpa transisi, efek gerakan, atau gulir halus."
+      }
+    },
     "liveOutputAnimation": {
       "title": "Animasi keluaran langsung AI",
       "desc": "Pilih gaya gerak yang dipakai ketika asisten streaming sebuah balasan.",
@@ -297,7 +317,12 @@
     "title": "Selaraskan",
     "workspaceUnavailable": {
       "title": "Sync is unavailable here",
-      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated."
+      "description": "Legacy WebDAV sync has no workspace isolation. It is available only for local personal data when no managed workspace is active; personal and team workspace sync is still being migrated.",
+      "conflicts": "Sinkronisasi dijeda dengan {{count}} konflik.",
+      "result": "Sinkronisasi ruang kerja selesai: {{uploaded}} diunggah, {{downloaded}} diterapkan.",
+      "v2Description": "Ruang kerja ini memakai sinkronisasi WebDAV v2 terisolasi. Sinkronisasi hanya berjalan setelah kepemilikan bisnis TS diaktifkan untuk perangkat ini.",
+      "running": "Menyinkronkan ruang kerja…",
+      "action": "Sinkronkan ruang kerja sekarang"
     },
     "subtitle": "Rekaman -level Ola data sync dengan WebDAV.",
     "loading": "Memuat pengaturan sinkronisasi...",
@@ -330,7 +355,14 @@
       "remoteUpdated": "Remote diperbarui",
       "downloaded": "Terunduh",
       "conflicts": "Konflik",
-      "success": "Data disinkronkan."
+      "success": "Data disinkronkan.",
+      "state": {
+        "idle": "Idle",
+        "running": "Syncing",
+        "success": "Synced",
+        "conflict": "Needs conflict resolution",
+        "error": "Sync failed"
+      }
     },
     "confirm": {
       "pushTitle": "Mengunggah data lokal ke WebDAV?",
@@ -589,7 +621,8 @@
     "clearFailed": "Gagal menghapus log",
     "clearEmpty": "Tidak ada log lebih tua dari 7 hari untuk dibersihkan",
     "cacheTokenShare": "Cached Token Share",
-    "cacheReadRatio": "Cache Read Ratio"
+    "cacheReadRatio": "Cache Read Ratio",
+    "billableInputTokens": "Token masukan yang ditagih"
   },
   "model": {
     "title": "Konfigurasi Model",
@@ -620,7 +653,6 @@
       "clarify": "Moda Clarify",
       "cowork": "Mode Kerja",
       "code": "Mode Kode",
-      "acp": "Mode ACP",
       "execute": "Execute Mode"
     },
     "promptRecommendationModesDesc": {
@@ -628,7 +660,6 @@
       "clarify": "Untuk klarifikasi persyaratan dan mengikuti saran-up",
       "cowork": "Untuk eksekusi kolaboratif dan saran pengrusakan tugas",
       "code": "Untuk implementasi, modifikasi, dan saran pengawakutuan",
-      "acp": "Untuk klarifikasi tujuan, desain arsitektur, dan saran delegasi dalam kontrol ACP arus",
       "execute": "For implementation, research, operations, debugging, and task breakdown suggestions"
     },
     "selectRecommendationModel": "Pilih model rekomendasi",
@@ -659,7 +690,8 @@
     "creative": "Kreatif",
     "random": "Acak",
     "maxTokens": "Max Tokens",
-    "maxTokensDesc": "Batas token maksimum per respon"
+    "maxTokensDesc": "Batas token maksimum per respon",
+    "selectProvider": "Pilih penyedia"
   },
   "plugin": {
     "title": "Pengaya",
@@ -834,7 +866,9 @@
       "analytics": "Graph health",
       "circularDependencies": "Circular dependencies: {{count}}",
       "deadCode": "Potentially unused symbols: {{count}}",
-      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}"
+      "fileDetails": "{{language}} · {{symbols}} symbols · {{size}}",
+      "advancedDiagnostics": "Diagnostik lanjutan",
+      "noSourceFiles": "Pengindeksan selesai, tetapi tidak ada berkas sumber yang dapat diindeks."
     },
     "productDesign": {
       "workflowTitle": "Workflow plugin",
@@ -933,7 +967,28 @@
       "agent": "Agen",
       "mcp": "Server MCP",
       "instructions": "Instruksi / MEMORY"
-    }
+    },
+    "businessHandoverSchemaUnsupported": "Skema basis data lama tidak memiliki kolom bisnis yang wajib.",
+    "businessHandoverBackupSpace": "Ruang kosong tidak cukup untuk snapshot pemulihan.",
+    "businessHandoverBackupDirectory": "Direktori pemulihan tidak tersedia atau tidak aman.",
+    "businessHandoverSourceUnavailable": "Basis data bisnis lama belum tersedia.",
+    "businessHandoverPreflightUnknown": "Pemeriksaan awal tidak dapat diselesaikan: {{reason}}",
+    "businessHandoverConfirm": "Buat snapshot pemulihan sekarang dan alihkan penulisan bisnis ke runtime TS?",
+    "businessHandoverSuccess": "Data bisnis kini dimiliki oleh runtime TS.",
+    "businessHandoverIncomplete": "Serah terima tidak mencapai kepemilikan TS. Periksa status lalu coba lagi.",
+    "businessHandoverFailed": "Serah terima bisnis gagal: {{error}}",
+    "businessHandoverTitle": "Kepemilikan runtime bisnis TS",
+    "businessHandoverDescription": "Buat snapshot pemulihan yang terverifikasi, hentikan penulis lama, dan alirkan data bisnis melalui runtime TS offline-first.",
+    "businessHandoverActive": "TS aktif",
+    "businessHandoverPending": "Belum dipromosikan",
+    "businessHandoverRunning": "Menyiapkan…",
+    "businessHandoverDone": "Selesai",
+    "businessHandoverAction": "Promosikan ke TS",
+    "businessHandoverUnavailable": "Promosi tidak tersedia sampai runtime TS siap dan flag keamanan serah terima diaktifkan.",
+    "businessHandoverPreflight": "Pemeriksaan awal: {{reason}}",
+    "businessHandoverWarning": "Catatan Native Project Wiki yang ada akan dipertahankan di arsip milik TS selama serah terima.",
+    "businessHandoverBackup": "Snapshot pemulihan",
+    "businessHandoverManifest": "Manifes serah terima"
   },
   "about": {
     "title": "Tentang",
@@ -975,10 +1030,6 @@
       "execute": {
         "title": "Execute Mode",
         "desc": "Hands-on work across coding, research, documents, DevOps, and connected applications, with auditable tool calls and verification."
-      },
-      "acp": {
-        "title": "ACP Mode",
-        "desc": "Multi-agent collaboration (Agent Collaboration Protocol): automatically decomposes goals, assigns subtasks to specialized agent teams — suited for large-scale engineering or cross-domain projects."
       }
     },
     "summary": "Ola menyatukan proses multi- model, server MCP, keterampilan, dan perubahan custom dalam satu pengalaman desktop sehingga Anda dapat beralih antara Chat, Cowork, atau mode Kode saat tetap memegang kendali."
@@ -1041,7 +1092,8 @@
         "exportFailed": "Ekspor gagal: {{error}}",
         "refreshSuccess": "Token disegarkan",
         "refreshFailed": "Gagal menyegarkan: {{error}}",
-        "removeSuccess": "Akun dihapus"
+        "removeSuccess": "Akun dihapus",
+        "clipboardUnavailable": "Clipboard is unavailable"
       }
     },
     "title": "Penyedia Al",
@@ -1356,7 +1408,11 @@
     "modelCategoryVideo": "Video",
     "seedanceVideo": "Seedance video",
     "cacheTtl": "Cache TTL (anthropic)",
-    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level."
+    "cacheTtlHint": "5m (default) or 1h (2x write cost). Model-level overrides provider-level.",
+    "credentialVaultUnavailable": {
+      "title": "Provider credentials are unavailable",
+      "description": "Encrypted storage could not be read. Editing is paused to protect saved accounts. Quit and reopen Ola; if this continues, keep your local data and check the logs."
+    }
   },
   "channel": {
     "title": "Kanal",
@@ -1502,7 +1558,12 @@
       "FeishuBitableCreateRecords": "Membuat catatan dalam tabel yang sesuai",
       "FeishuBitableUpdateRecords": "Mutakhirkan catatan dalam tabel yang dapat diisi",
       "FeishuBitableDeleteRecords": "Hapus catatan dari tabel yang dapat diisi"
-    }
+    },
+    "narrowPaneLabel": "Channel view",
+    "narrowList": "Channel list",
+    "narrowConfig": "Channel settings",
+    "olaTeamModels": "Model tim Ola",
+    "olaPersonalModels": "Model pribadi Ola"
   },
   "mcp": {
     "title": "Server MCP",
@@ -1560,7 +1621,21 @@
     "deleteConfirm": "Hapus server MCP \" {{name}} \"?",
     "noTools": "Tidak tersedia alat",
     "noResources": "Tak tersedia sumber daya",
-    "noPrompts": "Tak ada prompt yang tersedia"
+    "noPrompts": "Tak ada prompt yang tersedia",
+    "authorize": "Authorize",
+    "authorizeDesc": "Open the browser to authorize this server",
+    "signOut": "Sign out",
+    "signOutDesc": "Remove the stored authorization for this server",
+    "oauthRequired": "This server needs a browser authorization before it can be used.",
+    "oauthWaiting": "Waiting for the browser authorization to finish.",
+    "signedOut": "Authorization removed",
+    "status": {
+      "disconnected": "disconnected",
+      "connecting": "connecting",
+      "connected": "connected",
+      "authorization-required": "authorization required",
+      "error": "error"
+    }
   },
   "skillsmarket": {
     "title": "Skills Market",
@@ -1641,7 +1716,8 @@
     "disabledError": "Pencarian web dinonaktifkan. Harap aktifkan dalam pengaturan.",
     "apiKeyRequired": "Kunci API diperlukan bagi penyedia ini.",
     "testSuccess": "Uji pencarian web berhasil! Ditemukan {{count}} hasil.",
-    "testFailed": "Uji pencarian web gagal: {{error}}"
+    "testFailed": "Uji pencarian web gagal: {{error}}",
+    "apiKeySaved": "Kunci API disimpan dengan aman"
   },
   "shortcuts": {
     "title": "Pintas Papan Ketik",
@@ -1677,7 +1753,11 @@
     "exportConversation": "Ekspor percakapan",
     "copyConversation": "Salin percakapan",
     "allowTool": "Memungkinkan eksekusi alat",
-    "denyTool": "Eksekusi alat penyangkalan"
+    "denyTool": "Eksekusi alat penyangkalan",
+    "previousSession": "Switch to previous session",
+    "nextSession": "Switch to next session",
+    "scrollTop": "Scroll to conversation top",
+    "scrollBottom": "Scroll to conversation bottom"
   },
   "wiki": {
     "title": "Project Wiki",
@@ -1724,7 +1804,22 @@
     "cancelReplay": "Cancel replay",
     "flowSummary": "{{name}} · {{count}} steps",
     "run": "Run",
-    "delete": "Delete {{name}}"
+    "delete": "Delete {{name}}",
+    "errors": {
+      "workspaceUnavailable": "This workspace is temporarily unavailable. Desktop flows could not be loaded.",
+      "loadFailed": "Could not load desktop flows. Try again.",
+      "retry": "Retry loading",
+      "startFailed": "Could not start recording. Check desktop recording permissions and try again.",
+      "stopFailed": "Could not stop or save the recording. Check the current recording state.",
+      "saveFailed": "Could not save the desktop flow.",
+      "replayFailed": "Replay failed. Check the flow and run history.",
+      "cancelFailed": "Could not cancel replay.",
+      "deleteFailed": "Could not delete the desktop flow."
+    },
+    "reviewRequired": "Langkah pengetikan tidak dapat diputar ulang; rekam ulang tanpa mengetik.",
+    "runs": {
+      "title": "Eksekusi terbaru"
+    }
   },
   "permission": {
     "title": "Permissions",
@@ -1809,7 +1904,67 @@
     "channels": "Channels",
     "enabledCount": "{{enabled}} of {{total}} enabled",
     "healthyCount": "{{healthy}} of {{total}} healthy",
-    "installedCount": "{{total}} installed"
+    "installedCount": "{{total}} installed",
+    "refreshFailed": "Some capabilities could not be checked. Review the affected row and open its settings to repair.",
+    "healthTitle": "Capability connection and installation status",
+    "healthDescription": "Summarizes states that have been read. Unchecked, no request history, and load failures remain distinct and are never inferred as healthy.",
+    "refreshHealth": "Refresh status",
+    "openSettings": "Settings",
+    "diagnostics": {
+      "export": "Export redacted diagnostics",
+      "exportSuccess": "Redacted diagnostics saved.",
+      "exportFailed": "Could not export diagnostics.",
+      "privacyHint": "Exports aggregate states, counts, and time only; names, identifiers, paths, configuration, credentials, messages, and raw errors are excluded."
+    },
+    "health": {
+      "providers": "Model providers",
+      "skills": "Skills",
+      "extensions": "Extensions",
+      "builtinPlugins": "Built-in plugin setup",
+      "mcp": "MCP servers",
+      "channels": "Channels in the current workspace"
+    },
+    "healthTone": {
+      "healthy": "Healthy",
+      "attention": "Needs attention",
+      "unknown": "Unconfirmed",
+      "inventory": "Inventoried"
+    },
+    "healthDetail": {
+      "loadFailed": "Could not read status. Retry from the corresponding settings page.",
+      "notChecked": "Status has not been read yet.",
+      "noProviderRequests": "No request history is available to assess provider health.",
+      "providerCounts": "{{healthy}} of {{total}} providers have healthy recent requests; read at {{checkedAt}}",
+      "skillCount": "{{count}} Skills installed; installation does not mean every Skill fits the current task.",
+      "extensionCounts": "{{installed}} installed, {{enabled}} enabled; enabled does not mean the extension is running correctly.",
+      "builtinPluginCounts": "{{enabled}} of {{total}} enabled; {{needsSetup}} need required configuration (this check includes image model setup).",
+      "mcpCounts": "{{enabled}} enabled, {{connected}} connected, {{connecting}} connecting, {{disconnected}} disconnected, {{failed}} with errors; checked at {{checkedAt}}",
+      "mcpAuthorizationCount": "{{count}} need browser authorization",
+      "channelCounts": "{{enabled}} enabled, {{running}} running, {{stopped}} stopped, {{failed}} with errors; checked at {{checkedAt}}",
+      "noneEnabled": "Nothing is enabled in this category.",
+      "statusCheckFailed": "Could not read one or more channel statuses. Retry in Channel settings."
+    },
+    "lifecycleTitle": "Capability delivery status",
+    "lifecycleDescription": "Status labels reflect each capability's actual delivery stage and availability.",
+    "lifecyclePolicy": "Delivery status",
+    "status": {
+      "prototype": "Prototype",
+      "internal": "Internal",
+      "beta": "In testing",
+      "ga": "Generally available",
+      "deprecated": "Deprecated"
+    },
+    "capabilities": {
+      "local-agent-workspace": "Local Agent workspace",
+      "remote-ssh-operations": "Remote SSH operations",
+      "channel-automation": "Channel automation",
+      "browser-cookie-import": "Browser cookie import",
+      "media-generation": "Media generation",
+      "unified-execution-audit": "Unified execution audit",
+      "draw-canvas": "Draw canvas",
+      "pet-companion": "Pet companion",
+      "novnc-remote-desktop": "NoVNC remote desktop"
+    }
   },
   "pet": {
     "title": "Desktop Pet",
@@ -1845,7 +2000,10 @@
     "loading": "Loading extensions...",
     "emptyTitle": "No extensions installed",
     "emptyDesc": "Choose a folder containing extension.json to add custom tools to Ola.",
-    "noRenderers": "No custom renderers"
+    "noRenderers": "No custom renderers",
+    "workbenchViews": "Workbench views",
+    "workbenchCommands": "Commands",
+    "workbenchCommandsHint": "Enabled commands are available in the command palette."
   },
   "workModes": {
     "title": "Work modes",
@@ -1946,7 +2104,9 @@
           "team": "Ola team workspace",
           "localModels": "Local models",
           "resourceCount": "{{count}} managed models",
-          "localName": "Local workspace"
+          "localName": "Local workspace",
+          "current": "Current workspace",
+          "switchFailed": "Could not switch workspaces. Please try again."
         },
         "resources": {
           "title": "Managed model resources",
@@ -1954,7 +2114,12 @@
           "refresh": "Refresh",
           "available": "Available",
           "unavailable": "Unavailable",
-          "empty": "No Ola-managed models are available in this workspace."
+          "empty": "No Ola-managed models are available in this workspace.",
+          "workspace": "Current workspace: {{name}}",
+          "loading": "Syncing",
+          "notVerified": "Status unverified",
+          "localDescription": "Configure custom models under AI providers. Sign in and select a team workspace to view its authorized models.",
+          "localAction": "Manage custom device models"
         },
         "syncUnavailable": "The Ola service does not provide workspace sync yet. Local and previously synced content is preserved; refresh after the service is upgraded.",
         "deviceRegistered": "Registered device: {{name}}",
@@ -1978,5 +2143,26 @@
     "noProject": "Select a project with a working folder to use both capabilities.",
     "wikiTitle": "Project Wiki",
     "codeGraphTitle": "CodeGraph"
+  },
+  "providerHealth": {
+    "title": "Model provider health",
+    "description": "Tracks temporary request outcomes without reading or showing request credentials.",
+    "lastChecked": "Last checked: {{time}}",
+    "notChecked": "Provider status has not been checked",
+    "loadFailed": "Status check failed",
+    "retryHint": "Provider status could not be loaded. Refresh to retry; failures are never shown as healthy.",
+    "refresh": "Refresh provider status",
+    "requestCounts": "Successful requests / total requests",
+    "reset": "Reset health statistics for {{provider}}",
+    "empty": "No requests have been recorded, so provider health is unknown.",
+    "status": {
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "down": "Unavailable"
+    }
+  },
+  "common": {
+    "save": "Simpan",
+    "delete": "Hapus"
   }
 }

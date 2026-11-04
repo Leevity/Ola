@@ -30,10 +30,10 @@ assert.equal(
   'desktopAutomation'
 )
 assert.equal(parseSettingsRoute('#/settings/wiki')?.tab, 'projectIntelligence')
-assert.equal(parseSettingsRoute('#/settings/hooks')?.tab, 'advanced')
-assert.equal(parseSettingsRoute('#/settings/aiCoding')?.tab, 'advanced')
+assert.equal(parseSettingsRoute('#/settings/hooks')?.tab, 'general')
+assert.equal(parseSettingsRoute('#/settings/aiCoding')?.tab, 'general')
 assert.equal(parseSettingsDestination('#/settings/analytics'), 'usage')
-assert.equal(parseSettingsDestination('#/settings/pet'), 'petStudio')
+assert.equal(parseSettingsDestination('#/settings/pet'), 'pet')
 assert.equal(buildUsageRoute(), '#/usage')
 assert.equal(buildPetStudioRoute(), '#/pet-studio')
 assert.equal(parseSettingsRoute('#/settings/not-a-page')?.tab, DEFAULT_SETTINGS_PAGE_ID)

@@ -251,7 +251,7 @@ function TransferTaskList({
                         className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
                         onClick={() => onRetry(task.taskId)}
                       >
-                        {t('sftp.retryTask')}
+                        {t('workspace.sftp.retryTask')}
                       </Button>
                     ) : null}
                     {task.stage === 'transferring' && task.request ? (
@@ -261,7 +261,7 @@ function TransferTaskList({
                         className="h-8 rounded-[12px] border-border bg-card px-3 text-[0.72rem] font-semibold text-foreground shadow-none hover:bg-accent"
                         onClick={() => onPause(task.taskId)}
                       >
-                        {t('sftp.pauseTask')}
+                        {t('workspace.sftp.pauseTask')}
                       </Button>
                     ) : null}
                     <Button
@@ -300,11 +300,11 @@ function TransferTaskList({
               <div className="mt-1 flex justify-between text-[0.72rem] text-muted-foreground">
                 <span>
                   {formatBytes(task.progress?.speedBytesPerSecond)}/s ·{' '}
-                  {t('sftp.remaining', {
+                  {t('workspace.sftp.remaining', {
                     duration: formatDuration(task.progress?.remainingSeconds)
                   })}
                 </span>
-                <span>{t('sftp.retryCount', { count: task.retryCount ?? 0 })}</span>
+                <span>{t('workspace.sftp.retryCount', { count: task.retryCount ?? 0 })}</span>
               </div>
             </div>
           )

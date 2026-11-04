@@ -1,11 +1,5 @@
 ﻿import { decode, encode } from '@msgpack/msgpack'
 
-export const RUNTIME_APPROVAL_REQUEST_MSGPACK_CHANNEL = 'runtime:approval-request:msgpack'
-export const RUNTIME_APPROVAL_RESPONSE_MSGPACK_CHANNEL = 'runtime:approval-response:msgpack'
-export const RUNTIME_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL = 'runtime:renderer-tool-request:msgpack'
-export const RUNTIME_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL =
-  'runtime:renderer-tool-response:msgpack'
-
 export const DIAGNOSTICS_MEMORY_SAMPLE_MSGPACK_CHANNEL = 'diagnostics:memory-sample:msgpack'
 
 export const DB_MESSAGES_UPSERT_MSGPACK_CHANNEL = 'db:messages:upsert:msgpack'
@@ -97,10 +91,6 @@ export function decodeMessagePackPayload<T = unknown>(bytes: ArrayBuffer | Array
 
 export const MESSAGEPACK_CHANNELS = new Set<string>(
   [
-    RUNTIME_APPROVAL_REQUEST_MSGPACK_CHANNEL,
-    RUNTIME_APPROVAL_RESPONSE_MSGPACK_CHANNEL,
-    RUNTIME_RENDERER_TOOL_REQUEST_MSGPACK_CHANNEL,
-    RUNTIME_RENDERER_TOOL_RESPONSE_MSGPACK_CHANNEL,
     DIAGNOSTICS_MEMORY_SAMPLE_MSGPACK_CHANNEL,
     DB_MESSAGES_UPSERT_MSGPACK_CHANNEL,
     DB_MESSAGES_ADD_BATCH_MSGPACK_CHANNEL,
@@ -175,13 +165,15 @@ export const MESSAGEPACK_CHANNELS = new Set<string>(
     'ts-runtime:runs-list',
     'ts-runtime:run-submit',
     'ts-runtime:run-snapshot',
+    'ts-runtime:run-subscribe',
+    'ts-runtime:run-unsubscribe',
+    'ts-runtime:run-event',
+    'ts-runtime:run-resync',
     'ts-runtime:run-cancel',
     'ts-runtime:run-interact',
     'ts-runtime:asset-stage',
     'agent:request-stop',
-    'agent:reverse-cancel',
-    'agent:attach-run',
-    'agent:run-snapshot'
+    'agent:reverse-cancel'
   ].map((channel) => channel.replace(/:msgpack$/, ''))
 )
 

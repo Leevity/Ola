@@ -42,12 +42,13 @@ import {
 } from '@renderer/components/settings/settings-registry'
 import type { ExtensionWorkbenchViewDefinition } from '../../../shared/extension-types'
 
-export type AppMode = 'chat' | 'clarify' | 'execute' | 'acp'
-export type LegacyAppMode = 'cowork' | 'code'
+export type AppMode = 'chat' | 'clarify' | 'execute'
+/** Modes persisted by earlier releases; `acp` is read back as `execute`. */
+export type LegacyAppMode = 'cowork' | 'code' | 'acp'
 
 export function normalizeAppMode(mode: unknown): AppMode {
-  if (mode === 'cowork' || mode === 'code' || mode === 'execute') return 'execute'
-  if (mode === 'clarify' || mode === 'acp') return mode
+  if (mode === 'cowork' || mode === 'code' || mode === 'execute' || mode === 'acp') return 'execute'
+  if (mode === 'clarify') return 'clarify'
   return 'chat'
 }
 export type RemoteWorkspaceSection = 'ssh' | 'direct' | 'managed' | 'mobile'
@@ -91,7 +92,6 @@ export type LegacyRightPanelTab =
   | 'browser'
   | 'subagents'
   | 'team'
-  | 'acp'
 export type RightPanelSection = 'execution' | 'resources' | 'collaboration' | 'monitoring'
 export type AgentFilesSurface = 'sheet'
 export type AgentFilesTab = 'files' | 'changes'

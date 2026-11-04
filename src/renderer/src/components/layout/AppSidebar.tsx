@@ -91,10 +91,9 @@ import packageJson from '../../../../../package.json'
 const modeIcons: Record<SessionMode, React.ReactNode> = {
   chat: <MessageSquare className="size-4" />,
   clarify: <CircleHelp className="size-4" />,
-  execute: <Code2 className="size-4" />,
-  acp: <ShieldCheck className="size-4" />
+  execute: <Code2 className="size-4" />
 }
-const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'execute', 'acp']
+const sessionModeOptions: readonly SessionMode[] = ['chat', 'clarify', 'execute']
 const profileIcons: Record<TaskProfile, React.ReactNode> = {
   work: <BriefcaseBusiness className="size-4" />,
   code: <Code2 className="size-4" />
@@ -447,22 +446,22 @@ export function AppSidebar(): React.JSX.Element {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: '切换工作方式' })}
+                aria-label={t('sidebar.taskProfileSwitcher', { defaultValue: 'Switch work mode' })}
                 className="mt-3 flex w-full items-center gap-2 rounded-xl border border-border/70 bg-muted/35 px-3 py-2 text-left transition-colors hover:bg-muted/60 group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:size-9 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
               >
                 {profileIcons[defaultTaskProfile]}
                 <span className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
                   <span className="block truncate text-sm font-semibold">
                     {t(`sidebar.taskProfile.${defaultTaskProfile}.title`, {
-                      defaultValue: defaultTaskProfile === 'work' ? '工作' : '编程'
+                      defaultValue: defaultTaskProfile === 'work' ? 'Work' : 'Code'
                     })}
                   </span>
                   <span className="block truncate text-[10px] text-muted-foreground">
                     {t(`sidebar.taskProfile.${defaultTaskProfile}.desc`, {
                       defaultValue:
                         defaultTaskProfile === 'work'
-                          ? '日常工作、研究和办公'
-                          : '项目、代码、终端和 Git'
+                          ? 'Daily work, research and office tasks'
+                          : 'Projects, code, terminal and Git'
                     })}
                   </span>
                 </span>
@@ -480,7 +479,7 @@ export function AppSidebar(): React.JSX.Element {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 text-sm font-medium">
                       {t(`sidebar.taskProfile.${profile}.title`, {
-                        defaultValue: profile === 'work' ? '工作' : '编程'
+                        defaultValue: profile === 'work' ? 'Work' : 'Code'
                       })}
                       {defaultTaskProfile === profile && (
                         <CheckCircle2 className="ml-auto size-4" />
@@ -489,7 +488,9 @@ export function AppSidebar(): React.JSX.Element {
                     <span className="mt-0.5 block text-xs text-muted-foreground">
                       {t(`sidebar.taskProfile.${profile}.desc`, {
                         defaultValue:
-                          profile === 'work' ? '日常工作、研究和办公' : '项目、代码、终端和 Git'
+                          profile === 'work'
+                            ? 'Daily work, research and office tasks'
+                            : 'Projects, code, terminal and Git'
                       })}
                     </span>
                   </span>

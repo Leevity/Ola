@@ -4,6 +4,15 @@
 /** Transport type for MCP server connections */
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http'
 
+/**
+ * Pre-registered public OAuth client. When `clientId` is absent the authorization
+ * server's dynamic registration endpoint is used. No secret ever reaches Renderer.
+ */
+export interface McpServerAuthConfig {
+  clientId?: string
+  scope?: string
+}
+
 /** MCP server configuration */
 export interface McpServerConfig {
   id: string
@@ -18,13 +27,23 @@ export interface McpServerConfig {
   cwd?: string
   url?: string
   headers?: Record<string, string>
+  /** OAuth for HTTP transports; tokens stay in Main. */
+  auth?: McpServerAuthConfig
   autoFallback?: boolean
   createdAt: number
   description?: string
 }
 
-/** MCP server runtime status */
-export type McpServerStatus = 'disconnected' | 'connecting' | 'connected' | 'error'
+/**
+ * MCP server runtime status. `authorization-required` means the server answered 401
+ * and needs a browser authorization; it is not a connection failure.
+ */
+export type McpServerStatus =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'authorization-required'
+  | 'error'
 
 /** MCP Tool */
 export interface McpTool {

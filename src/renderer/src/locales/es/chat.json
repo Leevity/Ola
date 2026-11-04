@@ -4,7 +4,6 @@
     "placeholderClarify": "Describe tu idea y seguiré probando hasta que los requisitos estén claros...",
     "placeholderCowork": "Pídale al asistente que ayude con su proyecto...",
     "placeholderCode": "Describe lo que quieres construir, como arreglar errores, escribir scripts, o usar /commit para comprometer el repositorio...",
-    "placeholderAcp": "Describir el objetivo, contexto, limitaciones y criterios de aceptación. Diseñaré y delegaré primero en lugar de codificación directamente...",
     "placeholderPlanReview": "Ingrese los comentarios de revisión para este plan, o haga clic en la tarjeta anterior para implementarlo...",
     "placeholderPendingGoal": "Describe el objetivo de perseguir...",
     "pendingGoalBanner": "Su siguiente mensaje de texto será utilizado como meta y enviado normalmente.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "Predecir la siguiente pregunta afilada que pediría para definir completamente la solicitud.",
     "recommendationDefaultCowork": "Predecir la siguiente acción colaborativa que naturalmente escribiría.",
     "recommendationDefaultCode": "Predecir la siguiente solicitud de cambio de código concreto que escribiría naturalmente.",
-    "recommendationDefaultAcp": "Predecir la siguiente pregunta de análisis o diseño ACP que escribiría naturalmente.",
-    "recommendationInitWorkspace": "No AGENTS.md encontrado en la carpeta de trabajo actual. Predecir el siguiente paso natural, probable /init para inicializar el contexto del proyecto.",
-    "startAcp": "Iniciar una sesión ACP",
-    "startAcpDesc": "Primero clarifique el objetivo, el fondo, las limitaciones y los criterios de aceptación. A continuación, diseñe la arquitectura y delegue tareas antes de escribir código.",
-    "homeTitleAcp": "Modo ACP",
-    "homeDescAcp": "En el modo ACP, comience a aclarar objetivos, antecedentes, limitaciones y criterios de aceptación. A continuación, proponga un desglose de arquitectura y tareas antes de la implementación."
+    "recommendationInitWorkspace": "No AGENTS.md encontrado en la carpeta de trabajo actual. Predecir el siguiente paso natural, probable /init para inicializar el contexto del proyecto."
   },
   "planReview": {
     "awaitingReview": "Awaiting Review",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "Este es el modo Código",
         "description": "Utilízalo para tareas de ejecución directa, tales como archivos de edición, código de escritura, cheques de ejecución y detalles de ingeniería de manejo."
-      },
-      "modeAcp": {
-        "title": "Este es el modo ACP",
-        "description": "Úsalo como la torre de control para el trabajo complejo: esclare los límites y la aceptación primero, luego diseña la arquitectura, descompone las tareas y delegue la ejecución mientras el agente principal permanece fuera de codificación directa."
       },
       "leftSidebar": {
         "title": "Este es el ámbito del proyecto y del período de sesiones",
@@ -654,7 +644,8 @@
     "thinkingFor": "Pensando para {{seconds}} s",
     "pending": "Pensando",
     "thinkingEllipsis": "Pensando...",
-    "thoughts": "Pensamientos"
+    "thoughts": "Pensamientos",
+    "elapsedSeconds": "{{seconds}} s"
   },
   "messageList": {
     "startConversation": "Iniciar una conversación",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "Aclarar la tarea primero",
     "homeTitleCowork": "Trabajo dentro del proyecto",
     "homeTitleCode": "Inicio de codificación",
-    "homeTitleAcp": "Inicio Colaboración ACP",
-    "homeDescAcp": "Comience el modo ACP para la confirmación de la arquitectura, la aclaración de restricciones y el desglose de ejecución.",
     "homeDescAutoChat": "Después de enviar, elige un modelo mejor automáticamente basado en la complejidad de la tarea.",
     "homeDescAutoClarify": "Después de enviar, elige un modelo mejor adaptado para cuestionar y estrechar el plan.",
     "homeDescAutoCowork": "Después de enviar, elige un modelo mejor adaptado para el trabajo de proyecto, ediciones de archivos y herramientas.",
     "homeDescAutoCode": "Después de enviar, elige un modelo mejor adaptado para codificación, refactorización y análisis.",
-    "homeDescAutoAcp": "Después de enviar, escoge un modelo mejor adaptado para la confirmación de la arquitectura, la aclaración de restricciones y el desglose de ejecución.",
     "homeDescChatGeneral": "Bien por chat diario, escritura y preguntas ligeras.",
     "homeDescChatVision": "Bien para chat y también puede responder rápidamente con contexto de imagen.",
     "homeDescClarifyGeneral": "Bien por cuestiones de seguimiento, conformación de objetivos y llenado de limitaciones.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "Cambios de estadio primero, luego generar un mensaje",
     "aiCommitEmptyStaged": "Nada escenificado — no puede generar un mensaje",
     "aiCommitFailed": "Error de generación. Compruebe la configuración de API / modelo e inténtelo de nuevo"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }

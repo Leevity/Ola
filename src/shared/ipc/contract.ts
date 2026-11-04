@@ -120,6 +120,10 @@ export const IPC = {
   EXTENSION_STORAGE_GET: 'extension:storage-get',
   EXTENSION_STORAGE_SET: 'extension:storage-set',
   EXTENSION_STORAGE_DELETE: 'extension:storage-delete',
+  EXTENSION_CAPABILITIES_DESCRIBE: 'extension:capabilities-describe',
+  EXTENSION_CAPABILITY_GRANT: 'extension:capability-grant',
+  EXTENSION_CAPABILITY_REVOKE: 'extension:capability-revoke',
+  EXTENSION_CAPABILITY_APPROVE: 'extension:capability-approve',
 
   // SOUL Market
   SOULS_BUILTIN_LIST: 'souls:builtin-list',
@@ -198,6 +202,7 @@ export const IPC = {
 
   // MCP
   MCP_LIST: 'mcp:list',
+  MCP_GET: 'mcp:get',
   MCP_ADD: 'mcp:add',
   MCP_UPDATE: 'mcp:update',
   MCP_REMOVE: 'mcp:remove',
@@ -213,6 +218,9 @@ export const IPC = {
   MCP_LIST_PROMPTS: 'mcp:list-prompts',
   MCP_GET_PROMPT: 'mcp:get-prompt',
   MCP_REFRESH_CAPABILITIES: 'mcp:refresh-capabilities',
+  MCP_OAUTH_START: 'mcp:oauth-start',
+  MCP_OAUTH_SIGNOUT: 'mcp:oauth-signout',
+  MCP_OAUTH_CALLBACK: 'mcp:oauth-callback',
 
   // Cron Scheduler (v2)
   CRON_ADD: 'cron:add',
@@ -545,6 +553,10 @@ export const IPC = {
   PROVIDER_MIRROR_SNAPSHOT: 'provider:mirror-snapshot',
   SSH_CONFIG_CHANGED: 'ssh:config:changed',
   TS_RUNTIME_WORKSPACE_ACTIVITY: 'ts-runtime:workspace-activity',
+  TS_RUNTIME_RUN_EVENT: 'ts-runtime:run-event',
+  TS_RUNTIME_RUN_RESYNC: 'ts-runtime:run-resync',
+  TS_RUNTIME_RUN_SUBSCRIBE: 'ts-runtime:run-subscribe',
+  TS_RUNTIME_RUN_UNSUBSCRIBE: 'ts-runtime:run-unsubscribe',
   WIKI_EXPORT: 'wiki:export',
   WIKI_GENERATE: 'wiki:generate',
   WIKI_GET: 'wiki:get',
@@ -558,7 +570,6 @@ export const IPC = {
   MEDIA_SETTINGS_UPDATE: 'media:settings-update',
   FS_SEARCH_FILES: 'fs:search-files',
   DRAW_GRAPH_LIST: 'draw-graph:list',
-  RUNTIME_APPROVAL_REQUEST_MSGPACK: 'runtime:approval-request:msgpack',
   EXECUTION_RECORDS_LIST_MSGPACK: 'execution-records:list:msgpack',
   EXECUTION_ARTIFACTS_LIST_MSGPACK: 'execution-artifacts:list:msgpack',
   EXECUTION_ARTIFACTS_HIDE_MSGPACK: 'execution-artifacts:hide:msgpack',

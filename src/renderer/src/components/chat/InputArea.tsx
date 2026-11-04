@@ -457,15 +457,13 @@ function ActiveExtensionsBadge({
 const placeholderKeys: Record<AppMode, string> = {
   chat: 'input.placeholder',
   clarify: 'input.placeholderClarify',
-  execute: 'input.placeholderExecute',
-  acp: 'input.placeholderAcp'
+  execute: 'input.placeholderExecute'
 }
 
 const defaultRecommendationKeys: Record<AppMode, string> = {
   chat: 'input.recommendationDefaultChat',
   clarify: 'input.recommendationDefaultClarify',
-  execute: 'input.recommendationDefaultExecute',
-  acp: 'input.recommendationDefaultAcp'
+  execute: 'input.recommendationDefaultExecute'
 }
 
 interface FileSearchItem {

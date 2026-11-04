@@ -1085,7 +1085,12 @@ function ConnectionEditor({
   const update = (patch: Partial<EditorState>): void => onChange({ ...value, ...patch })
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-black/25 backdrop-blur-[1px]">
-      <button type="button" className="min-w-0 flex-1" onClick={onClose} aria-label={t('close')} />
+      <button
+        type="button"
+        className="min-w-0 flex-1"
+        onClick={onClose}
+        aria-label={t('action.close', { ns: 'common' })}
+      />
       <aside className="flex h-full w-full max-w-[440px] flex-col border-l bg-background shadow-2xl">
         <div className="flex items-start justify-between border-b px-6 py-5">
           <div>

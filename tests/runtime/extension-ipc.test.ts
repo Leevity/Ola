@@ -37,8 +37,26 @@ vi.mock('../../src/main/extensions/extension-runtime', () => ({
       if (id !== 'weather') throw new Error(`Extension "${id}" not found`)
     }
   }),
+  getExtensionManager: () => ({
+    handleCall: async (
+      id: string,
+      _method: string,
+      params: { toolName?: string; input?: Record<string, unknown> }
+    ) => ({
+      decision: 'allow' as const,
+      run: async () =>
+        executeExtensionHttpTool({
+          manifest: { id, name: id, tools: [] },
+          enabled: true,
+          config: { token: 'main-only' },
+          toolName: params.toolName ?? '',
+          input: params.input
+        })
+    }),
+    checkEscalation: async () => 'idle'
+  }),
   getExtensionPackageManager: () => ({
-    installFromFolder: vi.fn(),
+    installFromFolder: vi.fn(async () => 'weather'),
     remove: vi.fn()
   }),
   getExtensionStorage: () => ({ get: vi.fn(), set: vi.fn(), delete: vi.fn() })
@@ -54,6 +72,7 @@ vi.mock('../../src/main/extensions/extension-http-tool', () => ({
 }))
 
 import { registerExtensionHandlers } from '../../src/main/ipc/extension-handlers'
+import { executeExtensionHttpTool } from '../../src/main/extensions/extension-http-tool'
 
 async function call<T>(channel: string, args: unknown): Promise<T> {
   const handler = state.handlers.get(`${channel}:msgpack`)

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { useShallow } from 'zustand/react/shallow'
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
-import { MessageSquare, CircleHelp, Briefcase, Code2, ShieldCheck, ArrowDown } from 'lucide-react'
+import { MessageSquare, CircleHelp, Briefcase, Code2, ArrowDown } from 'lucide-react'
 import type { ContentBlock, ToolResultContent, UnifiedMessage } from '@renderer/lib/api/types'
 import { useChatStore } from '@renderer/stores/chat-store'
 import { useUIStore } from '@renderer/stores/ui-store'
@@ -70,11 +70,6 @@ const modeHints = {
     icon: <Code2 className="size-12 text-muted-foreground/20" />,
     titleKey: 'messageList.startCoding',
     descKey: 'messageList.startCodingDesc'
-  },
-  acp: {
-    icon: <ShieldCheck className="size-12 text-muted-foreground/20" />,
-    titleKey: 'messageList.startAcp',
-    descKey: 'messageList.startAcpDesc'
   }
 }
 

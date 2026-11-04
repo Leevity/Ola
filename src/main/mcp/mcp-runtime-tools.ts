@@ -2,10 +2,17 @@ import { materializeMcpArtifacts } from './mcp-result-files'
 import { RuntimeError } from '../../shared/runtime/contracts'
 import type { McpTool } from './mcp-types'
 import type { ToolContext, ToolDefinition } from '../../runtime/tools/tool-executor'
+import { ToolNamer, sanitizeDescription } from '../../shared/tool-naming'
 
 const MAX_INPUT_BYTES = 64 * 1024
 const MAX_OUTPUT_BYTES = 128 * 1024
-const SAFE_SEGMENT = /^[A-Za-z0-9_-]{1,96}$/
+
+/**
+ * Process-global namer so an MCP tool keeps the same external name across agent-run restarts
+ * in this session. Names are allocated once and never reused; a transcript that recorded a name
+ * still points at the same tool.
+ */
+const mcpToolNamer = new ToolNamer()
 
 export interface McpRuntimeManager {
   readResource?(serverId: string, uri: string): Promise<unknown>
@@ -13,9 +20,10 @@ export interface McpRuntimeManager {
   callTool(serverId: string, toolName: string, args: Record<string, unknown>): Promise<unknown>
 }
 
-function runtimeToolName(serverId: string, toolName: string): string | null {
-  if (!SAFE_SEGMENT.test(serverId) || !SAFE_SEGMENT.test(toolName)) return null
-  return `mcp__${serverId}__${toolName}`
+/** Assign a stable external name for an MCP tool, emitting a diagnostic on illegal input. */
+function runtimeToolName(serverId: string, toolName: string): string {
+  const internalId = `mcp:${serverId}:${toolName}`
+  return mcpToolNamer.nameFor(internalId, `mcp__${serverId}__${toolName}`)
 }
 
 function input(value: unknown): Record<string, unknown> {
@@ -47,11 +55,14 @@ export function createMcpRuntimeTools(
   for (const serverId of [...new Set(serverIds)].sort()) {
     for (const mcpTool of manager.getTools(serverId)) {
       const name = runtimeToolName(serverId, mcpTool.name)
-      if (!name || names.has(name)) continue
+      if (names.has(name)) continue
       names.add(name)
+      const description = sanitizeDescription(
+        mcpTool.description || `Call MCP tool ${mcpTool.name} on ${serverId}.`
+      )
       tools.push({
         name,
-        description: mcpTool.description || `Call MCP tool ${mcpTool.name} on ${serverId}.`,
+        description,
         inputSchema: mcpTool.inputSchema,
         effect: 'write',
         validate: input,

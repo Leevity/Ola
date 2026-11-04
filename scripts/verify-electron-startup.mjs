@@ -303,13 +303,13 @@ async function main() {
   }
   await sleep(500)
   const accountPage = await cdp(ws, 'Runtime.evaluate', {
-    expression: `({ heading: document.querySelector('h1')?.textContent?.trim() ?? '', bodyTextLength: document.body?.innerText?.length ?? 0, bodyText: document.body?.innerText ?? '' })`,
+    expression: `({ heading: document.querySelector('h1')?.textContent?.trim() ?? '', signInTitle: document.querySelector('#ola-sign-in-title')?.textContent?.trim() ?? '', bodyTextLength: document.body?.innerText?.length ?? 0, bodyText: document.body?.innerText ?? '' })`,
     returnByValue: true
   })
   const accountPageValue = accountPage.result?.value
   if (
     !accountPageValue ||
-    !/登录|sign in/i.test(accountPageValue.heading) ||
+    !/登录|sign in/i.test(accountPageValue.signInTitle) ||
     accountPageValue.bodyTextLength < 80 ||
     /minified react error|出了点问题/i.test(accountPageValue.bodyText)
   ) {
@@ -331,8 +331,10 @@ async function main() {
     throw new Error('Could not open an existing conversation for the translate flow')
   }
   await sleep(600)
+  // The message toolbar only renders inside the scroll viewport; without this the
+  // button sits at a negative y and the synthesized click lands on nothing.
   const userMessageMenuPosition = await cdp(ws, 'Runtime.evaluate', {
-    expression: `(() => { const messages = Array.from(document.querySelectorAll('[class~="group/user"]')); const message = messages.find((item) => item.textContent?.trim()); const button = message?.querySelector('button[aria-label="显示更多"], button[aria-label="Show more"]'); if (!button) return null; const rect = button.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } })()`,
+    expression: `(() => { const messages = Array.from(document.querySelectorAll('[class~="group/user"]')); const message = messages.find((item) => item.textContent?.trim()); const button = message?.querySelector('button[aria-label="显示更多"], button[aria-label="Show more"]'); if (!button) return null; button.scrollIntoView({ block: 'center' }); const rect = button.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } })()`,
     returnByValue: true
   })
   const userMessageMenuPoint = userMessageMenuPosition.result?.value

@@ -69,7 +69,11 @@ async function hydrateAndMigrateProviderState(raw: unknown): Promise<unknown> {
     }
   }
   const bundles = await readAuthBundles(raw)
-  return hydrateProviderCredentials(raw, bundles)
+  // A previous migration can leave stale `*Stored` markers when a provider
+  // credential was already removed. Keep the provider metadata readable so the
+  // settings page remains usable; a genuinely unavailable encrypted backend is
+  // still handled by the read error below.
+  return hydrateProviderCredentials(raw, bundles, { allowMissingCredentials: store.isPersistent() })
 }
 
 async function commitProviderState(

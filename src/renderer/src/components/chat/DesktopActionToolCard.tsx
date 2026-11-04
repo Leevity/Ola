@@ -166,7 +166,9 @@ export function DesktopActionToolCard({
             className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <span>
-              {collapsed ? t('showMore', { ns: 'common' }) : t('showLess', { ns: 'common' })}
+              {collapsed
+                ? t('action.showMore', { ns: 'common' })
+                : t('action.showLess', { ns: 'common' })}
             </span>
             <motion.span animate={{ rotate: collapsed ? 0 : 180 }} transition={ITEM_TRANSITION}>
               <ChevronDown className="size-3" />

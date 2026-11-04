@@ -4,7 +4,6 @@
     "placeholderClarify": "Décrivez votre idée et je continuerai à étudier jusqu'à ce que les exigences soient claires...",
     "placeholderCowork": "Demandez à l'assistant d'aider votre projet...",
     "placeholderCode": "Décrivez ce que vous voulez construire, comme corriger des bugs, écrire des scripts, ou utiliser /commit pour commiter le dépôt...",
-    "placeholderAcp": "Décrivez l'objectif, le contexte, les contraintes et les critères d'acceptation.",
     "placeholderPlanReview": "Entrez la rétroaction de révision pour ce plan, ou cliquez sur la carte ci-dessus pour la mettre en œuvre...",
     "placeholderPendingGoal": "Décrivez le but à poursuivre...",
     "pendingGoalBanner": "Votre prochain message texte sera utilisé comme objectif et envoyé normalement.",
@@ -117,12 +116,7 @@
     "recommendationDefaultClarify": "Prévoyez la prochaine question pointue que je vous demanderai d'épingler complètement la demande.",
     "recommendationDefaultCowork": "Prévoyez la prochaine action collaborative que je taperais naturellement.",
     "recommendationDefaultCode": "Prévoyez la prochaine demande de changement de code concret que je taperais naturellement.",
-    "recommendationDefaultAcp": "Prévoyez la prochaine question de cadrage ou de conception ACP que j'entretiens naturellement.",
-    "recommendationInitWorkspace": "Aucun AGENTS.md trouvé dans le dossier de travail actuel. Prévoyez l'étape suivante naturelle, probablement /init pour initialiser le contexte du projet.",
-    "startAcp": "Démarrer une session ACP",
-    "startAcpDesc": "D'abord clarifier l'objectif, le contexte, les contraintes et les critères d'acceptation.",
-    "homeTitleAcp": "Mode ACP",
-    "homeDescAcp": "En mode ACP, commencer par clarifier les objectifs, le contexte, les contraintes et les critères d'acceptation."
+    "recommendationInitWorkspace": "Aucun AGENTS.md trouvé dans le dossier de travail actuel. Prévoyez l'étape suivante naturelle, probablement /init pour initialiser le contexte du projet."
   },
   "planReview": {
     "awaitingReview": "En attente d'un réexamen",
@@ -168,10 +162,6 @@
       "modeCode": {
         "title": "C'est le mode Code",
         "description": "Utilisez-le pour des tâches d'implémentation directe telles que l'édition de fichiers, l'écriture de code, l'exécution de vérifications et le traitement des détails techniques."
-      },
-      "modeAcp": {
-        "title": "C'est le mode ACP",
-        "description": "Utilisez-le comme tour de contrôle pour un travail complexe: clarifier les limites et l'acceptation d'abord, puis concevoir l'architecture, décomposer les tâches, et déléguer l'exécution tandis que l'agent principal reste hors de codage direct."
       },
       "leftSidebar": {
         "title": "C'est le domaine du projet et de la session",
@@ -654,7 +644,8 @@
     "thinkingFor": "Penser à {{seconds}} s",
     "pending": "Penser",
     "thinkingEllipsis": "Penser...",
-    "thoughts": "Pensées"
+    "thoughts": "Pensées",
+    "elapsedSeconds": "{{seconds}} s"
   },
   "messageList": {
     "startConversation": "Démarrer une conversation",
@@ -671,13 +662,10 @@
     "homeTitleClarify": "Clarifier la tâche d'abord",
     "homeTitleCowork": "Travaux à l'intérieur du projet",
     "homeTitleCode": "Démarrer le codage",
-    "homeTitleAcp": "Début de la collaboration ACP",
-    "homeDescAcp": "Démarrer le mode ACP pour la confirmation de l'architecture, la clarification des contraintes et la ventilation de l'exécution.",
     "homeDescAutoChat": "Après l'envoi, il choisit automatiquement un meilleur modèle en fonction de la complexité des tâches.",
     "homeDescAutoClarify": "Après avoir envoyé, il choisit un modèle mieux adapté pour interroger et réduire le plan.",
     "homeDescAutoCowork": "Après l'envoi, il choisit un modèle mieux adapté au travail de projet, aux modifications de fichiers et aux outils.",
     "homeDescAutoCode": "Après l'envoi, il choisit un modèle mieux adapté pour le codage, la refacturation et l'analyse.",
-    "homeDescAutoAcp": "Après l'envoi, il choisit un modèle mieux adapté pour la confirmation de l'architecture, la clarification des contraintes et la panne d'exécution.",
     "homeDescChatGeneral": "Bon pour le chat quotidien, l'écriture et les questions légères.",
     "homeDescChatVision": "Bon pour le chat et peut également répondre rapidement avec le contexte d'image.",
     "homeDescClarifyGeneral": "Bon pour les questions de suivi, la définition des objectifs et le remplissage des contraintes.",
@@ -1109,5 +1097,8 @@
     "aiCommitNeedStaged": "Les changements d'étape d'abord, puis générer un message",
     "aiCommitEmptyStaged": "Rien mis en scène — ne peut générer un message",
     "aiCommitFailed": "La génération a échoué. Vérifiez les paramètres de l'API / modèle et essayez à nouveau"
+  },
+  "extensionToolResult": {
+    "originalPrice": "Was {{price}}"
   }
 }
