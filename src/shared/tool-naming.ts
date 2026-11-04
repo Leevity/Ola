@@ -97,7 +97,11 @@ export class ToolNamer {
         const headRoom = TOOL_NAME_MAX - suffix.length
         name = base.slice(0, Math.max(headRoom, 1)) + suffix
       }
-      if (attempts > 100) break
+      // Never return a name that is already taken: doing so would silently alias
+      // two different tools and let the model call the wrong one.
+      if (attempts > 100) {
+        throw new Error(`TOOL_NAME_ALLOCATION_EXHAUSTED: ${internalId}`)
+      }
     }
     this.used.add(name)
     this.byId.set(internalId, name)

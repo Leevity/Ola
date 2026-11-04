@@ -124,6 +124,7 @@ function executionArtifactCategory(extension: string, mediaType?: string): strin
 import {
   parseRuntimeInteractionRequest,
   parseRuntimeRunLocator,
+  parseRuntimeRunUnsubscribeRequest,
   parseRuntimeRunSnapshotLocator,
   parseRuntimeWorkspaceRequest,
   parseRuntimeWorkspaceSwitchRequest
@@ -957,7 +958,7 @@ export function registerTsRuntimeHandlers(): void {
       const subscribed = await runStreams.subscribe({ targetId, workspaceId, runId, afterSeq })
       // The window may have switched workspace while the subscription opened.
       if (getRegisteredWindowWorkspace(window) !== workspaceId) {
-        await runStreams.unsubscribe(targetId, runId)
+        await runStreams.unsubscribe(targetId, runId, subscribed.subscriptionId)
         throw new Error('WINDOW_WORKSPACE_MISMATCH')
       }
       return { subscriptionId: subscribed.subscriptionId, snapshot: subscribed.snapshot }
@@ -971,11 +972,13 @@ export function registerTsRuntimeHandlers(): void {
   registerMessagePackHandler<unknown>('ts-runtime:run-unsubscribe', async (args, event) => {
     if (!trusted(event)) return { unsubscribed: false, error: 'UNAUTHORIZED_IPC_SENDER' }
     try {
-      const { workspaceId, runId } = parseRuntimeRunLocator(args)
+      const { workspaceId, runId, subscriptionId } = parseRuntimeRunUnsubscribeRequest(args)
       assertWindowWorkspace(event, workspaceId)
       const window = BrowserWindow.fromWebContents(event.sender)
       if (!window) throw new Error('WINDOW_WORKSPACE_MISMATCH')
-      await runStreams.unsubscribe(String(window.id), runId)
+      // Ownership check: the renderer names the subscription it opened, so closing a stale one
+      // cannot cancel a newer stream for the same run in the same window.
+      await runStreams.unsubscribe(String(window.id), runId, subscriptionId)
       return { unsubscribed: true }
     } catch (error) {
       return {

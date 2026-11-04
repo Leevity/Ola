@@ -64,7 +64,8 @@ it('records only a successful declared HTTP Extension artifact from a local serv
       {
         getRuntime: async () => ({ id: manifest.id, enabled: true, manifest, config: {} })
       } as never,
-      [manifest.id]
+      [manifest.id],
+      async () => ({ decision: 'allow' as const })
     )
     const executor = new ToolExecutor(tools, async () => true)
     const events: Array<{ type: string; data: unknown }> = []

@@ -233,6 +233,9 @@ export function createSubAgentEventBuffer(sessionId: string): {
       )
       entry.text = ''
     }
+    // The next delta for this id recreates the entry; keeping empty buffers for
+    // every tool call would grow without bound over a long session.
+    deltaBuffers.delete(toolUseId)
   }
 
   const scheduleFlush = (toolUseId: string): void => {
@@ -348,6 +351,9 @@ export function createLiveToolInputThrottle(
     entry.pendingRaw = undefined
     entry.pendingSummary = undefined
     entry.pendingSignature = undefined
+    // The tool call has settled; a later delta for the same id recreates a fresh
+    // entry. Dropping it here keeps `entries` proportional to in-flight calls.
+    entries.delete(toolCallId)
   }
 
   const maybeClearDelivered = (toolCallId: string, signature: string): void => {

@@ -4,6 +4,7 @@ import type {
   ExtensionToolDefinition,
   ExtensionToolResult
 } from '../../shared/extension-types'
+import { isPrivateHostLiteral, matchesHostPermission } from '../../shared/extension-capabilities'
 
 const MAX_REDIRECTS = 5
 const MAX_RESPONSE_BYTES = 128 * 1024
@@ -86,6 +87,20 @@ export function interpolateExtensionValue(
     : value
 }
 
+/** Loopback/private literals are reachable only when that exact host was declared in `network`. */
+function explicitlyDeclaresPrivateHost(manifest: ExtensionManifest, hostname: string): boolean {
+  return (manifest.permissions?.network ?? []).some((permission) => {
+    try {
+      return (
+        new URL(permission.trim().replace(/\*+$/, '')).hostname.toLowerCase() ===
+        hostname.toLowerCase()
+      )
+    } catch {
+      return false
+    }
+  })
+}
+
 /** Checks an extension URL against its explicit http(s), host, port and path allowlist. */
 export function isExtensionNetworkAllowed(
   manifest: ExtensionManifest,
@@ -99,6 +114,21 @@ export function isExtensionNetworkAllowed(
   }
   if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password)
     return false
+  // Loopback/private literals are reachable only when that exact host was declared in the
+  // network allowlist. Alternate IPv4 spellings are normalized by isPrivateHostLiteral.
+  const privateTarget = isPrivateHostLiteral(target.hostname)
+  const privateDeclared = privateTarget && explicitlyDeclaresPrivateHost(manifest, target.hostname)
+  // An explicit hostPermissions declaration is an upper bound, not a hint: a manifest may
+  // not widen it via `permissions.network`. This is the lexical layer; DNS rebinding is still
+  // handled by the caller's realpath-equivalent resolution. A private host passes the lexical
+  // check only when its own explicit `network` grant was just verified above.
+  const declaredHosts = manifest.permissions?.hostPermissions
+  if (
+    declaredHosts?.length &&
+    !matchesHostPermission(declaredHosts, targetValue, { allowPrivateHosts: privateDeclared })
+  )
+    return false
+  if (privateTarget && !privateDeclared) return false
   return (manifest.permissions?.network ?? []).some((permission) => {
     const raw = permission.trim()
     if (!raw || raw === '*') return false

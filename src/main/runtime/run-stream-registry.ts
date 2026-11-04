@@ -37,13 +37,57 @@ export type RunStreamSender = (
  * fan out to windows with independent lifecycles, and the runtime already
  * multiplexes subscriptions per socket.
  */
+/** Frames pushed before `open()` resolves are bounded; overflow asks the window to resync. */
+const MAX_EARLY_EVENTS = 1024
+/**
+ * One key's lock must never wait on an unbounded promise: a single hung `open()` or `close()`
+ * would otherwise block every later subscription of that run, and `releaseTarget` would hang on
+ * window teardown. Both sides are bounded and a timeout is reported as a failure, not a success.
+ */
+const OPEN_TIMEOUT_MS = 15_000
+const CLOSE_TIMEOUT_MS = 5_000
+
+async function withTimeout<T>(work: Promise<T>, ms: number, reason: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(reason)), ms)
+        timer.unref?.()
+      })
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export class RunStreamRegistry {
   private subscriptions = new Map<string, RunStreamHandle>()
+  private tails = new Map<string, Promise<unknown>>()
 
   constructor(
     private readonly open: RunStreamOpener,
     private readonly send: RunStreamSender
   ) {}
+
+  /** Serialize all mutations of one key so concurrent re-subscriptions cannot leak handles. */
+  private async withKey<T>(key: string, task: (key: string) => Promise<T>): Promise<T> {
+    const prior = this.tails.get(key) ?? Promise.resolve()
+    let finish!: () => void
+    const gate = new Promise<void>((resolve) => {
+      finish = resolve
+    })
+    const tail = prior.catch(() => undefined).then(() => gate)
+    this.tails.set(key, tail)
+    await prior.catch(() => undefined)
+    try {
+      return await task(key)
+    } finally {
+      finish()
+      if (this.tails.get(key) === tail) this.tails.delete(key)
+    }
+  }
 
   async subscribe(input: {
     targetId: string
@@ -51,7 +95,20 @@ export class RunStreamRegistry {
     runId: string
     afterSeq: number
   }): Promise<{ subscriptionId: string; snapshot: RunSnapshot }> {
-    const key = this.key(input.targetId, input.runId)
+    return await this.withKey(this.key(input.targetId, input.runId), (key) =>
+      this.subscribeLocked(key, input)
+    )
+  }
+
+  private async subscribeLocked(
+    key: string,
+    input: {
+      targetId: string
+      workspaceId: string
+      runId: string
+      afterSeq: number
+    }
+  ): Promise<{ subscriptionId: string; snapshot: RunSnapshot }> {
     // Re-subscribing over a live subscription must not leak the previous one.
     await this.release(key)
     // The runtime can push before `open()` resolves, which is before the
@@ -67,12 +124,17 @@ export class RunStreamRegistry {
         subscriptionId,
         ...payload
       })
-    const opened = await this.open({
+    const opening = this.open({
       workspaceId: input.workspaceId,
       runId: input.runId,
       afterSeq: input.afterSeq,
       onEvent: (event) => {
         if (!subscriptionId) {
+          if (early.length >= MAX_EARLY_EVENTS) {
+            early.length = 0
+            resyncReason = 'SLOW_CONSUMER'
+            return
+          }
           early.push(event)
           return
         }
@@ -91,14 +153,25 @@ export class RunStreamRegistry {
         frame(RUN_RESYNC_CHANNEL, { reason })
       }
     })
+    const opened = await withTimeout(opening, OPEN_TIMEOUT_MS, 'RUN_STREAM_OPEN_TIMEOUT').catch(
+      async (error: unknown) => {
+        // `open()` may still resolve after the lock gave up; close that late handle so a timed-out
+        // subscribe cannot leave an orphaned runtime subscription behind.
+        void opening.then((late) => late.close()).catch(() => undefined)
+        throw error
+      }
+    )
+    // Register before exposing the id: an onEvent that arrives while early frames
+    // are flushed may call release(key), which must be able to close this handle.
+    this.subscriptions.set(key, opened)
     handle = opened
     subscriptionId = opened.subscriptionId
     if (resyncReason) {
+      this.subscriptions.delete(key)
       await opened.close().catch(() => undefined)
       frame(RUN_RESYNC_CHANNEL, { reason: resyncReason })
       return { subscriptionId, snapshot: opened.snapshot }
     }
-    this.subscriptions.set(key, opened)
     let delivered = true
     for (const event of early.splice(0))
       delivered = frame(RUN_EVENT_CHANNEL, { event }) && delivered
@@ -106,17 +179,29 @@ export class RunStreamRegistry {
     return { subscriptionId, snapshot: opened.snapshot }
   }
 
-  async unsubscribe(targetId: string, runId: string): Promise<void> {
-    await this.release(this.key(targetId, runId))
+  /**
+   * Drops one subscription. `subscriptionId` is optional for the internal teardown paths, but a
+   * renderer must send it: the registry key is only `targetId:runId`, so two streams of the same
+   * run in one window share a key and a stale unsubscribe would cancel the newer stream.
+   */
+  async unsubscribe(targetId: string, runId: string, subscriptionId?: string): Promise<void> {
+    const key = this.key(targetId, runId)
+    await this.withKey(key, async () => {
+      const handle = this.subscriptions.get(key)
+      if (subscriptionId !== undefined && handle?.subscriptionId !== subscriptionId) return
+      await this.release(key)
+    })
   }
 
   /** Drops every subscription owned by a window that went away. */
   async releaseTarget(targetId: string): Promise<void> {
     const prefix = `${targetId}:`
-    await Promise.all(
+    // `allSettled`: one unreachable key must not leave the other subscriptions of a closed
+    // window alive (window teardown cannot report a partial failure anyway).
+    await Promise.allSettled(
       [...this.subscriptions.keys()]
         .filter((key) => key.startsWith(prefix))
-        .map((key) => this.release(key))
+        .map((key) => this.withKey(key, async () => await this.release(key)))
     )
   }
 
@@ -128,6 +213,11 @@ export class RunStreamRegistry {
     const handle = this.subscriptions.get(key)
     if (!handle) return
     this.subscriptions.delete(key)
-    await handle.close().catch(() => undefined)
+    // A close that never settles must not keep the key's lock held.
+    await withTimeout(
+      handle.close().catch(() => undefined),
+      CLOSE_TIMEOUT_MS,
+      'RUN_STREAM_CLOSE_TIMEOUT'
+    ).catch(() => undefined)
   }
 }

@@ -26,7 +26,7 @@ export async function openMainRunStream(input: {
 }): Promise<MainRunStream | null> {
   if (!desktopRuntime.supportsRunStream) return null
   const queue: RunStreamStep[] = []
-  let wake: (() => void) | null = null
+  let wake: ((step: RunStreamStep) => void) | null = null
   let closed = false
   let signal: AbortSignal | undefined
   let onAbort: (() => void) | null = null
@@ -34,9 +34,12 @@ export async function openMainRunStream(input: {
   const settle = (step: RunStreamStep): void => {
     if (closed) return
     if (wake) {
+      // A consumer blocked in next() has an empty queue: hand the step to it
+      // directly. Enqueuing here and then calling resolve() would lose the
+      // event and make the waiter report a bogus `closed` step.
       const resolve = wake
       wake = null
-      resolve()
+      resolve(step)
       return
     }
     // A consumer that stops reading must not grow the queue without bound; it
@@ -64,7 +67,7 @@ export async function openMainRunStream(input: {
     onAbort = null
     const blocked = wake
     wake = null
-    blocked?.()
+    blocked?.({ kind: 'closed' })
     await handle.close().catch(() => undefined)
   }
 
@@ -87,11 +90,10 @@ export async function openMainRunStream(input: {
         signal = abortSignal
         onAbort = abortSignal ? listener : null
         abortSignal?.addEventListener('abort', listener, { once: true })
-        wake = () => {
+        wake = (step) => {
           if (abortSignal && onAbort) abortSignal.removeEventListener('abort', onAbort)
           onAbort = null
-          const next = queue.shift()
-          resolve(next ?? { kind: 'closed' })
+          resolve(step)
         }
       }),
     close

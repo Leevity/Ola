@@ -81,11 +81,15 @@ describe('run subscription stream', () => {
         .toBe('completed')
       // One more macrotask turn so the last frame reaches the client.
       await new Promise((resolve) => setTimeout(resolve, 50))
-      const text = pushed
+      // The run starts after `submit` returns, so the three deltas can land in
+      // the replay snapshot or arrive as pushes. Merge both sources by seq so
+      // this checks delivery order instead of which channel won the race.
+      const bySeq = new Map<number, RunEvent>()
+      for (const event of [...streamed.snapshot.events, ...pushed]) bySeq.set(event.seq, event)
+      const text = [...bySeq.values()]
+        .sort((left, right) => left.seq - right.seq)
         .filter((event) => event.type === 'message.delta')
         .map((event) => (event.data as { text: string }).text)
-      // The run starts after `submit` returns, so these three can arrive either
-      // inside the replay or as pushes; only their order is guaranteed.
       expect(text).toEqual(['a', 'b', 'c'])
       // Pushed events always continue the replay instead of repeating it.
       for (const event of pushed) expect(replayed).not.toContain(event.seq)

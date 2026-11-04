@@ -13,6 +13,8 @@ export type ExtensionState = {
   granted?: ExtensionCapabilityKind[]
   /** The required set at the time of last approval, used for upgrade-escalation comparison. */
   approvedRequired?: ExtensionCapabilityKind[]
+  /** Fingerprint of the permission surface that was approved, including hosts and tool URLs. */
+  approvedFingerprint?: string
 }
 
 type StateRoot = Record<string, ExtensionState>
@@ -61,6 +63,9 @@ function readState(value: unknown, now: number): ExtensionState | null {
   if (granted) state.granted = granted
   const approvedRequired = readCapabilityKinds(item.approvedRequired)
   if (approvedRequired) state.approvedRequired = approvedRequired
+  if (typeof item.approvedFingerprint === 'string') {
+    state.approvedFingerprint = item.approvedFingerprint
+  }
   return state
 }
 
@@ -130,6 +135,7 @@ export class ExtensionStateStore {
       config?: Record<string, string>
       granted?: ExtensionCapabilityKind[]
       approvedRequired?: ExtensionCapabilityKind[]
+      approvedFingerprint?: string
     }
   ): Promise<ExtensionState> {
     const id = normalizeExtensionId(extensionId)
@@ -147,6 +153,11 @@ export class ExtensionStateStore {
       else if (current.granted) next.granted = [...current.granted]
       if (patch.approvedRequired) next.approvedRequired = [...new Set(patch.approvedRequired)]
       else if (current.approvedRequired) next.approvedRequired = [...current.approvedRequired]
+      if (typeof patch.approvedFingerprint === 'string') {
+        next.approvedFingerprint = patch.approvedFingerprint
+      } else if (current.approvedFingerprint) {
+        next.approvedFingerprint = current.approvedFingerprint
+      }
       result = next
       root[id] = result
     })

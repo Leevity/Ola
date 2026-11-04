@@ -61,6 +61,7 @@ function executorFor(tool: ToolDefinition, emit: ReturnType<typeof hooks>['emit'
       sessionId: 'session-a',
       projectPath: '/project',
       isPolicySession: false,
+      enabled: true,
       emit
     }),
     async () => true
@@ -98,6 +99,7 @@ it('authorizes and locks the input a preToolUse hook rewrote', async () => {
     withToolHooks([tool], {
       sessionId: 'session-a',
       isPolicySession: false,
+      enabled: true,
       emit: hook.emit
     }),
     authorize
@@ -154,7 +156,12 @@ it('does not spawn hooks for a scenario-policy session', async () => {
   const { tool, execute } = recordingTool()
   const emit = vi.fn(async () => [{ permissionDecision: 'deny' as const }])
   const results = await new ToolExecutor(
-    withToolHooks([tool], { sessionId: 'session-a', isPolicySession: true, emit }),
+    withToolHooks([tool], {
+      sessionId: 'session-a',
+      isPolicySession: true,
+      enabled: true,
+      emit
+    }),
     async () => true
   ).executeAll(
     [{ id: 'call-1', name: 'Write', input: { path: 'a.txt' } }],
@@ -166,7 +173,7 @@ it('does not spawn hooks for a scenario-policy session', async () => {
   expect(results[0].isError).toBeUndefined()
 })
 
-it('fails open when the hook runner throws', async () => {
+it('fails closed when the veto-capable preToolUse runner throws', async () => {
   const { tool, execute } = recordingTool()
   const emit = vi.fn(async () => {
     throw new Error('timed-out')
@@ -176,9 +183,10 @@ it('fails open when the hook runner throws', async () => {
     context(),
     async () => undefined
   )
-  expect(execute).toHaveBeenCalledTimes(1)
-  expect(results[0].output).toBe('ran:{"path":"a.txt"}')
-  expect(results[0].isError).toBeUndefined()
+  expect(execute).not.toHaveBeenCalled()
+  expect(results[0].isError).toBe(true)
+  // ToolExecutor normalizes a hook veto into the ordinary permission denial.
+  expect(results[0].output).toBe('PERMISSION_DENIED')
 })
 
 it('keeps structured results intact for the runtime readers', async () => {

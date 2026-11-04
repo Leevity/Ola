@@ -50,8 +50,10 @@ export function registerExtensionHandlers(): void {
     async (args) => {
       try {
         const id = await getExtensionPackageManager().installFromFolder(args.sourcePath)
-        // First install has no prior approval → never lands in pending-approval.
-        await getExtensionManager().checkEscalation(id)
+        // A fresh folder install has no prior approval → never lands in pending-approval. A
+        // re-install over an existing approval baseline still compares against it, because the
+        // baseline lives outside the per-install state.
+        await getExtensionManager().checkEscalation(id, { firstInstall: true })
         return { success: true }
       } catch (error) {
         return { success: false, error: error instanceof Error ? error.message : String(error) }

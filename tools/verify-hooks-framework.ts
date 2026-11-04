@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { copyFile, link, mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, link, mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { loadHooksConfig, parseHooksConfig } from '../src/main/hooks/hooks-loader'
@@ -21,6 +21,9 @@ await writeFile(
   hookFilePath,
   `process.stdout.write(JSON.stringify({additionalContext:'ok',ignored:true}));`
 )
+// hooks-loader requires an executable bit on the command itself (X_OK). Rewriting
+// the file below preserves this mode, so one chmod is enough for the loader cases.
+await chmod(hookFilePath, 0o700)
 
 assert.throws(() => parseHooksConfig({ version: 2, hooks: [] }), /schema version/)
 assert.throws(
@@ -95,6 +98,9 @@ try {
 } catch {
   await copyFile(process.execPath, nodeBin)
 }
+// The runner cases use the Node binary as the command; keep X_OK deterministic
+// when copyFile landed on a platform that normalizes permissions.
+await chmod(nodeBin, 0o700)
 const hookScript = (body: string): string =>
   `const chunks=[];process.stdin.on('data',(chunk)=>chunks.push(chunk));` +
   `process.stdin.on('end',()=>{${body}});`

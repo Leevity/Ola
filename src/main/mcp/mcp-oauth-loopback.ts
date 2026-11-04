@@ -44,13 +44,27 @@ export function redirectUriForPort(port: number): string {
   return `http://localhost:${port}${MCP_OAUTH_CALLBACK_PATH}`
 }
 
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;'
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => HTML_ESCAPES[char] ?? char)
+}
+
 function renderCallbackPage(title: string, message: string): string {
+  const safeTitle = escapeHtml(title)
+  const safeMessage = escapeHtml(message)
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
+  <title>${safeTitle}</title>
   <style>
     body { font-family: system-ui, sans-serif; padding: 32px; color: #111; }
     .card { max-width: 520px; margin: 0 auto; padding: 24px; border: 1px solid #ddd; border-radius: 12px; }
@@ -60,8 +74,8 @@ function renderCallbackPage(title: string, message: string): string {
 </head>
 <body>
   <div class="card">
-    <h1>${title}</h1>
-    <p>${message}</p>
+    <h1>${safeTitle}</h1>
+    <p>${safeMessage}</p>
   </div>
 </body>
 </html>`
@@ -89,6 +103,18 @@ export async function startMcpOAuthLoopback(params: {
     request: http.IncomingMessage,
     response: http.ServerResponse
   ): Promise<void> => {
+    // Bind the listener to the loopback origin: a DNS-rebinding page resolving to
+    // 127.0.0.1 arrives with its own Host header and must not reach the flow.
+    const hostHeader = (request.headers.host ?? '').toLowerCase()
+    const hostname = hostHeader.startsWith('[')
+      ? hostHeader.slice(0, hostHeader.indexOf(']') + 1)
+      : (hostHeader.split(':')[0] ?? '')
+    if (!['localhost', '127.0.0.1', '[::1]'].includes(hostname)) {
+      response.statusCode = 400
+      response.end('Bad Request')
+      return
+    }
+
     const requestUrl = new URL(request.url || '', 'http://localhost')
     if (requestUrl.pathname !== MCP_OAUTH_CALLBACK_PATH) {
       response.statusCode = 404
@@ -101,6 +127,16 @@ export async function startMcpOAuthLoopback(params: {
       state: requestUrl.searchParams.get('state'),
       error: requestUrl.searchParams.get('error') ?? undefined,
       errorDescription: requestUrl.searchParams.get('error_description') ?? undefined
+    }
+
+    // A callback carrying neither a code nor an error is not an authorization
+    // attempt. Reject it without invoking Main and without consuming the listener,
+    // so a stray local request cannot cancel a pending login.
+    if (!result.code && !result.error) {
+      response.statusCode = 400
+      response.setHeader('Content-Type', 'text/html; charset=utf-8')
+      response.end(renderCallbackPage('Authorization failed', 'Missing authorization code.'))
+      return
     }
 
     let verdict: McpOAuthCallbackVerdict
@@ -123,7 +159,9 @@ export async function startMcpOAuthLoopback(params: {
             verdict.message ?? 'The authorization request was rejected.'
           )
     )
-    closeMcpOAuthLoopback(params.serverId)
+    // Only a completed flow closes the listener. A rejected callback (bad state,
+    // transient exchange failure) must leave it alive for the legitimate browser.
+    if (verdict.accepted) closeMcpOAuthLoopback(params.serverId)
   }
 
   const server = await listen(handleRequest, params.preferredPort ?? DEFAULT_MCP_OAUTH_PORT)

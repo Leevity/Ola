@@ -3,6 +3,7 @@ import {
   parseRuntimeInteractionRequest,
   parseRuntimeRunLocator,
   parseRuntimeRunSnapshotLocator,
+  parseRuntimeRunUnsubscribeRequest,
   parseRuntimeWorkspaceRequest,
   parseRuntimeWorkspaceSwitchRequest
 } from '../../src/main/ipc/ts-runtime-requests'
@@ -58,6 +59,28 @@ describe('TS runtime IPC request parsing', () => {
       ).toThrow('INVALID_REQUEST')
     }
   )
+
+  it('accepts an unsubscribe that names its own subscription', () => {
+    expect(
+      parseRuntimeRunUnsubscribeRequest({
+        workspaceId: 'local-personal',
+        runId: 'run',
+        subscriptionId: ' sub-1 '
+      })
+    ).toEqual({ workspaceId: 'local-personal', runId: 'run', subscriptionId: 'sub-1' })
+    // An older renderer sends no id; Main then releases whatever is registered for the run.
+    expect(
+      parseRuntimeRunUnsubscribeRequest({ workspaceId: 'local-personal', runId: 'run' })
+    ).toEqual({ workspaceId: 'local-personal', runId: 'run' })
+    expect(() =>
+      parseRuntimeRunUnsubscribeRequest({
+        workspaceId: 'local-personal',
+        runId: 'run',
+        subscriptionId: '',
+        extra: true
+      })
+    ).toThrow('INVALID_REQUEST')
+  })
 
   it('accepts a bounded interaction response without loosening run identifiers', () => {
     expect(

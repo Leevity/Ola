@@ -2906,10 +2906,8 @@
       ],
       "e2eEvidence": [
         "tests/runtime/extension-ipc.test.ts",
-        "tools/verify-extension-capability-gates.ts",
-        "tools/verify-extension-upgrade-escalation.ts",
-        "tools/verify-extension-lifecycle.ts",
-        "tools/verify-tool-namer-stability.ts"
+        "tests/runtime/extension-runtime-tools.test.ts",
+        "tests/runtime/extension-artifact-http-flow.test.ts"
       ],
       "status": "通过"
     },

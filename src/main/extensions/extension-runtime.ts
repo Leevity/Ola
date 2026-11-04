@@ -23,19 +23,32 @@ const secrets = new EncryptedExtensionSecretStore(
 )
 
 const extensionState = new ExtensionStateStore(join(olaDirectory, 'extensions.json'))
+// Approval history must survive `remove()` + re-install. Keeping it in a separate file makes
+// an upgrade unable to reset the user's last approved permission baseline.
+const extensionApprovals = new ExtensionStateStore(join(olaDirectory, 'extensions-approvals.json'))
 const extensionService = new ExtensionService(
   join(olaDirectory, 'extensions'),
   extensionState,
   secrets
+)
+const extensionManager = new ExtensionManager(
+  extensionService,
+  extensionState,
+  {},
+  extensionApprovals
 )
 const extensionStorage = new ExtensionStorageStore(join(olaDirectory, 'extensions-storage.json'))
 const extensionPackageManager = new ExtensionPackageManager(
   join(olaDirectory, 'extensions'),
   extensionState,
   extensionStorage,
-  secrets
+  secrets,
+  // A bundled package replacement is an upgrade: re-check the approval baseline
+  // immediately after the new manifest lands on disk.
+  async (id: string, context: { firstInstall: boolean }) => {
+    await extensionManager.checkEscalation(id, context)
+  }
 )
-const extensionManager = new ExtensionManager(extensionService, extensionState)
 
 export function getExtensionService(): ExtensionService {
   return extensionService

@@ -43,6 +43,51 @@ describe('extension HTTP tools', () => {
     expect(isExtensionNetworkAllowed(manifest, 'file:///tmp/x')).toBe(false)
   })
 
+  it('honours the scheme declared in hostPermissions instead of requiring https', () => {
+    const plain: ExtensionManifest = {
+      ...manifest,
+      permissions: {
+        network: ['http://plain.example.com/v1/*'],
+        hostPermissions: ['http://plain.example.com/v1/*']
+      }
+    }
+    // A plain-http declaration must not reject every target.
+    expect(isExtensionNetworkAllowed(plain, 'http://plain.example.com/v1/items')).toBe(true)
+    // A declared scheme is exact: http does not smuggle in https.
+    expect(isExtensionNetworkAllowed(plain, 'https://plain.example.com/v1/items')).toBe(false)
+    // hostPermissions stays an upper bound over the runtime network allowlist.
+    expect(isExtensionNetworkAllowed(plain, 'http://other.example.com/v1/items')).toBe(false)
+
+    const anyScheme: ExtensionManifest = {
+      ...manifest,
+      permissions: {
+        network: ['https://dual.example.com/v1/*', 'http://dual.example.com/v1/*'],
+        hostPermissions: ['*://dual.example.com/v1/*']
+      }
+    }
+    expect(isExtensionNetworkAllowed(anyScheme, 'https://dual.example.com/v1/items')).toBe(true)
+    expect(isExtensionNetworkAllowed(anyScheme, 'http://dual.example.com/v1/items')).toBe(true)
+  })
+
+  it('lets a private host through only when both allowlists name it explicitly', () => {
+    const loopback: ExtensionManifest = {
+      ...manifest,
+      permissions: {
+        network: ['http://127.0.0.1:8080/api/*'],
+        hostPermissions: ['http://127.0.0.1:8080/api/*']
+      }
+    }
+    expect(isExtensionNetworkAllowed(loopback, 'http://127.0.0.1:8080/api/status')).toBe(true)
+    const networkOnly: ExtensionManifest = {
+      ...manifest,
+      permissions: {
+        network: ['http://127.0.0.1:8080/api/*'],
+        hostPermissions: ['https://api.example.com/*']
+      }
+    }
+    expect(isExtensionNetworkAllowed(networkOnly, 'http://127.0.0.1:8080/api/status')).toBe(false)
+  })
+
   it('revalidates redirects and returns normalized tool data', async () => {
     const fetcher = vi.fn(async (url: RequestInfo | URL) => {
       if (String(url).endsWith('/1'))

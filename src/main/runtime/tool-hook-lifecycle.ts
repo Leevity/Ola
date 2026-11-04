@@ -19,6 +19,11 @@ export interface ToolHookLifecycleOptions {
   projectPath?: string
   /** A scenario-policy session is exempt from hooks, matching `hooks:emit`. */
   isPolicySession: boolean
+  /**
+   * Whether the hook service can actually evaluate policy. Required, so no call site can forget
+   * it and end up advertising a gate that always answers "no policy configured".
+   */
+  enabled: boolean
   emit: (event: HookEvent, invocation: HookInvocation) => Promise<HookOutput[]>
 }
 
@@ -71,16 +76,28 @@ export function withToolHooks(
   options: ToolHookLifecycleOptions
 ): ToolDefinition[] {
   if (options.isPolicySession) return definitions
+  // Hooks are switched off at the service level. Wrapping the definitions anyway would advertise
+  // a veto gate that can only ever return "no policy" and would pay an IPC round trip per call.
+  if (!options.enabled) return definitions
   // Rollback switch: the runtime members stay optional, so this only skips wiring.
   if (process.env.OLA_HOOKS_TOOL_EVENTS === '0') return definitions
   return definitions.map((definition) => ({
     ...definition,
     async prepare(input: unknown) {
-      // A hook that times out or crashes fails open. It must never be able to
-      // wedge the tool loop, and the hook history still records the failure.
-      const outputs = await options
-        .emit('preToolUse', baseInvocation(options, 'preToolUse', definition.name, input))
-        .catch(() => [] as HookOutput[])
+      // `preToolUse` is a veto-capable policy gate. "No policy configured" resolves
+      // to [] and proceeds, but a runner that threw means the gate could not be
+      // evaluated at all — failing open would silently run an unvetted tool call.
+      let outputs: HookOutput[]
+      try {
+        outputs = await options.emit(
+          'preToolUse',
+          baseInvocation(options, 'preToolUse', definition.name, input)
+        )
+      } catch (error) {
+        throw new ToolHookDeniedError(
+          `HOOK_EXECUTION_FAILED: ${error instanceof Error ? error.message : String(error)}`
+        )
+      }
       const denial = deniedBy(outputs)
       if (denial) throw new ToolHookDeniedError(denial)
       let next = input
@@ -96,6 +113,8 @@ export function withToolHooks(
       }
     },
     async after(input: unknown, output: unknown) {
+      // postToolUse carries only feedback/context, never a veto, so a failed
+      // runner drops the annotation but keeps the tool's real result.
       const outputs = await options
         .emit('postToolUse', {
           ...baseInvocation(options, 'postToolUse', definition.name, input),

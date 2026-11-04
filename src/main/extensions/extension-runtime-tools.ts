@@ -7,6 +7,17 @@ import { ToolNamer, sanitizeDescription } from '../../shared/tool-naming'
 const EXTENSION_TOOL_PREFIX = 'extension__'
 const MAX_INPUT_BYTES = 128 * 1024
 
+/**
+ * Admission hook supplied by the Main process. It is mandatory: without it the declarative
+ * tools would execute HTTP calls straight from the model, bypassing declared/granted/approval
+ * gates. Keep this module free of Electron imports so it stays testable in isolation.
+ */
+export type ExtensionCallAdmission = (call: {
+  extensionId: string
+  toolName: string
+  input: Record<string, unknown>
+}) => Promise<{ decision: 'allow' } | { decision: 'deny'; reason: string }>
+
 /** Stable, never-reused external-name allocator for extension tools across agent-run restarts. */
 const extensionToolNamer = new ToolNamer()
 
@@ -45,7 +56,8 @@ function validateInput(input: unknown, schema: Record<string, unknown>): Record<
 
 function definition(
   extension: RuntimeExtension,
-  tool: ExtensionToolDefinition
+  tool: ExtensionToolDefinition,
+  admit: ExtensionCallAdmission
 ): ToolDefinition | null {
   if (tool.kind !== 'http') return null
   const name = extensionRuntimeToolName(extension.id, tool.name)
@@ -56,8 +68,17 @@ function definition(
     effect: isReadOnly(tool) ? 'read' : 'write',
     validate: (input) => validateInput(input, tool.inputSchema),
     resources: async () => [`extension:${extension.id}:${tool.name}`],
-    execute: async (input, context) =>
-      await executeExtensionHttpTool({
+    execute: async (input, context) => {
+      const verdict = await admit({
+        extensionId: extension.id,
+        toolName: tool.name,
+        input: input as Record<string, unknown>
+      })
+      // A thrown admission hook also fails closed — no HTTP call leaves the process.
+      if (verdict.decision === 'deny') {
+        throw new Error(`EXTENSION_CALL_DENIED: ${verdict.reason}`)
+      }
+      return await executeExtensionHttpTool({
         manifest: extension.manifest,
         enabled: extension.enabled,
         config: extension.config,
@@ -65,6 +86,7 @@ function definition(
         input: input as Record<string, unknown>,
         signal: context.signal
       })
+    }
   }
 }
 
@@ -76,7 +98,8 @@ function definition(
  */
 export async function createExtensionRuntimeTools(
   service: Pick<ExtensionService, 'getRuntime'>,
-  extensionIds: readonly string[] | undefined
+  extensionIds: readonly string[] | undefined,
+  admit: ExtensionCallAdmission
 ): Promise<ToolDefinition[]> {
   const ids = [...new Set(extensionIds ?? [])]
   const extensions = await Promise.all(
@@ -93,7 +116,7 @@ export async function createExtensionRuntimeTools(
   for (const extension of extensions) {
     if (!extension?.enabled) continue
     for (const tool of extension.manifest.tools) {
-      const item = definition(extension, tool)
+      const item = definition(extension, tool, admit)
       if (!item || names.has(item.name)) continue
       names.add(item.name)
       result.push(item)

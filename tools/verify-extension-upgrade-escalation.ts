@@ -39,18 +39,23 @@ async function newHarness(): Promise<{
   manager: ExtensionManager
   service: ExtensionService
   stateStore: ExtensionStateStore
+  approvals: ExtensionStateStore
   denied: { id: string; reason: string }[]
 }> {
   const root = await mkdtemp(join(tmpdir(), 'ola-ext-escalation-'))
   const extensions = join(root, 'extensions')
   const stateStore = new ExtensionStateStore(join(root, 'extensions.json'))
+  const approvals = new ExtensionStateStore(join(root, 'extensions-approvals.json'))
   const secrets = new MemorySecrets()
   const service = new ExtensionService(extensions, stateStore, secrets)
   const denied: { id: string; reason: string }[] = []
-  const manager = new ExtensionManager(service, stateStore, {
-    onDenied: (id, reason) => denied.push({ id, reason })
-  })
-  return { root, manager, service, stateStore, denied }
+  const manager = new ExtensionManager(
+    service,
+    stateStore,
+    { onDenied: (id, reason) => denied.push({ id, reason }) },
+    approvals
+  )
+  return { root, manager, service, stateStore, approvals, denied }
 }
 
 const httpTool = {
@@ -72,11 +77,16 @@ const httpTool = {
       tools: [httpTool]
     })
     await h.stateStore.update('first', { enabled: true })
-    const lifecycle = await h.manager.checkEscalation('first')
+    const lifecycle = await h.manager.checkEscalation('first', { firstInstall: true })
     assert.equal(lifecycle, 'idle') // no prior approval ⇒ not pending
     const describe = await h.manager.describe('first')
     assert.deepEqual(describe.granted, ['network.request']) // legacy-free state, granted == required
     assert.equal(describe.lifecycle, 'idle')
+    // The approval IPC must not be usable as a general privilege grant.
+    await assert.rejects(
+      h.manager.approveRequiredCapabilities('first'),
+      /No capability approval is pending/
+    )
   } finally {
     await rm(h.root, { recursive: true, force: true })
   }
@@ -96,7 +106,7 @@ const httpTool = {
       tools: [httpTool]
     })
     await h.stateStore.update('upg', { enabled: true })
-    await h.manager.checkEscalation('upg')
+    await h.manager.checkEscalation('upg', { firstInstall: true })
     // Simulate an upgrade that adds a required capability.
     await setupExtension(dir, {
       schemaVersion: 1,
@@ -140,7 +150,7 @@ const httpTool = {
       tools: [httpTool]
     })
     await h.stateStore.update('same', { enabled: true })
-    await h.manager.checkEscalation('same')
+    await h.manager.checkEscalation('same', { firstInstall: true })
     await setupExtension(dir, {
       schemaVersion: 1,
       id: 'same',
@@ -178,6 +188,9 @@ const httpTool = {
       granted: [],
       approvedRequired: ['network.request']
     })
+    // The approval baseline lives in its own file; seed it so this scenario exercises a missing
+    // *grant* rather than a missing baseline (which would fail closed as `pending-approval`).
+    await h.approvals.update('log', { approvedRequired: ['network.request'] })
     // network.request not granted ⇒ the call is denied and logged.
     const call = await h.manager.handleCall('log', 'http.request', { toolName: 'fetch', input: {} })
     assert.equal(call.decision, 'deny')
@@ -207,6 +220,157 @@ const httpTool = {
     assert.equal(call.decision, 'deny')
   } finally {
     await rm(h.root, { recursive: true, force: true })
+  }
+}
+
+// --- Scenario F: remove + reinstall must not reset the durable approval baseline ---
+{
+  const root = await mkdtemp(join(tmpdir(), 'ola-ext-reinstall-'))
+  const extensions = join(root, 'extensions')
+  const stateStore = new ExtensionStateStore(join(root, 'extensions.json'))
+  const approvalStore = new ExtensionStateStore(join(root, 'approvals.json'))
+  const service = new ExtensionService(extensions, stateStore, new MemorySecrets())
+  const manager = new ExtensionManager(service, stateStore, {}, approvalStore)
+  try {
+    await setupExtension(extensions, {
+      schemaVersion: 1,
+      id: 'reinstall',
+      name: 'Reinstall',
+      version: '1',
+      permissions: { capabilities: { required: ['network.request'] } },
+      tools: [httpTool]
+    })
+    await stateStore.update('reinstall', { enabled: true })
+    assert.equal(await manager.checkEscalation('reinstall', { firstInstall: true }), 'idle')
+
+    // The UI upgrades by removing first, which clears the per-install state.
+    await stateStore.delete('reinstall')
+    await setupExtension(extensions, {
+      schemaVersion: 1,
+      id: 'reinstall',
+      name: 'Reinstall',
+      version: '2',
+      permissions: { capabilities: { required: ['network.request', 'process'] } },
+      tools: [httpTool]
+    })
+    await stateStore.update('reinstall', { enabled: true })
+    assert.equal(await manager.checkEscalation('reinstall'), 'pending-approval')
+    assert.equal(
+      (await manager.handleCall('reinstall', 'http.request', { toolName: 'fetch', input: {} }))
+        .decision,
+      'deny'
+    )
+    await manager.approveRequiredCapabilities('reinstall')
+    assert.equal(
+      (await manager.handleCall('reinstall', 'http.request', { toolName: 'fetch', input: {} }))
+        .decision,
+      'allow'
+    )
+    // Re-approving again without a fresh escalation is refused.
+    await assert.rejects(
+      manager.approveRequiredCapabilities('reinstall'),
+      /No capability approval is pending/
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+// --- Scenario G: a lost approval baseline fails closed instead of adopting the new manifest ---
+{
+  const root = await mkdtemp(join(tmpdir(), 'ola-ext-baseline-loss-'))
+  const extensions = join(root, 'extensions')
+  const stateStore = new ExtensionStateStore(join(root, 'extensions.json'))
+  const approvalPath = join(root, 'approvals.json')
+  const approvalStore = new ExtensionStateStore(approvalPath)
+  const service = new ExtensionService(extensions, stateStore, new MemorySecrets())
+  const manager = new ExtensionManager(service, stateStore, {}, approvalStore)
+  try {
+    await setupExtension(extensions, {
+      schemaVersion: 1,
+      id: 'lost',
+      name: 'Lost',
+      version: '1',
+      permissions: { capabilities: { required: ['network.request'] } },
+      tools: [httpTool]
+    })
+    await stateStore.update('lost', { enabled: true })
+    assert.equal(await manager.checkEscalation('lost', { firstInstall: true }), 'idle')
+    // The durable baseline disappears while the extension stays installed. Reading that as a
+    // first install would silently approve whatever the next manifest asks for.
+    await rm(approvalPath, { force: true })
+    await setupExtension(extensions, {
+      schemaVersion: 1,
+      id: 'lost',
+      name: 'Lost',
+      version: '2',
+      permissions: { capabilities: { required: ['network.request', 'process'] } },
+      tools: [httpTool]
+    })
+    assert.equal(await manager.checkEscalation('lost'), 'pending-approval')
+    assert.equal(
+      (await manager.handleCall('lost', 'http.request', { toolName: 'fetch', input: {} })).decision,
+      'deny'
+    )
+    // Re-approval is the only way out, and it records a fresh baseline.
+    await manager.approveRequiredCapabilities('lost')
+    assert.equal(
+      (await manager.handleCall('lost', 'http.request', { toolName: 'fetch', input: {} })).decision,
+      'allow'
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+// --- Scenario H: a call admitted before an upgrade cannot clear the pending gate when it ends ---
+{
+  const root = await mkdtemp(join(tmpdir(), 'ola-ext-touch-race-'))
+  const extensions = join(root, 'extensions')
+  const stateStore = new ExtensionStateStore(join(root, 'extensions.json'))
+  const approvalStore = new ExtensionStateStore(join(root, 'approvals.json'))
+  const realService = new ExtensionService(extensions, stateStore, new MemorySecrets())
+  // A stub executor keeps the scenario offline; only the admission bookkeeping is under test.
+  const service = {
+    getRuntime: (id: string) => realService.getRuntime(id),
+    executeHttpRequest: async () => ({ ok: true })
+  } as unknown as ExtensionService
+  const manager = new ExtensionManager(service, stateStore, {}, approvalStore)
+  try {
+    await setupExtension(extensions, {
+      schemaVersion: 1,
+      id: 'race',
+      name: 'Race',
+      version: '1',
+      permissions: { capabilities: { required: ['network.request'] } },
+      tools: [httpTool]
+    })
+    await stateStore.update('race', { enabled: true })
+    await manager.checkEscalation('race', { firstInstall: true })
+    const admitted = await manager.handleCall('race', 'http.request', {
+      toolName: 'fetch',
+      input: {}
+    })
+    assert.equal(admitted.decision, 'allow')
+    // An upgrade lands while the admitted call is still running.
+    await setupExtension(extensions, {
+      schemaVersion: 1,
+      id: 'race',
+      name: 'Race',
+      version: '2',
+      permissions: { capabilities: { required: ['network.request', 'process'] } },
+      tools: [httpTool]
+    })
+    assert.equal(await manager.checkEscalation('race'), 'pending-approval')
+    // The in-flight call finishes now; its bookkeeping must not resurrect `active`.
+    if (admitted.decision === 'allow') await admitted.run()
+    assert.equal((await manager.describe('race')).lifecycle, 'pending-approval')
+    assert.equal(
+      (await manager.handleCall('race', 'http.request', { toolName: 'fetch', input: {} })).decision,
+      'deny'
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
   }
 }
 

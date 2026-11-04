@@ -62,6 +62,25 @@ export function parseRuntimeRunLocator(input: unknown): RuntimeRunLocator {
   }
 }
 
+/**
+ * `run-unsubscribe` names the subscription it owns. The registry key is only
+ * window + run, so without the id a stale stream could cancel a newer one. The
+ * field stays optional so an older renderer keeps working; Main then falls back
+ * to releasing whatever is registered for that run.
+ */
+export function parseRuntimeRunUnsubscribeRequest(
+  input: unknown
+): RuntimeRunLocator & { subscriptionId?: string } {
+  const value = exactRecord(input, ['workspaceId', 'runId', 'subscriptionId'])
+  return {
+    workspaceId: parseRuntimeIdentifier(value.workspaceId),
+    runId: parseRuntimeIdentifier(value.runId),
+    ...(value.subscriptionId === undefined
+      ? {}
+      : { subscriptionId: parseRuntimeIdentifier(value.subscriptionId) })
+  }
+}
+
 export function parseRuntimeRunSnapshotLocator(input: unknown): RuntimeRunSnapshotLocator {
   const value = exactRecord(input, ['workspaceId', 'runId', 'afterSeq'])
   if (

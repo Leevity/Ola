@@ -13,10 +13,9 @@
 
 import {
   capabilityEscalated,
-  declaredCapabilities,
+  capabilityFingerprint,
   hasCapability,
-  projectedCapabilities,
-  requiredCapabilities
+  projectedCapabilities
 } from '../../shared/extension-capabilities'
 import type { ExtensionCapabilityKind } from '../../shared/extension-types'
 import { ExtensionStateStore, type ExtensionState } from './extension-state-store'
@@ -65,6 +64,15 @@ export type ExtensionCallResult =
   | { decision: 'allow'; run: () => Promise<unknown> }
   | { decision: 'deny'; reason: DenyReason }
 
+type CallEvaluation =
+  | {
+      decision: 'allow'
+      id: string
+      runtime: RuntimeExtension
+      narrowed: { toolName: string; input: Record<string, unknown> }
+    }
+  | { decision: 'deny'; reason: DenyReason }
+
 export type DenyReason =
   | 'unknown_method'
   | 'not-declared'
@@ -89,32 +97,47 @@ export interface ExtensionManagerOptions {
 export class ExtensionManager {
   private readonly lifecycle = new Map<string, ExtensionLifecycleState>()
   private readonly touchedAt = new Map<string, number>()
+  /** Manifest fingerprint the current lifecycle state was established against. */
+  private readonly lifecycleFingerprint = new Map<string, string>()
   private sweepTimer: NodeJS.Timeout | null = null
 
   constructor(
     private readonly service: ExtensionService,
     private readonly stateStore: ExtensionStateStore,
-    private readonly options: ExtensionManagerOptions = {}
+    private readonly options: ExtensionManagerOptions = {},
+    /**
+     * Durable approval history, stored separately from the per-install state. Removing and
+     * re-installing an extension deletes its state but must not reset what the user last
+     * approved — otherwise an upgrade could silently widen its permission surface.
+     *
+     * Deliberately has no default: defaulting to `stateStore` would silently restore the
+     * "remove resets the baseline" behaviour for any caller that forgets this argument.
+     */
+    private readonly approvalStore: ExtensionStateStore
   ) {}
 
-  /** Resolve the effective capability state, applying the legacy fallback (fully granted). */
+  /** Declared upper bound after legacy `permissions.network` projection. */
+  private declaredBound(runtime: RuntimeExtension): ExtensionCapabilityKind[] {
+    const declaration = projectedCapabilities(runtime.manifest).declaration
+    if (!declaration) return []
+    return [...new Set([...declaration.required, ...(declaration.optional ?? [])])]
+  }
+
+  /** Required capabilities after legacy projection (not the raw on-disk manifest). */
+  private requiredBound(runtime: RuntimeExtension): ExtensionCapabilityKind[] {
+    return [...new Set(projectedCapabilities(runtime.manifest).declaration?.required ?? [])]
+  }
+
+  /** Resolve the effective capability state, applying the legacy fallback. */
   private async capabilityState(
     extensionId: string,
     runtime: RuntimeExtension,
     state: ExtensionState
   ): Promise<{ granted: ExtensionCapabilityKind[]; approvedRequired: ExtensionCapabilityKind[] }> {
-    const projection = projectedCapabilities(runtime.manifest)
-    const declared = projection.declaration
-      ? [
-          ...new Set([
-            ...projection.declaration.required,
-            ...(projection.declaration.optional ?? [])
-          ])
-        ]
-      : []
-    const required = projection.declaration ? [...new Set(projection.declaration.required)] : []
-    // Legacy state has no granted/approvedRequired → fully granted, matching the declared bound.
-    const granted = state.granted ?? [...declared]
+    const required = this.requiredBound(runtime)
+    // Legacy state has no granted/approvedRequired. Grant only what the extension requires —
+    // optional capabilities must always be granted explicitly, never by a fallback.
+    const granted = state.granted ?? [...required]
     const approvedRequired = state.approvedRequired ?? [...required]
     if (!state.granted || !state.approvedRequired) {
       await this.persistCapabilities(extensionId, granted, approvedRequired)
@@ -131,14 +154,26 @@ export class ExtensionManager {
   }
 
   /**
-   * The four-gate admission check. Returns a function that actually runs the call only when
-   * every gate passes; denied calls never reach the executor and are logged.
+   * The four-gate admission check without executing anything. Both the IPC handler and the
+   * agent-runtime tool executor must call this so there is exactly one controlled entry point;
+   * an executor that skips it would bypass declared/granted/approval gates entirely.
    */
-  async handleCall(
+  async admitCall(
     extensionId: unknown,
     method: string,
     params: unknown
-  ): Promise<ExtensionCallResult> {
+  ): Promise<{ decision: 'allow' } | { decision: 'deny'; reason: DenyReason }> {
+    const evaluated = await this.evaluateCall(extensionId, method, params)
+    return evaluated.decision === 'allow'
+      ? { decision: 'allow' }
+      : { decision: 'deny', reason: evaluated.reason }
+  }
+
+  private async evaluateCall(
+    extensionId: unknown,
+    method: string,
+    params: unknown
+  ): Promise<CallEvaluation> {
     const id = typeof extensionId === 'string' ? extensionId : ''
     if (!id) return this.deny(id, 'unknown_method', 'missing extension id')
     // Gate 1: method must be one we implement.
@@ -164,8 +199,8 @@ export class ExtensionManager {
     const capability =
       method === 'http.request' ? ('network.request' as const) : ('agent.tool' as const)
 
-    // Gate 2: the capability must be declared in required ∪ optional.
-    if (!declaredCapabilities(runtime.manifest).includes(capability)) {
+    // Gate 2: the capability must be declared in required ∪ optional (after legacy projection).
+    if (!this.declaredBound(runtime).includes(capability)) {
       return this.deny(id, 'not-declared', `${capability} not declared`)
     }
     // Gate 3: the capability must be granted by the user.
@@ -185,6 +220,20 @@ export class ExtensionManager {
     if (narrowed === null) return this.deny(id, 'unsafe-param', 'unsafe parameter shape')
 
     this.touch(id)
+    return { decision: 'allow', id, runtime, narrowed }
+  }
+
+  /** Admit and execute an extension call (IPC path). */
+  async handleCall(
+    extensionId: unknown,
+    method: string,
+    params: unknown
+  ): Promise<ExtensionCallResult> {
+    const evaluated = await this.evaluateCall(extensionId, method, params)
+    if (evaluated.decision === 'deny') {
+      return { decision: 'deny', reason: evaluated.reason }
+    }
+    const { id, runtime, narrowed } = evaluated
     return {
       decision: 'allow',
       run: async () => {
@@ -197,7 +246,11 @@ export class ExtensionManager {
     }
   }
 
-  private deny(id: string, reason: DenyReason, detail: string): ExtensionCallResult {
+  private deny(
+    id: string,
+    reason: DenyReason,
+    detail: string
+  ): { decision: 'deny'; reason: DenyReason } {
     this.options.onDenied?.(id, reason, detail)
     return { decision: 'deny', reason }
   }
@@ -228,6 +281,11 @@ export class ExtensionManager {
 
   private touch(id: string): void {
     this.touchedAt.set(id, Date.now())
+    const current = this.lifecycle.get(id)
+    // A call that finishes while the extension awaits re-approval must not promote it back to
+    // `active`: the next `lifecycleFor` would then short-circuit and skip the baseline check for
+    // the rest of the process lifetime.
+    if (current === 'pending-approval' || current === 'disabled' || current === 'error') return
     this.lifecycle.set(id, 'active')
   }
 
@@ -238,19 +296,27 @@ export class ExtensionManager {
     state: ExtensionState
   ): Promise<ExtensionLifecycleState> {
     const current = this.lifecycle.get(id)
-    if (current === 'active' || current === 'asleep') return current
-    if (current === 'pending-approval' || current === 'disabled') return current
+    if (current === 'pending-approval' || current === 'disabled' || current === 'error')
+      return current
+    if (current === 'active' || current === 'asleep') {
+      // An already-activated extension skips the (file-backed) baseline check, but only while
+      // the manifest it was activated against is still the one on disk. A manifest replaced
+      // behind our back must fall through to the approval path instead of inheriting the state.
+      if (this.lifecycleFingerprint.get(id) === capabilityFingerprint(runtime.manifest))
+        return current
+    }
     if (!state.enabled) {
       this.lifecycle.set(id, 'disabled')
+      this.lifecycleFingerprint.delete(id)
       return 'disabled'
     }
-    const { approvedRequired } = await this.capabilityState(id, runtime, state)
-    const required = requiredCapabilities(runtime.manifest)
-    if (capabilityEscalated(approvedRequired, required)) {
+    if (await this.escalationPending(id, runtime)) {
       this.lifecycle.set(id, 'pending-approval')
+      this.lifecycleFingerprint.delete(id)
       return 'pending-approval'
     }
     this.lifecycle.set(id, 'active')
+    this.lifecycleFingerprint.set(id, capabilityFingerprint(runtime.manifest))
     this.touch(id)
     return 'active'
   }
@@ -290,7 +356,7 @@ export class ExtensionManager {
     const state = await this.stateStore.getOrCreate(id)
     const { granted, approvedRequired } = await this.capabilityState(id, runtime, state)
     const requested = [...new Set(kinds)]
-    const bound = new Set(declaredCapabilities(runtime.manifest))
+    const bound = new Set(this.declaredBound(runtime))
     if (requested.some((kind) => !bound.has(kind))) return { ok: false, granted: [...granted] }
     const nextGranted = [...new Set([...granted, ...requested])]
     await this.persistCapabilities(id, nextGranted, approvedRequired)
@@ -311,7 +377,7 @@ export class ExtensionManager {
     const { granted, approvedRequired } = await this.capabilityState(id, runtime, state)
     const revokeSet = new Set(kinds)
     const nextGranted = granted.filter((kind) => !revokeSet.has(kind))
-    const required = requiredCapabilities(runtime.manifest)
+    const required = this.requiredBound(runtime)
     const lostRequired = required.some((kind) => !nextGranted.includes(kind))
     if (lostRequired) {
       // A required capability gone ⇒ the extension can no longer run ⇒ disable it explicitly.
@@ -323,15 +389,56 @@ export class ExtensionManager {
     return nextGranted
   }
 
-  /** Re-approve after an escalation: record the new required set as approved and clear the gate. */
+  /**
+   * Whether the durable approval baseline no longer covers what the current manifest can do.
+   * A missing baseline is only "first install" for an extension that has never been installed;
+   * for an existing installation it means the baseline was lost (file deleted, corrupted, or
+   * written by a build without approvals) and it must fail closed rather than adopt the current
+   * manifest as if the user had approved it.
+   */
+  private async escalationPending(id: string, runtime: RuntimeExtension): Promise<boolean> {
+    const approval = await this.approvalStore.get(id)
+    if (!approval || approval.approvedRequired === undefined) {
+      return (await this.stateStore.get(id)) !== null
+    }
+    if (capabilityEscalated(approval.approvedRequired, this.requiredBound(runtime))) return true
+    // A record without a fingerprint predates the fingerprint field. It still carries the
+    // approved required set, so treat it as legacy rather than as an escalation.
+    return (
+      approval.approvedFingerprint !== undefined &&
+      approval.approvedFingerprint !== capabilityFingerprint(runtime.manifest)
+    )
+  }
+
+  /**
+   * Re-approve after an escalation. The IPC channel is reachable from the renderer, so this
+   * must never act as an unauthenticated privilege grant: it only proceeds when an escalation
+   * is actually pending, and it grants the newly required capabilities rather than reusing the
+   * stale grant set.
+   */
   async approveRequiredCapabilities(extensionId: unknown): Promise<void> {
     const id = typeof extensionId === 'string' ? extensionId : ''
     const runtime = await this.service.getRuntime(id)
     const state = await this.stateStore.getOrCreate(id)
-    const required = requiredCapabilities(runtime.manifest)
-    const granted = state.granted ?? [...required]
-    await this.stateStore.update(id, { approvedRequired: required, granted })
-    this.lifecycle.set(id, 'active')
+    // An unreadable baseline has no record to compare against, so the pending state raised by
+    // checkEscalation()/lifecycleFor() is what authorises the re-approval in that case. When the
+    // baseline is intact, an actual escalation must be pending — never a bare IPC call.
+    if (
+      this.lifecycle.get(id) !== 'pending-approval' &&
+      !(await this.escalationPending(id, runtime))
+    ) {
+      throw new Error('No capability approval is pending for ' + id)
+    }
+    const required = this.requiredBound(runtime)
+    const fingerprint = capabilityFingerprint(runtime.manifest)
+    const granted = [...new Set([...(state.granted ?? []), ...required])]
+    await this.persistCapabilities(id, granted, required)
+    await this.approvalStore.update(id, {
+      approvedRequired: required,
+      approvedFingerprint: fingerprint
+    })
+    this.lifecycle.set(id, state.enabled ? 'idle' : 'disabled')
+    this.lifecycleFingerprint.set(id, fingerprint)
   }
 
   /** Declared and granted capability surface for the UI. */
@@ -345,36 +452,62 @@ export class ExtensionManager {
     const runtime = await this.service.getRuntime(id)
     const state = await this.stateStore.getOrCreate(id)
     const { granted } = await this.capabilityState(id, runtime, state)
-    const declared = declaredCapabilities(runtime.manifest)
-    const required = requiredCapabilities(runtime.manifest)
+    const declared = this.declaredBound(runtime)
+    const required = this.requiredBound(runtime)
     const optional = declared.filter((kind) => !required.includes(kind))
     return { required, optional, granted, lifecycle: this.lifecycle.get(id) ?? 'idle' }
   }
 
   /**
-   * On install/update, decide whether the new manifest escalates required capabilities and must
-   * wait for re-approval. First install has no prior approval, so it never lands in pending-approval.
-   * Returns the resulting lifecycle state.
+   * On install/update, compare the manifest against the durable approval baseline and put an
+   * escalated extension into `pending-approval`. Only a caller that knows this is a genuine
+   * first install may record a baseline without blocking: for any other caller a missing
+   * baseline means it was lost, which must not turn into an implicit approval.
+   * The baseline lives outside the per-install state so remove + reinstall cannot reset it.
    */
-  async checkEscalation(extensionId: unknown): Promise<ExtensionLifecycleState> {
+  async checkEscalation(
+    extensionId: unknown,
+    options: { firstInstall?: boolean } = {}
+  ): Promise<ExtensionLifecycleState> {
     const id = typeof extensionId === 'string' ? extensionId : ''
+    // Read the durable baseline before getRuntime() creates a fresh per-install state row.
+    const prior = await this.approvalStore.get(id)
     const runtime = await this.service.getRuntime(id)
     const state = await this.stateStore.getOrCreate(id)
-    const required = requiredCapabilities(runtime.manifest)
-    const approvedRequired = state.approvedRequired
-    if (state.granted === undefined || state.approvedRequired === undefined) {
-      // Legacy state: treat as fully approved, no escalation. Backfill so future upgrades compare correctly.
-      const granted = state.granted ?? [...required]
-      const approved = state.approvedRequired ?? [...required]
-      await this.persistCapabilities(id, granted, approved)
+    const required = this.requiredBound(runtime)
+    const fingerprint = capabilityFingerprint(runtime.manifest)
+    if (!prior || prior.approvedRequired === undefined) {
+      if (options.firstInstall !== true) {
+        // Installed before, but nothing verifiable about what was approved: fail closed.
+        this.lifecycle.set(id, 'pending-approval')
+        this.lifecycleFingerprint.delete(id)
+        return 'pending-approval'
+      }
+      await this.persistCapabilities(
+        id,
+        state.granted ?? [...required],
+        state.approvedRequired ?? required
+      )
+      await this.approvalStore.update(id, {
+        approvedRequired: required,
+        approvedFingerprint: fingerprint
+      })
       this.lifecycle.set(id, state.enabled ? 'idle' : 'disabled')
+      this.lifecycleFingerprint.set(id, fingerprint)
       return state.enabled ? 'idle' : 'disabled'
     }
-    if (capabilityEscalated(approvedRequired, required)) {
+    if (await this.escalationPending(id, runtime)) {
       this.lifecycle.set(id, 'pending-approval')
+      this.lifecycleFingerprint.delete(id)
       return 'pending-approval'
     }
+    // Keep the baseline aligned with non-escalating changes (e.g. a version bump).
+    await this.approvalStore.update(id, {
+      approvedRequired: required,
+      approvedFingerprint: fingerprint
+    })
     this.lifecycle.set(id, state.enabled ? 'idle' : 'disabled')
+    this.lifecycleFingerprint.set(id, fingerprint)
     return state.enabled ? 'idle' : 'disabled'
   }
 }

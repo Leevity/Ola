@@ -146,14 +146,18 @@ async function completeMcpOAuth(
   if (result.error) return fail(result.errorDescription ?? result.error)
   if (!result.code) return fail('The authorization server did not return a code')
 
-  // CSRF check: the state was persisted when the SDK built the authorization URL.
+  // CSRF check: fail closed. A missing expected state means no authorization URL has
+  // been built yet (or the keychain read failed) — exchanging a code in that window
+  // would let any local caller complete a flow with an arbitrary state.
   const expectedState = (await mcpOAuthStore.read(serverId)).state
-  if (expectedState && result.state !== expectedState) {
+  if (!expectedState || result.state !== expectedState) {
     return fail('Authorization state mismatch')
   }
 
   try {
     const status = await mcpManager.completeAuthorization(serverId, result.code)
+    // The state and verifier are single-use: clear them so the callback cannot be replayed.
+    await mcpOAuthStore.patch(serverId, { state: undefined, codeVerifier: undefined })
     notifyMcpOAuthCallback(serverId, { serverId, ok: true, status })
     return { accepted: true }
   } catch (error) {

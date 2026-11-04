@@ -55,6 +55,9 @@ export async function openTsRuntimeRunStream(input: {
   const queue: TsRuntimeStreamItem[] = []
   let waiter: ((item: TsRuntimeStreamItem) => void) | null = null
   let closed = false
+  let closeRequested = false
+  let unsubscribeSent = false
+  let closeInFlight: Promise<void> | null = null
 
   const push = (item: TsRuntimeStreamItem): void => {
     if (closed) return
@@ -62,6 +65,12 @@ export async function openTsRuntimeRunStream(input: {
       const resolve = waiter
       waiter = null
       resolve(item)
+      return
+    }
+    // A reader that stops consuming must not grow the queue without bound.
+    if (queue.length >= 1024) {
+      queue.length = 0
+      queue.push({ kind: 'resync', reason: 'SLOW_CONSUMER' })
       return
     }
     queue.push(item)
@@ -85,8 +94,26 @@ export async function openTsRuntimeRunStream(input: {
     push({ kind: 'resync', reason: frame.reason ?? 'RESYNC_REQUIRED' })
   })
 
+  /**
+   * Idempotent release of the Main-side subscription. It may be called once while
+   * `run-subscribe` is still in flight (id unknown) and again after the response
+   * arrives, so closing during startup must not leave a live subscription behind.
+   */
+  const sendUnsubscribe = async (): Promise<void> => {
+    if (subscriptionId === null || unsubscribeSent) return
+    unsubscribeSent = true
+    const owned = subscriptionId
+    await invokeMessagePackBinary<RuntimeResult<{ unsubscribed: boolean }>>(
+      runtimeChannel('run-unsubscribe'),
+      // Main keys subscriptions by window+run, so the id is what proves this stream owns the
+      // entry it is about to close.
+      { workspaceId: input.workspaceId, runId: input.runId, subscriptionId: owned }
+    ).catch(() => undefined)
+  }
+
   const close = async (): Promise<void> => {
-    if (closed) return
+    if (closeInFlight) return await closeInFlight
+    closeRequested = true
     closed = true
     offEvent()
     offResync()
@@ -95,11 +122,8 @@ export async function openTsRuntimeRunStream(input: {
     const blocked = waiter
     waiter = null
     blocked?.({ kind: 'end' })
-    if (subscriptionId === null) return
-    await invokeMessagePackBinary<RuntimeResult<{ unsubscribed: boolean }>>(
-      runtimeChannel('run-unsubscribe'),
-      { workspaceId: input.workspaceId, runId: input.runId }
-    ).catch(() => undefined)
+    closeInFlight = sendUnsubscribe()
+    return await closeInFlight
   }
 
   function onAbort(): void {
@@ -139,7 +163,9 @@ export async function openTsRuntimeRunStream(input: {
     throw new Error('RUN_NOT_FOUND')
   }
   subscriptionId = subscribed.subscriptionId
-  if (input.signal?.aborted) {
+  // If close()/abort ran while the subscribe call was in flight, Main already
+  // created a subscription. Release it now that its id is known.
+  if (closeRequested || input.signal?.aborted) {
     await close()
     return null
   }

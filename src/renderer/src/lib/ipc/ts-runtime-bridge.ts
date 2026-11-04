@@ -334,7 +334,7 @@ export async function* streamTsRuntimeTextTurn(
       runId: run.runId,
       afterSeq,
       signal: input.signal
-    })
+    }).catch(() => null)
   try {
     await awaitPendingSessionCreate(run.sessionId)
     const result = await invokeMessagePackBinary<RuntimeResult<{ accepted: boolean }>>(
@@ -354,8 +354,9 @@ export async function* streamTsRuntimeTextTurn(
     }
     /**
      * Set when the caller owes one snapshot reconciliation. A subscription that
-     * cannot be opened leaves `stream` null, which turns the loop into the
-     * previous 40 ms poll — the degraded path for a Main process without push.
+     * cannot be opened — push unsupported, IPC rejected, or the open timed out —
+     * leaves `stream` null, which turns the loop into the previous 40 ms poll.
+     * Throwing here would abort a run whose events are still readable by polling.
      */
     let reconcile = !stream
     for (;;) {

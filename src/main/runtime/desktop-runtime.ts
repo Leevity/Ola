@@ -30,7 +30,7 @@ import {
   createLocalGlobFilesTool
 } from '../../runtime/tools/local-find-files'
 import { createExtensionRuntimeTools } from '../extensions/extension-runtime-tools'
-import { getExtensionService } from '../extensions/extension-runtime'
+import { getExtensionManager, getExtensionService } from '../extensions/extension-runtime'
 import {
   createLegacyWebFetchRuntimeTool,
   createLegacyWebSearchRuntimeTool,
@@ -283,7 +283,15 @@ export class DesktopRuntime {
         const subAgents = scenarioPolicy ? [] : await agentCatalog.list()
         const extensionTools = scenarioPolicy
           ? []
-          : await createExtensionRuntimeTools(getExtensionService(), run.extensionIds)
+          : await createExtensionRuntimeTools(
+              getExtensionService(),
+              run.extensionIds,
+              async ({ extensionId, toolName, input }) =>
+                await getExtensionManager().admitCall(extensionId, 'http.request', {
+                  toolName,
+                  input
+                })
+            )
         const mcpTools = scenarioPolicy
           ? []
           : (() => {
@@ -379,6 +387,7 @@ export class DesktopRuntime {
               sessionId: run.sessionId,
               ...(hookProjectPath ? { projectPath: hookProjectPath } : {}),
               isPolicySession: scenarioPolicy !== null,
+              enabled: hooksService.enabled,
               emit: (event, invocation) => hooksService.emit(event, invocation)
             }
           ),

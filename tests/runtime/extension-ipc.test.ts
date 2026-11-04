@@ -30,7 +30,7 @@ vi.mock('../../src/main/extensions/extension-runtime', () => ({
     getRuntime: async (id: string) => ({
       id,
       enabled: id === 'weather',
-      manifest: { id, name: id, tools: [] },
+      manifest: { schemaVersion: 1, id, name: id, version: '1', tools: [] },
       config: { token: 'main-only' }
     }),
     update: async (id: string) => {
@@ -46,7 +46,7 @@ vi.mock('../../src/main/extensions/extension-runtime', () => ({
       decision: 'allow' as const,
       run: async () =>
         executeExtensionHttpTool({
-          manifest: { id, name: id, tools: [] },
+          manifest: { schemaVersion: 1, id, name: id, version: '1', tools: [] },
           enabled: true,
           config: { token: 'main-only' },
           toolName: params.toolName ?? '',

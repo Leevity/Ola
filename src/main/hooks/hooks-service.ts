@@ -13,7 +13,9 @@ import type {
 import { hooksConfigPaths, loadHooksConfig } from './hooks-loader'
 import { HooksRunner } from './hooks-runner'
 
-// Temporarily disabled while the automation hook workflow is being redesigned.
+// Temporarily disabled while the automation hook workflow is being redesigned. This is the single
+// switch: `withToolHooks` reads it through `HooksService.enabled`, so a disabled service never
+// advertises a veto gate that cannot run.
 const AUTOMATION_HOOKS_ENABLED = false
 
 interface HooksState {
@@ -26,6 +28,11 @@ const MAX_HISTORY = 500
 const HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000
 const HISTORY_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000
 
+/** The one verdict a broken policy gate may produce: a denial that names the failure. */
+function executionFailedOutput(reason: string): HookOutput {
+  return { permissionDecision: 'deny', block: { reason: `HOOK_EXECUTION_FAILED: ${reason}` } }
+}
+
 export class HooksService {
   private state: HooksState = { version: 1, trustedKeys: [], history: [] }
   private initialized = false
@@ -34,13 +41,21 @@ export class HooksService {
 
   constructor(
     private readonly statePath = join(olaDataRoot(), 'hooks-state-v1.json'),
-    maxConcurrency = 4
+    maxConcurrency = 4,
+    /** Test seam: production reads the module flag; a test can exercise the failure matrix. */
+    private readonly enabledFlag: boolean = AUTOMATION_HOOKS_ENABLED,
+    runner: HooksRunner = new HooksRunner(maxConcurrency)
   ) {
-    this.runner = new HooksRunner(maxConcurrency)
+    this.runner = runner
     const cleanupTimer = setInterval(() => {
       void this.cleanupHistory()
     }, HISTORY_CLEANUP_INTERVAL_MS)
     cleanupTimer.unref()
+  }
+
+  /** Whether policy hooks are active. Wrappers must not install a gate when this is false. */
+  get enabled(): boolean {
+    return this.enabledFlag
   }
 
   private async initialize(): Promise<void> {
@@ -130,16 +145,37 @@ export class HooksService {
     event: HookEvent,
     invocation: Omit<HookInvocation, 'event' | 'version'>
   ): Promise<HookOutput[]> {
-    if (!AUTOMATION_HOOKS_ENABLED) return []
+    if (!this.enabled) return []
     const hooks = (await this.list(invocation.projectPath)).filter(
       (hook) => hook.enabled && hook.event === event && hook.trustState === 'trusted'
     )
+    // Only `preToolUse` can veto. A failure on any other event loses an annotation, so it must
+    // not turn into a denial.
+    const vetoCapable = event === 'preToolUse'
     const outputs: HookOutput[] = []
     for (const hook of hooks) {
-      const result = await this.runner.run(hook, { ...invocation, version: 1, event })
+      let result: Awaited<ReturnType<HooksRunner['run']>>
+      try {
+        result = await this.runner.run(hook, { ...invocation, version: 1, event })
+      } catch (error) {
+        // The gate could not be evaluated at all (untrusted executable, size limit, saturated
+        // runner). Denying this one call keeps the failure visible instead of silently allowing
+        // an unvetted tool call.
+        if (!vetoCapable) continue
+        outputs.push(executionFailedOutput(error instanceof Error ? error.message : String(error)))
+        break
+      }
       this.state.history.push(result.record)
       this.pruneHistory()
       await this.persist()
+      // A hook that timed out, crashed or printed unparsable output produced no verdict. "No
+      // verdict" is not an approval: for a veto-capable event it must deny, otherwise a broken
+      // hook silently authorizes every tool call it was meant to police.
+      if (result.record.status !== 'completed' && result.record.status !== 'blocked') {
+        if (!vetoCapable) continue
+        outputs.push(executionFailedOutput(result.record.status))
+        break
+      }
       outputs.push(result.output)
       if (result.output.block || result.output.permissionDecision === 'deny') break
     }

@@ -48,6 +48,8 @@ const extension: RuntimeExtension = {
   }
 }
 
+const allowAll = async () => ({ decision: 'allow' as const })
+
 describe('extension runtime tools', () => {
   it('exposes only explicitly selected enabled HTTP extensions without leaking config', async () => {
     const getRuntime = vi.fn(async (id: string) => (id === 'weather' ? extension : null))
@@ -61,7 +63,11 @@ describe('extension runtime tools', () => {
         })
       })
     )
-    const tools = await createExtensionRuntimeTools({ getRuntime } as never, ['weather', 'missing'])
+    const tools = await createExtensionRuntimeTools(
+      { getRuntime } as never,
+      ['weather', 'missing'],
+      allowAll
+    )
     expect(getRuntime).toHaveBeenCalledTimes(2)
     expect(tools.map((tool) => tool.name)).toEqual([extensionRuntimeToolName('weather', 'lookup')])
     expect(tools[0]?.effect).toBe('read')
@@ -81,15 +87,35 @@ describe('extension runtime tools', () => {
   it('does not expose disabled extensions and validates the declared object boundary', async () => {
     const disabled: RuntimeExtension = { ...extension, enabled: false }
     await expect(
-      createExtensionRuntimeTools({ getRuntime: async () => disabled } as never, ['weather'])
+      createExtensionRuntimeTools(
+        { getRuntime: async () => disabled } as never,
+        ['weather'],
+        allowAll
+      )
     ).resolves.toEqual([])
     const tools = await createExtensionRuntimeTools(
       { getRuntime: async () => extension } as never,
-      ['weather']
+      ['weather'],
+      allowAll
     )
     expect(() => tools[0]!.validate({})).toThrow('INVALID_TOOL_INPUT')
     expect(() => tools[0]!.validate({ city: 'Hangzhou', extra: true })).toThrow(
       'INVALID_TOOL_INPUT'
     )
+  })
+
+  it('fails closed when the capability manager denies the call', async () => {
+    const fetchSpy = vi.fn(async () => new Response('{}', { status: 200 }))
+    vi.stubGlobal('fetch', fetchSpy)
+    const tools = await createExtensionRuntimeTools(
+      { getRuntime: async () => extension } as never,
+      ['weather'],
+      async () => ({ decision: 'deny' as const, reason: 'not-granted' })
+    )
+    const input = tools[0]!.validate({ city: 'Hangzhou' })
+    await expect(
+      tools[0]!.execute(input, { signal: new AbortController().signal } as never)
+    ).rejects.toThrow('EXTENSION_CALL_DENIED: not-granted')
+    expect(fetchSpy).not.toHaveBeenCalled()
   })
 })

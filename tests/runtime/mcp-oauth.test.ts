@@ -382,3 +382,75 @@ describe('MCP OAuth loopback listener', () => {
     expect(second.redirectUri).toBe(first.redirectUri)
   })
 })
+
+describe('McpOAuthCredentialStore memory-only recovery', () => {
+  const cryptoFor = (flag: { available: boolean }): McpOAuthCryptography => ({
+    available: () => flag.available,
+    encrypt: (value: string) => Buffer.from(`enc:${value}`, 'utf8'),
+    decrypt: (value: Buffer) => value.toString('utf8').replace(/^enc:/, '')
+  })
+
+  // Flipping this models the platform keychain becoming available again mid-session.
+  let flag = { available: true }
+
+  it('keeps tokens that only exist on disk when a locked-keychain write touches one field', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ola-oauth-merge-'))
+    const path = join(dir, 'mcp-oauth.bin')
+    try {
+      flag = { available: true }
+      const seeded = new McpOAuthCredentialStore(path, cryptoFor(flag))
+      await seeded.patch('srv', {
+        tokens: { access_token: 'disk-token', token_type: 'Bearer' },
+        clientInformation: { client_id: 'disk-client' }
+      })
+
+      // A fresh store while the keychain is locked has no in-memory snapshot: this is exactly the
+      // state where a whole-record merge would drop the disk tokens.
+      flag.available = false
+      const locked = new McpOAuthCredentialStore(path, cryptoFor(flag))
+      await locked.patch('srv', { state: 'pending', codeVerifier: 'verifier' })
+
+      flag.available = true
+      const recovered = await locked.read('srv')
+      expect(recovered.state).toBe('pending')
+      expect(recovered.codeVerifier).toBe('verifier')
+      expect(recovered.tokens).toEqual({ access_token: 'disk-token', token_type: 'Bearer' })
+      expect(recovered.clientInformation).toEqual({ client_id: 'disk-client' })
+
+      // The recovery must reach disk, otherwise a restart loses the tokens again.
+      const reopened = new McpOAuthCredentialStore(path, cryptoFor(flag))
+      expect((await reopened.read('srv')).tokens).toEqual({
+        access_token: 'disk-token',
+        token_type: 'Bearer'
+      })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('replays a deletion made while the keychain was locked instead of resurrecting it', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ola-oauth-delete-'))
+    const path = join(dir, 'mcp-oauth.bin')
+    try {
+      flag = { available: true }
+      const seeded = new McpOAuthCredentialStore(path, cryptoFor(flag))
+      await seeded.patch('srv', {
+        state: 'stale',
+        tokens: { access_token: 'revoked', token_type: 'Bearer' }
+      })
+
+      flag.available = false
+      const locked = new McpOAuthCredentialStore(path, cryptoFor(flag))
+      await locked.clear('srv', 'tokens')
+      await locked.patch('srv', { state: 'fresh' })
+
+      flag.available = true
+      const recovered = await locked.read('srv')
+      expect(recovered.state).toBe('fresh')
+      // A logout during the locked window must not be undone by the merge.
+      expect(recovered.tokens).toBeUndefined()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})

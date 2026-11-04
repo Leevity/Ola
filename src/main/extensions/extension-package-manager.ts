@@ -72,7 +72,12 @@ export class ExtensionPackageManager {
     private readonly extensionsDirectory: string,
     private readonly stateStore: ExtensionStateStore,
     private readonly storageStore: ExtensionStorageStore,
-    private readonly secrets: ExtensionSecretStore
+    private readonly secrets: ExtensionSecretStore,
+    /** Called after a bundled package is replaced so capability approvals can be rechecked. */
+    private readonly onBundleUpdated?: (
+      extensionId: string,
+      context: { firstInstall: boolean }
+    ) => Promise<void>
   ) {}
 
   async installFromFolder(sourcePath: string): Promise<string> {
@@ -126,7 +131,15 @@ export class ExtensionPackageManager {
           !(await exists(target)) ||
           (await this.shouldUpdate(source, target, sourceManifest.version))
         if (shouldUpdate) await copyDirectoryAtomically(source, target, true)
+        // Establish the per-install state first: checkEscalation reads the runtime,
+        // and creating the row later would leave a first install disabled.
         if (!current) await this.stateStore.getOrCreate(sourceManifest.id, true)
+        if (shouldUpdate) {
+          // Replacing files is an upgrade even when no state row existed before: the durable
+          // approval baseline from the previous version must be compared. `firstInstall` only
+          // tells the manager that a genuinely new package may record a baseline.
+          await this.onBundleUpdated?.(sourceManifest.id, { firstInstall: !current })
+        }
       } catch {
         // A broken bundled package is skipped so it cannot block other extensions.
       }

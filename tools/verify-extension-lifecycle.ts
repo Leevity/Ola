@@ -32,8 +32,9 @@ async function newHarness(): Promise<{
   const extensions = join(root, 'extensions')
   await mkdir(extensions, { recursive: true })
   const stateStore = new ExtensionStateStore(join(root, 'extensions.json'))
+  const approvals = new ExtensionStateStore(join(root, 'extensions-approvals.json'))
   const service = new ExtensionService(extensions, stateStore, new MemorySecrets())
-  const manager = new ExtensionManager(service, stateStore)
+  const manager = new ExtensionManager(service, stateStore, {}, approvals)
   return { root, manager, stateStore }
 }
 
@@ -72,6 +73,9 @@ const manifest = (id: string, version = '1') => ({
       JSON.stringify(manifest('beta'))
     )
     await h.stateStore.update('beta', { enabled: true })
+    // A real install records the approval baseline before the first call; without it the manager
+    // fails closed instead of trusting the manifest.
+    await h.manager.checkEscalation('beta', { firstInstall: true })
     const call = await h.manager.handleCall('beta', 'http.request', {
       toolName: 'fetch',
       input: {}
