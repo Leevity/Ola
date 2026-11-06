@@ -94,6 +94,7 @@ import {
 } from '../remote/account-client'
 import { onRemoteAccountCleared, onWorkspaceDirectoryChanged } from '../remote/account-lifecycle'
 import { resolveManagedResourceTarget } from './managed-resource-resolver'
+import { permittedWorkspaceIds } from './workspace-authority'
 import { OfflineWorkspaceExpiryMonitor } from './offline-workspace-expiry-monitor'
 import { realpath, stat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
@@ -431,10 +432,7 @@ export class DesktopRuntime {
         dataDirectory,
         execute: createAgentExecutor(adapter, tools),
         authorize,
-        authority: {
-          workspaceIds: async () =>
-            new Set([LOCAL_PERSONAL_WORKSPACE_ID, ...(await loadOfflineWorkspaceIds())])
-        }
+        authority: { workspaceIds: () => permittedWorkspaceIds(loadOfflineWorkspaceIds) }
       })
       const client = new RuntimeClient()
       try {
