@@ -59,4 +59,28 @@ coordinator.reset('failing')
 const recovered = await coordinator.connectEnabled([config('failing')], async () => undefined)
 assert.deepEqual(recovered, [{ serverId: 'failing', status: 'connected', attempts: 1 }])
 
+// A preflight failure is a fact about this host, not a transient error: one attempt and no
+// backoff, but the circuit still opens so a reconnect storm cannot repeat the same probe.
+let blockedAttempts = 0
+const sleptBefore = sleepDurations.length
+const blocked = await coordinator.connectEnabled([config('blocked')], async () => {
+  blockedAttempts += 1
+  throw Object.assign(new Error('Node v20.18.1 does not satisfy ^24.22.1'), { retryable: false })
+})
+assert.deepEqual(blocked, [
+  {
+    serverId: 'blocked',
+    status: 'failed',
+    attempts: 1,
+    error: 'Node v20.18.1 does not satisfy ^24.22.1',
+    retryAt: now + 100,
+    nonRetryable: true
+  }
+])
+assert.equal(blockedAttempts, 1)
+assert.equal(sleepDurations.length, sleptBefore)
+assert.deepEqual(await coordinator.connectEnabled([config('blocked')], async () => undefined), [
+  { serverId: 'blocked', status: 'circuit-open', retryAt: now + 100 }
+])
+
 console.log('MCP auto-connect verification passed')

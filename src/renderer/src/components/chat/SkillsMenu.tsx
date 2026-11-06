@@ -175,7 +175,7 @@ function SkillsMenuContent({
   const toggleActiveMcp = useMcpStore((s) => s.toggleActiveMcp)
   const loadMcpServers = useMcpStore((s) => s.loadServers)
   const refreshAllMcpServers = useMcpStore((s) => s.refreshAllServers)
-  const mcpTools = useMcpStore((s) => s.serverTools)
+  const mcpExposedTools = useMcpStore((s) => s.serverExposedTools)
   const pluginsByProject = useAppPluginStore((s) => s.pluginsByProject)
   const availablePlugins = React.useMemo(() => {
     const projectPlugins = resolvePluginsForProject(pluginsByProject, projectId)
@@ -674,7 +674,9 @@ function SkillsMenuContent({
               ) : (
                 connectedMcpServers.map((server) => {
                   const isActive = activeMcpIds.includes(server.id)
-                  const toolCount = mcpTools[server.id]?.length ?? 0
+                  const toolCount = (mcpExposedTools[server.id] ?? []).filter(
+                    (tool) => tool.externalName
+                  ).length
                   return (
                     <DropdownMenuItem
                       key={server.id}

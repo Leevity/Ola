@@ -218,6 +218,7 @@ export const IPC = {
   MCP_LIST_PROMPTS: 'mcp:list-prompts',
   MCP_GET_PROMPT: 'mcp:get-prompt',
   MCP_REFRESH_CAPABILITIES: 'mcp:refresh-capabilities',
+  MCP_PREFLIGHT: 'mcp:preflight',
   MCP_OAUTH_START: 'mcp:oauth-start',
   MCP_OAUTH_SIGNOUT: 'mcp:oauth-signout',
   MCP_OAUTH_CALLBACK: 'mcp:oauth-callback',

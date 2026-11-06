@@ -1581,6 +1581,8 @@
     "importJsonFailed": "Nhập JSON thất bại",
     "importJsonInvalid": "Không tìm thấy máy phục vụ MCP hợp lệ cấu hình",
     "serverAdded": "Máy chủ MCP \" {{name}} Thêm",
+    "saveFailed": "Không thể lưu cấu hình máy chủ MCP",
+    "capabilitiesTruncated": "Việc phát hiện khả năng dừng ở giới hạn trang; danh sách này chỉ liệt kê một phần những gì máy chủ thông báo.",
     "serverRemoved": "Máy phục vụ MCP bị gỡ bỏ",
     "noServers": "Không cấu hình máy phục vụ MCP",
     "selectToConfig": "Chọn một máy phục vụ cần cấu hình",
@@ -1635,7 +1637,37 @@
       "connected": "connected",
       "authorization-required": "authorization required",
       "error": "error"
-    }
+    },
+    "toolExposure": "Tool Exposure",
+    "exposureCounter": "{{exposed}} of {{advertised}} tools exposed (max {{max}} per server)",
+    "exposureUnfilteredWarning": "No allowlist set: all {{total}} advertised tools would be exposed, above the {{max}} cap. Select the tools you need.",
+    "presets": "Presets",
+    "presetNone": "All",
+    "filterToolsPlaceholder": "Filter tools...",
+    "notExposable": "Not exposable ({{total}})",
+    "excludedByAllowlist": "Excluded by allowlist ({{total}})",
+    "exposeReasons": {
+      "INVALID_ALIAS": "The server tool alias is invalid, so no external name can be formed.",
+      "EMPTY_TOOL_NAME": "The advertised tool name is empty.",
+      "TOO_LONG": "The external tool name is too long or collides with another tool."
+    },
+    "preflightBlocked": "Preflight blocked this server: {{code}}",
+    "preflightRecheck": "Recheck",
+    "preflightIgnore": "Ignore preflight",
+    "preflightIgnoredNote": "Preflight ignored",
+    "preflightPassed": "Preflight passed",
+    "preflightFailed": "Preflight check failed",
+    "diagnosticCodes": {
+      "NODE_VERSION_UNSUPPORTED": "Node version unsupported",
+      "COMMAND_MISSING": "Required command missing",
+      "ENGINE_MISSING": "Engine missing",
+      "TOOL_NOT_EXPOSABLE": "Some tools cannot be exposed"
+    },
+    "runtimeLimits": "Runtime Limits",
+    "runtimeLimitsHint": "Optional: per-call timeout in milliseconds and per-result byte caps (inline text, max total).",
+    "timeoutMsPlaceholder": "Timeout (ms)",
+    "inlineBytesPlaceholder": "Inline bytes",
+    "maxResultBytesPlaceholder": "Max result bytes"
   },
   "skillsmarket": {
     "title": "Thị trường kỹ năng",

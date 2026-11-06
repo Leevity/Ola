@@ -9,13 +9,34 @@ import {
   StreamableHTTPError
 } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js'
-import type { McpServerConfig, McpServerStatus, McpTool, McpResource, McpPrompt } from './mcp-types'
+import type {
+  ExposedMcpTool,
+  McpExposurePolicy,
+  McpOutputLimits,
+  McpServerConfig,
+  McpServerDiagnostic,
+  McpServerStatus,
+  McpTool,
+  McpResource,
+  McpPrompt
+} from './mcp-types'
+import { buildExposedMcpTools } from '../../shared/mcp-tool-policy'
+import { isBlockingPreflightFailure, runMcpPreflight } from './mcp-preflight'
 import { getMcpOAuthCredentialStore, McpOAuthCredentialStore } from './mcp-oauth-store'
 import { McpOAuthProvider, serverScopedBackend } from './mcp-oauth-provider'
 import { DEFAULT_MCP_OAUTH_PORT, redirectUriForPort } from './mcp-oauth-loopback'
 
 /** Both HTTP transports can exchange a pending authorization code for tokens. */
 type AuthorizableTransport = { finishAuth(code: string): Promise<void> }
+
+/**
+ * Pagination bounds for one capability list. A server that keeps handing back cursors would
+ * otherwise spin here forever; stopping is visible because `_truncated` is reported to the panel.
+ */
+const MAX_CAPABILITY_PAGES = 32
+const MAX_CAPABILITY_ENTRIES = 512
+/** Calls without `timeoutMs` keep the SDK default; the ceiling stops a wedged child hanging a run. */
+const MAX_CALL_TIMEOUT_MS = 30 * 60 * 1000
 
 function buildProcessEnv(): Record<string, string> {
   const base: Record<string, string> = {}
@@ -56,6 +77,22 @@ function buildStdioEnv(
     env.NPM_CONFIG_CACHE = cacheDir
   }
   return env
+}
+
+/**
+ * A host-side gate refused to spawn the child. Its own type exists so `autoconnect-coordinator`
+ * can tell "this machine cannot run the server" apart from "the socket dropped" and stop retrying:
+ * re-running the same preflight on the same host produces the same answer.
+ */
+export class McpPreflightError extends Error {
+  readonly retryable = false
+  constructor(
+    readonly diagnostic: McpServerDiagnostic,
+    serverName: string
+  ) {
+    super(`MCP preflight blocked "${serverName}": ${diagnostic.hint ?? diagnostic.code}`)
+    this.name = 'McpPreflightError'
+  }
 }
 
 /**
@@ -101,6 +138,10 @@ export class McpClientWrapper {
   private _resources: McpResource[] = []
   private _prompts: McpPrompt[] = []
   private _usedFallback = false
+  private _exposed: ExposedMcpTool[] = []
+  private _unexposable = 0
+  private _truncated = false
+  private _diagnostic: McpServerDiagnostic | undefined
 
   constructor(
     private config: McpServerConfig,
@@ -113,8 +154,44 @@ export class McpClientWrapper {
   get error(): string | undefined {
     return this._error
   }
+  /** Every tool the server advertises. Display and diagnostics only — not what the model may call. */
   get tools(): McpTool[] {
     return this._tools
+  }
+  /**
+   * The tools the model may call, each carrying the external name Main registered it under.
+   * Entries excluded by the allowlist or by an illegal name stay present with `filtered`/`reason`
+   * set, so the panel can state exactly what is missing instead of a count quietly shrinking.
+   */
+  get exposedTools(): ExposedMcpTool[] {
+    return this._exposed
+  }
+  /** Tool names with no legal external name; a number so the IPC payload stays small. */
+  get unexposableToolCount(): number {
+    return this._unexposable
+  }
+  get capabilitiesTruncated(): boolean {
+    return this._truncated
+  }
+  get diagnostic(): McpServerDiagnostic | undefined {
+    return this._diagnostic
+  }
+  /** The namespace every external name in `_exposed` was built from. */
+  get toolAlias(): string {
+    return this.config.toolAlias ?? ''
+  }
+  /**
+   * The policy in force, read back from the live config rather than re-derived from the exposed
+   * list: an absent allowlist means "everything" and must not become an explicit full list just
+   * because a reconnect happened to enumerate every tool.
+   */
+  get exposurePolicy(): McpExposurePolicy {
+    const policy: McpExposurePolicy = {}
+    if (Array.isArray(this.config.enabledTools)) policy.enabledTools = this.config.enabledTools
+    if (this.config.toolPresets && Object.keys(this.config.toolPresets).length)
+      policy.toolPresets = this.config.toolPresets
+    if (this.config.activePreset) policy.activePreset = this.config.activePreset
+    return policy
   }
   get resources(): McpResource[] {
     return this._resources
@@ -122,8 +199,35 @@ export class McpClientWrapper {
   get prompts(): McpPrompt[] {
     return this._prompts
   }
+  get outputLimits(): McpOutputLimits | undefined {
+    return this.config.outputLimits
+  }
+  /** The config this connection was built from, so a live view never has to fake one. */
+  get serverConfig(): McpServerConfig {
+    return this.config
+  }
   get usedFallback(): boolean {
     return this._usedFallback
+  }
+
+  /** Re-read the exposure policy after `mcp:update` without reconnecting the transport. */
+  applyConfig(config: McpServerConfig): void {
+    this.config = config
+    this.rebuildExposedTools()
+  }
+
+  private rebuildExposedTools(): void {
+    const built = buildExposedMcpTools(this.toolAlias, this._tools, this.exposurePolicy)
+    this._exposed = built.exposed
+    this._unexposable = built.unexposable
+    if (this._diagnostic?.code === 'TOOL_NOT_EXPOSABLE') this._diagnostic = undefined
+    if (built.unexposable > 0) {
+      this._diagnostic = {
+        code: 'TOOL_NOT_EXPOSABLE',
+        unexposableToolCount: built.unexposable,
+        hint: `Server "${this.config.name}" advertises ${built.unexposable} tool(s) whose names cannot be exposed. Rename them upstream or narrow the allowlist.`
+      }
+    }
   }
 
   /** The authorization URL the server redirected to, once the SDK produced one. */
@@ -140,8 +244,17 @@ export class McpClientWrapper {
     this._usedFallback = false
 
     try {
+      // The gate runs before spawning, so the version reported is the one the child would get.
+      const blocker = await this.preflightBlocker()
+      if (blocker) {
+        this._diagnostic = blocker
+        this._status = 'error'
+        this._error = `${blocker.detail ?? ''} — ${blocker.hint ?? 'Preflight failed'}`.trim()
+        throw new McpPreflightError(blocker, this.config.name)
+      }
       await this.tryConnect(this.config.transport)
     } catch (err) {
+      if (err instanceof McpPreflightError) throw err
       // A 401 is not a failure: the server is waiting for a browser authorization.
       // Neither retrying nor falling back to SSE can succeed before that happens.
       if (isAuthorizationPending(err)) {
@@ -177,6 +290,27 @@ export class McpClientWrapper {
       this._error = msg
       throw err
     }
+  }
+
+  /**
+   * What preflight found, if anything should stop the connection. `ignorePreflight` downgrades a
+   * failure to a visible note: the user still sees why the server is unusual, the gate just
+   * releases. Connecting without the declared engine is the server's problem to report.
+   */
+  private async preflightBlocker(): Promise<McpServerDiagnostic | undefined> {
+    if (this.config.transport !== 'stdio') return undefined
+    if (!this.config.preflight) return undefined
+    const found = await runMcpPreflight(this.config)
+    if (!found) {
+      if (this._diagnostic && isBlockingPreflightFailure(this._diagnostic))
+        this._diagnostic = undefined
+      return undefined
+    }
+    if (this.config.ignorePreflight === true) {
+      this._diagnostic = found
+      return undefined
+    }
+    return found
   }
 
   /**
@@ -226,7 +360,9 @@ export class McpClientWrapper {
 
     console.log(
       `[MCP:${this.config.name}] Connected via ${transportType} — ` +
-        `${this._tools.length} tools, ${this._resources.length} resources, ${this._prompts.length} prompts`
+        `${this._tools.length} advertised, ${this._exposed.filter((tool) => tool.externalName).length} exposed` +
+        `${this._resources.length ? `, ${this._resources.length} resources` : ''}` +
+        `${this._prompts.length ? `, ${this._prompts.length} prompts` : ''}`
     )
   }
 
@@ -305,6 +441,9 @@ export class McpClientWrapper {
     this._tools = []
     this._resources = []
     this._prompts = []
+    this._exposed = []
+    this._unexposable = 0
+    this._truncated = false
     console.log(`[MCP:${this.config.name}] Disconnected`)
   }
 
@@ -312,22 +451,20 @@ export class McpClientWrapper {
   async refreshCapabilities(): Promise<void> {
     if (!this.client || this._status !== 'connected') return
 
+    this._truncated = false
     try {
-      // List tools (handle pagination)
       try {
         this._tools = await this.fetchAllTools()
       } catch {
         this._tools = []
       }
 
-      // List resources (handle pagination)
       try {
         this._resources = await this.fetchAllResources()
       } catch {
         this._resources = []
       }
 
-      // List prompts (handle pagination)
       try {
         this._prompts = await this.fetchAllPrompts()
       } catch {
@@ -335,6 +472,8 @@ export class McpClientWrapper {
       }
     } catch (err) {
       console.error(`[MCP:${this.config.name}] Failed to refresh capabilities:`, err)
+    } finally {
+      this.rebuildExposedTools()
     }
   }
 
@@ -343,8 +482,36 @@ export class McpClientWrapper {
     if (!this.client || this._status !== 'connected') {
       throw new Error(`MCP server "${this.config.name}" is not connected`)
     }
-    const result = await this.client.callTool({ name: toolName, arguments: args })
-    return result
+    const timeoutMs = this.effectiveCallTimeoutMs()
+    if (!timeoutMs) return await this.client.callTool({ name: toolName, arguments: args })
+    // Raced rather than handed to the SDK: a child that never answers a `tools/call` would
+    // otherwise hold the run open until the model gave up, with no error for the user to read.
+    const request = this.client.callTool({ name: toolName, arguments: args })
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new Error(
+            `MCP tool "${toolName}" on "${this.config.name}" timed out after ${Math.round(timeoutMs / 1000)}s`
+          )
+        )
+      }, timeoutMs)
+    })
+    // The abandoned request keeps running; swallowing its late result keeps the process clean.
+    void request.catch(() => undefined)
+    try {
+      return await Promise.race([request, deadline])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
+  }
+
+  /** `timeoutMs` clamped to the run ceiling; `undefined` keeps the SDK default. */
+  private effectiveCallTimeoutMs(): number | undefined {
+    const configured = this.config.timeoutMs
+    if (typeof configured !== 'number' || !Number.isFinite(configured) || configured <= 0)
+      return undefined
+    return Math.min(Math.round(configured), MAX_CALL_TIMEOUT_MS)
   }
 
   /** Read a resource from the MCP server */
@@ -372,7 +539,7 @@ export class McpClientWrapper {
     const collected: McpTool[] = []
     let cursor: string | undefined
 
-    do {
+    for (let page = 0; page < MAX_CAPABILITY_PAGES; page += 1) {
       const result = await this.client.listTools(cursor ? { cursor } : undefined)
       const pageTools = (result.tools ?? []).map((t) => ({
         name: t.name,
@@ -381,8 +548,20 @@ export class McpClientWrapper {
       }))
       collected.push(...pageTools)
       cursor = result.nextCursor ?? undefined
-    } while (cursor)
+      if (!cursor) return collected
+      if (collected.length >= MAX_CAPABILITY_ENTRIES) {
+        this._truncated = true
+        console.warn(
+          `[MCP:${this.config.name}] tool list stopped at ${collected.length}; the server advertises more`
+        )
+        return collected
+      }
+    }
 
+    this._truncated = true
+    console.warn(
+      `[MCP:${this.config.name}] tool list stopped after ${MAX_CAPABILITY_PAGES} pages; the server keeps paginating`
+    )
     return collected
   }
 
@@ -393,7 +572,7 @@ export class McpClientWrapper {
     const collected: McpResource[] = []
     let cursor: string | undefined
 
-    do {
+    for (let page = 0; page < MAX_CAPABILITY_PAGES; page += 1) {
       const result = await this.client.listResources(cursor ? { cursor } : undefined)
       const pageResources = (result.resources ?? []).map((r) => ({
         uri: r.uri,
@@ -403,8 +582,13 @@ export class McpClientWrapper {
       }))
       collected.push(...pageResources)
       cursor = result.nextCursor ?? undefined
-    } while (cursor)
-
+      if (!cursor) return collected
+      if (collected.length >= MAX_CAPABILITY_ENTRIES) {
+        this._truncated = true
+        return collected
+      }
+    }
+    this._truncated = true
     return collected
   }
 
@@ -415,7 +599,7 @@ export class McpClientWrapper {
     const collected: McpPrompt[] = []
     let cursor: string | undefined
 
-    do {
+    for (let page = 0; page < MAX_CAPABILITY_PAGES; page += 1) {
       const result = await this.client.listPrompts(cursor ? { cursor } : undefined)
       const pagePrompts = (result.prompts ?? []).map((p) => ({
         name: p.name,
@@ -428,8 +612,13 @@ export class McpClientWrapper {
       }))
       collected.push(...pagePrompts)
       cursor = result.nextCursor ?? undefined
-    } while (cursor)
-
+      if (!cursor) return collected
+      if (collected.length >= MAX_CAPABILITY_ENTRIES) {
+        this._truncated = true
+        return collected
+      }
+    }
+    this._truncated = true
     return collected
   }
 

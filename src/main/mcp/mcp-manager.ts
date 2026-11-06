@@ -1,6 +1,12 @@
 import { McpClientWrapper } from './mcp-client'
 import { getMcpOAuthCredentialStore } from './mcp-oauth-store'
-import type { McpServerConfig, McpServerInfo, McpServerStatus } from './mcp-types'
+import type {
+  ExposedMcpTool,
+  McpOutputLimits,
+  McpServerConfig,
+  McpServerInfo,
+  McpServerStatus
+} from './mcp-types'
 
 /**
  * McpManager — manages multiple MCP server connections with lifecycle control.
@@ -77,18 +83,25 @@ export class McpManager {
     await this.connectServer(config)
   }
 
-  /** Get full info for a single server */
+  /**
+   * Live view of one server, built from the config the connection actually runs with plus the
+   * exposure the client resolved. `mcp:update` re-applies the stored config, so this never lags.
+   */
   getServerInfo(id: string): McpServerInfo | undefined {
     const client = this.clients.get(id)
     if (!client) return undefined
 
     return {
-      config: { id } as McpServerConfig, // minimal — full config comes from persistence
+      config: client.serverConfig,
       status: client.status,
-      tools: client.tools,
+      tools: client.tools.map((tool) => ({ name: tool.name, description: tool.description })),
+      exposedTools: client.exposedTools,
+      exposure: client.exposurePolicy,
       resources: client.resources,
       prompts: client.prompts,
-      error: client.error
+      capabilitiesTruncated: client.capabilitiesTruncated,
+      error: client.error,
+      diagnostic: client.diagnostic
     }
   }
 
@@ -98,12 +111,33 @@ export class McpManager {
     return client?.status ?? 'disconnected'
   }
 
-  /** Get tools for a server */
-  getTools(
-    id: string
-  ): { name: string; description?: string; inputSchema: Record<string, unknown> }[] {
+  /**
+   * Tools the model may call, each with its external name. This is what the runtime registry and
+   * the renderer both consume; `getAllTools` is the raw advertisement and must never be registered.
+   */
+  getTools(id: string): ExposedMcpTool[] {
     const client = this.clients.get(id)
-    return client?.tools ?? []
+    if (!client) return []
+    return client.exposedTools.filter((tool) => Boolean(tool.externalName))
+  }
+
+  /** Every tool the server advertises, allowlist and naming included. Display only. */
+  getAllTools(id: string): ExposedMcpTool[] {
+    return this.clients.get(id)?.exposedTools ?? []
+  }
+
+  /** The namespace this server's external names use. Empty when the record predates aliases. */
+  getToolAlias(id: string): string {
+    return this.clients.get(id)?.toolAlias ?? ''
+  }
+
+  getOutputLimits(id: string): McpOutputLimits | undefined {
+    return this.clients.get(id)?.outputLimits
+  }
+
+  /** Push a config edit — allowlist, presets, timeout — onto a live connection without reconnecting. */
+  applyConfig(config: McpServerConfig): void {
+    this.clients.get(config.id)?.applyConfig(config)
   }
 
   /** Get resources for a server */

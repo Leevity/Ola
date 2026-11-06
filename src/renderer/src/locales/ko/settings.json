@@ -1581,6 +1581,8 @@
     "importJsonFailed": "JSON 가져 오기 실패",
     "importJsonInvalid": "MCP 서버 구성이 없습니다.",
     "serverAdded": "MCP 서버 \"{{name}}\" 추가",
+    "saveFailed": "MCP 서버 설정을 저장할 수 없습니다",
+    "capabilitiesTruncated": "기능 탐색이 페이지 한도에서 중단되었으므로 이 목록은 서버가 광고하는 기능의 일부입니다.",
     "serverRemoved": "MCP 서버 제거",
     "noServers": "구성되는 MCP 서버 없음",
     "selectToConfig": "서버 선택하기",
@@ -1635,7 +1637,37 @@
       "connected": "connected",
       "authorization-required": "authorization required",
       "error": "error"
-    }
+    },
+    "toolExposure": "Tool Exposure",
+    "exposureCounter": "{{exposed}} of {{advertised}} tools exposed (max {{max}} per server)",
+    "exposureUnfilteredWarning": "No allowlist set: all {{total}} advertised tools would be exposed, above the {{max}} cap. Select the tools you need.",
+    "presets": "Presets",
+    "presetNone": "All",
+    "filterToolsPlaceholder": "Filter tools...",
+    "notExposable": "Not exposable ({{total}})",
+    "excludedByAllowlist": "Excluded by allowlist ({{total}})",
+    "exposeReasons": {
+      "INVALID_ALIAS": "The server tool alias is invalid, so no external name can be formed.",
+      "EMPTY_TOOL_NAME": "The advertised tool name is empty.",
+      "TOO_LONG": "The external tool name is too long or collides with another tool."
+    },
+    "preflightBlocked": "Preflight blocked this server: {{code}}",
+    "preflightRecheck": "Recheck",
+    "preflightIgnore": "Ignore preflight",
+    "preflightIgnoredNote": "Preflight ignored",
+    "preflightPassed": "Preflight passed",
+    "preflightFailed": "Preflight check failed",
+    "diagnosticCodes": {
+      "NODE_VERSION_UNSUPPORTED": "Node version unsupported",
+      "COMMAND_MISSING": "Required command missing",
+      "ENGINE_MISSING": "Engine missing",
+      "TOOL_NOT_EXPOSABLE": "Some tools cannot be exposed"
+    },
+    "runtimeLimits": "Runtime Limits",
+    "runtimeLimitsHint": "Optional: per-call timeout in milliseconds and per-result byte caps (inline text, max total).",
+    "timeoutMsPlaceholder": "Timeout (ms)",
+    "inlineBytesPlaceholder": "Inline bytes",
+    "maxResultBytesPlaceholder": "Max result bytes"
   },
   "skillsmarket": {
     "title": "기술 시장",

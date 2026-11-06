@@ -1,0 +1,1854 @@
+{
+  "server": {
+    "package": "rea-agents",
+    "version": "6.8.0",
+    "enginesNode": "^22.23.4 || ^24.22.1 || >=26.12.1",
+    "catalogSource": "recorded",
+    "recordedToolsSha256": "a98940ba69acd9c1781d180cee362d4ddab18f77eefdd3e3216f10e1bf98e5e9",
+    "inventorySha256": "abdffb2bb1ee25a7898eb23c42eb1e44c90c9a1cc50cb90b8370aed2691207c8"
+  },
+  "count": 229,
+  "byCategory": {
+    "core": 26,
+    "javascript": 24,
+    "native": 112,
+    "android": 50,
+    "web": 17
+  },
+  "overSegmentBudget": [],
+  "unmappedModules": [],
+  "tools": [
+    {
+      "name": "address_name",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "core",
+      "engines": [],
+      "description": "Resolve the primary analyzed name at a code or data address. Headless providers require an explicit address; GUI providers may default to their current cursor. Null means the provider has no primary name at that address.",
+      "readOnly": false
+    },
+    {
+      "name": "address_to_file_offset",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Map one provider-normalized virtual address to its original nonnegative file offset. Hopper verifies the original bytes against the selected executable digest and translates FAT image-relative offsets using the loaded header. Results preserve the provider coordinate, image base, and source path. Unmapped addresses fail explicitly; changed or unavailable sources return typed errors retaining native",
+      "readOnly": false
+    },
+    {
+      "name": "analyze_function",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "Build a dossier for one native function identified by symbol or provider-returned address. Returns identity with complete inclusive analyzed body ranges or explicit unknown, provider-specific pseudocode and assembly, comments, calls, references, referenced strings/names, local CFG blocks, and available native API boundary observations. Ghidra terminal-call assumptions that may cut the analyzed bod",
+      "readOnly": false
+    },
+    {
+      "name": "analyze_javascript_application",
+      "module": "server/registerElectronTools.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Reconstruct one local ASAR or extracted JavaScript application as an inline application graph without executing it. Returns recovered graph nodes, edges, semantic relations, integrity contradictions, limitations, and coverage. Select source_paths to acquire and analyze only exact inventoried file paths; the complete artifact inventory and identity remain intact, and unselected sources remain expli",
+      "readOnly": false
+    },
+    {
+      "name": "analyze_swift_types",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Categorize analyzed Swift procedure names using their manglings or same-address Swift symbol aliases. Decodes legacy and literal modern nominal contexts into classes, structs, enums, protocols, and extensions. Preserves provider names and supporting mangled_names; unresolved categories appear in other and in unclassified, which remains inline even under category filters. Returns deduplicated proce",
+      "readOnly": false
+    },
+    {
+      "name": "analyze_web_bundle",
+      "module": "server/registerBrowserTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Capture JavaScript source from one selected CDP page and statically derive a chunk graph, route and endpoint candidates, vendor fingerprints, page-declared WebMCP metadata, and optionally fetch source maps from the selected target origin or explicitly requested origins. JavaScript is parsed but never executed. Select detail summary and an explicit javascript-routes view for filtered route patterns",
+      "readOnly": false
+    },
+    {
+      "name": "annotate_native_function",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "Atomically update one function name and/or entry comments, read them back, and return a refreshed complete function dossier. Ghidra changes its ephemeral session analysis database only; original executable bytes remain unchanged. Empty comment text clears that comment. Edits remain available to subsequent MCP calls until close; CLI returns the updated dossier before discarding its session. Invalid",
+      "readOnly": false
+    },
+    {
+      "name": "batch_decompile",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Decompile each explicit procedure symbol or address, with one provider read active per batch. Preserves each input selector in address and reports the observed canonical entry and entry label in procedure; identity or label failures remain explicit without discarding usable pseudocode. Returns ordered per-item success or error results and aggregate counts. The complete reply retains every pseudoco",
+      "readOnly": false
+    },
+    {
+      "name": "binary_overview",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Return the bound document and exhaustive procedure/string counts, plus every segment and segment_count when the provider supports segment enumeration. If segment fields are omitted, segment coverage is unavailable rather than empty. When every observed segment agrees on an analysis image base, return it as image_base so callers can relate provider addresses to their loader coordinates. Use search_",
+      "readOnly": false
+    },
+    {
+      "name": "binary_session",
+      "module": "mcpDoctor.js",
+      "category": "core",
+      "engines": [],
+      "description": "Report the active binary target or resource-only app root, provider and capability availability when applicable, client-feature, analysis, and server-identity status without starting analysis.",
+      "readOnly": false
+    },
+    {
+      "name": "build_call_path",
+      "module": "server/registerInvestigationTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Build every shortest direct-callee path inline from complete analyze_function Evidence records using exact canonical addresses. Missing dossiers and provider mixing remain unknown; every node and edge cites source Evidence.",
+      "readOnly": false
+    },
+    {
+      "name": "build_reconstruction_obligation_ledger",
+      "module": "server/registerApplicationTools/obligationLedger.js",
+      "category": "native",
+      "engines": [],
+      "description": "Generate the complete deterministic ReconstructionObligationLedger from an authenticated Evidence bundle, reviewed obligations, and an explicit reconstruction manifest. Static candidates remain candidates; duplicate ownership, missing original or reconstruction cases, missing parser/type, weak verifier authority, unenumerated claims, contradictions, dependencies, and residual unknowns fail closed.",
+      "readOnly": false
+    },
+    {
+      "name": "capture_adb_screen",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Capture one frame of the device screen as a PNG (`screencap -p` through exec-out, no device-side file) into a caller-selected output directory, digesting it and reporting its dimensions. No recording or interaction.",
+      "readOnly": false
+    },
+    {
+      "name": "capture_browser_scenario",
+      "module": "cliBrowserScenarioCommands.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "Run a controlled browser scenario when passive observation cannot exercise the application. Launch the selected executable or connect to a loopback CDP target, provide a start URL and actions, and select storage or artifacts when needed. A request action sends one HTTP request to the start origin through the page's own fetch, with header values from secrets, page cookies or local storage; write me",
+      "readOnly": false
+    },
+    {
+      "name": "capture_electron_scenario",
+      "module": "server/registerElectronTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Use this for a provider-owned Electron run when passive CDP or Inspector observation cannot exercise application behavior. REA owns startup and teardown, accepts caller-defined click/wait actions plus window-targeted renderer reload/crash and synthetic open-url/second-instance delivery, and returns correlated window/WebContents/process/preload/session/navigation/shell/IPC evidence without retainin",
+      "readOnly": false
+    },
+    {
+      "name": "capture_native_ui_scenario",
+      "module": "native/NativeMacOSProvider.js",
+      "category": "native",
+      "engines": [],
+      "description": "Run selected-element press, increment/decrement scroll, AXValue text entry and bounded wait steps in one exact native app window. Returns ordered before/after captures and action/capture failures. Actions can change app data, network activity and persistent state; application state is left as-is and restoration is not attempted. native_ui_deadline_ms is the scenario deadline (omitted means 180000 ",
+      "readOnly": false
+    },
+    {
+      "name": "capture_process_scenario",
+      "module": "server/registerInvestigationTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Run one caller-selected command under a PTY and return process capture Evidence with residual unknowns. The renderer admits at most 1,000,000 combined terminal cells, computed as columns × (rows + scrollback); every resize uses the selected scrollback and must fit the same budget. Supply a smaller terminal shape when that product is too large; dimensions are never clamped. This release has no runt",
+      "readOnly": false
+    },
+    {
+      "name": "capture_web_screenshot",
+      "module": "server/registerBrowserTools.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Capture the current visible viewport of one configured page as an inline, content-addressed PNG artifact. The operation never scrolls, navigates, or evaluates page JavaScript.",
+      "readOnly": false
+    },
+    {
+      "name": "close_binary",
+      "module": "server/registerSessionTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "When the investigation is finished, drain earlier provider requests, optionally write a provider-neutral analysis snapshot atomically to the caller-supplied path, then close the active analysis session and every provider resource started for it. Resource-only app sessions have no binary snapshot binding, so close them without snapshot_path. Later provider requests wait until this lifecycle operati",
+      "readOnly": false
+    },
+    {
+      "name": "close_frida_session",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Unload session scripts and attempt to detach REA's Frida session. Then resume a still-paused spawned process if script cleanup or session detach confirms instrumentation was released. Cleanup failures are reported. REA never kills the target; its final state is reported as unknown.",
+      "readOnly": false
+    },
+    {
+      "name": "close_gdb_session",
+      "module": "server/registerGdbTools.js",
+      "category": "native",
+      "engines": ["gdb", "ghidra"],
+      "description": "Close the owned GDB process after verifying the inferior state. When one live thread group has a verified durable output TTY, REA automatically detaches it, which may resume target execution; otherwise close reports that a disposition is required. REA never kills attached or remote targets as part of debugger cleanup. In a shared MCP server, this admitted close retires any active binary-analysis s",
+      "readOnly": false
+    },
+    {
+      "name": "close_rizin_debug_session",
+      "module": "server/registerRizinDebugTools.js",
+      "category": "native",
+      "engines": ["ghidra", "rizin"],
+      "description": "Close the REA-owned Rizin debugger only after verifying no inferior remains or detaching one with a verified caller-selected TTY output sink. A detached target may continue running and write to that TTY; target state is otherwise reported as unknown. REA never signals an inferior based on PID or path. In a shared MCP server, this admitted close retires any active binary-analysis session; after tar",
+      "readOnly": false
+    },
+    {
+      "name": "collect_adb_bugreport",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": ["adb"],
+      "description": "Collect one device-generated bugreport archive (`adb bugreport`) into a caller-selected output directory, digesting the zip. The archive contains the device's own dumpstate, dumpsys, and logcat report; collection can take minutes. Read-only with respect to configuration.",
+      "readOnly": false
+    },
+    {
+      "name": "comment",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "native",
+      "engines": [],
+      "description": "Read the regular analysis comment at an address, defaulting to the current cursor. This is read-only and returns null when no comment exists; use set_comment to persist a finding.",
+      "readOnly": false
+    },
+    {
+      "name": "compare_application_versions",
+      "module": "server/registerApplicationTools/compareVersions.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Compare two authenticated JavaScript Application Graph versions supplied as inline Evidence or exact same-session retained references. Uses unique-only exact digest, module source digest, source-map identity, structural fingerprint, and non-module semantic-key tiers. Reports added, removed, changed, ambiguous, and unknown entities plus the complete matching changed_from graph without fuzzy or modu",
+      "readOnly": false
+    },
+    {
+      "name": "compare_artifacts",
+      "module": "server/registerSessionTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Compare complete artifact inventories by logical occurrence path, content identity, metadata, and graph relations. Pass the inventory Evidence nested in each inspect_artifact result as left and right, or pass its inspect_analysis_view summary while the complete parent Evidence remains retained in this session. Summary facts are not treated as a complete inventory; comparison resolves the exact ret",
+      "readOnly": false
+    },
+    {
+      "name": "compare_bundles",
+      "module": "cliEvidenceCommands.js",
+      "category": "core",
+      "engines": [],
+      "description": "Compare two canonical Evidence bundles by exact record membership, explicit one-to-one observation pairs, and complete residual-unknown revision histories. Supply absolute local filesystem paths; relative paths are rejected. Missing bundle members describe omission only, never behavioral equivalence; output is digest-anchored and returns every change inline.",
+      "readOnly": false
+    },
+    {
+      "name": "compare_functions",
+      "module": "server/registerSessionTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Compare two explicit analyze_function Evidence records or exact retained session references across identity, exact provider text, calls, references, strings, and address-normalized CFG topology. Missing or provider-incompatible facets remain truncated or unknown; every conclusion cites both Evidence sets.",
+      "readOnly": false
+    },
+    {
+      "name": "compare_javascript_export_shapes",
+      "module": "server/registerApplicationTools/compareExportShapes.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Compare static return shapes for one exact module/export selector on each authenticated JavaScript Application Graph supplied as inline Evidence or exact same-session retained references. Variants pair only by reciprocal unique literal discriminants. Each retained variant lists observed return-property names even when values stay unknown. Presence (present, absent, or unknown-coverage) is separate",
+      "readOnly": false
+    },
+    {
+      "name": "compare_managed_members",
+      "module": "server/registerManagedWorkflowTools/compareManagedMembers.js",
+      "category": "native",
+      "engines": [],
+      "description": "Compare two authenticated inspect_managed_members Evidence records using unique-only tiers: exact declared type, name, and CIL/signature; exact declared type, name, and signature (decoded or not); exact declared type, name, and decoded structural method shape; then exact CIL/signature or decoded structural method shape alone, which never takes a member whose own declared type and name remain unpai",
+      "readOnly": false
+    },
+    {
+      "name": "compare_process_captures",
+      "module": "server/registerSessionTools.js",
+      "category": "web",
+      "engines": [],
+      "description": "Compare two compatible process capture observations across terminal, interaction, lifecycle, process, filesystem, command-shim, HTTP, and WebSocket evidence. Optional trace_spec validates exact events against an explicit partial order or finite trace language; concurrency is never inferred from timestamps or broad sorting. Missing, journal-free, or truncated observations are never treated as equiv",
+      "readOnly": false
+    },
+    {
+      "name": "compare_source_to_bundle",
+      "module": "server/registerApplicationTools/compareSourceToBundle.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Compare a cryptographically committed HistoricalSourceGraph supplied inline or as reference {kind:file,path:absolute-local-JSON-path} with authenticated JavaScript Application Graph Evidence supplied inline or by exact same-session retained reference. Omitted view preserves the full report. Optional view {kind:summary} or {kind:source-to-bundle,collection:mappings|candidates,source_paths?,mapping_",
+      "readOnly": false
+    },
+    {
+      "name": "compare_wasm_interfaces",
+      "module": "mcp/createServer-CoLFsKLA.js",
+      "category": "native",
+      "engines": [],
+      "description": "Compare typed core WASM import/export names, kinds and exact signatures from two authenticated inspect_wasm_artifact Evidence records. Select imports, exports or both explicitly. Retained references resolve only in the current session; CLI accepts portable inline Evidence. Duplicate names, unsupported types and missing historical interface facets remain unknown. Preserve original module digests an",
+      "readOnly": false
+    },
+    {
+      "name": "compare_web_captures",
+      "module": "server/registerBrowserTools.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "Compare passive web captures by providing before and after, each with the complete inspect_web_page normalized_result in inspection and an optional complete discover_webmcp_tools normalized_result in webmcp; or compare recorded scenarios by passing complete capture_browser_scenario normalized_result objects in before_scenario and after_scenario with an optional normalization policy. Use exactly on",
+      "readOnly": false
+    },
+    {
+      "name": "compare_web_screenshots",
+      "module": "server/registerBrowserTools.js",
+      "category": "web",
+      "engines": [],
+      "description": "Compare two self-verifying PNG screenshot artifacts with local pixel metrics. Returns exact changed-pixel ratios and channel deltas without OCR or external services.",
+      "readOnly": false
+    },
+    {
+      "name": "correlate_static_and_runtime",
+      "module": "server/registerInvestigationTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Evaluate every explicit caller-declared hypothesis between exact static comparison findings and runtime comparison dimensions. Similar names or paths are never auto-matched, consistent cochange never proves causality, and unknown or truncated inputs remain unresolved. Returns all correlations and their complete Evidence closure inline.",
+      "readOnly": false
+    },
+    {
+      "name": "current_address",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Return Hopper's current cursor address for the selected document. Use only for interactive navigation state; prefer explicit addresses in reproducible investigations.",
+      "readOnly": false
+    },
+    {
+      "name": "current_document",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Return the document currently selected by REA's Hopper bridge.",
+      "readOnly": false
+    },
+    {
+      "name": "current_procedure",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Return the analyzed procedure containing Hopper's current cursor. This uses GUI cursor state and is not a procedure-name lookup.",
+      "readOnly": false
+    },
+    {
+      "name": "cutter_command",
+      "module": "server/registerCutterTools.js",
+      "category": "native",
+      "engines": ["ghidra", "rizin"],
+      "description": "Run one arbitrary Rizin command in a selected live Cutter session. Commands may edit and persist analysis state or execute plugin-provided effects; completion uncertainty is returned as Evidence and must not be retried automatically. The authenticated request and response frame is bounded by REA_BRIDGE_MAX_REQUEST_BYTES (default 16777216 bytes, floor 7464, maximum 536870887). The payload budget ex",
+      "readOnly": false
+    },
+    {
+      "name": "decode_android_resources",
+      "module": "server/registerApktoolTools.js",
+      "category": "android",
+      "engines": ["apktool", "jadx"],
+      "description": "Decode one local APK's resources with `apktool d --no-src` in a provider-owned workspace that is removed after projection: the readable AndroidManifest.xml, apktool.yml version and SDK facts, the app's string resources (default or selected locales, bounded to 2000 entries per table), selectable string locales, and the decoded file count. The target APK is digest with SHA-256 before decoding; smali",
+      "readOnly": false
+    },
+    {
+      "name": "decode_interface_builder",
+      "module": "server/registerArtifactTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Decode compiled storyboard and nib archives inside the active Apple app bundle, including keyed property lists and NIBArchive object tables, into a bounded object, hierarchy, and connection graph. This is static archive parsing; unrecognized archive classes and unresolved code handlers remain explicit unknowns. A full app graph is often several megabytes; detail summary retains it and returns docu",
+      "readOnly": false
+    },
+    {
+      "name": "decode_signal_recording",
+      "module": "signals/SigrokRecordingProvider.js",
+      "category": "core",
+      "engines": ["sigrok"],
+      "description": "Decode an existing local logic/signal recording on Linux with sigrok-cli 0.7.2 and util-linux prlimit. Supply decoder stack, channels and options explicitly; optionally select input format and annotation classes. Return 50 literal output lines by default, with line_offset/line_limit paging; line_limit:null requests all remaining lines. Output windows count display lines, not annotations or samples",
+      "readOnly": false
+    },
+    {
+      "name": "decompile_all",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Write provider pseudocode for every analyzed function, or a filtered subset, into a caller-selected directory and return only a manifest. Each file records the provider function name, canonical address, inclusive body ranges when procedure_info supplies them, and that function's procedure_info and pseudocode limitations. Each function's index record keeps its complete limitations. Evidence keeps a",
+      "readOnly": false
+    },
+    {
+      "name": "decompile_jeb_item",
+      "module": "server/registerJebTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Decompile one type or method to engine pseudo-code using its decompiler (Dalvik, Java, or native). item_address comes from the engine's code item listing; unit_path defaults to the engine's first code unit and stays unknown when omitted. Read-only with respect to the target file.",
+      "readOnly": false
+    },
+    {
+      "name": "demangle_swift",
+      "module": "native/NativeMacOSProvider.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Demangle an ordered list of single-line Swift symbols without requiring Hopper. Each input returns demangled, unchanged, or invalid status. An exact underscore input skipped by swift-demangle is invalid with empty output; it does not discard valid companion results. native_command_timeout_ms is the swift-demangle wall clock (omitted means 60000 ms) and does not raise the fixed 67108864-byte output",
+      "readOnly": false
+    },
+    {
+      "name": "discover_webmcp_tools",
+      "module": "server/registerBrowserTools.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "Passively inventory every page-registered WebMCP tool and its complete structural input-schema summary using the experimental CDP WebMCP domain. Metadata is page-declared-untrusted; REA never registers or invokes discovered tools.",
+      "readOnly": false
+    },
+    {
+      "name": "evaluate_reconstruction_coverage",
+      "module": "server/registerApplicationTools/coverage.js",
+      "category": "native",
+      "engines": [],
+      "description": "Evaluate inline evidence-backed reconstruction coverage against one named boundary. Missing ownership or inventory is partial; stale, weak, truncated, skipped, unresolved, or conflicting tied verifier proof is unknown; contradictions, failed proof, missing owners, and authority routing fail closed.",
+      "readOnly": true
+    },
+    {
+      "name": "execute_rizin_command",
+      "module": "server/registerReverseEngineeringTools.js",
+      "category": "native",
+      "engines": ["ghidra", "rizin"],
+      "description": "Execute one caller-selected Rizin command against a local artifact using the Rizin CLI profile that suppresses user settings and scripts while retaining plugins. Preserves decoded stdout and stderr inline with SHA-256 Evidence, up to a shared 16 MiB combined limit; invalid UTF-8 bytes are represented by replacement characters and flagged in Evidence limitations. output_truncated reports output bey",
+      "readOnly": false
+    },
+    {
+      "name": "export_environment_bundle",
+      "module": "server/registerApplicationTools/environmentBundle.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "Write an agent environment bundle folder from capture Evidence (capture_browser_scenario, or HAR inspect_web_network_capture Evidence) into an absent absolute output_directory whose parent exists, as rea environment-build does. It projects the environment manifest with the default template rules, derives the state the bundle serves, and reports read tools answered from the state or replayed with t",
+      "readOnly": false
+    },
+    {
+      "name": "export_evidence_bundle",
+      "module": "server/registerSessionTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Atomically write the session's deterministic Evidence bundle to the requested local path. Existing files require overwrite: true; records and manifests use canonical byte-stable ordering.",
+      "readOnly": false
+    },
+    {
+      "name": "export_web_scripts",
+      "module": "server/registerWebScriptTool.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Export JavaScript bytes already retained in one local inspect_web_page or capture_browser_scenario JSON capture (normalized result or complete Evidence). Writes scripts and a digest-verified manifest into an absent absolute output_directory. Returns all source URLs, script or transaction/event references, unavailable states, and an analysis_input for analyze_javascript_application when any bytes w",
+      "readOnly": false
+    },
+    {
+      "name": "extract_artifact",
+      "module": "server/registerArtifactTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Extract regular files (including Node.js SEA scripts and assets) exposed by a supported active archive reader into a fresh temporary directory chosen by REA. A nested archive exposed as a file is copied as a file; inspect and extract it separately to unpack its contents. The result includes its location. DMG extraction is unavailable; use a caller-managed read-only mount on macOS to access its fil",
+      "readOnly": false
+    },
+    {
+      "name": "extract_firmware",
+      "module": "server/registerFirmwareTools.js",
+      "category": "native",
+      "engines": ["binwalk", "ghidra"],
+      "description": "Extract caller-selected firmware bytes with Unblob 26.6.x (verified with 26.6.4) into an absent output directory. Returns verified child paths/digests, task derivations, unknown chunks and uncovered selected input ranges, extraction diagnostics and explicit extraction_gaps rows naming unextracted regions, missing extractor dependencies and a continuation_id referencing shared extraction_continuati",
+      "readOnly": false
+    },
+    {
+      "name": "find_changed_behavior",
+      "module": "server/registerInvestigationTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Aggregate validated process, artifact, and function comparison Evidence. Runtime observations remain distinct from static behavior candidates; missing or incomplete comparisons produce unresolved findings, never causal claims. Returns every finding inline.",
+      "readOnly": false
+    },
+    {
+      "name": "find_xrefs_to_name",
+      "module": "server/registerEnhancedTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Resolve an exact name against the bound provider's name inventory and return a resolved or unresolved result. Unresolved names use the stable name_not_found reason; this xref workflow returns address-only projections.",
+      "readOnly": false
+    },
+    {
+      "name": "frida_session_status",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Read observed Frida session state on each call. Default detail=complete returns queued script messages and capture truncation. detail=summary retains the complete observation in this session and returns identity, state, scripts, retained message count and truncation without payloads. Export the complete parent with export_evidence_bundle; retained summaries are historical and never refresh live st",
+      "readOnly": false
+    },
+    {
+      "name": "gdb_console",
+      "module": "server/registerGdbTools.js",
+      "category": "native",
+      "engines": ["gdb", "ghidra"],
+      "description": "Run one unrestricted GDB CLI command through MI interpreter-exec console and return raw MI, console, target, and log records inline with Evidence. Default detail complete preserves the original Evidence. Explicit detail summary retains that complete parent and returns every ordered MI record once, omitting duplicate stream groupings and raw mirrors; parent_evidence_id supports later inspect_analys",
+      "readOnly": false
+    },
+    {
+      "name": "gdb_session_status",
+      "module": "server/registerGdbTools.js",
+      "category": "native",
+      "engines": ["gdb"],
+      "description": "Return the observed lifecycle state and bounded recent MI records and process diagnostics for one persistent REA GDB session; truncation and invalid-UTF-8 fields report discarded or lossy data.",
+      "readOnly": true
+    },
+    {
+      "name": "get_call_graph",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Resolve one symbol or address to its canonical procedure entry, then traverse the bound provider's caller or callee relationships until the reachable graph is exhausted. Every node uses a canonical address and has an ok/error status; failures use safe typed projections. Unresolved indirect calls may be missing and results are not a whole-program CFG.",
+      "readOnly": false
+    },
+    {
+      "name": "get_evidence_bundle",
+      "module": "server/ToolResultDelivery.js",
+      "category": "native",
+      "engines": [],
+      "description": "Return every retained Evidence record and residual unknown as a complete canonical bundle by default. detail=summary discovers retained records without copying or transferring their payloads; optionally filter by exact Evidence ID, operation, target SHA-256, analysis-profile digest or canonical native procedure address. Metadata distinguishes complete record retention from native value-flow trunca",
+      "readOnly": true
+    },
+    {
+      "name": "get_navigation_context",
+      "module": "server/registerSessionTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Return the selected document, current address, and containing/current procedure in one provider-neutral result. The result reflects sequential provider observations, not an atomic cursor snapshot; a cursor outside any procedure returns procedure: null.",
+      "readOnly": false
+    },
+    {
+      "name": "get_objc_classes",
+      "module": "server/registerEnhancedTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Discover Objective-C class labels, optionally filtering by literal substring. Rows are coalesced only when exact selected-image pointer-fixup evidence proves that their own addresses bind the same imported class symbol, binding stream, raw library ordinal and resolved library, weak status, and addend. Rows without that evidence remain separate, with identity coverage reported as unknown, partial, ",
+      "readOnly": false
+    },
+    {
+      "name": "get_objc_protocols",
+      "module": "server/registerEnhancedTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Discover and deduplicate Objective-C and Swift protocol labels.",
+      "readOnly": false
+    },
+    {
+      "name": "goto_address",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Move Hopper's GUI cursor to a mapped address and return the observed cursor address. Interior coordinates snap to the containing analyzed object's start. Unmapped destinations fail without moving the cursor. This changes navigation state but not analysis data; use explicit-address tools for headless workflows.",
+      "readOnly": false
+    },
+    {
+      "name": "identify_flutter_build",
+      "module": "server/registerFlutterTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Identify a Flutter app's build facts by pure parsing: observed Dart snapshot hashes from lib/<abi>/libapp.so, per-ABI library digests, the engine library's GNU build-id, and any labeled Dart version or toolchain strings libflutter.so carries. Complete snapshot coverage currently expects two independent headers in the legacy split VM/isolate profile; unified and other layouts can yield partial buil",
+      "readOnly": false
+    },
+    {
+      "name": "import_evidence_bundle",
+      "module": "server/registerSessionRecordTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Read the JSON bundle at the supplied local path, validate every Evidence ID and canonical manifest, then atomically merge it. Imported content is data only and is never executed.",
+      "readOnly": false
+    },
+    {
+      "name": "import_managed_reconstruction",
+      "module": "server/registerManagedWorkflowTools/importManagedReconstruction.js",
+      "category": "native",
+      "engines": [],
+      "description": "Import decompiler-produced managed reconstruction against authenticated inspect_managed_members Evidence. The workflow locks each method to artifact SHA-256, MVID, metadata token, signature hash, and the limited decoded-IL tuple hash, records the decompiler identity and options, and marks C# or pseudocode as analyst inference rather than canonical byte observation.",
+      "readOnly": false
+    },
+    {
+      "name": "inline_comment",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "core",
+      "engines": [],
+      "description": "Read the inline instruction comment at an address, defaulting to the current cursor. Returns null when absent; use set_inline_comment to write one.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_adb_client",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": ["adb"],
+      "description": "Inspect the caller-selected adb client: resolved binary, version, and install path. Never contacts devices and never starts the adb server. REA never installs platform tools; select a binary with REA_ADB_PATH (absolute) or adb on PATH.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_adb_device",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Inspect one device's build identity through a fixed `getprop` whitelist: Android and SDK versions, security patch, fingerprint, product identity, CPU ABIs, and debuggable flag, plus the observed emulator indicator ro.kernel.qemu. Present properties retain empty values; omitted keys were not reported. Read-only with respect to the device.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_adb_display",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Read physical and override size/density from `wm size` and `wm density`. Malformed numeric declarations are retained in numeric_issues with partial coverage; optional values remain null. Required physical-size failures retain partial display facts. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_adb_package",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Inspect installed-package versions, install times, installer, user id, flags, and requested-permission count through read-only `dumpsys package`. Malformed numeric declarations are retained in bounded numeric_issues and make coverage partial; version_code stays exact text. Unknown sections are not inferred.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_adb_window",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Report the window manager's focus declarations with display context, original lines and explicit summary status. Reads `dumpsys window windows`, falling back to `displays` only when no focus field is declared. Singular fields are unknown for multiple contexts or repeated declarations; inspect focus_contexts for every observation. Read-only; no interaction occurs.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_address_context",
+      "module": "server/registerSessionTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit reproducible address for its analyzed name, containing procedure, regular and inline comments, and matching bookmarks. Each unsupported facet returns a typed unavailable outcome; use xrefs, assembly, or pseudocode for those deeper views.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_analysis_settings",
+      "module": "server/registerAnalysisSettingsTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect REA's editable runtime admission sizes, deadlines and worker heaps, their bounds, launch values and application points. No active target is required. Filters intersect. If an error already names a setting and its bounds, update_analysis_settings can be called directly. Explicit per-call arguments override runtime defaults. Active worker values are not observed by this configuration view.",
+      "readOnly": true
+    },
+    {
+      "name": "inspect_analysis_view",
+      "module": "server/registerAnalysisViewTool.js",
+      "category": "android",
+      "engines": ["chrome", "gdb", "tshark"],
+      "description": "Use javascript-routes collections to query route patterns, source-linked occurrences, source status, unknowns or summary counts from retained JavaScript application or web-bundle Evidence. Inspect selected views of supported completed Evidence without repeating analysis. Choose a view compatible with the parent operation described below. Command summary views preserve ordered GDB records or opaque",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_android_class",
+      "module": "server/registerAndroidTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Inspect one exact Android class's parsed methods, fields and inner classes, including synthetic members. Returns display signatures, exact DEX prototypes and encoded static final field values without generating source. A prototype is not a complete raw method ID; overload indices remain consistent within the artifact and engine session.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_android_method",
+      "module": "server/registerAndroidTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Decompile one Android method with smali fallback. Requires explicit overload_index when multiple methods share a name. Reports its DEX prototype, representation, fallback markers and source truncation; display signatures may be aliases.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_android_package",
+      "module": "server/registerAndroidTools.js",
+      "category": "android",
+      "engines": ["jadx"],
+      "description": "Inspect a local APK's package, SDK and permission declarations, decoded manifest and class/resource counts, with a bounded static component projection. Omitted or complete detail preserves the complete result. Select detail: \"summary\" for all declarations, engine identity and counts without decoded manifest text or duplicate raw calls; retains the complete source and returns a distinct linked insp",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_apk_signature",
+      "module": "mcp/createServer-CoLFsKLA.js",
+      "category": "android",
+      "engines": [],
+      "description": "Inspect declared v1/v2/v3/v3.1 APK signers, certificate fingerprints, algorithm IDs, content digests, SDK ranges, rotation lineage and source stamp without executing Android code. SHA-256 identifies the exact local file. Summary retains complete Evidence; an optional view selects signers/digests/lineage using stable IDs, scheme or signer-ID batches, fields and paging. Read retained pages with insp",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_apktool_client",
+      "module": "server/registerApktoolTools.js",
+      "category": "android",
+      "engines": ["apktool"],
+      "description": "Inspect the caller-selected apktool launcher: resolved command, selection source, and version. Decodes nothing. REA never installs Apktool or Java; select a launcher with REA_APKTOOL_COMMAND (absolute) or apktool on PATH.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_apple_ips",
+      "module": "server/registerAppleIpsTool.js",
+      "category": "native",
+      "engines": ["pwntools"],
+      "description": "Inspect one explicit local Apple .ips crash report without executing a target, launching atos, or opening a disassembler. Parses the first-line metadata object and, when bug_type is the string 309, the crash body: process identity, exception and termination facts, threads, usedImages, lossless integer registers, and deterministic classification from documented SIGKILL, EXC_GUARD, pointer-authentic",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_artifact",
+      "module": "server/promptCompletion.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect an active archive or application package, including Node.js SEA carriers, in one call. By default returns the complete content-addressed artifact graph once, as the typed nested inventory Evidence, with root and integrity observations, integrity contradictions, hypotheses, unexplored branches, limitations, and next probes inline. For PCK and large containers prefer detail summary: it retai",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_asset_catalog",
+      "module": "mcp/ArtifactProvider-CChlnMvw.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect compiled Assets.car metadata in an active Apple app bundle. Returns stable paginated catalog and rendition records with raw assetutil metadata and catalog digests; rendition bytes are not extracted.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_binary_layout",
+      "module": "server/registerBinaryDiagnosticsTools.js",
+      "category": "native",
+      "engines": ["pwntools"],
+      "description": "Inspect an explicit local binary without launching it as a host process. Returns file-backed section/segment ranges, linked addresses, original symbol/REL/RELA table identities, complete encoded RELR tables and upstream-derived offsets with unknown per-word locations/addends, raw name bytes, dependency/interpreter names and static mitigation inferences inline with artifact SHA-256 Evidence. Profil",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_byte_entropy",
+      "module": "server/registerByteEntropyTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect Shannon byte entropy for one explicit local file offline, without execution, extraction or external tools. Returns file-wide SHA-256 and entropy, fixed-block entropy for an optional offset/length window, and adjacent high (>=7.2) and low (<=1.0) runs with exact file offsets. Block size is a power of two from 256 to 65536 (default 4096). Complete output can become very large because it incl",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_dart_aot",
+      "module": "server/registerFlutterTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Inspect one ABI's legacy split VM/isolate Dart AOT snapshot inside an APK (complete structural coverage: Dart 2.14 FullAOT kind 3). Unified _kDartSnapshotData/_kDartSnapshotText profiles are unsupported. Returns the four snapshot exports through the ELF dynamic symbol table with offsets, sizes and headers (magic, kind, length), snapshot hash, and a bounded string-pool projection from isolate data ",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_desktop_application",
+      "module": "server/registerDesktopApplicationTool.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Inspect a local desktop application directory using bounded listings, file headers and selected metadata. Returns .NET, Unity Mono/IL2CPP, Unreal, Godot, GameMaker and Electron candidates, supporting paths/range hashes, component path markers and concrete next probes. No target execution, extraction, network or target changes. Default summary retains complete Evidence for inspect_analysis_view kin",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_devicetree",
+      "module": "server/registerDevicetreeTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect an explicit local flattened devicetree blob (FDT v16/v17) without execution or external tools. Returns validated header, memory reservations, full node/property tree with bounded raw hex, derived standard strings, cells and parent-sized reg tuples, aliases and selected single-cell phandle references with unresolved targets. Binding-specific arrays, overlays and runtime hardware remain unkn",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_electron_fuses",
+      "module": "server/registerElectronTools.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Inspect packaged Electron fuse bytes in one local macOS app bundle, Electron Framework binary, Windows PE executable, or Linux ELF executable. Returns the artifact digest, per-slice wire version, fuse index, version-1 name, state, and raw byte, plus derived implications for Inspector flags, ELECTRON_RUN_AS_NODE, embedded ASAR integrity, and app.asar-only loading. A missing sentinel is unknown fuse",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_electron_page",
+      "module": "server/registerElectronTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Passively inspect one Electron file page by supplying its loopback CDP endpoint and target ID. The provider rechecks that the target currently exists at that endpoint and is a local file page. Returns frames, DOM structure, resource paths, and scripts without evaluating renderer JavaScript or invoking Electron APIs. The selected endpoint exposes every local file page and its metadata to this tool.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_elf_notes",
+      "module": "server/registerElfNotesTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local ELF32/ELF64 image's PT_NOTE program headers and SHT_NOTE sections without executing it or opening a disassembler. Returns note-table file ranges, owners, types, descriptor SHA-256 and hex previews, plus GNU build-id, ABI-tag and gold-version fields when those descriptors match. A missing table is observed absence of those declarations, not proof the image never carried n",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_erlang_beam",
+      "module": "server/registerErlangTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local Erlang BEAM IFF container without executing bytecode or installing Erlang. Returns form/chunk byte ranges and payload SHA-256, atoms, export/import/lambda tables with resolved atom names, and the Code header. Complete output is the default. detail summary retains complete Evidence and returns module/header/counts; include a beam view for selected atoms/exports/imports/la",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_evm_interface",
+      "module": "mcp/createServer-CoLFsKLA.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect explicit local flat EVM bytecode without target execution or chain/RPC access. Select raw or hex encoding explicitly. Omitted or complete detail returns original carrier and decoded identities, full bytecode and all inferred interface candidates inline. For all inferred selectors/offsets/arguments/mutability and identities without bytecode hex or duplicated stdout, select detail: \"summary\"",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_firmware_regions",
+      "module": "server/registerFirmwareTools.js",
+      "category": "native",
+      "engines": ["binwalk"],
+      "description": "Inspect signature candidates in a local firmware file with Binwalk 3.1.x (verified with 3.1.0). Returns offsets, reported lengths, descriptions and raw confidence values. Length validation and runtime addresses remain unknown. No extraction or target execution. Linux, caller-supplied tool, util-linux prlimit and procps ps required; 128 MiB input limit, one worker. Adjust analysis_timeout_ms for th",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_go_binary",
+      "module": "server/registerGoTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect embedded Go compiler version, main module, dependency/replacement versions and build settings in an explicit local ELF, PE or thin Mach-O image, or the slice of a universal Mach-O named by architecture (read without lipo; artifact stays the universal file, selected_slice records the slice and source ranges stay file offsets). Default detail complete returns original artifact SHA-256, exact",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_gpu_code_objects",
+      "module": "server/registerGpuCodeObjectsTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect static CUDA/HIP GPU code objects in local ELF/PE hosts, CUDA fatbins, CUBIN, PTX and Clang HIP bundles (CUDA LZ4/Zstd and CCOB v1/v2/v3 zlib/Zstd). Default inventory reads directories; full-file SHA-256 always streams every byte. analysis kernels decodes only selected object_ids/targets (object_ids require expected_sha256 from their inventory), retaining all inventory rows and explicit par",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_il2cpp_metadata",
+      "module": "server/registerIl2cppTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect local Unity IL2CPP metadata (24/27/29/31/39), optionally linking a caller-selected 64-bit little-endian Mach-O, PE or ELF binary. Static reading only. Default summary retains complete Evidence; use parent_evidence_id with inspect_analysis_view kind il2cpp-metadata for named collections, indices, fields and paging. Parameters accept method_indices; method_addresses accept addresses and stat",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_jeb_client",
+      "module": "server/registerJebTools.js",
+      "category": "web",
+      "engines": ["jeb"],
+      "description": "Inspect the running JEB client serving MCP: engine version, GUI or headless mode, and startup time. Does not open a target. Requires a caller-started JEB client reachable at REA_JEB_MCP_URL (default http://127.0.0.1:8425/mcp); REA never installs or launches JEB.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_kernel_module",
+      "module": "server/registerKernelModuleTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local ELF32/ELF64 ET_REL Linux kernel module without executing it or opening a disassembler. Returns ordered .modinfo key/value entries (duplicates preserved), __versions symbol CRCs, presence of .gnu.linkonce.this_module and __ksymtab sections, observed .init.text and .exit.text sizes, and an appended module signature trailer with its module_signature fields plus a PKCS#7 byt",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_keyed_archive",
+      "module": "mcp/ArtifactProvider-CChlnMvw.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one Foundation NSKeyedArchiver plist in the active app bundle as original object-table nodes, class descriptors, named roots, and UID edges. Preserves shared and cyclic references without instantiating classes. The path is relative to the bundle; root selection and object pagination preserve original identities.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_macho",
+      "module": "server/registerNativeTools.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Inspect Mach-O slices, load commands, imports, exports, dependencies, build metadata, segments, sections, permissions, and exact command provenance without launching Hopper. Large frameworks return megabytes of symbols; detail summary retains the complete Evidence and returns slice identity with per-collection counts, then page rows with inspect_analysis_view kind macho. native_command_timeout_ms ",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_managed_artifact",
+      "module": "server/registerManagedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect an explicit PE/CLI path, or the selected managed target, without loading or executing target code. Omitted or complete detail returns complete metadata inventories with original coverage. Select detail: \"summary\" on the first call for complete identity, PE/CLI, classification with its evidence, module/MVID, assembly, frameworks, returned-collection counts, coverage/issues and limitations. ",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_managed_members",
+      "module": "server/registerManagedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect PE/CLI metadata members, signatures, raw CIL hashes, decoded-instruction-tuple hashes, separately reported exception regions, call edges, field-access anchors, and the #US string literals that ldstr loads, without loading or executing target code. Select type_names to decode only the members of those exact declaring types and the literals their bodies load, which keeps large assemblies suc",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_managed_native_boundaries",
+      "module": "server/registerManagedWorkflowTools/verifyManagedNativeBoundaries.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect PE/CLI ModuleRef, ImplMap/PInvoke declarations, CLI native-header indicators, and non-IL method implementation flags without loading or executing target code. Results are managed declarations and degraded native-boundary observations, not verified native exports or addresses.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_model_artifact",
+      "module": "server/registerModelArtifactTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect local GGUF v2/v3 or safetensors declarations by content, without loading models or executing code. Default hash header reads only the header: full-file SHA-256 and Evidence subject are unknown; artifact.header_sha256 is a scoped prefix commitment, not weight identity. hash full additionally streams all file bytes for SHA-256. Optional view returns a selected metadata/tensor/type page plus ",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_native_api",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Analyze a native API boundary in one function identified by symbol or provider-returned address. Returns confidence, evidence, jump-table dispatch/data/case mappings, separately evidenced default targets, unsupported branches, and residual unknowns. Null case values mean unresolved cases, never a known default.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_native_data_type",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one recovered type by exact database category path or defined typed data address. Returns observed size, alignment, packing, fields, bitfields, enum values, and child type identities; source-level authority and flexible-tail semantics remain unknown unless substantiated.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_native_dispatch_metadata",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect the bound provider's name inventory for Objective-C class/method symbols and Swift mangled symbols, returning at most max_records decoded names. Optional objc_class_import_addresses request exact pointer-slot binding facts for those addresses; they are decoded only from the selected Mach-O slice and retain partial or unsupported coverage when not established. Includes target SHA-256 when a",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_native_exports",
+      "module": "server/registerNativeExportsTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local PE or ELF image's export table without executing it or opening an engine: PE export-directory names, ordinals, addresses and forwarders, or ELF defined default/protected global, weak and unique .dynsym symbols with type, binding and symbol version. Ordinal-only, forwarded and hidden-version exports stay distinct. Portable on any supported host. Coverage is partial when t",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_native_instruction",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one exact code or data address: decoded bytes, mnemonic, ordered operand tokens, flow, outgoing instruction references and typed incoming references where available. Incoming references preserve source, access kind, operand index and analysis provenance even at data addresses; they do not prove runtime access. Memory addressing decomposition is unavailable when the provider supplies only t",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_native_load_image",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": [],
+      "description": "Verify the provider's loaded DOS MZ or explicitly selected COM image against its immutable target snapshot: complete original/modified source-byte digests, header/module file mappings and memory digests, relocations and external entry. Returns measured observations and independent checks with mismatch coordinates. COM verification includes its imposed entry register context and does not claim PSP/",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_packet_capture",
+      "module": "server/registerCaptureTools.js",
+      "category": "web",
+      "engines": ["tshark"],
+      "description": "Inspect caller-selected fields in an existing local packet capture with TShark 4.x. Return 50 matching frames by default, with match_offset/match_limit paging and coverage counts; match_limit:null requests all remaining matches. Preserve repeated values, frame numbers, display filter, decode-as rules and pass mode in inline Evidence with source/tool identity and diagnostics. Optional packet_limit ",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_packet_fields",
+      "module": "server/registerCaptureTools.js",
+      "category": "web",
+      "engines": ["tshark"],
+      "description": "Discover protocols or field names/types registered in the installed TShark 4.x. kind defaults to protocols; use fields and optional exact protocol abbreviation to select field definitions. query searches name/abbreviation/description by case-insensitive literal substring using Unicode simple case folding. Return 50 matches by default with offset/limit paging; null requests all remaining within res",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_pcap_capture",
+      "module": "server/registerPcapTools.js",
+      "category": "web",
+      "engines": ["tshark"],
+      "description": "Request detail summary for capture identity/counts, then page retained facts with inspect_analysis_view kind pcap. Default detail complete preserves inline delivery. Inspect one saved pcap or pcapng capture through an owned snapshot: metadata, exact packet count, SHA-256, IPv4/IPv6 address counts, DNS questions and address values from the same single-question response, TLS SNI, protocol distributi",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_pcap_client",
+      "module": "server/registerPcapTools.js",
+      "category": "web",
+      "engines": ["tshark"],
+      "description": "Inspect the caller-selected tshark and capinfos binaries: selected commands, selection sources, and versions. Both tools must be usable. Reads no capture file. REA never installs the Wireshark suite; select binaries with REA_TSHARK_COMMAND and REA_CAPINFOS_COMMAND (absolute) or from PATH.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_pe_certificates",
+      "module": "server/registerPeCertificatesTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local PE32/PE32+ image's IMAGE_DIRECTORY_ENTRY_SECURITY table without executing it, verifying signatures or opening a disassembler. Returns WIN_CERTIFICATE file ranges, types and payload SHA-256, plus structurally decoded PKCS#7 signedData digest algorithms, embedded X.509 serial/issuer/subject/validity fields and signer identifiers, including a subject key identifier, when ty",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_pe_imports",
+      "module": "server/registerPeImportsTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local PE32/PE32+ image's IMAGE_DIRECTORY_ENTRY_IMPORT and delay-load tables without executing it or opening a disassembler. Returns DLL names, named and ordinal functions, ILT/IAT RVAs, delay-load descriptors, and the pefile import hash of the standard import table, withheld with a reason when that table is partial or pefile would hash a different row sequence. A missing impor",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_pe_load_config",
+      "module": "server/registerPeLoadConfigTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect PE32/PE32+ TLS callbacks and sized load configuration without executing the image. Returns callback VA/RVA/file offsets and sections, security cookie, SafeSEH (PE32), CFG flags and table pointers/counts, EH continuation and XFG fields. Flag-derived mitigation claims are labeled inferred. Absent directories are null; malformed structures and exhausted budgets fail without partial success. R",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_pe_resources",
+      "module": "server/registerPeResourcesTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local PE32/PE32+ image's complete bounded type/name/language resource tree without executing it or opening a disassembler. Returns numeric IDs versus original UTF-16 names, directory identity paths including empty branches, directory/data-entry file locations, payload RVA/file ranges, complete SHA-256 hashes and static RT_GROUP_ICON image-resource candidates. Language fallback",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_plist",
+      "module": "native/NativeMacOSProvider.js",
+      "category": "native",
+      "engines": [],
+      "description": "Requires an open binary or bundle-resource session; use open_binary or open_bundle_resources first. Parse its Info.plist by default, or select a local plist with path within that session. Supplying path does not open a session. Returns normalized JSON rather than plutil text. native_command_timeout_ms is each file or plutil command's wall clock (omitted means 60000 ms). The 67108864-byte plist inp",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_python_pyc",
+      "module": "server/registerPythonPycTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect one explicit local CPython 3.7–3.13 .pyc file with a supported 16-byte header without executing bytecode, invoking CPython or recovering source. Returns the header (magic, pinned python_version, PEP 552 flags, source hash or mtime/size), the top-level code object with nested functions, names, const summaries, and bytecode length/SHA-256. Complete output is the default. detail summary retai",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_recorded_crash",
+      "module": "server/registerRecordedCrashTools.js",
+      "category": "native",
+      "engines": ["gdb", "pwntools"],
+      "description": "Inspect a supplied Linux ELF64 amd64 or AArch64 little-endian core without launching its target or attaching to any live PID. Returns all recorded segments, raw note owners/descriptors and source ranges, every Linux CORE PRSTATUS thread/register and SIGINFO fields inline with SHA-256 Evidence. Historical PID is recorded metadata; current process/file identity, note coverage and signal-thread assoc",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_rust_binary",
+      "module": "server/registerRustTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect the cargo-auditable crate dependency list embedded in an explicit local ELF, PE or thin Mach-O image, or the slice of a universal Mach-O named by architecture (read without lipo; artifact stays the universal file, selected_slice records the slice and offsets stay file offsets). Returns the artifact SHA-256, the .dep-v0 section file offset and size, compressed and uncompressed sizes, format",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_signal_decoders",
+      "module": "signals/SigrokRecordingProvider.js",
+      "category": "native",
+      "engines": ["sigrok"],
+      "description": "Discover installed sigrok protocol decoders or inspect one decoder's channel/option help on Linux. Omit decoder to list ID/name pairs; supply its exact ID for literal help lines with source line numbers. query is a case-insensitive literal substring using Unicode simple case folding; catalog queries match the ID or name independently. Page matches with offset/limit (default 50; null returns all re",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_signature",
+      "module": "native/NativeMacOSProvider.js",
+      "category": "native",
+      "engines": [],
+      "description": "Inspect the selected Mach-O architecture's code-signing identity, hashes, authorities, designated requirement, entitlements and hardened-runtime state from a temporary digest-verified byte snapshot. Other slices are checked for unsigned state, with their metadata coverage stated separately. Exact command provenance is retained. native_command_timeout_ms is each codesign command's wall clock (omitt",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_sqlite_database",
+      "module": "sqlite/SqliteDatabaseFailures.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Inspect an explicit local SQLite database snapshot and its existing sibling WAL without modifying source files or opening a native analysis provider. Requires Node.js 24.x >=24.15 or 26+ with native DatabaseSync.limits support, checked by the worker. Returns observed Evidence with database/WAL SHA-256 and a compact schema inventory. Selecting an exact ordinary table expands only its schema and sam",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_wasm_artifact",
+      "module": "wasm/WabtArtifactProvider.js",
+      "category": "javascript",
+      "engines": ["wabt"],
+      "description": "Validate an explicit local WASM artifact with caller-supplied WABT 1.0.42. Optional custom-section interpretation errors do not invalidate the core module; warnings and name-section interpretation status remain in the result. Omitted or complete detail returns exact byte SHA-256, sections, upstream import/export WAT forms and decoded WAT inline as Evidence. For counts, validation and WAT identity ",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_web_event_listeners",
+      "module": "server/registerWebRuntimeTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Inspect listeners registered directly on the first main-document CSS match in one selected CDP page. Returns event flags, native callback locations, source ownership and exact script text/digests inline. Does not dispatch events, evaluate JavaScript or invoke handlers. Delegated ancestor/framework listeners and execution history remain unknown. Releases REA's object group and transport, preserving",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_web_network_capture",
+      "module": "server/registerWebNetworkCaptureTool.js",
+      "category": "web",
+      "engines": [],
+      "description": "Explicit record_ordinals also decode retained protobuf/gRPC bodies whose declared content type is recognized. Optional protobuf selects exact body_pointers, framing, and a caller-supplied local FileDescriptorSet with message_type. Native gRPC and gRPC-web framing remain distinct. Wire fields are flat byte-range facts; ambiguous readings stay candidates, compressed payloads stay unknown. Page retai",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_web_page",
+      "module": "server/registerBrowserTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Passively inspect one selected page target through CDP without evaluating JavaScript, navigating, clicking, closing, or mutating the page. If no origin filter is supplied, capture is scoped to the target's current origin. Returns DOM structure, accessibility, scripts, resources, attach-window network and console metadata, workers, and redacted storage inventory as Evidence.",
+      "readOnly": false
+    },
+    {
+      "name": "inspect_with_objdump",
+      "module": "server/registerReverseEngineeringTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Run caller-selected GNU objdump inspection against a local artifact, or request operation=architectures without a path to list BFD targets advertised by the installed binary. For operation=disassemble, optional symbol selects native symbol-scoped disassembly before output collection; omission preserves all code sections. Matching and symbol boundaries follow GNU objdump. Preserves decoded stdout a",
+      "readOnly": false
+    },
+    {
+      "name": "install_adb_package",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": ["adb"],
+      "description": "Install one local APK on the device (`adb install [-r]`), recording the APK's host digest and byte size. A device-mutating tool: `replace_requested` records whether `-r` was selected; `replaced` is null because install success does not establish prior package state. The device's own Success/Failure verdict is preserved with its reason.",
+      "readOnly": false
+    },
+    {
+      "name": "instrument_with_frida",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Run one caller-authored Frida script against an explicitly selected process and detach when the observation window ends. The CLI and MCP share this ephemeral workflow; use MCP session operations for persistent sessions. Remote authentication is used only for this call and excluded from Evidence.",
+      "readOnly": false
+    },
+    {
+      "name": "list_adb_devices",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": ["adb"],
+      "description": "List attached devices exactly as `adb devices -l` reports them: serial, state, transport, model metadata, and an inferred emulator/physical kind with its evidence basis. Emulators and USB or network devices appear alike; REA neither starts nor manages them. May start the local adb server on first use.",
+      "readOnly": false
+    },
+    {
+      "name": "list_adb_directory",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "List the immediate children of one absolute device directory, including hidden entries: names, kinds, permissions, owner, group, sizes, dates, and symlink targets. Names and targets preserve embedded newlines. Recognizes the standard errors for absent paths and denied reads. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "list_adb_features",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "List the device's declared hardware and software features (`pm list features`) for device fingerprinting. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "list_adb_packages",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "List installed packages on one device with each base APK's device path, optionally scoped to third-party or system packages. Paths are device filesystem paths, not host-local. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "list_adb_processes",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "List running processes exactly as `ps -A` reports them: user, pid, ppid, rss, state, and name. Useful for pairing with instrumentation lanes. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "list_adb_services",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "List the device's binder services with their interfaces (`service list`). Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "list_architectures",
+      "module": "native/NativeMacOSProvider.js",
+      "category": "native",
+      "engines": [],
+      "description": "List thin or universal Mach-O slices with offsets, sizes, alignment, explicit coverage, and native-tool provenance. native_command_timeout_ms is the lipo wall clock (omitted means 60000 ms). It does not raise the fixed 67108864-byte output allowance.",
+      "readOnly": false
+    },
+    {
+      "name": "list_bookmarks",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "List every bookmark in the selected Hopper document as address and name pairs; unnamed bookmarks retain a null name. Use bookmarks as analyst-authored navigation aids; this does not discover code references.",
+      "readOnly": false
+    },
+    {
+      "name": "list_browser_targets",
+      "module": "server/registerBrowserTools.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "List page targets exposed by the selected loopback Chrome DevTools Protocol endpoint. Optionally filter by exact origin. URLs preserve query values and fragments; only URL userinfo credentials are removed. HTTP discovery and browser-socket discovery use the fixed 10-second discovery deadline, then the socket closes without a later command. This operation accepts no command_timeout_ms; that listing",
+      "readOnly": false
+    },
+    {
+      "name": "list_cutter_sessions",
+      "module": "server/registerCutterTools.js",
+      "category": "core",
+      "engines": ["rizin"],
+      "description": "List live REA bridge sessions hosted by upstream Cutter instances, including observed document identity and bridge-directory security status. Discovery admits at most 256 descriptor candidates (16 MiB at the descriptor byte limit). That candidate budget is separate from REA_BRIDGE_MAX_REQUEST_BYTES and has no runtime override. Discovery reads and probes at most eight concurrently, and reports brid",
+      "readOnly": false
+    },
+    {
+      "name": "list_documents",
+      "module": "server/promptCompletion.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "List provider program or document identities. Hopper may expose several documents; a Ghidra headless session contains exactly its one imported Program.",
+      "readOnly": false
+    },
+    {
+      "name": "list_electron_targets",
+      "module": "server/registerElectronTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "List every Electron file:// page target from a selected loopback CDP endpoint. Local file paths are canonicalized after symlink resolution. Selecting an endpoint exposes every eligible target and its local path metadata.",
+      "readOnly": false
+    },
+    {
+      "name": "list_frida_devices",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "List Frida devices currently available to this host, optionally connecting to the caller-selected remote Frida endpoint. Remote authentication options are used for this call only and are never returned or recorded.",
+      "readOnly": false
+    },
+    {
+      "name": "list_frida_processes",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "List processes observed on a selected Frida device or caller-supplied remote endpoint. A remote connection is closed after discovery; authentication values are never returned or recorded.",
+      "readOnly": false
+    },
+    {
+      "name": "list_javascript_runtime_targets",
+      "module": "server/registerJavaScriptRuntimeObservationTools.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "List every eligible Node/Electron V8 Inspector target from an explicit literal-loopback endpoint. Node discovery file locations that cannot be verified are preserved as unresolved reported URLs; they do not prove filesystem identity. Listing does not attach to targets.",
+      "readOnly": false
+    },
+    {
+      "name": "list_jeb_units",
+      "module": "server/registerJebTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "List project units by stable unit path and type, with optional wildcard filter, parent restriction, and pagination. The engine caps pages at 100 units; a full page reports partial coverage because more units may exist. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "list_names",
+      "module": "mcp/XrefsAddressResolution-CeqYz6pY.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "List every analyzed memory and external symbol as address/value pairs. Provider metadata distinguishes Ghidra primary, dynamic, external, type, and source facts when available. Select detail summary for counts and retained native-inventory pages; complete remains the default.",
+      "readOnly": false
+    },
+    {
+      "name": "list_procedures",
+      "module": "server/promptCompletion.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "List every analyzed procedure as address/value pairs after provider analysis. Ghidra metadata distinguishes thunks and external functions; use returned addresses in later function operations. Select detail summary for counts and retained native-inventory pages; complete remains the default.",
+      "readOnly": false
+    },
+    {
+      "name": "list_segments",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "List segments or memory blocks using exclusive end addresses. Ghidra reports block permissions, address space, image base, initialization, and overlay facts; Hopper marks unavailable permissions explicitly.",
+      "readOnly": false
+    },
+    {
+      "name": "list_strings",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "List every provider-reported string object or candidate, or filter to one address, as address/value pairs with encoding, terminator status, and byte length when available. Hopper reads complete typed objects and retains its original display text as provider_value; long literals may span adjacent unterminated objects. Kuna scans mapped printable sequences of at least five characters, including unte",
+      "readOnly": false
+    },
+    {
+      "name": "list_unknowns",
+      "module": "server/registerSessionRecordTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "List current residual-unknown heads in deterministic ID order, with optional exact status, severity, and domain filters. Results are complete inline by default; supply offset and limit to page the filtered order. total is the matching-head count and next_offset is null when the page exhausts the result. This is read-only; unresolved, contradicted, and non-truth dispositions remain distinct.",
+      "readOnly": true
+    },
+    {
+      "name": "load_frida_script",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Load caller-supplied JavaScript into a Frida session. Scripts can read or change target memory and behavior and can access the target process's capabilities. Messages and script errors are returned inline as Evidence; source content is not persisted.",
+      "readOnly": false
+    },
+    {
+      "name": "match_native_functions",
+      "module": "server/registerNativeFunctionMatchingTool.js",
+      "category": "native",
+      "engines": [],
+      "description": "Match two retained list_procedures inventories by unique exact reported symbols, then unique identical observed function bytes. Optional same-context list_names/procedure_info/read_bytes/analyze_function Evidence supplies symbol origin, exact bodies, bytes and dossier links as supplied static facts. Optional compatible CFG/call/string fingerprints from supplied dossiers propose unresolved groups o",
+      "readOnly": false
+    },
+    {
+      "name": "next_address",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "core",
+      "engines": [],
+      "description": "Return the next analyzed object address after an explicit address or current cursor. This is a navigation primitive, not instruction-flow or CFG analysis.",
+      "readOnly": false
+    },
+    {
+      "name": "observe_javascript_runtime",
+      "module": "server/registerJavaScriptRuntimeObservationTools.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Attach passively to one Node/Electron V8 Inspector target by supplying its loopback Inspector endpoint and target ID. The provider rechecks target presence and attachability; a Node discovery file location may remain unresolved. Loaded script locations are validated independently from Debugger.scriptParsed. Authorized file script items retain their exact Inspector URL in optional reported_url sepa",
+      "readOnly": false
+    },
+    {
+      "name": "observe_native_calls",
+      "module": "native/LldbCallTracer.js",
+      "category": "native",
+      "engines": [],
+      "description": "Launch the active Mach-O as an owned process under LLDB and record each entry into caller-selected functions or Objective-C methods: thread, module, symbol, load and file address, raw argument registers, selector, receiver class and optional caller frames. Every hit auto-continues. No expression is evaluated and no other process is attached. The process is killed when max_events or duration_ms is ",
+      "readOnly": false
+    },
+    {
+      "name": "observe_native_ui",
+      "module": "native/NativeMacOSProvider.js",
+      "category": "native",
+      "engines": [],
+      "description": "Observe an already-running native app by PID and window ID, bound to the active Mach-O target. Captures a bounded accessibility tree and selected-window screenshot; OS permission denial fails without broad capture or target launch. native_ui_deadline_ms is the observation deadline (omitted means 180000 ms, range 1..2147483647, next call). It does not raise the fixed 67108864-byte output allowance ",
+      "readOnly": false
+    },
+    {
+      "name": "observe_web_execution",
+      "module": "server/registerWebRuntimeTools.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "Instrument one selected CDP page for a finite, externally driven precise coverage window. Resets execution counters and prevents optimized execution until stopped. Returns complete nested UTF-16 ranges/counts, independently hashed script text and request initiator associations by session script ID. Does not navigate, click, evaluate selected code or close the externally owned page. Navigation ends",
+      "readOnly": false
+    },
+    {
+      "name": "observe_web_session",
+      "module": "server/registerBrowserTools.js",
+      "category": "web",
+      "engines": ["chrome"],
+      "description": "Arm a CDP observation window of the requested duration while the user operates the page. By default it follows the selected target's current origin; an explicit origin list controls which origins may be retained. Records navigation, redirect, lifecycle, and failure events.",
+      "readOnly": false
+    },
+    {
+      "name": "open_binary",
+      "module": "server/registerSessionTools.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Open a local executable, application bundle, archive, JavaScript, source map, plist, or analysis database after validation. format=dos-com explicitly interprets 1..65280 headerless bytes as a DOS COM analysis image. format=raw-binary interprets headerless bytes with a required architecture and entry_point; file offset 0 maps at that address. Omission preserves header-based detection. provider_id s",
+      "readOnly": false
+    },
+    {
+      "name": "open_bundle_resources",
+      "module": "server/registerSessionTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Open a local app bundle for read-only plist, Interface Builder, asset catalog, and keyed archive inspection without resolving or inventing its executable identity. This switches the shared session to a resource-only lane; executable analysis is unavailable until another target is opened.",
+      "readOnly": false
+    },
+    {
+      "name": "open_jeb_project",
+      "module": "server/registerJebTools.js",
+      "category": "native",
+      "engines": ["jeb"],
+      "description": "Open or create a JEB project from an artifact file or existing .jdb2 database on the engine host. Returns the project's input-file digests and top-level units. The engine analyzes the target itself; REA does not read the file or execute it. Fails when a project is already open.",
+      "readOnly": false
+    },
+    {
+      "name": "prev_address",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "core",
+      "engines": [],
+      "description": "Return the previous analyzed object start before an explicit address or current cursor. This is a navigation primitive and may fail at document boundaries; data objects and instructions remain distinct from control flow.",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_address",
+      "module": "mcp/XrefsAddressResolution-CeqYz6pY.js",
+      "category": "core",
+      "engines": [],
+      "description": "Resolve an unambiguous procedure symbol name or provider-normalized address to its canonical entry address. External address spaces remain explicit.",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_assembly",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "core",
+      "engines": ["ghidra"],
+      "description": "Return assembly for one analyzed procedure identified by symbol or hexadecimal address. Use when pseudocode loses calling-convention or instruction-level detail; output is currently returned as one unpaginated string. Ghidra terminal-call assumptions that may cut the analyzed body are reported in Evidence limitations.",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_callees",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "Return the provider's resolved direct callees for one procedure identified by symbol or address. Unresolved indirect calls may be absent; use analyze_function and typed references to preserve available edge uncertainty. Ghidra terminal-call assumptions that may cut the analyzed body are reported in Evidence limitations.",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_callers",
+      "module": "mcp/BundleResourceSession-Cc80orbz.js",
+      "category": "core",
+      "engines": ["ghidra"],
+      "description": "Return the provider's resolved direct callers for one procedure identified by symbol or address. Results reflect completed static analysis and may omit unresolved indirect references. Ghidra terminal-call assumptions that may cut the analyzed body are reported in Evidence limitations.",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_info",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "Return provider metadata for one procedure identified by symbol or address: entrypoint, signature, locals, size, block count, and complete inclusive body ranges when observed. Extents reflect the provider's analyzed body; Ghidra terminal-call assumptions that may cut it are reported in Evidence limitations. Hopper locals preserve observed names and signed stack displacements; source types remain u",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_pseudo_code",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "Decompile one analyzed procedure by symbol name or provider-normalized address. Ghidra also accepts file-offset:0x... selectors and falls back to a unique source-file mapping when a 0x-prefixed number resolves to no procedure; existing analysis addresses take precedence and ambiguous mappings fail explicitly. Returns provider-specific pseudocode, never original source or cross-provider text equiva",
+      "readOnly": false
+    },
+    {
+      "name": "procedure_references",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "Return every raw incoming or outgoing reference edge for one procedure. Endpoint procedures are resolved only from provider containment. Ghidra preserves detailed reference flags. Hopper preserves native CallReference classifications and exact endpoints while leaving unavailable detailed flags explicit.",
+      "readOnly": false
+    },
+    {
+      "name": "project_android_application_graph",
+      "module": "server/registerApplicationTools/projectMobileApplicationGraph.js",
+      "category": "android",
+      "engines": [],
+      "description": "Project authenticated APK inventory_artifact Evidence into an execution-free Android application inventory. Reports exact component paths and hashes, runtime-family hints, and path-based bridge hypotheses without decoding DEX, executing the APK, or claiming observed runtime calls.",
+      "readOnly": false
+    },
+    {
+      "name": "project_apple_application_graph",
+      "module": "server/registerApplicationTools/projectMobileApplicationGraph.js",
+      "category": "native",
+      "engines": [],
+      "description": "Project authenticated IPA, macOS .app directory, ZIP, or DMG inventory Evidence into an execution-free Apple application inventory. Reports application roots, nested bundles with path-convention roles (app extensions, XPC services, login items, privileged helpers, system extensions, frameworks), launchd plists, exact component paths and hashes, runtime-family hints, and path-based bridge hypothese",
+      "readOnly": false
+    },
+    {
+      "name": "project_harmony_application_graph",
+      "module": "server/registerApplicationTools/projectMobileApplicationGraph.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Project authenticated HarmonyOS HAP, HSP, or App Pack inventory Evidence into an execution-free application inventory. Reports packaging-model hints (Stage module.json versus FA config.json), exact component paths and hashes (manifests, Ark bytecode, resources, native libraries, JavaScript, signing), App Pack child packages, runtime-family hints, and path-based N-API bridge hypotheses without deco",
+      "readOnly": false
+    },
+    {
+      "name": "project_managed_application_graph",
+      "module": "server/registerManagedWorkflowTools/projectManagedApplicationGraph.js",
+      "category": "native",
+      "engines": [],
+      "description": "Project authenticated managed artifact, member, and native-boundary Evidence into the provider-neutral application graph without executing managed code, loading assemblies, or translating managed metadata tokens to native addresses. The graph preserves managed static observations as managed-specific nodes linked to source Evidence, with in-module calls and field-access edges; other call and field-",
+      "readOnly": false
+    },
+    {
+      "name": "pull_adb_file",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Pull one absolute device path (a database, shared-preferences XML, or any readable file) into a caller-selected output directory, digesting it with SHA-256. The local copy must not already exist. Read-only with respect to the device.",
+      "readOnly": false
+    },
+    {
+      "name": "pull_adb_package",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Pull one installed package's complete APK set (base plus every split, as `pm path` reports) from the device into a caller-selected output directory, creating a package-named subdirectory that must not already exist. Every pulled file is digested with SHA-256; partial pulls keep successful artifacts and per-file failure reasons. The device keeps the originals.",
+      "readOnly": false
+    },
+    {
+      "name": "push_adb_file",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": ["adb"],
+      "description": "Push one local file to an absolute device path. If the destination is an existing directory, adb places the file inside it under the local basename and the result reports that file path. A device-mutating tool: checks for an existing destination file before transfer and refuses it unless overwrite is explicitly requested; this check is not atomic and another process can create the path before adb ",
+      "readOnly": false
+    },
+    {
+      "name": "read_adb_logcat",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Read a bounded dump of the device log (`logcat -d -t`) for one buffer, optionally restricted to a process id. No streaming, no clearing; the newest lines are kept when the count cap trims. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "read_adb_setting",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Read one settings value (`settings get`) from the system, secure, or global namespace. Absent keys report the device's own null observation. Read-only; writing settings is not exposed.",
+      "readOnly": false
+    },
+    {
+      "name": "read_bytes",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": [],
+      "description": "Read analyzed bytes from one provider-normalized virtual address. The hexadecimal payload reports the exact returned length; incomplete reads remain explicit and unsupported provider APIs return typed capability unavailability.",
+      "readOnly": false
+    },
+    {
+      "name": "read_function_instructions",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "Return every raw instruction for one analyzed procedure. Instruction text and body extent are provider-specific. Ghidra terminal-call assumptions that may cut the analyzed body are reported in limitations.",
+      "readOnly": false
+    },
+    {
+      "name": "reconcile_javascript_runtime",
+      "module": "server/registerElectronTools.js",
+      "category": "javascript",
+      "engines": ["chrome"],
+      "description": "Reconcile verified static JavaScript application graphs with existing passive web/Electron CDP, passive V8 Inspector, or provider-owned active Electron Evidence. Active Electron captures contribute an explicitly partial target-only runtime record; they never invent renderer scripts, frames, workers, or execution claims. Exact captured-source digests take priority over caller-declared file/URL mapp",
+      "readOnly": false
+    },
+    {
+      "name": "record_unknown",
+      "module": "server/registerSessionRecordTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Create one deterministic residual unknown and immutable mutation evidence. Validates all evidence and relationship references, and rejects duplicate stable identity.",
+      "readOnly": false
+    },
+    {
+      "name": "recover_javascript_sources",
+      "module": "server/registerJavaScriptRecoveryTool.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Recover readable modules from local UTF-8 JavaScript scripts/bundles into an absent directory, using caller-supplied Wakaru ^1.13.0 (verified with 1.14.0) on Linux x64. Use additional_paths for related chunks; each input retains its own snapshot and provenance. Returns original/derived digests, extraction byte ranges, emitted source maps, warnings and analysis_input inline. Structural splitting ma",
+      "readOnly": false
+    },
+    {
+      "name": "resolve_adb_packages",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Find installed packages by case-insensitive substring of the package name (e.g. `whatsapp` → `com.whatsapp`), returning each match's base APK device path. The first step of an easy get: resolve, then pull_adb_package the exact name. Read-only.",
+      "readOnly": false
+    },
+    {
+      "name": "resolve_containing_procedure",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "core",
+      "engines": [],
+      "description": "Resolve an arbitrary address, including an interior instruction or exact external entry, to its provider-analyzed containing procedure. A negative result distinguishes outside segments from not in a procedure and is never guessed from nearby symbols.",
+      "readOnly": false
+    },
+    {
+      "name": "resolve_native_call_targets",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": [],
+      "description": "Resolve one explicit static call site using typed provider call references. Preserves ambiguous targets as candidates and unresolved computed calls as unknown; does not execute code or traverse a call graph.",
+      "readOnly": false
+    },
+    {
+      "name": "resume_frida_session",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Resume the process created by a paused Frida spawn session. Attached processes are already running and cannot be resumed through this operation.",
+      "readOnly": false
+    },
+    {
+      "name": "rizin_debug_command",
+      "module": "server/registerRizinDebugTools.js",
+      "category": "native",
+      "engines": ["ghidra", "rizin"],
+      "description": "Execute one unrestricted command in a persistent Rizin debugger session. Returns raw output inline with Evidence, including backend output interleaved before the completion marker. If the command exceeds the output-byte, frame-byte, or frame-count limit, `output_truncated` is true and `completion_status` is `unknown`; retained partial output is returned and the owned debugger session is stopped. E",
+      "readOnly": false
+    },
+    {
+      "name": "rizin_debug_session_status",
+      "module": "server/registerRizinDebugTools.js",
+      "category": "native",
+      "engines": ["rizin"],
+      "description": "Return observed lifecycle state and bounded recent NUL-framed output and process diagnostics for one Rizin debugger session; truncation fields report discarded data, and output_invalid_utf8 reports whether invalid UTF-8 has been observed in session frame bytes; recent output may contain replacement characters.",
+      "readOnly": false
+    },
+    {
+      "name": "search_android_classes",
+      "module": "server/registerAndroidTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Search complete top-level decompiler class-name rows in an explicit local APK by case-sensitive substring. Empty query inventories all rows. Repeated names remain repeated and appear in duplicate_names; the provider accepts only class names for lookup, so these rows do not identify which same-name class node a later lookup selects. Retains artifact and engine identity; no APK execution.",
+      "readOnly": false
+    },
+    {
+      "name": "search_bytes",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "Find masked byte signatures in initialized analyzed memory. Hex byte pairs and ?? wildcards are supported; an optional equal-length hex mask selects bits. Bounds are inclusive. Matches are ordered by provider address and never span blocks. Coverage describes this page; reuse the same query with next_cursor to continue. Uninitialized blocks are listed separately. Ghidra only; Hopper is unavailable.",
+      "readOnly": false
+    },
+    {
+      "name": "search_procedures",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Search every analyzed procedure name using literal matching by default or regex when requested. Results are deterministic and complete. Hopper regex mode uses ECMAScript Unicode syntax in a cancellable worker. The matching deadline is REA_REGEX_MATCHING_DEADLINE_MS (a positive decimal integer of milliseconds from 1 to 2147483647, default 5000). Unset keeps the default. A deadline failure names the",
+      "readOnly": false
+    },
+    {
+      "name": "search_strings",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "Search every provider-reported string object or candidate using literal matching by default or regex when requested. Results are deterministic and complete over that provider inventory, not every text sequence in artifact bytes. Kuna scans mapped sequences of at least five characters, including unterminated fragments, without computing references. Ghidra may omit packed or undefined literals, incl",
+      "readOnly": false
+    },
+    {
+      "name": "set_address_name",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "android",
+      "engines": ["hopper"],
+      "description": "Assign an analyst name to one mapped hexadecimal address and report whether the native edit succeeded and exact readback matched. Hopper rejects symbol names exceeding 1024 UTF-16 code units before mutation, and rejects names owned by another address; use set_addresses_names to explicitly move or swap labels among selected addresses. This mutates analysis metadata.",
+      "readOnly": false
+    },
+    {
+      "name": "set_addresses_names",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "android",
+      "engines": ["hopper"],
+      "description": "Assign analyst names to multiple mapped addresses in one call and return per-address edit/readback success booleans. Hopper validates mapped destinations, native string representations, its 1024 UTF-16 code-unit symbol-name limit, and unique destinations/names before applying edits. Existing labels may move or swap only among explicitly selected addresses; unselected label owners remain unchanged.",
+      "readOnly": false
+    },
+    {
+      "name": "set_bookmark",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "android",
+      "engines": [],
+      "description": "Create or update a bookmark at a mapped hexadecimal address and report readback success. Omit name to preserve an existing name or create an unnamed bookmark; an empty string clears the bookmark name. This mutates navigation metadata; bookmarks are analyst-authored navigation aids, not binary evidence.",
+      "readOnly": false
+    },
+    {
+      "name": "set_comment",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "android",
+      "engines": ["hopper"],
+      "description": "Write a regular analysis comment at a hexadecimal address and return whether readback matched. An empty comment clears it. This mutates the Hopper document; use comments to record evidence IDs or reasoning.",
+      "readOnly": false
+    },
+    {
+      "name": "set_inline_comment",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "android",
+      "engines": ["hopper"],
+      "description": "Write an inline instruction comment at a hexadecimal address and return whether readback matched. An empty comment clears it; Hopper may flatten newlines, producing false on exact readback. This mutates analysis metadata.",
+      "readOnly": false
+    },
+    {
+      "name": "start_adb_activity",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Start an intent with `am start -W`: one action, optional data URI, optional explicit component, and up to 16 typed extras (string, boolean, int, long, float). A device-mutating tool; the full wait report determines success, with failed-attempt facts and raw output retained.",
+      "readOnly": false
+    },
+    {
+      "name": "start_adb_app",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Start one installed app's resolved launcher activity with `am start -W -n`. A device-mutating tool for dynamic analysis. The full wait report determines success; failures retain launch-attempt facts and raw output. Pair with `read_adb_logcat` (pid filter) and `list_adb_processes` to observe the app, and `stop_adb_app` to end the run.",
+      "readOnly": false
+    },
+    {
+      "name": "start_frida_session",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Attach Frida to one selected process or spawn one selected target. Spawned targets remain paused until resume_frida_session, allowing scripts to load before execution. Closing a session detaches instrumentation; it does not kill the target.",
+      "readOnly": false
+    },
+    {
+      "name": "start_gdb_session",
+      "module": "server/registerGdbTools.js",
+      "category": "native",
+      "engines": ["gdb"],
+      "description": "Start a BYO GDB process in MI3 mode when available, suppress startup files, and disable auto-loading. Persistent GDB sessions are available only on Linux, where REA can verify live inferior output descriptors through /proc before detaching; macOS descriptor verification is not implemented, and Windows Job Object cleanup can terminate debugger inferiors. Optionally set inferior_tty to a caller-sele",
+      "readOnly": false
+    },
+    {
+      "name": "start_rizin_debug_session",
+      "module": "server/registerRizinDebugTools.js",
+      "category": "android",
+      "engines": ["ghidra", "rizin"],
+      "description": "Start a persistent Rizin debugger session using `-N` to suppress user settings and scripts while retaining plugins, `-0` for NUL framing, and `-d` with an optional caller-selected IO debugger backend. Requires a caller-selected Linux TTY for inferior stdout and stderr; the target may write directly to that terminal while running and after detach. REA verifies both destinations and `dbg.exitkills=f",
+      "readOnly": false
+    },
+    {
+      "name": "stop_adb_app",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Force-stop every process of one package (`am force-stop`), ending a dynamic-analysis run. A device-mutating tool; it succeeds whether or not the package had running processes.",
+      "readOnly": false
+    },
+    {
+      "name": "trace_android_references",
+      "module": "server/registerAndroidTools.js",
+      "category": "android",
+      "engines": [],
+      "description": "Trace incoming static using nodes to an exact Android class or selected method overload. The total counts containing nodes, not individual invoke instructions. Use inspect_android_class to choose an overload_index when names collide. Source lines and the containing node dex_offset remain unknown. direct_invokes carries exact DEX code-unit instruction offsets when available; direct_invokes_exhausti",
+      "readOnly": false
+    },
+    {
+      "name": "trace_application_feature",
+      "module": "server/registerApplicationTools/traceFeature.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Trace a typed literal seed through every reachable part of an authenticated JavaScript Application Graph supplied as inline Evidence or exact same-session retained references. Original static, native, passive-runtime, inferred, and unknown authorities remain distinct; native addon handoffs never open a provider or execute the application.",
+      "readOnly": false
+    },
+    {
+      "name": "trace_call_path",
+      "module": "server/registerEnhancedTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Resolve start and optional goal symbols or addresses to canonical procedure entries, then trace direct callers or callees until the graph is exhausted or the goal is reached. Results use canonical addresses; Evidence preserves supplied selectors. Returns visited nodes, direct-call edges, a shortest traversal path, provider failures, and residual unknowns. A requested goal is unknown when unresolve",
+      "readOnly": false
+    },
+    {
+      "name": "trace_dylib_resolution",
+      "module": "mcp/ArtifactProvider-CChlnMvw.js",
+      "category": "native",
+      "engines": [],
+      "description": "Trace how dyld would resolve each Mach-O dylib load for the active Mach-O, or for every executable in the active .app bundle (the main app, XPC services, extensions, login items, helpers). Expands @executable_path, @loader_path, and @rpath through each process's LC_RPATH stack in dependents-first load order, and reports every candidate path with its outcome, the resolved image and digest, weak, re",
+      "readOnly": false
+    },
+    {
+      "name": "trace_feature",
+      "module": "server/registerEnhancedTools.js",
+      "category": "core",
+      "engines": [],
+      "description": "Trace the complete literal query, preserving spaces, through every matching string and procedure, their xrefs, and truthful containing-procedure resolution. Returns observations and residual unknowns without inferring reference kinds.",
+      "readOnly": false
+    },
+    {
+      "name": "trace_javascript_semantics",
+      "module": "server/registerApplicationTools/traceSemantics.js",
+      "category": "javascript",
+      "engines": [],
+      "description": "Trace static JavaScript data-flow, direct call/return, and closure relations from inline application Evidence or an exact same-session retained reference. Dynamic or unsupported semantics remain explicit unknowns; static reachability never claims runtime execution.",
+      "readOnly": false
+    },
+    {
+      "name": "trace_native_ui_action",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Trace one unique compiled UI action, object ID, native symbol or exact function address through authored connections, encoded or symbolized Objective-C handlers, and bounded static call references. Typed direct and resolved indirect calls, ambiguous candidates, inferred untyped provider callees, and targetless sites remain distinct. Runtime reachability is unknown; use trace_native_values for reco",
+      "readOnly": false
+    },
+    {
+      "name": "trace_native_values",
+      "module": "server/registerEnhancedTools.js",
+      "category": "native",
+      "engines": ["ghidra"],
+      "description": "Trace a bounded static dependency graph from one explicit native procedure. Includes high-p-code def-use, constants, operators, memory and branch operations, resolved call edges, and derived argument/parameter and return/output bindings. Missing bindings, alias semantics, persistent state and RNG roles remain unknown. Budgets bound depth, decompilations, graph size and payloads; nodes are paginate",
+      "readOnly": false
+    },
+    {
+      "name": "trace_web_module_imports",
+      "module": "server/registerWebModuleTool.js",
+      "category": "web",
+      "engines": [],
+      "description": "Trace one exported website script's outgoing native ES imports/re-exports, using exact URL and optional selected import-map context. Reads a local export_web_scripts manifest and verifies the selected source's SHA-256/size; returns source positions, native resolved URLs or exact errors, every matching captured candidate and explicit unknown execution. Query/fragment identities are preserved. Compu",
+      "readOnly": false
+    },
+    {
+      "name": "trace_web_source_location",
+      "module": "server/registerWebSourceLocationTool.js",
+      "category": "web",
+      "engines": [],
+      "description": "Trace one generated position in an exported website script through an explicitly paired local source map. Verifies manifest, selected script and map SHA-256/byte identities; returns every equal-position mapping, reported source/root, resolved source URL, embedded sourcesContent and original position inline. One-based lines and zero-based UTF-16 columns; greatest generated position <= requested acr",
+      "readOnly": false
+    },
+    {
+      "name": "uninstall_adb_package",
+      "module": "server/registerAdbTools.js",
+      "category": "android",
+      "engines": ["adb"],
+      "description": "Request package removal for user 0 (`adb shell pm uninstall --user 0`) without data retention. A device-mutating tool; absent packages report the device's own refusal reason.",
+      "readOnly": false
+    },
+    {
+      "name": "unload_frida_script",
+      "module": "server/registerFridaTools.js",
+      "category": "android",
+      "engines": ["frida"],
+      "description": "Unload one caller-selected Frida script from a live session. This removes that script's instrumentation from the target.",
+      "readOnly": false
+    },
+    {
+      "name": "unset_bookmark",
+      "module": "mcp/binary-DR8ElrdQ.js",
+      "category": "native",
+      "engines": ["hopper"],
+      "description": "Remove the bookmark at a mapped hexadecimal address and return whether it is absent. Hopper also permits removing an existing legacy bookmark outside mapped memory. This mutates navigation metadata and does not alter binary bytes.",
+      "readOnly": false
+    },
+    {
+      "name": "update_analysis_settings",
+      "module": "server/registerAnalysisSettingsTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "When REA names an adjustable limit, atomically set or reset its runtime default, then retry once work and cleanup have settled. No inspection call is required when the error supplies the bounds. Changes apply only to new work, survive target close/open, and disappear on REA restart. Reset restores launch configuration. Does not edit files, restart providers, raise host limits, or override explicit",
+      "readOnly": false
+    },
+    {
+      "name": "update_unknown",
+      "module": "server/registerSessionRecordTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Append one immutable full-state revision and mutation evidence. Requires exact expected_revision; stale concurrent writers fail instead of overwriting newer analysis.",
+      "readOnly": false
+    },
+    {
+      "name": "verify_managed_native_boundaries",
+      "module": "server/registerManagedWorkflowTools/verifyManagedNativeBoundaries.js",
+      "category": "native",
+      "engines": [],
+      "description": "Verify managed P/Invoke/native-boundary declarations against authenticated native export or function Evidence without executing managed code or translating managed metadata tokens into native addresses. The workflow preserves declaration-only, verified, inferred, contradicted, and unresolved states; a name candidate with missing managed or native module identity remains unresolved with its candida",
+      "readOnly": false
+    },
+    {
+      "name": "verify_reconstruction",
+      "module": "server/registerInvestigationTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Verify a finite typed behavioral and structural specification against a canonical Evidence bundle. Pass means every declared claim has complete comparable authority—not global source equivalence; changed claims fail and missing, limited, or unresolved evidence stays unknown.",
+      "readOnly": false
+    },
+    {
+      "name": "verify_unknown_resolution",
+      "module": "server/registerSessionRecordTools.js",
+      "category": "native",
+      "engines": [],
+      "description": "Revalidate the current residual-unknown head against live bundled evidence, exact authority/confidence/environment requirements, and revision integrity. Withdrawn and out-of-scope dispositions are not truth claims.",
+      "readOnly": true
+    },
+    {
+      "name": "xrefs",
+      "module": "cliCommandNames.js",
+      "category": "native",
+      "engines": ["ghidra", "hopper"],
+      "description": "Return analyzed references to a code or data address. Hopper may default to its current cursor; headless providers such as Ghidra require an explicit address. Use to connect strings, globals, selectors, and functions; bare addresses are untyped and indirect references may be incomplete. Use inspect_native_instruction at the target address for typed incoming references where supported.",
+      "readOnly": false
+    }
+  ]
+}

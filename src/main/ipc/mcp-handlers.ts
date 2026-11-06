@@ -4,6 +4,8 @@ import { isTrustedRendererIpcEvent } from '../renderer-security'
 import { McpAutoConnectCoordinator } from '../mcp/autoconnect-coordinator'
 import { McpConfigStore } from '../mcp/mcp-config-store'
 import { McpManager } from '../mcp/mcp-manager'
+import { McpPreflightError } from '../mcp/mcp-client'
+import { isBlockingPreflightFailure, runMcpPreflight } from '../mcp/mcp-preflight'
 import { getMcpOAuthCredentialStore } from '../mcp/mcp-oauth-store'
 import {
   closeAllMcpOAuthLoopbacks,
@@ -210,7 +212,13 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
   registerMcpMessagePackHandler<{ id: string; patch: Partial<McpServerConfig> }>(
     'mcp:update',
     async ({ id, patch }) => {
-      return await updateServer(id, patch)
+      const result = await updateServer(id, patch)
+      if (!result.success) return result
+      // A live connection must honour an edited allowlist, timeout, or output cap without being
+      // torn down: reconnecting would drop in-flight calls for a settings change.
+      const stored = await mcpConfigStore.get(id)
+      if (stored.server) mcpManager.applyConfig(stored.server)
+      return result
     }
   )
 
@@ -239,7 +247,9 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
       return { success: true, status: mcpManager.getStatus(id) }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      return { success: false, error: msg }
+      // The status text is written for a log; the code is what the panel can act on.
+      const diagnostic = err instanceof McpPreflightError ? err.diagnostic : undefined
+      return { success: false, error: msg, diagnostic }
     }
   })
 
@@ -267,10 +277,17 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
       return {
         config,
         status: info?.status ?? 'disconnected',
+        // Advertised tools ship without schemas: a server with 229 of them would otherwise put
+        // every input schema on every panel refresh. Schemas ride only on `exposedTools`, which
+        // the per-server allowlist caps at 32.
         tools: info?.tools ?? [],
+        exposedTools: info?.exposedTools ?? [],
+        exposure: info?.exposure ?? {},
         resources: info?.resources ?? [],
         prompts: info?.prompts ?? [],
-        error: info?.error
+        capabilitiesTruncated: info?.capabilitiesTruncated ?? false,
+        error: info?.error,
+        diagnostic: info?.diagnostic
       }
     })
   })
@@ -313,6 +330,20 @@ export function registerMcpHandlers(mcpManager: McpManager): void {
   // List prompts for a server
   registerMcpMessagePackHandler<string>('mcp:list-prompts', (id) => {
     return mcpManager.getPrompts(id)
+  })
+
+  // Report host requirements without spawning the server, so the panel can explain a
+  // preflight before the user pays for a connection attempt.
+  registerMcpMessagePackHandler<string>('mcp:preflight', async (id) => {
+    const stored = await mcpConfigStore.get(id)
+    if (!stored.server) return { success: false, error: 'Server not found' }
+    const diagnostic = await runMcpPreflight(stored.server)
+    // `null` rather than `undefined`: MessagePack round-trips a missing key as nil on this side.
+    return {
+      success: true,
+      diagnostic: diagnostic ?? null,
+      blocked: isBlockingPreflightFailure(diagnostic)
+    }
   })
 
   // Refresh capabilities for a server

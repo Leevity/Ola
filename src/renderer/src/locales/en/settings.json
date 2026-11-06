@@ -1789,6 +1789,8 @@
     "importJsonFailed": "JSON import failed",
     "importJsonInvalid": "No valid MCP server config found",
     "serverAdded": "MCP server \"{{name}}\" added",
+    "saveFailed": "MCP server config could not be saved",
+    "capabilitiesTruncated": "Capability discovery stopped at the page limit, so this list is only part of what the server advertises.",
     "serverRemoved": "MCP server removed",
     "noServers": "No MCP servers configured",
     "selectToConfig": "Select a server to configure",
@@ -1803,7 +1805,7 @@
     "commandPlaceholder": "npx, node, python, etc.",
     "arguments": "Arguments",
     "argumentsPlaceholder": "-y @anthropic/mcp-server-filesystem /path",
-    "argumentsHint": "Space-separated arguments",
+    "argumentsHint": "Space-separated arguments; quote values that contain spaces",
     "workingDirectory": "Working Directory",
     "workingDirectoryPlaceholder": "Optional working directory",
     "envVars": "Environment Variables",
@@ -1843,7 +1845,37 @@
       "connected": "connected",
       "authorization-required": "authorization required",
       "error": "error"
-    }
+    },
+    "toolExposure": "Tool Exposure",
+    "exposureCounter": "{{exposed}} of {{advertised}} tools exposed (max {{max}} per server)",
+    "exposureUnfilteredWarning": "No allowlist set: all {{total}} advertised tools would be exposed, above the {{max}} cap. Select the tools you need.",
+    "presets": "Presets",
+    "presetNone": "All",
+    "filterToolsPlaceholder": "Filter tools...",
+    "notExposable": "Not exposable ({{total}})",
+    "excludedByAllowlist": "Excluded by allowlist ({{total}})",
+    "exposeReasons": {
+      "INVALID_ALIAS": "The server tool alias is invalid, so no external name can be formed.",
+      "EMPTY_TOOL_NAME": "The advertised tool name is empty.",
+      "TOO_LONG": "The external tool name is too long or collides with another tool."
+    },
+    "preflightBlocked": "Preflight blocked this server: {{code}}",
+    "preflightRecheck": "Recheck",
+    "preflightIgnore": "Ignore preflight",
+    "preflightIgnoredNote": "Preflight ignored",
+    "preflightPassed": "Preflight passed",
+    "preflightFailed": "Preflight check failed",
+    "diagnosticCodes": {
+      "NODE_VERSION_UNSUPPORTED": "Node version unsupported",
+      "COMMAND_MISSING": "Required command missing",
+      "ENGINE_MISSING": "Engine missing",
+      "TOOL_NOT_EXPOSABLE": "Some tools cannot be exposed"
+    },
+    "runtimeLimits": "Runtime Limits",
+    "runtimeLimitsHint": "Optional: per-call timeout in milliseconds and per-result byte caps (inline text, max total).",
+    "timeoutMsPlaceholder": "Timeout (ms)",
+    "inlineBytesPlaceholder": "Inline bytes",
+    "maxResultBytesPlaceholder": "Max result bytes"
   },
   "skillsmarket": {
     "title": "Skills Market",

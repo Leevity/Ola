@@ -40,6 +40,7 @@ import { useTeamStore } from '@renderer/stores/team-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { scenarioAllowsTool } from '../../../../shared/scenario-policy'
+import { MCP_RUN_TOOL_BUDGET } from '../../../../shared/mcp-tool-policy'
 import { PLAN_MODE_ALLOWED_TOOLS } from '@renderer/lib/tools/plan-tool'
 import { usePlanStore, type Plan } from '@renderer/stores/plan-store'
 import { useTaskStore } from '@renderer/stores/task-store'
@@ -1149,24 +1150,31 @@ export async function sendChatMessage(
         userPrompt = userPrompt ? `${userPrompt}\n${channelSection}` : channelSection
       }
 
-      // Build MCP info for system prompt — inject active MCP server metadata and tool mappings
+      // Build MCP info for system prompt — only names Main exposed (externalName), enumerated
+      // within the same budget the run guard enforces.
       if (promptAllowsToolContext && activeMcps.length > 0) {
         const mcpLines: string[] = ['\n## Active MCP Servers']
+        let promptToolBudget = MCP_RUN_TOOL_BUDGET
         for (const srv of activeMcps) {
-          const tools = activeMcpTools[srv.id] ?? []
-          mcpLines.push(`- **${srv.name}** (${tools.length} tools, transport: ${srv.transport})`)
+          const callable = (activeMcpTools[srv.id] ?? []).filter((tool) => tool.externalName)
+          mcpLines.push(`- **${srv.name}** (${callable.length} tools, transport: ${srv.transport})`)
           if (srv.description?.trim()) {
             mcpLines.push(`  ${srv.description.trim()}`)
           }
-          if (tools.length > 0) {
+          if (callable.length > 0 && promptToolBudget > 0) {
+            const shown = callable.slice(0, promptToolBudget)
+            promptToolBudget -= shown.length
+            const ellipsis = shown.length < callable.length ? ', …' : ''
             mcpLines.push(
-              `  Available tools: ${tools.map((t) => `\`mcp__${srv.id}__${t.name}\``).join(', ')}`
+              `  Available tools: ${shown
+                .map((tool) => `\`${tool.externalName}\``)
+                .join(', ')}${ellipsis}`
             )
           }
         }
         mcpLines.push(
           '',
-          'MCP tools are prefixed with `mcp__{serverId}__{toolName}`. Call them like any other tool — they are routed to the corresponding MCP server automatically.',
+          'MCP tools are named `mcp__{serverAlias}__{toolName}`. Call them like any other tool — they are routed to the corresponding MCP server automatically.',
           'MCP tools require user approval before execution.'
         )
         const mcpSection = mcpLines.join('\n')
@@ -1270,6 +1278,20 @@ export async function sendChatMessage(
           cachedPromptSnapshot.toolDefs.some((t) => t.name === 'PluginSendMessage'))
 
       const effectiveToolDefs = requestToolDefs
+      // Over-wide runs must fail loudly, naming the widest servers: `parseRunSpec` rejects more
+      // than MCP_RUN_TOOL_BUDGET names, and a silently truncated list is the defect this guards.
+      if (effectiveToolDefs.length > MCP_RUN_TOOL_BUDGET) {
+        const widest = activeMcps
+          .map((srv) => ({ name: srv.name, count: (activeMcpTools[srv.id] ?? []).length }))
+          .filter((entry) => entry.count > 0)
+          .sort((left, right) => right.count - left.count)
+          .map((entry) => `${entry.name} (${entry.count})`)
+          .join(', ')
+        throw new Error(
+          `MCP_TOOL_BUDGET_EXCEEDED: ${effectiveToolDefs.length} tools exceed the ${MCP_RUN_TOOL_BUDGET}-tool per-run limit. ` +
+            `Widest MCP servers: ${widest || 'none'}. Narrow their tool allowlists in Settings → MCP.`
+        )
+      }
       let agentSystemPrompt = cachedPromptSnapshot?.systemPrompt ?? ''
 
       if (canReusePromptSnapshot && cachedPromptSnapshot) {

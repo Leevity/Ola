@@ -1,69 +1,65 @@
 import { toolRegistry } from '../agent/tool-registry'
 import type { ToolHandler } from '../tools/tool-types'
-import type { McpServerConfig, McpTool, McpResource } from './types'
+import type { ExposedMcpTool, McpResource, McpServerConfig } from './types'
 import { encodeStructuredToolResult } from '../tools/tool-result-format'
 import { ipcClient } from '../ipc/ipc-client'
 import { IPC } from '../ipc/channels'
+import {
+  MCP_TOOL_NAME_PREFIX,
+  mcpExternalToolName,
+  parseMcpExternalToolName
+} from '../../../../shared/mcp-tool-policy'
 
 /**
- * MCP Tool & Resource Bridge — dynamically maps MCP server tools and resources
- * to ToolHandlers registered in the global tool registry.
- *
- * Tool naming:
- *   Tools:     `mcp__{serverId}__{toolName}`
- *   Resources: `mcp__{serverId}__resource__{resourceName}`
- * This avoids conflicts between different servers and with built-in tools.
+ * MCP Tool & Resource Bridge — maps the exposed tool set Main ships over IPC to ToolHandlers in
+ * the global tool registry. Names are consumed verbatim from `externalName` (tools) or composed
+ * with the pure `mcpExternalToolName(alias, ...)` (resources). The renderer never re-derives a
+ * name from a server id; that divergence made connected tools vanish from runs silently.
  */
 
-const MCP_TOOL_PREFIX = 'mcp__'
+/** Registered names plus their owning server id, so cleanup never decodes ids from names. */
+let _registeredMcp: Array<{ name: string; serverId: string }> = []
 
-/** Track registered MCP tool/resource names for cleanup */
-let _registeredMcpNames: string[] = []
-
-/** Build a prefixed tool name */
-function mcpToolName(serverId: string, toolName: string): string {
-  return `${MCP_TOOL_PREFIX}${serverId}__${toolName}`
-}
-
-/** Parse server ID and original tool name from a prefixed tool name */
+/**
+ * Decode an external MCP tool name. For canonical names the first segment is the server's alias
+ * (map it back to an id via `McpServerConfig.toolAlias`); for legacy names it is the stored server
+ * id, which is how pre-alias tools are recorded in old transcripts.
+ */
 export function parseMcpToolName(
   prefixedName: string
 ): { serverId: string; toolName: string } | null {
-  if (!prefixedName.startsWith(MCP_TOOL_PREFIX)) return null
-  const rest = prefixedName.slice(MCP_TOOL_PREFIX.length)
-  const sepIdx = rest.indexOf('__')
-  if (sepIdx === -1) return null
-  return {
-    serverId: rest.slice(0, sepIdx),
-    toolName: rest.slice(sepIdx + 2)
-  }
+  const parsed = parseMcpExternalToolName(prefixedName)
+  if (!parsed) return null
+  return { serverId: parsed.alias, toolName: parsed.toolSegment }
 }
 
 /** Check if a tool name is an MCP tool */
 export function isMcpTool(name: string): boolean {
-  return name.startsWith(MCP_TOOL_PREFIX)
+  return name.startsWith(MCP_TOOL_NAME_PREFIX)
 }
 
 /**
- * Register MCP tools for all active servers.
- * Execution is owned by Main's connected MCP manager and crosses the trusted
- * MessagePack IPC boundary; the renderer only keeps definitions and routing.
+ * Register exactly the exposed tools Main named, using its external names verbatim. Entries
+ * without `externalName` carry a `reason` or `filtered` and are not registerable; skipping them
+ * is the fail-closed default.
  */
 export function registerMcpTools(
   activeServers: McpServerConfig[],
-  toolsMap: Record<string, McpTool[]>
+  toolsMap: Record<string, ExposedMcpTool[]>
 ): void {
   // Unregister any previously registered MCP tools/resources first
   unregisterMcpTools()
 
-  const newNames: string[] = []
+  const newEntries: Array<{ name: string; serverId: string }> = []
 
   for (const server of activeServers) {
     const tools = toolsMap[server.id]
     if (!tools?.length) continue
 
     for (const mcpTool of tools) {
-      const name = mcpToolName(server.id, mcpTool.name)
+      if (!mcpTool.externalName) continue
+
+      const name = mcpTool.externalName
 
       const handler: ToolHandler = {
         definition: {
@@ -76,6 +72,7 @@ export function registerMcpTools(
           }
         },
         execute: async (input, ctx) => {
+          // Main routes the call by the server-advertised name, not the external name.
           const result = await ipcClient.invoke(IPC.MCP_CALL_TOOL, {
             serverId: server.id,
             toolName: mcpTool.name,
@@ -97,21 +94,16 @@ export function registerMcpTools(
           projectScoped: Boolean(server.projectId)
         }
       })
-      newNames.push(name)
+      newEntries.push({ name, serverId: server.id })
     }
   }
 
-  _registeredMcpNames = newNames
-}
-
-/** Build a resource tool name: mcp__{serverId}__resource__{resourceName} */
-function mcpResourceToolName(serverId: string, resourceName: string): string {
-  return `${MCP_TOOL_PREFIX}${serverId}__resource__${resourceName}`
+  _registeredMcp = newEntries
 }
 
 /**
- * Register MCP resources as tools for all active servers.
- * Resource reads use the same trusted Main MCP bridge as dynamic tools.
+ * Register MCP resources as tools. Resource names live in the same alias namespace as tools with
+ * a `resource__` segment; a server without `toolAlias` cannot name them and is skipped.
  */
 export function registerMcpResources(
   activeServers: McpServerConfig[],
@@ -120,9 +112,13 @@ export function registerMcpResources(
   for (const server of activeServers) {
     const resources = resourcesMap[server.id]
     if (!resources?.length) continue
+    if (!server.toolAlias) continue
 
     for (const resource of resources) {
-      const name = mcpResourceToolName(server.id, resource.name)
+      const built = mcpExternalToolName(server.toolAlias, `resource__${resource.name}`)
+      if (!built.ok) continue
+
+      const name = built.name
 
       const handler: ToolHandler = {
         definition: {
@@ -155,26 +151,25 @@ export function registerMcpResources(
           projectScoped: Boolean(server.projectId)
         }
       })
-      _registeredMcpNames.push(name)
+      _registeredMcp.push({ name, serverId: server.id })
     }
   }
 }
 
 /** Unregister all previously registered MCP tools and resources */
 export function unregisterMcpTools(): void {
-  for (const name of _registeredMcpNames) {
-    const parsed = parseMcpToolName(name)
-    if (parsed) toolRegistry.unregister(name, `mcp:${parsed.serverId}`)
+  for (const entry of _registeredMcp) {
+    toolRegistry.unregister(entry.name, `mcp:${entry.serverId}`)
   }
-  _registeredMcpNames = []
+  _registeredMcp = []
 }
 
 /** Check if any MCP tools or resources are currently registered */
 export function isMcpToolsRegistered(): boolean {
-  return _registeredMcpNames.length > 0
+  return _registeredMcp.length > 0
 }
 
 /** Get count of currently registered MCP tools and resources */
 export function getMcpToolCount(): number {
-  return _registeredMcpNames.length
+  return _registeredMcp.length
 }

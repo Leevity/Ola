@@ -58,6 +58,7 @@ import {
   type CompactToolHeaderModel
 } from './CompactToolCallHeader'
 import { parseExtensionToolResult } from '@renderer/lib/extensions/extension-result'
+import { parseMcpExternalToolName } from '../../../../shared/mcp-tool-policy'
 import { BashArtifactsCard } from './BashArtifactsCard'
 import { CodeGraphToolCard } from './CodeGraphToolCard'
 import { WebSearchBlock } from './WebSearchBlock'
@@ -2012,7 +2013,9 @@ function ToolDetailSectionHeader({ label }: { label: string }): React.JSX.Elemen
   )
 }
 
-const STRUCTURED_INPUT_VALUE_CHARS = 300
+// Head truncation is what an approval card must never do to a confirmable payload: the last characters
+// are where a sentence's meaning sits. 320 is the longest string any tool schema accepts.
+const STRUCTURED_INPUT_VALUE_CHARS = 320
 const STRUCTURED_INPUT_OBJECT_KEY_LIMIT = 12
 const STRUCTURED_INPUT_ARRAY_ITEM_LIMIT = 6
 
@@ -3202,10 +3205,12 @@ function ToolCallCardInner({
     () => inputSummary(name, input, outputText),
     [input, name, outputText]
   )
-  const displayName = React.useMemo(
-    () => t(`permission.toolLabels.${name}`, { defaultValue: name }),
-    [name, t]
-  )
+  const displayName = React.useMemo(() => {
+    // `mcp__<alias>__<tool>` reads as noise in a card; show `alias · tool` instead.
+    const mcp = parseMcpExternalToolName(name)
+    if (mcp) return `${mcp.alias} · ${mcp.toolSegment}`
+    return t(`permission.toolLabels.${name}`, { defaultValue: name })
+  }, [name, t])
   const headerSummary = React.useMemo(() => {
     if (name !== 'TaskList') return summary
     if (!outputText) return null

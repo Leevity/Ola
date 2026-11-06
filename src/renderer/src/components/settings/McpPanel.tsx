@@ -37,8 +37,80 @@ import {
   DialogHeader,
   DialogTitle
 } from '@renderer/components/ui/dialog'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMcpStore } from '@renderer/stores/mcp-store'
-import type { McpServerConfig, McpTransportType } from '@renderer/lib/mcp/types'
+import { ipcClient } from '@renderer/lib/ipc/ipc-client'
+import { IPC } from '@renderer/lib/ipc/channels'
+import type {
+  AdvertisedMcpTool,
+  ExposedMcpTool,
+  McpExposurePolicy,
+  McpServerConfig,
+  McpServerDiagnostic,
+  McpTransportType
+} from '@renderer/lib/mcp/types'
+import {
+  MCP_EXPOSED_TOOLS_MAX_PER_SERVER,
+  mcpExposureSize,
+  resolveMcpEffectiveToolNames,
+  validateMcpExposure
+} from '../../../../shared/mcp-tool-policy'
+
+// ─── Argument line parsing ───
+// Shell-style: whitespace separates args; double/single quotes group them; backslash escapes the
+// next character. `--flag="a b"` must stay one arg.
+
+function parseArgsLine(value: string): string[] {
+  const args: string[] = []
+  let current = ''
+  let hasToken = false
+  let quote: '"' | "'" | null = null
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index]
+    if (quote) {
+      if (char === '\\' && index + 1 < value.length) {
+        current += value[index + 1]
+        index += 1
+      } else if (char === quote) {
+        quote = null
+      } else {
+        current += char
+      }
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      hasToken = true
+      continue
+    }
+    if (char === '\\' && index + 1 < value.length) {
+      current += value[index + 1]
+      hasToken = true
+      index += 1
+      continue
+    }
+    if (/\s/.test(char)) {
+      if (hasToken) {
+        args.push(current)
+        current = ''
+        hasToken = false
+      }
+      continue
+    }
+    current += char
+    hasToken = true
+  }
+  if (hasToken) args.push(current)
+  return args
+}
+
+function serializeArgs(args: string[]): string {
+  return args
+    .map((arg) =>
+      arg && !/[\s"']/.test(arg) ? arg : `"${arg.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
+    )
+    .join(' ')
+}
 
 type McpJsonImportEntry = {
   command?: string
@@ -105,6 +177,214 @@ const TRANSPORT_LABELS: Record<McpTransportType, string> = {
 
 // ─── Server Config Panel (right side) ───
 
+function ToolExposureSection({
+  server,
+  advertised,
+  exposed
+}: {
+  server: McpServerConfig
+  advertised: AdvertisedMcpTool[]
+  exposed: ExposedMcpTool[]
+}): React.JSX.Element {
+  const { t } = useTranslation('settings')
+  const updateServer = useMcpStore((s) => s.updateServer)
+  const truncated = useMcpStore((s) => s.serverTruncated[server.id] === true)
+  const [filter, setFilter] = useState('')
+  const [exposureError, setExposureError] = useState<string | null>(null)
+  const parentRef = useRef<HTMLDivElement>(null)
+
+  const policy: McpExposurePolicy = {
+    enabledTools: server.enabledTools,
+    toolPresets: server.toolPresets,
+    activePreset: server.activePreset
+  }
+  const effective = resolveMcpEffectiveToolNames(policy)
+  const exposedSize = mcpExposureSize(policy)
+
+  const rows = useMemo(() => {
+    const q = filter.trim().toLowerCase()
+    return advertised.filter(
+      (tool) =>
+        !q ||
+        tool.name.toLowerCase().includes(q) ||
+        (tool.description ?? '').toLowerCase().includes(q)
+    )
+  }, [advertised, filter])
+
+  // Virtualized: REA-style servers advertise hundreds of tools.
+  // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer is read within one render pass only
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 44,
+    overscan: 10
+  })
+
+  const toggleTool = (name: string, allow: boolean): void => {
+    // The first toggle materializes the unfiltered default into an explicit allowlist.
+    const base = new Set(effective ?? new Set(advertised.map((tool) => tool.name)))
+    if (allow) base.add(name)
+    else base.delete(name)
+    const candidate: McpExposurePolicy = { ...policy, enabledTools: [...base] }
+    const verdict = validateMcpExposure(candidate)
+    if (!verdict.ok) {
+      setExposureError(verdict.error)
+      return
+    }
+    setExposureError(null)
+    updateServer(server.id, { enabledTools: candidate.enabledTools }).catch((error: unknown) =>
+      setExposureError(error instanceof Error ? error.message : String(error))
+    )
+  }
+
+  const applyPreset = (preset: string | undefined): void => {
+    const verdict = validateMcpExposure({ ...policy, activePreset: preset })
+    if (!verdict.ok) {
+      setExposureError(verdict.error)
+      return
+    }
+    setExposureError(null)
+    updateServer(server.id, { activePreset: preset }).catch((error: unknown) =>
+      setExposureError(error instanceof Error ? error.message : String(error))
+    )
+  }
+
+  const presetKeys = Object.keys(server.toolPresets ?? {})
+  const unexposable = exposed.filter((tool) => tool.reason && !tool.filtered)
+  const excluded = exposed.filter((tool) => tool.filtered)
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-xs">
+        <span className="font-medium">{t('mcp.toolExposure')}</span>
+        <span className="text-muted-foreground">
+          {t('mcp.exposureCounter', {
+            exposed: exposedSize ?? advertised.length,
+            advertised: advertised.length,
+            max: MCP_EXPOSED_TOOLS_MAX_PER_SERVER
+          })}
+        </span>
+      </div>
+      {truncated && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          {t('mcp.capabilitiesTruncated')}
+        </p>
+      )}
+      {exposedSize === null && advertised.length > MCP_EXPOSED_TOOLS_MAX_PER_SERVER && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          {t('mcp.exposureUnfilteredWarning', {
+            total: advertised.length,
+            max: MCP_EXPOSED_TOOLS_MAX_PER_SERVER
+          })}
+        </p>
+      )}
+      {presetKeys.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-xs text-muted-foreground mr-1">{t('mcp.presets')}</span>
+          <button
+            onClick={() => applyPreset(undefined)}
+            className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+              !server.activePreset
+                ? 'border-primary bg-primary/10 font-medium'
+                : 'text-muted-foreground hover:bg-muted/60'
+            }`}
+          >
+            {t('mcp.presetNone')}
+          </button>
+          {presetKeys.map((key) => (
+            <button
+              key={key}
+              onClick={() => applyPreset(key)}
+              className={`rounded-full border px-2 py-0.5 text-xs transition-colors ${
+                server.activePreset === key
+                  ? 'border-primary bg-primary/10 font-medium'
+                  : 'text-muted-foreground hover:bg-muted/60'
+              }`}
+            >
+              {key}
+            </button>
+          ))}
+        </div>
+      )}
+      {exposureError && <p className="text-xs text-destructive">{exposureError}</p>}
+      <Input
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        className="h-7 text-xs"
+        placeholder={t('mcp.filterToolsPlaceholder')}
+      />
+      <div ref={parentRef} className="h-56 overflow-y-auto rounded-md border">
+        {rows.length === 0 ? (
+          <p className="p-3 text-xs text-muted-foreground">{t('mcp.noTools')}</p>
+        ) : (
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative', width: '100%' }}>
+            {virtualizer.getVirtualItems().map((item) => {
+              const tool = rows[item.index]
+              const allowed = !effective || effective.has(tool.name)
+              return (
+                <label
+                  key={tool.name}
+                  className="absolute left-0 top-0 flex w-full items-start gap-2 border-b px-2.5 py-2 text-left"
+                  style={{ height: item.size, transform: `translateY(${item.start}px)` }}
+                >
+                  <input
+                    type="checkbox"
+                    className="mt-0.5 size-3.5 shrink-0 accent-primary"
+                    checked={allowed}
+                    onChange={() => toggleTool(tool.name, !allowed)}
+                  />
+                  <span className="min-w-0">
+                    <span className="block truncate font-mono text-xs">{tool.name}</span>
+                    {tool.description && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {tool.description}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {unexposable.length > 0 && (
+        <div>
+          <p className="text-xs font-medium mb-1">
+            {t('mcp.notExposable', { total: unexposable.length })}
+          </p>
+          <div className="space-y-1">
+            {unexposable.map((tool) => (
+              <div
+                key={tool.name}
+                className="rounded-md border border-destructive/20 bg-destructive/5 px-2.5 py-1.5"
+              >
+                <p className="text-xs font-mono truncate">{tool.name}</p>
+                <p className="text-xs text-destructive/80">
+                  {t(`mcp.exposeReasons.${tool.reason}`, { defaultValue: tool.reason ?? '' })}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {excluded.length > 0 && (
+        <div>
+          <p className="text-xs font-medium mb-1">
+            {t('mcp.excludedByAllowlist', { total: excluded.length })}
+          </p>
+          <div className="space-y-1">
+            {excluded.map((tool) => (
+              <div key={tool.name} className="rounded-md border px-2.5 py-1.5 opacity-70">
+                <p className="text-xs font-mono truncate">{tool.name}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ServerConfigPanel({
   server,
   projectId
@@ -122,12 +402,16 @@ function ServerConfigPanel({
   const signOutServer = useMcpStore((s) => s.signOutServer)
   const serverStatuses = useMcpStore((s) => s.serverStatuses)
   const serverTools = useMcpStore((s) => s.serverTools)
+  const serverExposedTools = useMcpStore((s) => s.serverExposedTools)
+  const serverDiagnostics = useMcpStore((s) => s.serverDiagnostics)
   const serverResources = useMcpStore((s) => s.serverResources)
   const serverPrompts = useMcpStore((s) => s.serverPrompts)
   const serverErrors = useMcpStore((s) => s.serverErrors)
 
   const status = serverStatuses[server.id] ?? 'disconnected'
   const tools = serverTools[server.id] ?? []
+  const exposed = serverExposedTools[server.id] ?? []
+  const diagnostic = serverDiagnostics[server.id]
   const resources = serverResources[server.id] ?? []
   const prompts = serverPrompts[server.id] ?? []
   const error = serverErrors[server.id]
@@ -136,7 +420,7 @@ function ServerConfigPanel({
   const [localName, setLocalName] = useState(server.name)
   const [localDescription, setLocalDescription] = useState(server.description ?? '')
   const [localCommand, setLocalCommand] = useState(server.command ?? '')
-  const [localArgs, setLocalArgs] = useState((server.args ?? []).join(' '))
+  const [localArgs, setLocalArgs] = useState(serializeArgs(server.args ?? []))
   const [localCwd, setLocalCwd] = useState(server.cwd ?? '')
   const [localEnv, setLocalEnv] = useState(
     server.env
@@ -155,13 +439,27 @@ function ServerConfigPanel({
   )
   const [capTab, setCapTab] = useState<'tools' | 'resources' | 'prompts'>('tools')
   const [connecting, setConnecting] = useState(false)
+  const [rechecking, setRechecking] = useState(false)
+  const [localTimeoutMs, setLocalTimeoutMs] = useState(
+    server.timeoutMs !== undefined ? String(server.timeoutMs) : ''
+  )
+  const [localInlineBytes, setLocalInlineBytes] = useState(
+    server.outputLimits?.inlineTextBytes !== undefined
+      ? String(server.outputLimits.inlineTextBytes)
+      : ''
+  )
+  const [localMaxBytes, setLocalMaxBytes] = useState(
+    server.outputLimits?.maxResultBytes !== undefined
+      ? String(server.outputLimits.maxResultBytes)
+      : ''
+  )
 
   // Reset local state when selected server changes
   useEffect(() => {
     setLocalName(server.name)
     setLocalDescription(server.description ?? '')
     setLocalCommand(server.command ?? '')
-    setLocalArgs((server.args ?? []).join(' '))
+    setLocalArgs(serializeArgs(server.args ?? []))
     setLocalCwd(server.cwd ?? '')
     setLocalEnv(
       server.env
@@ -178,6 +476,17 @@ function ServerConfigPanel({
             .join('\n')
         : ''
     )
+    setLocalTimeoutMs(server.timeoutMs !== undefined ? String(server.timeoutMs) : '')
+    setLocalInlineBytes(
+      server.outputLimits?.inlineTextBytes !== undefined
+        ? String(server.outputLimits.inlineTextBytes)
+        : ''
+    )
+    setLocalMaxBytes(
+      server.outputLimits?.maxResultBytes !== undefined
+        ? String(server.outputLimits.maxResultBytes)
+        : ''
+    )
   }, [server.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refresh status on mount
@@ -191,10 +500,16 @@ function ServerConfigPanel({
     (patch: Partial<McpServerConfig>) => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
       saveTimerRef.current = setTimeout(() => {
-        updateServer(server.id, patch)
+        // A rejected timer callback is the one write path with no awaiting UI, so the rejection has
+        // to be caught here or it escapes as an unhandled promise failure the panel never shows.
+        updateServer(server.id, patch).catch((error: unknown) => {
+          toast.error(t('mcp.saveFailed'), {
+            description: error instanceof Error ? error.message : String(error)
+          })
+        })
       }, 500)
     },
-    [server.id, updateServer]
+    [server.id, updateServer, t]
   )
 
   const handleNameChange = (value: string): void => {
@@ -218,7 +533,7 @@ function ServerConfigPanel({
 
   const handleArgsChange = (value: string): void => {
     setLocalArgs(value)
-    debouncedSave({ args: value.trim() ? value.trim().split(/\s+/) : [] })
+    debouncedSave({ args: parseArgsLine(value) })
   }
 
   const handleCwdChange = (value: string): void => {
@@ -253,6 +568,57 @@ function ServerConfigPanel({
       }
     }
     debouncedSave({ headers: Object.keys(headers).length > 0 ? headers : undefined })
+  }
+
+  const parsePositiveInt = (value: string): number | undefined => {
+    const parsed = Number(value.trim())
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined
+  }
+
+  const handleTimeoutChange = (value: string): void => {
+    setLocalTimeoutMs(value)
+    debouncedSave({ timeoutMs: parsePositiveInt(value) })
+  }
+
+  const handleOutputLimitsChange = (
+    key: 'inlineTextBytes' | 'maxResultBytes',
+    value: string
+  ): void => {
+    const parsed = parsePositiveInt(value)
+    if (key === 'inlineTextBytes') setLocalInlineBytes(value)
+    else setLocalMaxBytes(value)
+    debouncedSave({
+      outputLimits: {
+        ...server.outputLimits,
+        [key]: parsed
+      }
+    })
+  }
+
+  const handleRecheckPreflight = async (): Promise<void> => {
+    setRechecking(true)
+    try {
+      const res = (await ipcClient.invoke(IPC.MCP_PREFLIGHT, server.id)) as {
+        success: boolean
+        error?: string
+        diagnostic?: McpServerDiagnostic
+        blocked?: boolean
+      }
+      if (!res.success) {
+        toast.error(t('mcp.preflightFailed'), { description: res.error })
+        return
+      }
+      useMcpStore.setState((s) => ({
+        serverDiagnostics: { ...s.serverDiagnostics, [server.id]: res.diagnostic }
+      }))
+      if (!res.blocked) toast.success(t('mcp.preflightPassed'))
+    } catch (err) {
+      toast.error(t('mcp.preflightFailed'), {
+        description: err instanceof Error ? err.message : String(err)
+      })
+    } finally {
+      setRechecking(false)
+    }
   }
 
   const handleConnect = async (): Promise<void> => {
@@ -494,6 +860,38 @@ function ServerConfigPanel({
 
       <Separator className="mb-4" />
 
+      {/* Runtime limits: per-call timeout and per-result size caps */}
+      <section className="space-y-1.5 mb-4">
+        <label className="text-xs font-medium">{t('mcp.runtimeLimits')}</label>
+        <div className="grid grid-cols-3 gap-2">
+          <Input
+            type="number"
+            min={1}
+            value={localTimeoutMs}
+            onChange={(e) => handleTimeoutChange(e.target.value)}
+            className="h-8 text-xs font-mono"
+            placeholder={t('mcp.timeoutMsPlaceholder')}
+          />
+          <Input
+            type="number"
+            min={1}
+            value={localInlineBytes}
+            onChange={(e) => handleOutputLimitsChange('inlineTextBytes', e.target.value)}
+            className="h-8 text-xs font-mono"
+            placeholder={t('mcp.inlineBytesPlaceholder')}
+          />
+          <Input
+            type="number"
+            min={1}
+            value={localMaxBytes}
+            onChange={(e) => handleOutputLimitsChange('maxResultBytes', e.target.value)}
+            className="h-8 text-xs font-mono"
+            placeholder={t('mcp.maxResultBytesPlaceholder')}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">{t('mcp.runtimeLimitsHint')}</p>
+      </section>
+
       {/* Connection control */}
       <section className="flex flex-wrap items-center gap-2 mb-4">
         {status === 'connected' ? (
@@ -587,6 +985,42 @@ function ServerConfigPanel({
         </div>
       )}
 
+      {/* Preflight banner: explains a blocked start and offers re-check or explicit override */}
+      {diagnostic && (
+        <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 mb-4 space-y-1.5">
+          <p className="text-xs font-medium text-destructive">
+            {t('mcp.preflightBlocked', {
+              code: t(`mcp.diagnosticCodes.${diagnostic.code}`, { defaultValue: diagnostic.code })
+            })}
+          </p>
+          {diagnostic.detail && (
+            <p className="text-xs text-destructive/90 font-mono break-all">{diagnostic.detail}</p>
+          )}
+          {diagnostic.hint && <p className="text-xs text-muted-foreground">{diagnostic.hint}</p>}
+          <div className="flex flex-wrap items-center gap-2 pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-xs"
+              onClick={handleRecheckPreflight}
+              disabled={rechecking}
+            >
+              <RefreshCw className={`size-3 mr-1 ${rechecking ? 'animate-spin' : ''}`} />
+              {t('mcp.preflightRecheck')}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 text-xs"
+              disabled={server.ignorePreflight}
+              onClick={() => updateServer(server.id, { ignorePreflight: true })}
+            >
+              {server.ignorePreflight ? t('mcp.preflightIgnoredNote') : t('mcp.preflightIgnore')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Capabilities tabs */}
       {status === 'connected' && (
         <>
@@ -617,24 +1051,9 @@ function ServerConfigPanel({
             })}
           </div>
 
-          {/* Tools list */}
+          {/* Tools list: virtualized allowlist picker over advertised tools + exposure report */}
           {capTab === 'tools' && (
-            <div className="space-y-1">
-              {tools.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-2">{t('mcp.noTools')}</p>
-              ) : (
-                tools.map((tool) => (
-                  <div key={tool.name} className="rounded-md border px-2.5 py-2">
-                    <p className="text-xs font-medium font-mono">{tool.name}</p>
-                    {tool.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                        {tool.description}
-                      </p>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+            <ToolExposureSection server={server} advertised={tools} exposed={exposed} />
           )}
 
           {/* Resources list */}
@@ -713,16 +1132,22 @@ function AddServerDialog({
 
   const handleAdd = async (): Promise<void> => {
     const serverName = name.trim() || t('mcp.namePlaceholder')
-    const id = await addServer({
-      name: serverName,
-      enabled: true,
-      transport,
-      autoFallback: true
-    })
-    setSelectedServer(id)
-    onOpenChange(false)
-    resetForm()
-    toast.success(t('mcp.serverAdded', { name: serverName }))
+    try {
+      const id = await addServer({
+        name: serverName,
+        enabled: true,
+        transport,
+        autoFallback: true
+      })
+      setSelectedServer(id)
+      onOpenChange(false)
+      resetForm()
+      toast.success(t('mcp.serverAdded', { name: serverName }))
+    } catch (error) {
+      toast.error(t('mcp.saveFailed'), {
+        description: error instanceof Error ? error.message : String(error)
+      })
+    }
   }
 
   const handleJsonImport = async (): Promise<void> => {

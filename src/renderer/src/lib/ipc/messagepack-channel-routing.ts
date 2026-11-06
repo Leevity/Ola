@@ -233,6 +233,7 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'mcp:get-prompt',
   'mcp:list-prompts',
   'mcp:refresh-capabilities',
+  'mcp:preflight',
   'mcp:oauth-start',
   'mcp:oauth-signout',
   'memory-automation:list',

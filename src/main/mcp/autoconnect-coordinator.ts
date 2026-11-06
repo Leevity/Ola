@@ -17,7 +17,14 @@ type AutoConnectCoordinatorOptions = {
 export type McpAutoConnectOutcome =
   | { serverId: string; status: 'connected'; attempts: number }
   | { serverId: string; status: 'circuit-open'; retryAt: number }
-  | { serverId: string; status: 'failed'; attempts: number; error: string; retryAt: number }
+  | {
+      serverId: string
+      status: 'failed'
+      attempts: number
+      error: string
+      retryAt: number
+      nonRetryable?: boolean
+    }
 
 function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -25,6 +32,18 @@ function defaultSleep(ms: number): Promise<void> {
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * A preflight failure says "this host cannot run the server", not "the socket dropped". Retrying
+ * it three times with backoff produces the same answer and buries it under retry noise.
+ */
+function isNonRetryable(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { retryable?: boolean }).retryable === false
+  )
 }
 
 export class McpAutoConnectCoordinator {
@@ -90,6 +109,19 @@ export class McpAutoConnectCoordinator {
         return { serverId: server.id, status: 'connected', attempts: attempt }
       } catch (error) {
         lastError = toErrorMessage(error)
+        if (isNonRetryable(error)) {
+          // Still open the circuit: the host is not going to gain a missing binary mid-session.
+          const blockedAt = this.now() + this.circuitOpenMs
+          this.circuitOpenUntil.set(server.id, blockedAt)
+          return {
+            serverId: server.id,
+            status: 'failed',
+            attempts: attempt,
+            error: lastError,
+            retryAt: blockedAt,
+            nonRetryable: true
+          }
+        }
         if (attempt < this.maxAttempts) {
           await this.sleep(this.initialBackoffMs * 2 ** (attempt - 1))
         }

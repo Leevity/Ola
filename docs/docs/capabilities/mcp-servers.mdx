@@ -48,6 +48,32 @@ MCP 主进程 handler 提供这些能力：
 - `mcp:list-prompts`
 - `mcp:refresh-capabilities`
 
+写操作 `mcp:add` / `mcp:update` / `mcp:remove` 一律返回 `{ success, error? }`：Main 会先校验曝光策略，
+再用原子写落盘，所以 `success: false` 时磁盘上没有半个改动，调用方必须把它当成失败，不能先改自己的
+列表。`mcp:server-info` 在没有活跃 client 时返回 `undefined`，设置面板据此清空缓存的 tools / exposedTools
+/ resources / prompts，而不是继续显示上一次连接的能力。`capabilitiesTruncated` 为真表示能力发现在分页
+上限处停止，面板列出的只是服务器宣告的一部分。
+
+## 工具命名 / Tool naming
+
+模型看到的 MCP 工具名由 `(toolAlias, 服务器宣告的名字)` 纯函数生成，Main、渲染进程和 runtime 三侧
+得到完全相同的字符串：
+
+```text
+mcp__<toolAlias>__<sanitized name>          例：mcp__rea__binary_session
+mcp__<toolAlias>__resource__<resource name> 例：mcp__docs__resource__notes_index
+```
+
+- `toolAlias` 在创建 server 时按不可变的 `id` 分配一次，之后不随 `name` 改名而变，历史 transcript 因此
+  始终指向同一个工具。
+- 整名上限 64 字符；段预算 = `64 - 5 - 2 - len(alias)`，超长的名字保留前缀并附加 `_<fnv1a32>` 尾巴，
+  而不是截断，所以同前缀的两个长名字仍然可区分。
+- server 的 resource 在两侧都注册成只读工具：渲染进程经 `mcp:read-resource`，Main 的 runtime 路径经
+  `manager.readResource()`，两边使用同一个 `resource__` 段。
+- 无法命名的工具不会被静默丢弃，而是带着 `INVALID_ALIAS` / `EMPTY_TOOL_NAME` / `TOO_LONG` 原因出现在
+  `exposedTools` 里，设置面板把它列在 “Not exposable”。
+- 上限：每个 server 最多暴露 `32` 个工具，单次 run 最多 `128` 个工具名。
+
 ## Server 配置 / Server config
 
 `McpServerConfig` 常见字段：

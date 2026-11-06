@@ -116,15 +116,23 @@ export function createSubAgentRuntimeTool(
       if (!context.runNested && !context.submitNested)
         throw new RuntimeError('NESTED_RUNTIME_UNAVAILABLE')
 
+      // An accessibility verb drives the user's own screen under the user's own OS grant, and the
+      // approval card plus the application bound are framed around the interactive run that asked
+      // for them. A nested loop must not inherit that reach, so the names never cross the boundary.
       const childToolNames = (context.run.toolNames ?? []).filter(
         (toolName) =>
+          !toolName.startsWith('desktop_ax_') &&
           toolName !== 'Task' &&
           toolName !== 'Agent' &&
           toolName !== 'EnterPlanMode' &&
           toolName !== 'ExitPlanMode' &&
           (!selectedAgent ||
-            (selectedAgent.tools.includes(toolName) &&
-              !selectedAgent.disallowedTools.includes(toolName)))
+            // `*` means "every tool the parent run already has". The renderer has honoured it
+            // all along; matching it here stops an agent written with a wildcard from getting
+            // zero tools on the Main runtime path.
+            (selectedAgent.disallowedTools.includes(toolName)
+              ? false
+              : selectedAgent.tools.includes('*') || selectedAgent.tools.includes(toolName)))
       )
       const teamName = input.teamName ?? context.run.teamContext?.teamName
       if (input.background && !teamName) throw new RuntimeError('TEAM_NOT_ACTIVE')

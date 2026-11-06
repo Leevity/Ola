@@ -2,7 +2,7 @@ import type { ToolDefinition } from './api/types'
 import { APP_PLUGIN_DESCRIPTORS } from './app-plugin/types'
 import { PLUGIN_TOOL_DEFINITIONS } from './channel/plugin-tools'
 import { isMcpTool } from './mcp/mcp-tools'
-import type { McpServerConfig, McpTool } from './mcp/types'
+import type { McpServerConfig, ExposedMcpTool } from './mcp/types'
 import { buildMemoryContext } from './agent/dynamic-context'
 import type { LayeredMemorySnapshot, SessionMemoryScope } from './agent/memory-files'
 import type { PromptEnvironmentContext } from './agent/system-prompt'
@@ -38,7 +38,7 @@ type ChatModePromptOptions = {
   hasWebSearch: boolean
   hasPluginTools?: boolean
   activeMcps: Array<Pick<McpServerConfig, 'id' | 'name' | 'description' | 'transport'>>
-  activeMcpTools: Record<string, Array<Pick<McpTool, 'name'>>>
+  activeMcpTools: Record<string, Array<Pick<ExposedMcpTool, 'name'>>>
 }
 
 type PromptCacheEnvironmentContext = {

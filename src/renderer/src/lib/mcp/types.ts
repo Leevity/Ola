@@ -1,5 +1,24 @@
 // ── MCP Types for Renderer ──
-// Re-exported / mirrored from main process types for use in renderer
+// Mirror of Main's contract (src/main/mcp/mcp-types.ts). Shared policy types are imported from
+// `src/shared/mcp-tool-policy` rather than copied, so the renderer cannot drift from Main's names.
+
+import type {
+  AdvertisedMcpTool,
+  ExposedMcpTool,
+  McpExposurePolicy,
+  McpOutputLimits,
+  McpPreflightConfig,
+  McpServerDiagnostic
+} from '../../../../shared/mcp-tool-policy'
+
+export type {
+  AdvertisedMcpTool,
+  ExposedMcpTool,
+  McpExposurePolicy,
+  McpOutputLimits,
+  McpPreflightConfig,
+  McpServerDiagnostic
+} from '../../../../shared/mcp-tool-policy'
 
 /** Transport type for MCP server connections */
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http'
@@ -30,6 +49,16 @@ export interface McpServerConfig {
   /** OAuth for HTTP transports; tokens stay in Main. */
   auth?: McpServerAuthConfig
   autoFallback?: boolean
+  /** Immutable `mcp__<toolAlias>__<tool>` namespace; assigned by Main, never edited here. */
+  toolAlias?: string
+  /** Model-facing allowlist. Absent = expose all advertised tools; `[]` = expose nothing. */
+  enabledTools?: string[]
+  toolPresets?: Record<string, string[]>
+  activePreset?: string
+  preflight?: McpPreflightConfig
+  ignorePreflight?: boolean
+  outputLimits?: McpOutputLimits
+  timeoutMs?: number
   createdAt: number
   description?: string
 }
@@ -44,13 +73,6 @@ export type McpServerStatus =
   | 'connected'
   | 'authorization-required'
   | 'error'
-
-/** MCP Tool */
-export interface McpTool {
-  name: string
-  description?: string
-  inputSchema: Record<string, unknown>
-}
 
 /** MCP Resource */
 export interface McpResource {
@@ -67,12 +89,17 @@ export interface McpPrompt {
   arguments?: Array<{ name: string; description?: string; required?: boolean }>
 }
 
-/** Full MCP server info */
+/** Full MCP server info; `tools` is advertised-only, `exposedTools` is what may be registered. */
 export interface McpServerInfo {
   config: McpServerConfig
   status: McpServerStatus
-  tools: McpTool[]
+  tools: AdvertisedMcpTool[]
+  exposedTools: ExposedMcpTool[]
+  exposure: McpExposurePolicy
   resources: McpResource[]
   prompts: McpPrompt[]
+  /** Capability discovery stopped early, so `tools` is a partial catalog rather than the whole server. */
+  capabilitiesTruncated?: boolean
   error?: string
+  diagnostic?: McpServerDiagnostic
 }

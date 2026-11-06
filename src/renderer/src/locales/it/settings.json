@@ -1581,6 +1581,8 @@
     "importJsonFailed": "JSON importazione fallita",
     "importJsonInvalid": "Nessuna configurazione del server MCP valida trovata",
     "serverAdded": "Server MCP \" {{name}} \" aggiunto",
+    "saveFailed": "Impossibile salvare la configurazione del server MCP",
+    "capabilitiesTruncated": "Il rilevamento delle funzionalità si è fermato al limite di pagine; questo elenco mostra solo una parte di ciò che il server annuncia.",
     "serverRemoved": "Server MCP rimosso",
     "noServers": "Nessun server MCP configurato",
     "selectToConfig": "Selezionare un server per configurare",
@@ -1635,7 +1637,37 @@
       "connected": "connected",
       "authorization-required": "authorization required",
       "error": "error"
-    }
+    },
+    "toolExposure": "Tool Exposure",
+    "exposureCounter": "{{exposed}} of {{advertised}} tools exposed (max {{max}} per server)",
+    "exposureUnfilteredWarning": "No allowlist set: all {{total}} advertised tools would be exposed, above the {{max}} cap. Select the tools you need.",
+    "presets": "Presets",
+    "presetNone": "All",
+    "filterToolsPlaceholder": "Filter tools...",
+    "notExposable": "Not exposable ({{total}})",
+    "excludedByAllowlist": "Excluded by allowlist ({{total}})",
+    "exposeReasons": {
+      "INVALID_ALIAS": "The server tool alias is invalid, so no external name can be formed.",
+      "EMPTY_TOOL_NAME": "The advertised tool name is empty.",
+      "TOO_LONG": "The external tool name is too long or collides with another tool."
+    },
+    "preflightBlocked": "Preflight blocked this server: {{code}}",
+    "preflightRecheck": "Recheck",
+    "preflightIgnore": "Ignore preflight",
+    "preflightIgnoredNote": "Preflight ignored",
+    "preflightPassed": "Preflight passed",
+    "preflightFailed": "Preflight check failed",
+    "diagnosticCodes": {
+      "NODE_VERSION_UNSUPPORTED": "Node version unsupported",
+      "COMMAND_MISSING": "Required command missing",
+      "ENGINE_MISSING": "Engine missing",
+      "TOOL_NOT_EXPOSABLE": "Some tools cannot be exposed"
+    },
+    "runtimeLimits": "Runtime Limits",
+    "runtimeLimitsHint": "Optional: per-call timeout in milliseconds and per-result byte caps (inline text, max total).",
+    "timeoutMsPlaceholder": "Timeout (ms)",
+    "inlineBytesPlaceholder": "Inline bytes",
+    "maxResultBytesPlaceholder": "Max result bytes"
   },
   "skillsmarket": {
     "title": "Mercato delle competenze",

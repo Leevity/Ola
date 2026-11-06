@@ -1823,6 +1823,8 @@
     "importJsonFailed": "JSON 导入失败",
     "importJsonInvalid": "未识别到有效的 MCP 服务器配置",
     "serverAdded": "已添加 MCP 服务器 \"{{name}}\"",
+    "saveFailed": "无法保存 MCP 服务器配置",
+    "capabilitiesTruncated": "能力发现已在分页上限处停止，因此这里只列出服务器宣告的一部分。",
     "serverRemoved": "已移除 MCP 服务器",
     "noServers": "未配置 MCP 服务器",
     "selectToConfig": "选择一个服务器进行配置",
@@ -1877,7 +1879,37 @@
       "connected": "已连接",
       "authorization-required": "需要授权",
       "error": "错误"
-    }
+    },
+    "toolExposure": "对外暴露的工具",
+    "exposureCounter": "已暴露 {{exposed}}/{{advertised}} 个工具（每个服务器最多 {{max}} 个）",
+    "exposureUnfilteredWarning": "未设置白名单：全部 {{total}} 个工具都会被暴露，已超过 {{max}} 个上限。请勾选需要的工具。",
+    "presets": "预设",
+    "presetNone": "全部",
+    "filterToolsPlaceholder": "筛选工具…",
+    "notExposable": "无法暴露（{{total}}）",
+    "excludedByAllowlist": "已被白名单排除（{{total}}）",
+    "exposeReasons": {
+      "INVALID_ALIAS": "服务器工具别名无效，无法生成外部名称。",
+      "EMPTY_TOOL_NAME": "服务器宣告的工具名称为空。",
+      "TOO_LONG": "外部工具名过长，或与另一个工具重名。"
+    },
+    "preflightBlocked": "预检已阻止此服务器：{{code}}",
+    "preflightRecheck": "重新检查",
+    "preflightIgnore": "忽略预检",
+    "preflightIgnoredNote": "已忽略预检",
+    "preflightPassed": "预检通过",
+    "preflightFailed": "预检失败",
+    "diagnosticCodes": {
+      "NODE_VERSION_UNSUPPORTED": "Node 版本不受支持",
+      "COMMAND_MISSING": "缺少必需的命令",
+      "ENGINE_MISSING": "缺少运行引擎",
+      "TOOL_NOT_EXPOSABLE": "部分工具无法暴露"
+    },
+    "runtimeLimits": "运行时限制",
+    "runtimeLimitsHint": "可选：单次调用超时（毫秒）与单次结果字节上限（内联文本、总计上限）。",
+    "timeoutMsPlaceholder": "超时（毫秒）",
+    "inlineBytesPlaceholder": "内联字节",
+    "maxResultBytesPlaceholder": "最大结果字节"
   },
   "skillsmarket": {
     "title": "技能市场",

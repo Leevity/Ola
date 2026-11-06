@@ -1,5 +1,23 @@
 // ── MCP System — Shared Types ──
 
+import type {
+  AdvertisedMcpTool,
+  ExposedMcpTool,
+  McpExposurePolicy,
+  McpOutputLimits,
+  McpPreflightConfig,
+  McpServerDiagnostic
+} from '../../shared/mcp-tool-policy'
+
+export type {
+  AdvertisedMcpTool,
+  ExposedMcpTool,
+  McpExposurePolicy,
+  McpOutputLimits,
+  McpPreflightConfig,
+  McpServerDiagnostic
+} from '../../shared/mcp-tool-policy'
+
 /** Transport type for MCP server connections */
 export type McpTransportType = 'stdio' | 'sse' | 'streamable-http'
 
@@ -39,6 +57,33 @@ export interface McpServerConfig {
 
   // Auto-fallback: when transport = 'streamable-http' fails, retry with 'sse'
   autoFallback?: boolean
+
+  // ── Tool exposure ──
+
+  /**
+   * Short, immutable namespace for `mcp__<toolAlias>__<tool>`. Assigned by `McpConfigStore.add`
+   * and frozen thereafter: the tool segment alone is not unique across servers, and recomputing
+   * the namespace from the editable `name` would rename live tool identities and break transcripts
+   * that recorded the old one.
+   */
+  toolAlias?: string
+  /**
+   * Model-facing allowlist of server tool names. Absent = every advertised tool is exposed
+   * (legacy). An empty array is the opposite and means "expose nothing", which is why the store
+   * never coerces absent to `[]`.
+   */
+  enabledTools?: string[]
+  /** Named allowlists the user can switch between; only `activePreset` contributes to exposure. */
+  toolPresets?: Record<string, string[]>
+  activePreset?: string
+  /** Host-side gates run before spawning a stdio child. */
+  preflight?: McpPreflightConfig
+  /** Skip preflight after it has explained itself. The result stays visible; only the gate relaxes. */
+  ignorePreflight?: boolean
+  /** Per-result size policy. Defaults keep the built-in 128 KB inline cap. */
+  outputLimits?: McpOutputLimits
+  /** Per-call timeout in ms. Absent uses the transport default. */
+  timeoutMs?: number
 
   // Metadata
   createdAt: number
@@ -82,8 +127,25 @@ export interface McpPrompt {
 export interface McpServerInfo {
   config: McpServerConfig
   status: McpServerStatus
-  tools: McpTool[]
+  /** What the server advertises. Names and descriptions only — never registerable. */
+  tools: AdvertisedMcpTool[]
+  /**
+   * One entry per advertised tool, with the external name Main already assigned. Entries with a
+   * name are registerable; `filtered` and `reason` say why the rest are not. The renderer registers
+   * these verbatim — a tool absent here is absent on purpose and is reported, never dropped quietly.
+   */
+  exposedTools: ExposedMcpTool[]
+  /** The exposure policy actually in force, resolved for this server. */
+  exposure: McpExposurePolicy
   resources: McpResource[]
   prompts: McpPrompt[]
+  /**
+   * True when capability discovery stopped at the page or entry ceiling, so `tools` is a partial
+   * catalog. Without it the panel shows a short list as if the server advertised nothing else.
+   * Tools that cannot be registered are not counted here: each stays in `exposedTools` with a
+   * `reason`, which is the list the panel renders.
+   */
+  capabilitiesTruncated?: boolean
   error?: string
+  diagnostic?: McpServerDiagnostic
 }

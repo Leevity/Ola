@@ -32,8 +32,11 @@ export function fnv1a32(value: string): string {
  * Sanitize an untrusted tool name. Whitelist `[a-zA-Z0-9_-]` only (untrusted input ⇒ a blacklist
  * is guaranteed to miss something). Illegal characters become `_`, and runs of three or more
  * underscores collapse to `__` to preserve the `mcp__server__tool` / `ext__id__tool` separators.
+ *
+ * `max` lets a caller carve out a shorter segment of an external name — the MCP namespace needs
+ * a per-segment budget so the assembled `mcp__alias__tool` name can never exceed `TOOL_NAME_MAX`.
  */
-export function sanitizeToolName(raw: string): string {
+export function sanitizeToolName(raw: string, max: number = TOOL_NAME_MAX): string {
   let cleaned = ''
   for (const char of raw) {
     if (/[A-Za-z0-9_-]/.test(char)) cleaned += char
@@ -44,7 +47,7 @@ export function sanitizeToolName(raw: string): string {
   // Trim leading/trailing underscores to keep the name tidy and non-empty.
   cleaned = cleaned.replace(/^_+|_+$/g, '')
   if (!cleaned) return 'tool'
-  return cleaned.slice(0, TOOL_NAME_MAX)
+  return cleaned.slice(0, max)
 }
 
 /**

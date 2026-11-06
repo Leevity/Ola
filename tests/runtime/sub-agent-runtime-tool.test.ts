@@ -112,6 +112,32 @@ describe('TS Task runtime tool', () => {
     })
   })
 
+  it('never carries an accessibility verb into a nested run', async () => {
+    const tool = createSubAgentRuntimeTool()
+    let submitted: Record<string, unknown> | undefined
+    await tool.execute(
+      { description: 'click the button', prompt: 'Inspect the project', subagent_type: 'custom' },
+      context({
+        run: {
+          ...run(),
+          toolNames: [
+            'Read',
+            'desktop_ax_launch',
+            'desktop_ax_snapshot',
+            'desktop_ax_click',
+            'desktop_ax_input_text',
+            'desktop_ax_adjust'
+          ]
+        },
+        runNested: async (input) => {
+          submitted = input as Record<string, unknown>
+          return snapshot('completed', 'report')
+        }
+      })
+    )
+    expect(submitted?.toolNames).toEqual(['Read'])
+  })
+
   it('uses the current custom agent snapshot for schema, prompt, tool scope and turn limit', async () => {
     const agent: AgentInfo = {
       name: 'reviewer',
@@ -155,6 +181,37 @@ describe('TS Task runtime tool', () => {
         context({ runNested: async () => snapshot('completed') })
       )
     ).rejects.toThrow('INVALID_TOOL_INPUT')
+  })
+
+  it('expands a wildcard scope over the parent tools and still honours the deny list', async () => {
+    const agent: AgentInfo = {
+      name: 'sweep',
+      description: 'Sweep the binary',
+      tools: ['*'],
+      allowedTools: [],
+      disallowedTools: ['mcp__rea__address_name'],
+      maxTurns: 2,
+      maxIterations: 2,
+      systemPrompt: 'Sweep the selected address.'
+    }
+    const tool = createSubAgentRuntimeTool('Task', [agent])
+    let submitted: RunSpec | undefined
+    await tool.execute(
+      tool.validate({ description: 'sweep', prompt: 'Sweep', subagent_type: 'sweep' }),
+      context({
+        run: {
+          ...run(),
+          toolNames: ['Read', 'Write', 'mcp__rea__address_name', 'mcp__rea__search_bytes']
+        },
+        runNested: async (input) => {
+          submitted = input as RunSpec
+          return snapshot('completed')
+        }
+      })
+    )
+    // An MCP alias name is an ordinary tool name here: the wildcard reaches it, the deny list
+    // removes it, and nothing about the `mcp__` shape needs a special case.
+    expect(submitted?.toolNames).toEqual(['Read', 'Write', 'mcp__rea__search_bytes'])
   })
 
   it('submits background work and rejects unattended sub-agent requests explicitly', async () => {

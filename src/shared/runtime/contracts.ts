@@ -511,7 +511,9 @@ export function parseRunSpec(input: unknown): RunSpec {
     toolNames = value.toolNames.map((item) => {
       if (typeof item !== 'string') throw new RuntimeError('INVALID_RUN')
       const name = item.trim()
-      if (!/^[A-Za-z][A-Za-z0-9_.:-]{0,95}$/.test(name) || seen.has(name))
+      // 64 chars and `[A-Za-z0-9_-]` are the upstream provider limit, not our preference: a name
+      // that passes here but breaks there fails the whole run request.
+      if (!/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(name) || seen.has(name))
         throw new RuntimeError('INVALID_RUN')
       seen.add(name)
       return name

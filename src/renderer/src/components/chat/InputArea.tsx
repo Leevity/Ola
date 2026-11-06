@@ -378,7 +378,7 @@ function ActiveMcpsBadge({ projectId }: { projectId?: string | null }): React.JS
   const activeMcpIdsByProject = useMcpStore((s) => s.activeMcpIdsByProject)
   const servers = useMcpStore((s) => s.servers)
   const serverStatuses = useMcpStore((s) => s.serverStatuses)
-  const serverTools = useMcpStore((s) => s.serverTools)
+  const serverExposedTools = useMcpStore((s) => s.serverExposedTools)
   const activeMcpIds = React.useMemo(
     () =>
       resolveEffectiveActiveMcpIds({
@@ -403,7 +403,11 @@ function ActiveMcpsBadge({ projectId }: { projectId?: string | null }): React.JS
         <p className="text-xs font-medium">{t('skills.activeMcpServers')}</p>
         {activeServers.map((s) => (
           <p key={s.id} className="text-xs text-muted-foreground">
-            {s.name} ({t('skills.mcpToolCount', { count: serverTools[s.id]?.length ?? 0 })})
+            {s.name} (
+            {t('skills.mcpToolCount', {
+              count: (serverExposedTools[s.id] ?? []).filter((tool) => tool.externalName).length
+            })}
+            )
           </p>
         ))}
       </TooltipContent>
