@@ -155,9 +155,12 @@ function toolNames(options: CronAgentRunOptions, definition: AgentDefinition): s
  * A local provider can be selected in every workspace, but the run still owns
  * the job's data workspace. Hosted bindings additionally carry an authorization
  * workspace and must agree with that job scope.
+ *
+ * A job with no binding at all still has a workspace: failure reporting must not
+ * depend on the binding that is missing, or the error it carries dies with it.
  */
 function resolveWorkspaceId(options: CronAgentRunOptions): string {
-  if (!options.modelSource) throw new Error('MODEL_NOT_SELECTED')
+  if (!options.modelSource) return options.workspaceId?.trim() || 'local-personal'
   const workspaceId =
     options.workspaceId?.trim() ||
     (options.modelSource.kind === 'local' ? 'local-personal' : options.modelSource.workspaceId)
@@ -373,8 +376,56 @@ async function projectEvent(
   }
 }
 
+/**
+ * A run that never reached the runtime has no row to update, and a rejected background
+ * promise would be both silent and unhandled. A job without a model binding still ends
+ * as a recorded, broadcast failure so the schedule history shows what stopped it.
+ */
+async function failBeforeRuntimeRequest(
+  options: CronAgentRunOptions,
+  active: ActiveTsCronRun,
+  message: string
+): Promise<void> {
+  const runId = `run-${nanoid(8)}`
+  const workspaceId = active.workspaceId
+  const runKind = options.runKind ?? (options.trialRun ? 'trial' : 'scheduled')
+  active.runId = runId
+  await createCronRun({
+    runId,
+    jobId: options.jobId,
+    workspaceId,
+    startedAt: Date.now(),
+    scheduledFor: runKind === 'scheduled' ? (options.firedAt ?? null) : null,
+    jobNameSnapshot: options.name ?? null,
+    promptSnapshot: options.prompt,
+    sourceSessionIdSnapshot: options.sessionId ?? null,
+    modelSnapshot: options.model ?? null,
+    workingFolderSnapshot: options.workingFolder ?? null,
+    deliveryModeSnapshot: options.deliveryMode ?? 'desktop',
+    deliveryTargetSnapshot: options.deliveryTarget ?? null,
+    runKind
+  }).catch((error) => console.error('[CronRun] Failed to record a rejected start:', error))
+  await appendLog(options, runId, 'error', message).catch(() => undefined)
+  await appendLog(options, runId, 'end', 'error').catch(() => undefined)
+  await updateCronRun({
+    runId,
+    workspaceId,
+    patch: {
+      finishedAt: Date.now(),
+      status: 'error',
+      toolCallCount: 0,
+      outputSummary: null,
+      error: message
+    }
+  }).catch((error) => console.error('[CronRun] Failed to finish a rejected start:', error))
+  await emitFinished(options, runId, 'error', 0, '', message).catch(() => undefined)
+}
+
 async function runInternal(options: CronAgentRunOptions, active: ActiveTsCronRun): Promise<void> {
-  if (!options.modelSource) throw new Error('MODEL_NOT_SELECTED')
+  if (!options.modelSource) {
+    await failBeforeRuntimeRequest(options, active, 'MODEL_NOT_SELECTED')
+    return
+  }
   const runId = `run-${nanoid(8)}`
   const agentDefinition = await resolveCronAgentDefinition(options.agentId)
   const workspaceId = resolveWorkspaceId(options)
@@ -596,11 +647,17 @@ export function runTsCronAgentInBackground(
     startedAt: Date.now(),
     progress: { iteration: 0, toolCalls: 0, currentStep: 'initializing' }
   })
-  void runInternal(options, active).finally(() => {
-    activeRuns.delete(options.jobId)
-    executionState.delete(options.jobId)
-    onFinished?.(options.jobId)
-  })
+  void runInternal(options, active)
+    .catch((error) => {
+      // The run reports its own failures; anything still escaping would otherwise surface
+      // as an unhandled rejection in the main process, which no job list can show.
+      console.error('[CronRun] Background run failed outside its own reporting:', error)
+    })
+    .finally(() => {
+      activeRuns.delete(options.jobId)
+      executionState.delete(options.jobId)
+      onFinished?.(options.jobId)
+    })
 }
 
 export function abortTsCronAgentRun(jobId: string): boolean {

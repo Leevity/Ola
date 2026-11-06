@@ -209,6 +209,22 @@ function isFailedExtensionHttpResult(output: unknown): boolean {
   )
 }
 
+/**
+ * A failed call reaches the model as the fixed `TOOL_FAILED` token, which leaves no cause behind
+ * for anyone reading the journal afterwards. RuntimeError codes are machine tokens and safe to
+ * record; any other error contributes only its name, because messages routinely carry paths,
+ * URLs and credentials.
+ */
+function failureCause(error: unknown): string {
+  const token =
+    error instanceof RuntimeError
+      ? error.code
+      : error instanceof Error
+        ? error.name
+        : String(error ?? '')
+  return /^[A-Za-z][A-Za-z0-9_.:-]{0,63}$/.test(token) ? token : 'ERROR'
+}
+
 function confirmedLinkArtifacts(output: unknown): Array<{ url: string; title: string }> {
   if (!output || typeof output !== 'object' || Array.isArray(output)) return []
   const result = output as Record<string, unknown>
@@ -376,6 +392,7 @@ export class ToolExecutor {
       await record('tool.started', { id: call.id, name: call.name, effect: tool.effect })
       context.signal.throwIfAborted()
       let result: ToolResult
+      let cause: string | null = null
       try {
         const rawOutput = await tool.execute(input, { ...context, toolCallId: call.id })
         // A policy hook's post-processing is model-visible output, so it must
@@ -391,13 +408,16 @@ export class ToolExecutor {
           ...(imageOutput ? { images: imageOutput.images } : {}),
           ...(isFailedExtensionHttpResult(output) ? { isError: true } : {})
         }
-      } catch {
+      } catch (error) {
         // A cancelled effect is intentionally left without a result: recovery must not retry it.
         context.signal.throwIfAborted()
+        cause = failureCause(error)
         result = { id: call.id, name: call.name, output: 'TOOL_FAILED', isError: true }
       }
       context.signal.throwIfAborted()
-      await record('tool.result', result)
+      // The cause is journal-only; the model keeps receiving the fixed failure token, because an
+      // arbitrary error message can carry paths, URLs or credentials.
+      await record('tool.result', cause ? { ...result, error: cause } : result)
       if (!result.isError) {
         const artifacts = await confirmedFileArtifacts(call.name, result.output, resources)
         for (const artifact of artifacts)

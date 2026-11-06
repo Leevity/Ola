@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { ToolExecutor, type ToolDefinition } from '../../src/runtime/tools/tool-executor'
 import { createLocalShellCommandTool } from '../../src/runtime/tools/local-shell-command'
-import type { RunSpec } from '../../src/shared/runtime/contracts'
+import { RuntimeError, type RunSpec } from '../../src/shared/runtime/contracts'
 
 const run: RunSpec = {
   runId: 'run-1',
@@ -281,6 +281,86 @@ describe('runtime artifact events', () => {
     } finally {
       await rm(root, { recursive: true, force: true })
     }
+  })
+
+  it('records a sanitized failure cause in the journal while the model sees TOOL_FAILED', async () => {
+    const events: Array<{ type: string; data: unknown }> = []
+    const failing = (name: string, error: unknown): ToolDefinition => ({
+      ...definition(name, null),
+      execute: async () => {
+        throw error
+      }
+    })
+    const executor = new ToolExecutor(
+      [
+        failing('throw_code', new RuntimeError('BROWSER_NOT_CONNECTED')),
+        failing('throw_code_with_path', new RuntimeError('/private/etc/ola/secret')),
+        failing('throw_message', new TypeError('read ECONNRESET of /private/etc/ola/secret')),
+        failing('throw_string', '/private/etc/ola/secret')
+      ],
+      async () => true
+    )
+    const results = await executor.executeAll(
+      [
+        { id: 'cause-1', name: 'throw_code', input: {} },
+        { id: 'cause-2', name: 'throw_code_with_path', input: {} },
+        { id: 'cause-3', name: 'throw_message', input: {} },
+        { id: 'cause-4', name: 'throw_string', input: {} }
+      ],
+      { run, signal: new AbortController().signal },
+      async (type, data) => {
+        events.push({ type, data })
+      }
+    )
+    expect(results.map((result) => result.output)).toEqual([
+      'TOOL_FAILED',
+      'TOOL_FAILED',
+      'TOOL_FAILED',
+      'TOOL_FAILED'
+    ])
+    expect(events.filter((event) => event.type === 'tool.result')).toEqual([
+      {
+        type: 'tool.result',
+        data: {
+          id: 'cause-1',
+          name: 'throw_code',
+          output: 'TOOL_FAILED',
+          isError: true,
+          error: 'BROWSER_NOT_CONNECTED'
+        }
+      },
+      {
+        type: 'tool.result',
+        data: {
+          id: 'cause-2',
+          name: 'throw_code_with_path',
+          output: 'TOOL_FAILED',
+          isError: true,
+          error: 'ERROR'
+        }
+      },
+      {
+        type: 'tool.result',
+        data: {
+          id: 'cause-3',
+          name: 'throw_message',
+          output: 'TOOL_FAILED',
+          isError: true,
+          error: 'TypeError'
+        }
+      },
+      {
+        type: 'tool.result',
+        data: {
+          id: 'cause-4',
+          name: 'throw_string',
+          output: 'TOOL_FAILED',
+          isError: true,
+          error: 'ERROR'
+        }
+      }
+    ])
+    expect(JSON.stringify(events)).not.toContain('/private/etc/ola/secret')
   })
 
   it('keeps generated image artifacts inside their workspace directory', async () => {
