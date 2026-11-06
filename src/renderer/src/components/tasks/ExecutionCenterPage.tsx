@@ -100,6 +100,7 @@ export function ExecutionCenterPage({
   const listRequestId = React.useRef(0)
   const detailRequestId = React.useRef(0)
   const artifactRequestId = React.useRef(0)
+  const selectedKeyRef = React.useRef<string | null>(null)
 
   const load = React.useCallback(
     async (cursor?: ExecutionRecordCursor, background = false): Promise<void> => {
@@ -112,7 +113,20 @@ export function ExecutionCenterPage({
         setError(null)
         setRecords((current) => {
           const incoming = result.records.filter((record) => record.workspaceId === workspaceId)
-          if (!cursor && !background) return incoming
+          if (!cursor && !background) {
+            // A refresh must not drop the run the user is acting on: when it falls off
+            // the first page, keep its last known copy near its previous position so the
+            // details pane and the row the user is looking at stay put.
+            const position = current.findIndex(
+              (record) => `${record.source}:${record.id}` === selectedKeyRef.current
+            )
+            const stillPaged = incoming.some(
+              (record) => `${record.source}:${record.id}` === selectedKeyRef.current
+            )
+            if (position < 0 || stillPaged) return incoming
+            const index = Math.min(position, incoming.length)
+            return [...incoming.slice(0, index), current[position], ...incoming.slice(index)]
+          }
           if (background) {
             return mergeExecutionPage(current, incoming, (item) => `${item.source}:${item.id}`)
           }
@@ -132,6 +146,10 @@ export function ExecutionCenterPage({
     },
     [workspaceId, view]
   )
+
+  React.useEffect(() => {
+    selectedKeyRef.current = selectedKey
+  }, [selectedKey])
 
   React.useEffect(() => {
     const listRequest = listRequestId
