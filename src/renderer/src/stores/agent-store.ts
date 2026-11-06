@@ -838,7 +838,9 @@ async function hydrateAgentHistoryPersistence(): Promise<void> {
     if (agentHistoryPersistencePending) {
       queueAgentHistoryPersistence()
     }
-    void migrateLegacySubAgentHistoryToSqlite()
+    void migrateLegacySubAgentHistoryToSqlite().catch((retryError) => {
+      console.warn('[AgentStore] Deferred sub-agent history retry failed:', retryError)
+    })
   }
 }
 
