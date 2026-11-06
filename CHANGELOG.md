@@ -124,6 +124,25 @@ error}` answer on add, update and remove instead of editing its own list first
   both surfaced only as `TS_RUNTIME_TEXT_REQUIRED`
   (`src/renderer/src/lib/ipc/agent-bridge.ts`).
 
+### Tool catalog coverage
+
+- Switching on 高级绘图, 视频生成, the CodeGraph plugin or the desktop-control plugin no longer
+  disables chat. Those capabilities register renderer tool names the TS runtime has no Main-owned
+  tool for, and one such name was enough for the eligibility gate to answer `TOOLS_NOT_MIGRATED` and
+  refuse the whole run. The name now leaves the run's catalog — system prompt, submitted tool list
+  and eligibility check alike — and the assistant message states in the transcript which
+  capabilities this run did not include, in all 16 locales
+  (`src/renderer/src/lib/ipc/ts-runtime-text-eligibility.ts`,
+  `src/renderer/src/lib/agent/chat-send-message.ts`,
+  `src/renderer/src/components/chat/AssistantMessage.tsx`).
+- Any other name outside the allowlist still fails closed, and a quarantine entry is only allowed
+  while the catalog still publishes that tool.
+  `tests/runtime/renderer-tool-catalog-coverage.test.ts`, run by `npm run test:runtime`, re-reads the
+  production wiring in `src/renderer/src/lib/tools/index.ts` and the app-plugin descriptors, so a new
+  registrar or an unlabeled capability turns the build red instead of the conversation.
+- A failed sub-agent history migration left a retry nobody awaited, which rejected as an unhandled
+  promise whenever a test imported the tool catalog (`src/renderer/src/stores/agent-store.ts`).
+
 ## [1.0.6] - 2026-10-17
 
 ### Highlights
