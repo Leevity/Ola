@@ -99,6 +99,30 @@ error}` answer on add, update and remove instead of editing its own list first
   acceptance scenarios and states which of them were skipped for want of a packaged app. It is not
   part of any CI gate. See
   `docs/migrations/ts-runtime/evidence/failure-diagnosability-and-electron-aggregate-2026-11-06.md`.
+- An expired cloud session no longer disables local chat. The runtime host's workspace authority
+  serves `local-personal` when the offline workspace directory cannot be read, because a directory
+  that 401s says nothing about the local workspace — the same rule the Cron scope query already
+  applies (`src/main/runtime/workspace-authority.ts`).
+- A failed runtime request keeps its own code and leaves its cause behind. A `ModelBindingError`
+  such as `ACCOUNT_UNAVAILABLE` now reaches the client as that code instead of the flattened
+  `REQUEST_FAILED`, and a non-contract error is logged with the method it broke before the frame is
+  answered (`src/runtime/host/runtime-server.ts`).
+
+### Transcript replay and auxiliary requests
+
+- The TS runtime history projection no longer fails an entire conversation on a thinking reply. The
+  run contract carries role, text and images only, so reasoning cards, error cards and completed
+  tool traffic are dropped from the replay rather than raising `MESSAGE_CONTENT_NOT_MIGRATED`;
+  previously the first thinking reply or the first tool call disabled every later turn in that
+  session, which surfaced as `Agent failed TS_RUNTIME_AGENT_UNAVAILABLE` on the next send
+  (`src/renderer/src/lib/ipc/ts-runtime-text-eligibility.ts`).
+- An auxiliary text request — composer recommendation, session rename, memory automation, draw
+  prompt optimiser — no longer reasons. It inherited the chat provider's reasoning effort into a
+  256-token budget, so the completion could be all thinking and no text, which the caller could not
+  tell apart from a failure (`src/renderer/src/lib/api/responses-session-policy.ts`).
+- `runTsTextRequest` records the cause it used to discard. A stream error and an empty completion
+  both surfaced only as `TS_RUNTIME_TEXT_REQUIRED`
+  (`src/renderer/src/lib/ipc/agent-bridge.ts`).
 
 ## [1.0.6] - 2026-10-17
 
