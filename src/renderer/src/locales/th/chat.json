@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "ไม่พร้อมใช้งานในการรันนี้",
+    "detail": "การรันนี้ไม่ได้ใช้ {{tools}} เนื่องจาก TS รันไทม์ยังไม่มีเครื่องมือสำหรับเรื่องนี้",
+    "canvas": "การวาดบนแคนวาส",
+    "video": "การสร้างวิดีโอ",
+    "codegraph": "การค้นหา CodeGraph",
+    "desktop": "การควบคุมเดสก์ท็อป"
   }
 }

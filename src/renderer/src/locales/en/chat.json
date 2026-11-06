@@ -1447,5 +1447,13 @@
   "pendingQueue": {
     "persistFailed": "Queued messages could not be saved. Keep Ola open and try again.",
     "restoreFailed": "Queued messages could not be restored."
+  },
+  "runCapability": {
+    "notice": "Not available in this run",
+    "detail": "This run left out {{tools}}; the TS runtime has no tool for it yet.",
+    "canvas": "Canvas drawing",
+    "video": "Video generation",
+    "codegraph": "CodeGraph search",
+    "desktop": "Desktop control"
   }
 }

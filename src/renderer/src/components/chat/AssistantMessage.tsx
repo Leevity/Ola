@@ -28,6 +28,7 @@ import {
   Share2,
   GitFork,
   CircleHelp,
+  Info,
   Archive
 } from 'lucide-react'
 import { FadeIn, ScaleIn } from '@renderer/components/animate-ui'
@@ -93,6 +94,7 @@ import { useMemoizedTokens } from '@renderer/hooks/use-estimated-tokens'
 import { getLastDebugInfo, getRequestTraceInfo } from '@renderer/lib/debug-store'
 import { readRuntimeDebugBody } from '@renderer/lib/ipc/agent-bridge'
 import { MONO_FONT } from '@renderer/lib/constants'
+import { runCapabilityLabels } from '@renderer/lib/run-capability-labels'
 import {
   getLiveOutputComponentClass,
   getLiveOutputCursorClass
@@ -506,6 +508,26 @@ function CompletionTokenSummary({
           </HoverCardContent>
         </HoverCard>
       )}
+    </div>
+  )
+}
+
+function RunCapabilityNotice({ toolNames }: { toolNames: string[] }): React.JSX.Element | null {
+  const { t } = useTranslation('chat')
+  const labels = runCapabilityLabels(toolNames, (key) => t(key))
+  if (!labels.length) return null
+  return (
+    <div className="my-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-border bg-muted/25 px-3 py-2 text-[12px]">
+      <Info className="size-3.5 shrink-0 text-muted-foreground" />
+      <span className="font-medium text-foreground">
+        {t('runCapability.notice', { defaultValue: 'Not available in this run' })}
+      </span>
+      <span className="text-muted-foreground">
+        {t('runCapability.detail', {
+          tools: labels.join(', '),
+          defaultValue: 'This run left out {{tools}}; the TS runtime has no tool for it yet.'
+        })}
+      </span>
     </div>
   )
 }
@@ -1695,6 +1717,7 @@ export function AssistantMessage({
 
   const isLiveMode = renderMode === 'default'
   const runOutcome = meta?.runOutcome
+  const capabilityNotice = meta?.capabilityNotice
 
   const isGeneratingImage = useChatStore((s) =>
     isLiveMode && msgId ? !!s.generatingImageMessages[msgId] : false
@@ -2992,6 +3015,9 @@ export function AssistantMessage({
             ) : null}
           </div>
         )}
+        {!isStreaming && capabilityNotice?.toolNames.length ? (
+          <RunCapabilityNotice toolNames={capabilityNotice.toolNames} />
+        ) : null}
         {collapsed ? (
           <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
             <div className="max-h-10 overflow-hidden whitespace-pre-wrap break-words">

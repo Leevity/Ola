@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Indisponível nesta execução",
+    "detail": "Esta execução deixou {{tools}} de fora; o ambiente de execução TS ainda não tem uma ferramenta para isso.",
+    "canvas": "Desenho no canvas",
+    "video": "Geração de vídeo",
+    "codegraph": "Pesquisa no CodeGraph",
+    "desktop": "Controle da área de trabalho"
   }
 }

@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Niet beschikbaar in deze uitvoering",
+    "detail": "Deze uitvoering liet {{tools}} weg; de TS-runtime heeft daar nog geen tool voor.",
+    "canvas": "Canvas-tekenen",
+    "video": "Videogeneratie",
+    "codegraph": "CodeGraph-zoeken",
+    "desktop": "Bureaubladbediening"
   }
 }

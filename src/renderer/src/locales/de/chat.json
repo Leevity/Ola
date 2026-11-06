@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "In dieser Ausführung nicht verfügbar",
+    "detail": "Diese Ausführung hat {{tools}} ausgelassen; die TS-Laufzeit hat dafür noch kein Werkzeug.",
+    "canvas": "Canvas-Zeichnen",
+    "video": "Videogenerierung",
+    "codegraph": "CodeGraph-Suche",
+    "desktop": "Desktop-Steuerung"
   }
 }

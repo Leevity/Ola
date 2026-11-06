@@ -142,6 +142,7 @@ import type {
 import {
   assessTsRuntimeTextEligibility,
   explicitTsRuntimeModelSource,
+  isUnmigratedTsRuntimeCapabilityTool,
   supportsTsRuntimeReadOnlyTools
 } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { assessTsRuntimeAgentEligibility } from '@renderer/lib/ipc/ts-runtime-agent-eligibility'
@@ -877,7 +878,7 @@ export async function sendChatMessage(
         ? resolveActiveMcpContext(session?.projectId ?? null)
         : null
     const taskProfile = session?.taskProfile ?? 'work'
-    const registeredToolDefs = withRequestExtensionToolDefinitions(
+    const requestToolSnapshot = withRequestExtensionToolDefinitions(
       await createRequestToolDefinitionSnapshot({
         taskProfile,
         refreshCatalog: ensureRequestToolCatalogFresh,
@@ -885,6 +886,15 @@ export async function sendChatMessage(
         getTaskDefinition: createRequestTaskToolDefinition
       }),
       session?.projectId ?? null
+    )
+    // A capability the TS runtime has no Main-owned tool for leaves the run's catalog instead of
+    // refusing the conversation, so it must leave the system prompt too — and the assistant
+    // message records what the model was not given.
+    const droppedCapabilityNames = requestToolSnapshot
+      .filter((definition) => isUnmigratedTsRuntimeCapabilityTool(definition.name))
+      .map((definition) => definition.name)
+    const registeredToolDefs = requestToolSnapshot.filter(
+      (definition) => !isUnmigratedTsRuntimeCapabilityTool(definition.name)
     )
     const scenarioToolDefs = session?.scenarioPolicy
       ? registeredToolDefs.filter((definition) =>
@@ -1598,6 +1608,7 @@ export async function sendChatMessage(
                 : 'RUNTIME_UNAVAILABLE',
           providerType: agentProviderConfig.type,
           toolNames: effectiveToolDefs.map((tool) => tool.name),
+          droppedCapabilities: droppedCapabilityNames,
           isPlanMode,
           sessionMode: mode,
           hasChannels: promptAllowsToolContext && scopedActiveChannels.length > 0,
@@ -1615,6 +1626,21 @@ export async function sendChatMessage(
         setRequestTraceInfo(assistantMsgId, {
           executionPath: useTsAgent ? 'ts-runtime' : 'unavailable'
         })
+
+        // An enabled capability this run could not use is named in the transcript, so a dropped
+        // draw or CodeGraph button is not mistaken for the model choosing to ignore it.
+        if (droppedCapabilityNames.length) {
+          const noticeMessage = useChatStore
+            .getState()
+            .getSessionMessages(sessionId!)
+            .find((message) => message.id === assistantMsgId)
+          updateRuntimeMessage(sessionId!, assistantMsgId, {
+            meta: {
+              ...noticeMessage?.meta,
+              capabilityNotice: { toolNames: droppedCapabilityNames }
+            }
+          })
+        }
 
         const loop: AsyncIterable<AgentEvent> | AsyncIterable<TsRuntimeProjectedEvent> =
           useTsAgent && tsAgentEligibility?.eligible && tsAgentModelSource

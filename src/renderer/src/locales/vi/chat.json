@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Không khả dụng trong lượt chạy này",
+    "detail": "Lượt chạy này đã bỏ qua {{tools}}; thời gian chạy TS chưa có công cụ cho việc đó.",
+    "canvas": "Vẽ trên canvas",
+    "video": "Tạo video",
+    "codegraph": "Tìm kiếm CodeGraph",
+    "desktop": "Điều khiển máy tính để bàn"
   }
 }

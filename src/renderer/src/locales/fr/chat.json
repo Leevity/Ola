@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Indisponible pour cette exécution",
+    "detail": "Cette exécution a laissé {{tools}} de côté ; l'exécuteur TS n'a pas encore d'outil pour cela.",
+    "canvas": "Dessin sur canevas",
+    "video": "Génération de vidéo",
+    "codegraph": "Recherche CodeGraph",
+    "desktop": "Contrôle du bureau"
   }
 }

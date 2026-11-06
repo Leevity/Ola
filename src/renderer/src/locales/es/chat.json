@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "No disponible en esta ejecución",
+    "detail": "Esta ejecución omitió {{tools}}; el entorno de ejecución TS aún no tiene una herramienta para ello.",
+    "canvas": "Dibujo en lienzo",
+    "video": "Generación de vídeo",
+    "codegraph": "Búsqueda en CodeGraph",
+    "desktop": "Control del escritorio"
   }
 }

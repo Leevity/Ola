@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Tidak tersedia dalam proses ini",
+    "detail": "Proses ini tidak memakai {{tools}}; runtime TS belum punya alat untuk itu.",
+    "canvas": "Gambar kanvas",
+    "video": "Pembuatan video",
+    "codegraph": "Pencarian CodeGraph",
+    "desktop": "Kontrol desktop"
   }
 }

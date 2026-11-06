@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "غير متاح في هذا التشغيل",
+    "detail": "لم يشمل هذا التشغيل {{tools}}؛ لم يوفر مشغّل TS أداة لذلك بعد.",
+    "canvas": "الرسم على اللوحة",
+    "video": "توليد الفيديو",
+    "codegraph": "البحث في CodeGraph",
+    "desktop": "التحكم في سطح المكتب"
   }
 }

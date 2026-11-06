@@ -1411,5 +1411,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "原价 {{price}}"
+  },
+  "runCapability": {
+    "notice": "本次运行不可用的能力",
+    "detail": "本次运行没有带上{{tools}}：TS 运行时还没有对应的工具。",
+    "canvas": "画布绘图",
+    "video": "视频生成",
+    "codegraph": "代码图谱检索",
+    "desktop": "桌面控制"
   }
 }

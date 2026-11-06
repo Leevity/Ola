@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "이 실행에서는 사용 불가",
+    "detail": "이 실행에는 {{tools}}이(가) 포함되지 않았습니다. TS 런타임에 아직 해당 도구가 없습니다.",
+    "canvas": "캔버스 드로잉",
+    "video": "동영상 생성",
+    "codegraph": "CodeGraph 검색",
+    "desktop": "데스크톱 제어"
   }
 }

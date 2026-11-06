@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "この実行では利用できません",
+    "detail": "この実行には{{tools}}が含まれませんでした。TS ランタイムに対応するツールがまだありません。",
+    "canvas": "キャンバス描画",
+    "video": "動画生成",
+    "codegraph": "CodeGraph 検索",
+    "desktop": "デスクトップ操作"
   }
 }

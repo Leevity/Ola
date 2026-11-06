@@ -4,6 +4,7 @@ import { parseModelSource, type ModelSource } from '../../../../shared/runtime/m
 import type { RuntimeImage, RuntimeTextMessage } from '../../../../shared/runtime/contracts'
 import {
   assessTsRuntimeTextEligibility,
+  isUnmigratedTsRuntimeCapabilityTool,
   supportsTsRuntimeAgentTools
 } from './ts-runtime-text-eligibility'
 
@@ -54,9 +55,13 @@ export function assessTsRuntimeAgentEligibility(input: {
     return { eligible: false, reason: 'PLUGIN_NOT_MIGRATED' }
   if (input.hasChannels && !hasValidChannelContext(input.channelContext))
     return { eligible: false, reason: 'CHANNELS_NOT_MIGRATED' }
+  // A settings-gated capability the runtime cannot execute leaves this run and is named to the
+  // user; any other name outside the allowlist still fails the request closed. The submitting
+  // path removes those names from its own catalog, so the model is never offered one of them.
+  const droppedToolSet = new Set(input.toolNames.filter(isUnmigratedTsRuntimeCapabilityTool))
   if (
     !supportsTsRuntimeAgentTools({
-      toolNames: input.toolNames,
+      toolNames: input.toolNames.filter((name) => !droppedToolSet.has(name)),
       workingDirectory: input.workingDirectory,
       extensionToolNames: input.extensionToolNames
     })

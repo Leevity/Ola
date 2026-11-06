@@ -207,6 +207,11 @@ export interface RunOutcomeMeta {
   outcome: FinalOutcome
 }
 
+export interface RunCapabilityNoticeMeta {
+  /** Renderer tool names the TS runtime has no Main-owned equivalent for. */
+  toolNames: string[]
+}
+
 export interface MessageMeta {
   compactBoundary?: CompactBoundaryMeta
   compactSummary?: CompactSummaryMeta
@@ -218,6 +223,8 @@ export interface MessageMeta {
   requestModel?: MessageRequestModelMeta
   /** Structured terminal state and result for a tool-backed conversation turn. */
   runOutcome?: RunOutcomeMeta
+  /** Enabled capabilities the runtime left out of this run, named so the gap is not silent. */
+  capabilityNotice?: RunCapabilityNoticeMeta
 }
 
 export interface UnifiedMessage {

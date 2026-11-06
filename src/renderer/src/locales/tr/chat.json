@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Bu çalışmada kullanılamaz",
+    "detail": "Bu çalışma {{tools}} dışında kaldı; TS çalışma zamanının bunun için bir aracı yok.",
+    "canvas": "Tuval çizimi",
+    "video": "Video oluşturma",
+    "codegraph": "CodeGraph araması",
+    "desktop": "Masaüstü denetimi"
   }
 }

@@ -1100,5 +1100,13 @@
   },
   "extensionToolResult": {
     "originalPrice": "Was {{price}}"
+  },
+  "runCapability": {
+    "notice": "Недоступно в этом запуске",
+    "detail": "Этот запуск пропустил {{tools}}; у среды выполнения TS ещё нет такого инструмента.",
+    "canvas": "Рисование на холсте",
+    "video": "Генерация видео",
+    "codegraph": "Поиск CodeGraph",
+    "desktop": "Управление рабочим столом"
   }
 }

@@ -113,6 +113,29 @@ const TS_RUNTIME_LOCAL_AGENT_TOOL_NAMES = new Set([
   'PowerShell',
   'Monitor'
 ])
+/**
+ * Capabilities the renderer registers into the chat catalog when a setting or app plugin is
+ * switched on, for which the TS runtime has no Main-owned tool. A run drops these from its
+ * catalog and says so in the transcript, because refusing the whole conversation over an
+ * optional draw button is the worse failure. A name outside this list and outside the
+ * allowlist still fails closed: an undocumented drop is how a model ends up promising work
+ * it cannot do.
+ */
+export const TS_RUNTIME_UNMIGRATED_CAPABILITY_TOOLS: ReadonlySet<string> = new Set([
+  'CanvasOperation',
+  'GenerateVideo',
+  'codegraph_explore',
+  'DesktopScreenshot',
+  'DesktopClick',
+  'DesktopType',
+  'DesktopScroll',
+  'DesktopWait'
+])
+
+export function isUnmigratedTsRuntimeCapabilityTool(name: string): boolean {
+  return TS_RUNTIME_UNMIGRATED_CAPABILITY_TOOLS.has(name)
+}
+
 // Alias is lowercase and `_`-free, so the first `__` after the prefix is the separator and the
 // whole name stays within the 64-char provider limit by construction.
 const TS_RUNTIME_MCP_TOOL_NAME = /^mcp__[a-z0-9-]{1,12}__[A-Za-z0-9_-]{1,47}$/
