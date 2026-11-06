@@ -2,6 +2,104 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### MCP tool exposure, identity, and preflight
+
+- MCP tools are now named by a pure function of an immutable per-server alias and the advertised
+  tool name (`src/shared/mcp-tool-policy.ts`), and Main ships that name to the renderer instead of
+  both layers re-deriving it. Tools could previously disappear from the model's view when the two
+  derivations disagreed; nothing is dropped silently any more — filtered, unnameable, and truncated
+  capabilities are reported through `ExposedMcpTool` and `McpServerInfo.diagnostic`.
+- Adds per-server exposure control (`enabledTools`, `toolPresets`, `activePreset`) capped at 32
+  tools per server, so a large catalog such as REA's 229 tools cannot invalidate an entire run
+  against the 128-name `run.toolNames` limit.
+- Adds a host preflight that probes the interpreter the stdio child will actually use, plus declared
+  external commands, before any connection is attempted, with an actionable diagnostic and an
+  "ignore preflight" escape. Non-retryable failures now spend one attempt instead of the full
+  backoff schedule.
+- Oversized MCP text results are spilled to a file in the managed results directory and replaced
+  inline with its path, instead of failing the call and discarding the answer. Per-server
+  `outputLimits` and `timeoutMs` control the inline budget, the hard ceiling, and the call deadline.
+- Sub-agent tool selection now honours the `*` wildcard the renderer already supported, so an agent
+  written with a wildcard no longer receives zero tools on the Main runtime path.
+- Adds the REA (Reverse Engineer Anything) recipe — spine plus `javascript`, `native`, `android` and
+  `web` presets — and the trimmed `reverse-engineer-anything` built-in skill. See
+  `docs/rea-mcp-integration.md`.
+- Adds `npm run verify:mcp-tool-naming` to `verify:ci-core`.
+- Fixes the name-length budget, which was derived for a shorter alias than the maximum the alias
+  field allows. A legal 12-character alias with a long advertised name produced an over-length
+  tool name and the tool was reported as unnameable; the budget is now computed from the alias in
+  each call (`src/shared/mcp-tool-policy.ts`).
+- The MCP settings panel no longer reports a refused write as saved. Main validates the exposure
+  policy and the atomic file write before it persists, and the store now honours that `{success,
+error}` answer on add, update and remove instead of editing its own list first
+  (`src/renderer/src/stores/mcp-store.ts`).
+- MCP resources are registered as tools on the Main side as well, under the same
+  `mcp__<alias>__resource__<name>` name the renderer uses, with the server and URI bound at
+  registration. A run that named a resource previously reached no tool at all
+  (`src/main/mcp/mcp-runtime-tools.ts`).
+- A catalog truncated by the discovery page limit is stated in the panel instead of presenting the
+  partial list as the whole server, and a server that Main no longer has a live client for has its
+  cached tools, resources and prompts cleared rather than shown as still connected.
+- Translates the MCP exposure, preflight and diagnostic strings that were falling back to English in
+  Simplified Chinese, and adds the two new notices to all 16 locales.
+
+### Desktop accessibility control (agent-desktop), hidden by default
+
+- Adds the seven Main-side `desktop_ax_*` runtime tools (launch, list, snapshot, inspect, click,
+  input_text, adjust) over the hash-pinned [agent-desktop](https://github.com/vercel-labs/agent-desktop)
+  v1.1.0 CLI: argv red lines, headless-only invocation, approval before any mutation, refusal when
+  unattended, and a bounded snapshot that is shrunk before it reaches the model
+  (`src/main/agent-desktop/`, `src/main/runtime/desktop-ax-runtime-tools.ts`).
+- Pins every published binary by SHA-256 in `resources/agent-desktop.lock.json`.
+  `scripts/stage-agent-desktop.mjs` fetches each archive over HTTPS, verifies the hash before
+  extraction, and writes only the files the lock names; `tests/runtime/agent-desktop-staging.test.ts`
+  holds the lock, platform-key and pin-drift checks.
+- `npm run verify:desktop-ax-gate` re-proves from source that the feature stays unreachable while
+  any acceptance row is open, and `:strict` is the release form that refuses a single non-`pass`
+  row. Status and the unhide checklist live in `docs/agent-desktop-acceptance.md`.
+- The plugin ships hidden and force-disabled: no product flow names these tools, so nothing can run
+  them until the platform and release rows above are closed on real machines.
+
+### Run-stream delivery after workspace revocation
+
+- Reading the offline workspace directory no longer revokes the local personal workspace.
+  `revokeUnavailableWorkspaces` takes the complete set that is still permitted, and the directory
+  never names `local-personal`, so the first read stopped every personal run's push mid-response
+  (`src/main/runtime/desktop-runtime.ts`).
+- Revocation ends a subscription with a `run.resync` frame instead of removing it silently, so a
+  waiting consumer reconciles from its cursor rather than stalling on a workspace that can never
+  push again (`src/runtime/host/runtime-server.ts`).
+- The offline workspace expiry monitor ignores an expiry timestamp it already fired for; an
+  expired directory no longer drove a zero-delay loop of directory reads, each with a network
+  fetch and a revocation pass (`src/main/runtime/offline-workspace-expiry-monitor.ts`).
+- The runtime status panel docks in flow when its pane is short, not only when it is narrow, so
+  the floating overlay no longer covers the composer and the pending-queue strip in a minimum-size
+  window.
+- Provider settings become `inert` while the credential vault is unreadable, because every edit in
+  that state would rewrite the store without the secrets it could not read.
+- Electron scenarios wait for the real process exit before reusing a user-data directory, and the
+  packaged Cron recovery scenario resolves the app payload per platform, so it runs on macOS as
+  well as Windows. See
+  `docs/migrations/ts-runtime/evidence/run-stream-workspace-revocation-2026-11-05.md`.
+
+### Failure diagnosability
+
+- A failed tool call now leaves its cause in the run journal (`tool.result.error`) while the model
+  still receives the fixed `TOOL_FAILED` token. Only a `RuntimeError` code, an error class name, or
+  the neutral `ERROR` is recorded, because error messages routinely carry paths, URLs and
+  credentials (`src/runtime/tools/tool-executor.ts`).
+- A cron job with no model binding records a failed run and reports it through `cron:run-finished`
+  instead of rejecting in the background. Previously the fire was silent, the job looked like it
+  never ran, and the main process logged an unhandled rejection. Failure reporting resolves the
+  workspace from the job row, so it no longer depends on the binding that is missing
+  (`src/main/cron/ts-cron-agent-background.ts`).
+- Adds `npm run verify:ci-electron`, a local aggregate that sequences the Electron-backed
+  acceptance scenarios and states which of them were skipped for want of a packaged app. It is not
+  part of any CI gate. See
+  `docs/migrations/ts-runtime/evidence/failure-diagnosability-and-electron-aggregate-2026-11-06.md`.
+
 ## [1.0.6] - 2026-10-17
 
 ### Highlights
