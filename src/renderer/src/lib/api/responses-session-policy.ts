@@ -23,13 +23,14 @@ export function withAuxiliaryResponsesRequestPolicy(
   config: ProviderConfig,
   scope: string
 ): ProviderConfig {
-  if (config.type !== 'openai-responses') {
-    return config
-  }
-
+  // Auxiliary callers read a tiny token budget and cannot tell a reasoning-only completion
+  // from a failed one, so no protocol reasons here; the Responses session scope still applies.
   return {
     ...config,
-    responsesSessionScope: scope,
-    websocketMode: 'disabled'
+    ...(config.type === 'openai-responses'
+      ? { responsesSessionScope: scope, websocketMode: 'disabled' }
+      : {}),
+    thinkingEnabled: false,
+    reasoningEffort: undefined
   }
 }

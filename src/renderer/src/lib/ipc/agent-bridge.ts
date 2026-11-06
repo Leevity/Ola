@@ -175,11 +175,18 @@ export async function runTsTextRequest(args: {
           if (event.type === 'error') throw event.error
         }
         if (text.trim()) return text
+        console.warn('[TS Runtime] auxiliary text request produced no text', {
+          model: provider.model,
+          maxTokens: provider.maxTokens
+        })
       } catch (error) {
         if (args.signal?.aborted) throw error
         // Do not fall back to a removed runtime. Callers receive an explicit
-        // TS runtime error below.
+        // TS runtime error below, so this is the only place the real cause survives.
+        console.error('[TS Runtime] auxiliary text request failed', error)
       }
+    } else {
+      console.warn('[TS Runtime] auxiliary text request ineligible', eligibility.reason)
     }
   }
 
