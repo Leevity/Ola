@@ -158,9 +158,9 @@ export function supportsTsRuntimeAgentTools(input: {
 }
 
 /**
- * The TS bridge preserves plain text plus bounded image content. Rich blocks,
- * tool transcripts, oversized images and provider-specific features fail closed
- * until they have an equivalent runtime contract.
+ * The TS bridge replays plain text plus bounded image content. Reasoning cards, error cards and
+ * tool traffic are dropped because the run contract has no field for them; block shapes it does
+ * not know, oversized images and provider-specific features still fail closed.
  */
 export function assessTsRuntimeTextEligibility(input: {
   messages: readonly UnifiedMessage[]
@@ -230,14 +230,15 @@ export function assessTsRuntimeTextEligibility(input: {
   const history: RuntimeTextMessage[] = []
   const historyMessages = [...input.messages.slice(0, currentUserIndex), ...trailingContext]
   for (const message of historyMessages) {
-    if (
-      (message.role !== 'system' && message.role !== 'user' && message.role !== 'assistant') ||
-      !extractRuntimeContent(message.content)
-    )
+    if (message.role !== 'system' && message.role !== 'user' && message.role !== 'assistant')
       return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
     const content = extractRuntimeContent(message.content)
-    if (!content || (!content.text && content.images.length === 0))
-      return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
+    if (!content) return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
+    if (!content.text && content.images.length === 0) {
+      // Nothing survived projection. A tool round or a reasoning-only turn keeps no replayable
+      // text, so it leaves the history instead of disabling every later turn.
+      continue
+    }
     history.push({
       role: message.role,
       text: content.text,
@@ -296,6 +297,18 @@ function extractRuntimeContent(
       if (block.text.trim()) text.push(block.text)
       continue
     }
+    // Reasoning, error cards and tool traffic exist only in the rendered transcript. The run
+    // contract carries role, text and images, so replaying such a turn means dropping the
+    // block rather than failing the conversation — otherwise the first thinking reply, or the
+    // first tool call, would disable every later turn in the session.
+    if (
+      block.type === 'thinking' ||
+      block.type === 'agent_error' ||
+      block.type === 'image_error' ||
+      block.type === 'tool_use' ||
+      block.type === 'tool_result'
+    )
+      continue
     if (block.type !== 'image') return null
     if (images.length >= MAX_TS_RUNTIME_IMAGE_COUNT) return null
     const source = block.source

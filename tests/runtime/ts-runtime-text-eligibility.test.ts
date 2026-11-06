@@ -210,6 +210,7 @@ describe('TS runtime text eligibility', () => {
       },
       messages[1]
     ] as unknown as UnifiedMessage[]
+    // A completed tool round is real conversation content the run contract cannot carry yet.
     for (const input of [toolMessages, richMessages]) {
       expect(
         assessTsRuntimeTextEligibility({
@@ -219,6 +220,100 @@ describe('TS runtime text eligibility', () => {
         })
       ).toEqual({ eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' })
     }
+  })
+
+  it('replays a reasoning-model transcript by dropping the blocks the contract cannot carry', () => {
+    const reasoningTurn: UnifiedMessage = {
+      id: 'one',
+      role: 'assistant',
+      content: [
+        { type: 'thinking', thinking: 'Planning the answer', startedAt: 1, completedAt: 2 },
+        { type: 'text', text: 'Earlier answer' }
+      ],
+      createdAt: 1
+    }
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: [reasoningTurn, messages[1]],
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      history: [{ role: 'assistant', text: 'Earlier answer' }]
+    })
+
+    const failedTurn: UnifiedMessage = {
+      id: 'one',
+      role: 'assistant',
+      content: [
+        { type: 'text', text: 'Partial answer' },
+        { type: 'agent_error', code: 'runtime_error', message: 'Reattach failed' }
+      ],
+      createdAt: 1
+    }
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: [failedTurn, messages[1]],
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      history: [{ role: 'assistant', text: 'Partial answer' }]
+    })
+
+    // A turn cut off during reasoning keeps nothing, so it leaves the history rather than
+    // disabling every later turn in the session.
+    const reasoningOnlyTurn: UnifiedMessage = {
+      id: 'one',
+      role: 'assistant',
+      content: [{ type: 'thinking', thinking: 'Cut off mid-thought' }],
+      createdAt: 1
+    }
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: [reasoningOnlyTurn, messages[1]],
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({ eligible: true, history: [] })
+  })
+
+  it('keeps the text of a completed tool round and drops the traffic the contract cannot carry', () => {
+    const toolRoundMessages: UnifiedMessage[] = [
+      {
+        ...messages[0],
+        content: [
+          { type: 'text', text: 'Let me read it first' },
+          { type: 'tool_use', id: 'call-1', name: 'Read', input: { path: 'a.ts' } }
+        ]
+      },
+      {
+        id: 'tool',
+        role: 'user',
+        content: [{ type: 'tool_result', toolUseId: 'call-1', content: 'file body' }]
+      },
+      {
+        id: 'answer',
+        role: 'assistant',
+        content: [{ type: 'text', text: 'It exports one function' }]
+      },
+      messages[1]
+    ]
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: toolRoundMessages,
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      history: [
+        { role: 'assistant', text: 'Let me read it first' },
+        { role: 'assistant', text: 'It exports one function' }
+      ]
+    })
   })
 
   it('uses a typed session binding and never guesses a managed resource', () => {
