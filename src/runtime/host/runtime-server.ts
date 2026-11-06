@@ -9,6 +9,7 @@ import {
   type RuntimeCapability
 } from '../../shared/runtime/contracts'
 import { RunScheduler } from '../scheduler/run-scheduler'
+import { ModelBindingError } from '../../shared/runtime/model-source'
 import type { ExecutionPageKey } from '../../shared/execution-record'
 import { FrameDecoder, encodeFrame } from './framing'
 
@@ -25,6 +26,15 @@ const TERMINAL_RUN_STATUSES: ReadonlySet<string> = new Set([
   'cancelled',
   'interrupted'
 ])
+
+/**
+ * The vocabulary a request frame may carry. Both contract error classes have a code the renderer
+ * can name; anything else keeps the fixed token and is logged with its cause instead of vanishing.
+ */
+function requestFailureCode(error: unknown): string {
+  if (error instanceof RuntimeError || error instanceof ModelBindingError) return error.code
+  return 'REQUEST_FAILED'
+}
 
 /** A terminal `run.status` is the run's last event, so the subscription ends there. */
 function isTerminalRunEvent(event: RunEvent): boolean {
@@ -170,9 +180,11 @@ export class RuntimeServer {
           tail = tail
             .then(async () => {
               let requestId: string | undefined
+              let method: string | undefined
               try {
                 const request = record(frame)
                 requestId = id(request.id)
+                method = typeof request.method === 'string' ? request.method : undefined
                 if (!authenticated) {
                   const params = record(request.params)
                   if (
@@ -204,10 +216,12 @@ export class RuntimeServer {
                   this.send(socket, { id: requestId, result })
                 }
               } catch (error) {
-                this.send(socket, {
-                  id: requestId,
-                  error: error instanceof RuntimeError ? error.code : 'REQUEST_FAILED'
-                })
+                const code = requestFailureCode(error)
+                if (code === 'REQUEST_FAILED')
+                  // The frame carries a fixed token, so without this line the only trace of a
+                  // failed request is what the user sees: "Agent failed REQUEST_FAILED".
+                  console.error('[TsRuntime] request failed', { method, error })
+                this.send(socket, { id: requestId, error: code })
                 if (!authenticated) socket.end()
               } finally {
                 inflight--
