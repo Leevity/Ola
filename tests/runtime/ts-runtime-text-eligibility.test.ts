@@ -244,6 +244,20 @@ describe('TS runtime text eligibility', () => {
     expect(supportsTsRuntimeReadOnlyTools({ toolNames: ['WebFetch', 'MemorySearch'] })).toBe(false)
   })
 
+  it('matches the MCP alias shape Main is allowed to mint', () => {
+    const accepts = (name: string) =>
+      supportsTsRuntimeAgentTools({ toolNames: [name], workingDirectory: undefined })
+    // The longest advertised REA name stays whole inside the segment budget.
+    expect(accepts('mcp__rea__build_reconstruction_obligation_ledger')).toBe(true)
+    expect(accepts('mcp__rea__resource__report')).toBe(true)
+    expect(accepts('mcp__abcdefghijkl__x')).toBe(true)
+    // An underscore in the alias would make `__` ambiguous, and a 13-char alias is not mintable.
+    expect(accepts('mcp__docs_v1__search')).toBe(false)
+    expect(accepts('mcp__abcdefghijklm__x')).toBe(false)
+    // Names over the provider ceiling are never eligible, whatever their shape.
+    expect(accepts(`mcp__rea__${'z'.repeat(48)}`)).toBe(false)
+  })
+
   it('permits approved execute-tool equivalents only with a fixed working root', () => {
     expect(
       supportsTsRuntimeAgentTools({
