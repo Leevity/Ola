@@ -972,10 +972,23 @@ function GeneralPanel(): React.JSX.Element {
       {/* Motion */}
       <section className="space-y-3">
         <div className="max-w-lg">
-          <h2 className="text-sm font-medium">{t('general.motionLevel')}</h2>
-          <p className="text-[0.8125rem] text-muted-foreground">{t('general.motionLevelDesc')}</p>
+          <h2 id="settings-motion-level-label" className="text-sm font-medium">
+            {t('general.motionLevel')}
+          </h2>
+          <p
+            id="settings-motion-level-description"
+            className="text-[0.8125rem] text-muted-foreground"
+          >
+            {t('general.motionLevelDesc')}
+          </p>
         </div>
-        <div className="grid max-w-2xl gap-2 sm:grid-cols-3" role="radiogroup">
+        <div
+          id="settings-motion-level"
+          className="grid max-w-2xl gap-2 sm:grid-cols-3"
+          role="radiogroup"
+          aria-labelledby="settings-motion-level-label"
+          aria-describedby="settings-motion-level-description"
+        >
           {MOTION_LEVELS.map((level) => {
             const active = settings.motionLevel === level
             return (

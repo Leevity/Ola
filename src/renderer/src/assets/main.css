@@ -1950,11 +1950,9 @@
   font-size: max(14px, 0.875rem);
 }
 
+/* The overview entry point only exists in short windows; taller windows keep the
+   health and lifecycle sections inline. */
 .capability-center-overview-toggle {
-  display: flex;
-}
-
-.capability-center-overview:not(.is-expanded) {
   display: none;
 }
 
@@ -1963,6 +1961,33 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     overflow-x: visible;
+  }
+}
+
+/* Short windows (the minimum height at 125–200% display scaling) cannot fit the
+   capability header, its tabs and a usable plugin form in one screenful, so the
+   panel stops filling the viewport and the settings page scrolls as a whole. */
+@media (max-height: 500px) {
+  .capability-center-overview-toggle {
+    display: flex;
+  }
+
+  .capability-center-overview:not(.is-expanded) {
+    display: none;
+  }
+
+  .capability-center,
+  .app-plugin-panel {
+    height: auto;
+    min-height: 100%;
+  }
+
+  .capability-center-tabpanel {
+    min-height: 13rem;
+  }
+
+  .app-plugin-content {
+    overflow-y: visible;
   }
 }
 
