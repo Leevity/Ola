@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { ProviderConfig, UnifiedMessage } from '../../src/renderer/src/lib/api/types'
 import { assessTsRuntimeAgentEligibility } from '../../src/renderer/src/lib/ipc/ts-runtime-agent-eligibility'
-import { TS_RUNTIME_CHANNEL_TOOL_NAMES } from '../../src/renderer/src/lib/ipc/ts-runtime-text-eligibility'
+import {
+  supportsTsRuntimeAgentTools,
+  TS_RUNTIME_CHANNEL_TOOL_NAMES,
+  TS_RUNTIME_UNMIGRATED_CAPABILITY_TOOLS
+} from '../../src/renderer/src/lib/ipc/ts-runtime-text-eligibility'
 
 const provider: ProviderConfig = {
   type: 'openai-chat',
@@ -51,6 +55,36 @@ describe('TS runtime Execute eligibility', () => {
       history: [],
       modelOptions: {}
     })
+  })
+
+  it.each([...TS_RUNTIME_UNMIGRATED_CAPABILITY_TOOLS])(
+    'drops %s from the run instead of refusing it',
+    (name) => {
+      expect(assessTsRuntimeAgentEligibility({ ...baseline, toolNames: ['Read', name] })).toEqual({
+        eligible: true,
+        modelSource: baseline.modelSource,
+        prompt: baseline.messages[0].content,
+        promptImages: [],
+        history: [],
+        modelOptions: {}
+      })
+      // The name is still unmigrated; only the deliberate drop keeps the run alive.
+      expect(
+        supportsTsRuntimeAgentTools({
+          toolNames: ['Read', name],
+          workingDirectory: '/workspace'
+        })
+      ).toBe(false)
+    }
+  )
+
+  it('still fails closed for a tool name outside the allowlist and the quarantine', () => {
+    expect(
+      assessTsRuntimeAgentEligibility({
+        ...baseline,
+        toolNames: ['Read', 'CanvasOperation', 'SomeNewUnmappedTool']
+      })
+    ).toEqual({ eligible: false, reason: 'TOOLS_NOT_MIGRATED' })
   })
 
   it.each([

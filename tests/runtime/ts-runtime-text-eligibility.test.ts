@@ -292,11 +292,13 @@ describe('TS runtime text eligibility', () => {
       {
         id: 'tool',
         role: 'user',
+        createdAt: 2,
         content: [{ type: 'tool_result', toolUseId: 'call-1', content: 'file body' }]
       },
       {
         id: 'answer',
         role: 'assistant',
+        createdAt: 3,
         content: [{ type: 'text', text: 'It exports one function' }]
       },
       messages[1]
