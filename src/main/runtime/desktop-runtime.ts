@@ -51,6 +51,8 @@ import { createSkillRuntimeTool } from './skill-runtime-tool'
 import { createCronRuntimeTools } from './cron-runtime-tools'
 import { createMemoryRuntimeTools } from './memory-runtime-tools'
 import { createBrowserRuntimeTools } from './browser-runtime-tools'
+import { createDesktopAxRuntimeTools } from './desktop-ax-runtime-tools'
+import { resolveDesktopAxAllowedApps } from '../agent-desktop/allowed-apps'
 import { createVideoRuntimeTool } from './video-runtime-tool'
 import { createImageRuntimeTool } from './image-runtime-tool'
 import { createTeamRuntimeTools } from './team-runtime-tools'
@@ -106,6 +108,7 @@ import {
   desktopRuntimeDescriptorPath,
   publishDesktopRuntimeConnection
 } from '../../runtime/host/desktop-connection'
+import { LOCAL_PERSONAL_WORKSPACE_ID } from '../../shared/runtime/model-source'
 
 const protocols = new Set<ModelProtocol>([
   'openai-chat',
@@ -348,6 +351,11 @@ export class DesktopRuntime {
                     ])
                   })()
                 : Promise.resolve([])
+        // The application bound lives in the plugin configuration, which only Main may read here;
+        // a run that does not name an accessibility tool never pays for the lookup.
+        const desktopAxAllowedApps = run.toolNames?.some((name) => name.startsWith('desktop_ax_'))
+          ? await resolveDesktopAxAllowedApps(run.projectId)
+          : []
         return new ToolExecutor(
           withToolHooks(
             selectExplicitTools(
@@ -365,6 +373,9 @@ export class DesktopRuntime {
                 ...createCronRuntimeTools(),
                 ...createMemoryRuntimeTools(),
                 ...createBrowserRuntimeTools(),
+                ...createDesktopAxRuntimeTools({
+                  allowedApps: desktopAxAllowedApps
+                }),
                 createAskUserRuntimeTool(),
                 createWidgetRuntimeTool(),
                 ...(run.translationContext ? createTranslationRuntimeTools() : []),
@@ -422,7 +433,7 @@ export class DesktopRuntime {
         authorize,
         authority: {
           workspaceIds: async () =>
-            new Set(['local-personal', ...(await loadOfflineWorkspaceIds())])
+            new Set([LOCAL_PERSONAL_WORKSPACE_ID, ...(await loadOfflineWorkspaceIds())])
         }
       })
       const client = new RuntimeClient()
@@ -432,25 +443,29 @@ export class DesktopRuntime {
           { endpoint: service.endpoint, token: service.token },
           this.connectionDescriptorPath
         )
+        // Revocation compares a workspace against the set that is still permitted, and
+        // the offline directory never names the local personal workspace. Omitting it
+        // here would revoke every personal run's push the first time the directory is read.
+        const revokeUnavailable = (ids: ReadonlySet<string>): void => {
+          service.revokeUnavailableWorkspaces(new Set([LOCAL_PERSONAL_WORKSPACE_ID, ...ids]))
+        }
         const expiryMonitor = new OfflineWorkspaceExpiryMonitor(
           loadOfflineWorkspaceExpiresAt,
           loadOfflineWorkspaceIds,
-          service.revokeUnavailableWorkspaces
+          revokeUnavailable
         )
         this.expiryMonitor = expiryMonitor
         this.unsubscribeAccountEvents = [
           onRemoteAccountCleared(() => {
             expiryMonitor.stop()
-            service.revokeUnavailableWorkspaces(new Set())
+            revokeUnavailable(new Set())
           }),
           onWorkspaceDirectoryChanged((ids) => {
-            service.revokeUnavailableWorkspaces(ids)
+            revokeUnavailable(ids)
             expiryMonitor.refreshSchedule()
           })
         ]
-        service.revokeUnavailableWorkspaces(
-          await loadOfflineWorkspaceIds().catch(() => new Set<string>())
-        )
+        revokeUnavailable(await loadOfflineWorkspaceIds().catch(() => new Set<string>()))
         expiryMonitor.refreshSchedule()
         this.service = service
         this.client = client

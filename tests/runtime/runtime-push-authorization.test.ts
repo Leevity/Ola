@@ -96,6 +96,7 @@ describe('run subscription authorization', () => {
     const server = new RuntimeServer(scheduler, TOKEN, { workspaceIds: async () => allowed })
     const client = new RuntimeClient()
     const pushed: RunEvent[] = []
+    const resyncReasons: string[] = []
     try {
       await scheduler.initialize()
       await server.listen(endpoint)
@@ -107,7 +108,7 @@ describe('run subscription authorization', () => {
         runId: 'revoked',
         afterSeq: 0,
         onEvent: (event) => pushed.push(event),
-        onResync: () => undefined
+        onResync: (reason) => resyncReasons.push(reason)
       })
       await emit!('message.delta', { text: 'before' })
       await expect.poll(async () => pushed.length, { timeout: 5000 }).toBeGreaterThan(0)
@@ -118,6 +119,9 @@ describe('run subscription authorization', () => {
       await emit!('message.delta', { text: 'after' }).catch(() => undefined)
       await new Promise((resolve) => setTimeout(resolve, 100))
       expect(pushed).toHaveLength(beforeRevoke)
+      // The resync frame is what releases the consumer; dropping the subscription silently
+      // would leave a waiting run stream stalled on a workspace that can never push again.
+      expect(resyncReasons).toEqual(['WORKSPACE_REVOKED'])
       // The socket is still usable for a permitted workspace.
       allowed.add('local-personal')
       await client.request('ping', {})

@@ -463,10 +463,11 @@ export class RuntimeServer {
           allowed,
           (await this.authority.externalBusy?.()) ?? false
         )
-        // A socket keeps only subscriptions it is still allowed to observe.
+        // A socket keeps only subscriptions it is still allowed to observe. The resync frame is
+        // what releases a waiting subscriber; a silent removal would stall its stream forever.
         for (const subscription of [...connection.subscriptions.values()]) {
           if (!allowed.has(subscription.workspaceId))
-            this.removeSubscription(connection, subscription.subscriptionId)
+            this.dropSubscription(connection, subscription, 'WORKSPACE_REVOKED')
         }
         return { ok: true }
       default:
@@ -488,7 +489,7 @@ export class RuntimeServer {
     for (const connection of this.connections.values()) {
       for (const subscription of [...connection.subscriptions.values()]) {
         if (!availableIds.has(subscription.workspaceId))
-          this.removeSubscription(connection, subscription.subscriptionId)
+          this.dropSubscription(connection, subscription, 'WORKSPACE_REVOKED')
       }
     }
   }

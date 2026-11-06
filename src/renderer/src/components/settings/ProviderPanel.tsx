@@ -4507,7 +4507,11 @@ export function ProviderPanel(): React.JSX.Element {
         </div>
       )}
       <ProviderHealthPanel />
-      <div className="provider-settings-panels flex min-h-0 flex-1 overflow-hidden">
+      <div
+        className="provider-settings-panels flex min-h-0 flex-1 overflow-hidden"
+        // Credentials are unreadable, so any edit here would drop the stored secrets.
+        inert={credentialVaultUnavailable}
+      >
         {/* Left: Provider list */}
         <div className="provider-settings-list flex min-h-0 shrink-0 flex-col bg-muted/10">
           {/* Search + Add */}

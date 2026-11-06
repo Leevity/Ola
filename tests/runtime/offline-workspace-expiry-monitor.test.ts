@@ -25,6 +25,33 @@ it('revokes expired team access without waiting for another UI request', async (
   }
 })
 
+it('revokes an expired directory once instead of re-reading it on a zero-delay timer', async () => {
+  vi.useFakeTimers()
+  vi.setSystemTime(1_000)
+  let reads = 0
+  const revoked: string[][] = []
+  const monitor = new OfflineWorkspaceExpiryMonitor(
+    async () => 1_100,
+    async () => {
+      reads++
+      return new Set(['team-a'])
+    },
+    (ids) => revoked.push([...ids])
+  )
+  try {
+    monitor.refreshSchedule()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(revoked).toEqual([['team-a']])
+    // The cached directory stays expired, so re-arming on the same timestamp would fire
+    // immediately and re-read (a network fetch plus a revocation) on every turn.
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(revoked).toEqual([['team-a']])
+    expect(reads).toBe(1)
+  } finally {
+    monitor.stop()
+  }
+})
+
 it('rearms when an online refresh replaces the expiring directory', async () => {
   vi.useFakeTimers()
   vi.setSystemTime(1_000)

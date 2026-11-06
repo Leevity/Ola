@@ -346,7 +346,11 @@ export function RuntimeStatusPanel({
   React.useEffect(() => {
     const parent = panelRootRef.current?.parentElement
     if (!parent) return
-    const update = (): void => setCompactLayout(parent.clientWidth < 640)
+    const update = (): void => {
+      // A short pane has no spare room below the header: the floating overlay would sit on top
+      // of the composer and the pending-queue strip, so dock the panel in flow instead.
+      setCompactLayout(parent.clientWidth < 640 || parent.clientHeight < 640)
+    }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(parent)

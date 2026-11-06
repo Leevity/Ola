@@ -4,6 +4,7 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647
 export class OfflineWorkspaceExpiryMonitor {
   private timer: ReturnType<typeof setTimeout> | null = null
   private revision = 0
+  private expiredAt: number | null = null
 
   constructor(
     private readonly readExpiresAt: () => Promise<number | null>,
@@ -28,6 +29,9 @@ export class OfflineWorkspaceExpiryMonitor {
 
   private arm(expiresAt: number, revision: number): void {
     if (revision !== this.revision) return
+    // An expired directory keeps reporting the same timestamp, so re-arming on it would
+    // re-read the directory (and re-run revocation) as fast as a zero-delay timer allows.
+    if (this.expiredAt === expiresAt) return
     const delay = Math.min(MAX_TIMER_DELAY_MS, Math.max(0, expiresAt - Date.now()))
     this.timer = setTimeout(() => {
       this.timer = null
@@ -36,6 +40,7 @@ export class OfflineWorkspaceExpiryMonitor {
         this.arm(expiresAt, revision)
         return
       }
+      this.expiredAt = expiresAt
       void this.refreshIds().then(
         (ids) => {
           if (revision !== this.revision) return
