@@ -36,7 +36,14 @@ async function startApp(executable: string, expectedLog: string): Promise<void> 
   if (!dataRoot) throw new Error('Missing isolated Cron data root')
   const child = spawn(
     executable,
-    ['--no-sandbox', '--disable-gpu', `--user-data-dir=${join(dataRoot, 'electron-user-data')}`],
+    [
+      '--no-sandbox',
+      '--disable-gpu',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling',
+      `--user-data-dir=${join(dataRoot, 'electron-user-data')}`
+    ],
     {
       cwd: dirname(executable),
       env: { ...process.env, OLA_E2E_DATA_ROOT: dataRoot },
@@ -80,8 +87,11 @@ describe('packaged Electron Cron recovery', () => {
     async () => {
       const executable = resolve(packagedExecutable!)
       expect(existsSync(executable)).toBe(true)
-      const archive = join(dirname(executable), 'resources', 'app.asar')
-      expect(asar.extractFile(archive, 'out\\main\\index.js').toString()).toContain(
+      // macOS keeps the app payload next to Contents/MacOS, Windows next to the executable.
+      const appDir =
+        process.platform === 'darwin' ? join(dirname(executable), '..') : dirname(executable)
+      const archive = join(appDir, 'resources', 'app.asar')
+      expect(asar.extractFile(archive, ['out', 'main', 'index.js'].join(sep)).toString()).toContain(
         'OLA_E2E_DATA_ROOT'
       )
       dataRoot = mkdtempSync(join(tmpdir(), 'ola-cron-electron-'))

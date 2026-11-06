@@ -149,6 +149,9 @@ async function startApp(): Promise<void> {
       ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
       '--no-sandbox',
       '--disable-gpu',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling',
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${join(root, 'electron-user-data')}`
     ],
@@ -313,10 +316,14 @@ describe.skipIf(!enabled)('settings save failure in Electron', () => {
         join(root, 'electron-user-data', 'mesh-node-identity.bin')
       )
       expect(encryptedIdentity.toString()).not.toContain(meshPublicKeys[0])
-      const localState = JSON.parse(
-        await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
-      ) as { os_crypt?: { encrypted_key?: unknown } }
-      expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+      // Only Windows keeps the safeStorage key in sessionData/Local State; macOS and
+      // Linux resolve it through the OS keychain, so there is nothing to read here.
+      if (process.platform === 'win32') {
+        const localState = JSON.parse(
+          await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
+        ) as { os_crypt?: { encrypted_key?: unknown } }
+        expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+      }
       await stopApp(false)
       expect(forcedStopCount).toBe(1)
       await startApp()
@@ -360,10 +367,14 @@ describe.skipIf(!enabled)('settings save failure in Electron', () => {
       expect(state).toBeTruthy()
       const pending = await readFile(join(root, 'electron-user-data', 'remote-oauth-pending.bin'))
       expect(pending.toString()).not.toContain(state)
-      const localState = JSON.parse(
-        await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
-      ) as { os_crypt?: { encrypted_key?: unknown } }
-      expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+      // Only Windows keeps the safeStorage key in sessionData/Local State; macOS and
+      // Linux resolve it through the OS keychain, so there is nothing to read here.
+      if (process.platform === 'win32') {
+        const localState = JSON.parse(
+          await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
+        ) as { os_crypt?: { encrypted_key?: unknown } }
+        expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+      }
       await stopApp(false)
       expect(forcedStopCount).toBe(1)
       await startApp()
@@ -491,10 +502,14 @@ app.whenReady().then(() => {
         join(root, 'electron-user-data', 'credentials', 'vault.bin')
       )
       expect(vaultBytes.toString()).not.toContain('ola-e2e-credential-secret')
-      const localState = JSON.parse(
-        await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
-      ) as { os_crypt?: { encrypted_key?: unknown } }
-      expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+      // Only Windows keeps the safeStorage key in sessionData/Local State; macOS and
+      // Linux resolve it through the OS keychain, so there is nothing to read here.
+      if (process.platform === 'win32') {
+        const localState = JSON.parse(
+          await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
+        ) as { os_crypt?: { encrypted_key?: unknown } }
+        expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+      }
       await stopApp(false)
       expect(forcedStopCount).toBe(1)
       await startApp()
@@ -542,12 +557,15 @@ app.whenReady().then(() => {
       const ids = [
         'settings-auto-update', 'settings-project-directory-custom',
         'settings-project-directory', 'settings-font-family', 'settings-font-size',
-        'settings-animations', 'settings-toolbar-collapsed', 'settings-runs-collapsed',
+        'settings-motion-level', 'settings-toolbar-collapsed', 'settings-runs-collapsed',
         'settings-tool-density', 'settings-language'
       ]
       const unnamed = ids.filter((id) => {
         const control = document.getElementById(id)
-        return !control || !(control.labels?.[0]?.textContent?.trim() || control.getAttribute('aria-label'))
+        if (!control) return true
+        if (control.labels?.[0]?.textContent?.trim() || control.getAttribute('aria-label')) return false
+        const labelledBy = control.getAttribute('aria-labelledby')
+        return !labelledBy || !document.getElementById(labelledBy)?.textContent?.trim()
       })
       const describedIds = ids.filter((id) => id !== 'settings-project-directory')
       const undescribed = describedIds.filter((id) => {
@@ -914,10 +932,14 @@ app.whenReady().then(() => {
     expect(savedProviderConfig).toContain(importedEmail)
     expect(savedProviderConfig).not.toContain('ola-e2e-placeholder-token')
     expect((await stat(join(root, 'providers', 'secrets.bin'))).size).toBeGreaterThan(0)
-    const localState = JSON.parse(
-      await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
-    ) as { os_crypt?: { encrypted_key?: unknown } }
-    expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+    // Only Windows keeps the safeStorage key in sessionData/Local State; macOS and
+    // Linux resolve it through the OS keychain, so there is nothing to read here.
+    if (process.platform === 'win32') {
+      const localState = JSON.parse(
+        await readFile(join(root, 'electron-user-data', 'session-data', 'Local State'), 'utf8')
+      ) as { os_crypt?: { encrypted_key?: unknown } }
+      expect(typeof localState.os_crypt?.encrypted_key).toBe('string')
+    }
     const vaultDigestBeforeRestart = createHash('sha256')
       .update(await readFile(join(root, 'providers', 'secrets.bin')))
       .digest('hex')
@@ -934,9 +956,14 @@ app.whenReady().then(() => {
       expect(state).toBe(true)
       return
     }
-    const localStateBeforeRestart = (
-      await stat(join(root, 'electron-user-data', 'session-data', 'Local State'))
-    ).size
+    // Diagnostic only, and Chromium may not have created the file at all on platforms
+    // that resolve the encryption key from the OS keychain.
+    const localStateSizeBeforeRestart = await stat(
+      join(root, 'electron-user-data', 'session-data', 'Local State')
+    ).then(
+      (entry) => entry.size,
+      () => -1
+    )
     await evaluate(`(() => {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
@@ -984,7 +1011,15 @@ app.whenReady().then(() => {
     expect(systemForm.proxyLabel).toBe('系统代理')
     expect(systemForm.endpointDescription).toBe('settings-shell-endpoint-description')
     expect(systemForm.proxyDescription).toBe('settings-system-proxy-description')
-    expect(systemForm.platformBadge).toContain('Windows')
+    const expectedPlatform =
+      process.platform === 'win32'
+        ? 'Windows'
+        : process.platform === 'darwin'
+          ? 'macOS'
+          : process.platform === 'linux'
+            ? 'Linux'
+            : process.platform
+    expect(systemForm.platformBadge).toContain(expectedPlatform)
     await evaluate(`(() => {
       const textarea = document.getElementById('settings-shell-environment')
       const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set
@@ -1095,21 +1130,34 @@ app.whenReady().then(() => {
       overviewVisible: boolean
       panelHeight: number
       pluginOverflowY: string
+      panelTop: number
+      contentHeight: number
+      viewportHeight: number
     }>(`(() => {
       const toggle = document.getElementById('capability-center-overview-toggle')
       const overview = document.getElementById('capability-center-overview')
       const panel = document.getElementById('capability-panel-builtin')
+      const content = document.querySelector('.app-plugin-content')
       return {
         toggleVisible: Boolean(toggle?.getClientRects().length),
         overviewVisible: Boolean(overview?.getClientRects().length),
         panelHeight: panel?.getBoundingClientRect().height ?? 0,
-        pluginOverflowY: getComputedStyle(document.querySelector('.app-plugin-content')).overflowY
+        pluginOverflowY: getComputedStyle(content).overflowY,
+        panelTop: Math.round(panel?.getBoundingClientRect().top ?? -1),
+        contentHeight: Math.round(content?.getBoundingClientRect().height ?? 0),
+        viewportHeight: window.innerHeight
       }
     })()`)
+    if (screenshotDir) {
+      await captureScreenshot(join(screenshotDir, '20-capability-compact.png'))
+    }
     if (!compactCapabilityLayout) throw new Error('Capability layout metrics were unavailable')
     expect(compactCapabilityLayout.toggleVisible).toBe(true)
     expect(compactCapabilityLayout.overviewVisible).toBe(false)
-    expect(compactCapabilityLayout.panelHeight).toBeGreaterThan(200)
+    expect(
+      compactCapabilityLayout.panelHeight,
+      JSON.stringify(compactCapabilityLayout)
+    ).toBeGreaterThan(200)
     expect(compactCapabilityLayout.pluginOverflowY).toBe('visible')
     await evaluate(`document.getElementById('capability-center-overview-toggle')?.click()`)
     await waitFor<boolean>(
@@ -1307,7 +1355,7 @@ app.whenReady().then(() => {
         vaultBytesAfterRestart,
         vaultChangedAfterRestart: vaultDigestAfterRestart !== vaultDigestBeforeRestart,
         vaultHeader,
-        localStateBeforeRestart,
+        localStateSizeBeforeRestart,
         logs: logs.slice(-2500)
       })
     ).toBe(1)

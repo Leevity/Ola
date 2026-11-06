@@ -189,6 +189,9 @@ describe.skipIf(!enabled)('session deletion Electron synchronization', () => {
         ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
         '--no-sandbox',
         '--disable-gpu',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${join(root, 'electron-user-data')}`
       ],

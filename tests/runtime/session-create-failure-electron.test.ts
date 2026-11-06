@@ -2,6 +2,7 @@ import { once } from 'node:events'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
+import { createServer, type Server } from 'node:http'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
@@ -27,6 +28,7 @@ type DevToolsSocket = {
 let root: string | undefined
 let child: ChildProcess | undefined
 let socket: DevToolsSocket | undefined
+let modelServer: Server | undefined
 let logs = ''
 
 async function call(
@@ -117,7 +119,63 @@ async function connect(port: number): Promise<void> {
   throw new Error(`Timed out waiting for Electron primary page; logs=${logs.slice(-3000)}`)
 }
 
+async function seedFixtureProvider(): Promise<void> {
+  if (!root) throw new Error('Missing isolated E2E root')
+  modelServer = createServer((request, response) => {
+    if (new URL(request.url ?? '/', 'http://127.0.0.1').pathname !== '/v1/chat/completions') {
+      response.writeHead(404).end()
+      return
+    }
+    request.resume()
+    request.on('end', () => {
+      response.writeHead(200, { 'content-type': 'text/event-stream' })
+      response.end(
+        'data: {"choices":[{"delta":{"content":"E2E committed session response."}}]}\n\ndata: [DONE]\n\n'
+      )
+    })
+  })
+  await new Promise<void>((resolveListen) => modelServer!.listen(0, '127.0.0.1', resolveListen))
+  const address = modelServer.address()
+  if (!address || typeof address === 'string') throw new Error('Fixture provider address')
+  await writeFile(
+    join(root, 'config.json'),
+    JSON.stringify({
+      'ola-providers': {
+        state: {
+          providers: [
+            {
+              id: 'e2e-create-provider',
+              name: 'E2E Create Provider',
+              type: 'openai-chat',
+              apiKey: '',
+              baseUrl: `http://127.0.0.1:${address.port}/v1`,
+              enabled: true,
+              requiresApiKey: false,
+              createdAt: Date.now(),
+              models: [
+                {
+                  id: 'e2e-create-model',
+                  name: 'E2E Create Model',
+                  enabled: true,
+                  category: 'chat'
+                }
+              ]
+            }
+          ],
+          activeProviderId: 'e2e-create-provider',
+          activeModelId: 'e2e-create-model'
+        },
+        version: 0
+      }
+    }),
+    'utf8'
+  )
+}
+
 afterEach(async () => {
+  modelServer?.closeAllConnections()
+  modelServer?.close()
+  modelServer = undefined
   socket?.close()
   socket = undefined
   if (child && child.exitCode === null) {
@@ -170,6 +228,9 @@ describe.skipIf(!enabled)('session creation failure in Electron', () => {
         ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
         '--no-sandbox',
         '--disable-gpu',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${join(root, 'electron-user-data')}`
       ],
@@ -248,6 +309,9 @@ describe.skipIf(!enabled)('session creation failure in Electron', () => {
       }),
       'utf8'
     )
+    // The composer blocks sending without a usable provider, so the run that commits
+    // the session needs a local fixture endpoint rather than a real API key.
+    await seedFixtureProvider()
     const port = 12_000 + Math.floor(Math.random() * 35_000)
     const packagedExe = process.env.OLA_PACKAGED_EXE
     child = spawn(
@@ -256,6 +320,9 @@ describe.skipIf(!enabled)('session creation failure in Electron', () => {
         ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
         '--no-sandbox',
         '--disable-gpu',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${join(root, 'electron-user-data')}`
       ],

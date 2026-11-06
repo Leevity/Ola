@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { DatabaseSync } from 'node:sqlite'
 import { createServer, type Server } from 'node:http'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -113,10 +113,11 @@ function devToolsCall(
 async function waitForPageText(
   ws: DevToolsWebSocket,
   predicate: (value: string) => boolean,
-  description: string
+  description: string,
+  maxAttempts = 40
 ): Promise<string> {
   let lastText = ''
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const result = await devToolsCall(ws, 'Runtime.evaluate', {
       expression: 'document.body?.innerText ?? ""',
       returnByValue: true
@@ -126,11 +127,21 @@ async function waitForPageText(
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
   const diagnostics = await devToolsCall(ws, 'Runtime.evaluate', {
-    expression: `({url:location.href,title:document.title,readyState:document.readyState,root:document.querySelector('#root')?.innerHTML.slice(0,500)})`,
+    expression: `(() => {
+      const bubbles = [...document.querySelectorAll('[class~="group/user"], [class~="group/assistant"]')];
+      return {
+        url: location.href,
+        title: document.title,
+        readyState: document.readyState,
+        bubbleCount: bubbles.length,
+        lastBubbles: bubbles.slice(-3).map((node) => node.textContent?.trim().slice(0, 260) ?? ''),
+        bodyTail: (document.body?.innerText ?? '').slice(-900),
+      };
+    })()`,
     returnByValue: true
   })
   throw new Error(
-    `Timed out waiting for ${description}. Renderer text: ${lastText.slice(0, 1200)}. Page: ${JSON.stringify(diagnostics.result?.value)}. Electron logs: ${childLogs.slice(-8000)}`
+    `Timed out waiting for ${description}. Renderer text: ${lastText.slice(0, 1200)}. Page: ${JSON.stringify(diagnostics.result?.value)}. Electron logs: ${await runtimeLogTail()}`
   )
 }
 
@@ -138,10 +149,11 @@ async function waitForExpression<T>(
   ws: DevToolsWebSocket,
   expression: string,
   predicate: (value: T | undefined) => boolean,
-  description: string
+  description: string,
+  maxAttempts = 40
 ): Promise<T> {
   let value: T | undefined
-  for (let attempt = 0; attempt < 40; attempt += 1) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const result = await devToolsCall(ws, 'Runtime.evaluate', {
       expression,
       returnByValue: true,
@@ -160,6 +172,23 @@ async function waitForExpression<T>(
   )
 }
 
+// The raw child log is mostly multi-line renderer console dumps, so failures report the
+// main-process lines that show what the runtime was actually doing.
+async function runtimeLogTail(): Promise<string> {
+  const lines = childLogs.split('\n')
+  const labelled = lines.filter((line) => /^\s*\[[A-Za-z][^\]]*\]/.test(line))
+  let appLog = ''
+  if (root) {
+    const logDir = join(root, 'logs')
+    const names = await readdir(logDir).catch(() => [] as string[])
+    const newest = names.sort().at(-1)
+    if (newest) {
+      appLog = (await readFile(join(logDir, newest), 'utf8').catch(() => '')).slice(-6000)
+    }
+  }
+  return `\n--- stdout ---\n${lines.length} lines / ${labelled.length} labelled\n${(labelled.length ? labelled : lines).slice(-80).join('\n')}\n--- app log ---\n${appLog}`
+}
+
 async function captureScreenshot(ws: DevToolsWebSocket, name: string): Promise<void> {
   const directory = process.env.OLA_E2E_SCREENSHOT_DIR
   if (!directory) return
@@ -171,6 +200,23 @@ async function captureScreenshot(ws: DevToolsWebSocket, name: string): Promise<v
   const data = (result as { data?: string }).data
   if (!data) throw new Error(`Screenshot capture returned no image data for ${name}`)
   await writeFile(join(directory, name), Buffer.from(data, 'base64'))
+}
+
+// Renderer storage is only flushed once the previous Electron process is gone, so a restart
+// step must wait for the real exit instead of racing it before reusing the user-data dir.
+async function stopChild(processToStop: ChildProcess): Promise<void> {
+  if (processToStop.exitCode !== null || !processToStop.kill('SIGTERM')) return
+  const exited = await Promise.race([
+    once(processToStop, 'exit').then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 15_000))
+  ])
+  if (!exited) {
+    processToStop.kill('SIGKILL')
+    await Promise.race([
+      once(processToStop, 'exit'),
+      new Promise((resolve) => setTimeout(resolve, 5_000))
+    ])
+  }
 }
 
 afterEach(async () => {
@@ -194,10 +240,7 @@ afterEach(async () => {
   testTerminalIds.length = 0
   socket?.close()
   socket = undefined
-  if (child && !child.killed) {
-    child.kill('SIGTERM')
-    await Promise.race([once(child, 'exit'), new Promise((resolve) => setTimeout(resolve, 2_000))])
-  }
+  if (child) await stopChild(child)
   child = undefined
   childLogs = ''
   if (accountFixtureServer) {
@@ -774,6 +817,9 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
         ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
         '--no-sandbox',
         '--disable-gpu',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
         `--inspect=127.0.0.1:${mainInspectorPort}`,
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${join(root, 'electron-user-data')}`
@@ -892,10 +938,38 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       returnByValue: true
     })
     expect(prepareProjectReview.result?.value).toBe(true)
-    await waitForExpression<boolean>(
+    await waitForExpression<{
+      dialog: { present: boolean; state: string | null; animation: string; play: string }
+      prompt: string
+      motion: Record<string, string | undefined>
+      overlay: number
+      bodyPointerEvents: string
+      visibility: string
+    }>(
       socket,
-      `(() => { const editor = document.querySelector('[role="textbox"][contenteditable="true"]'); const textArea = [...document.querySelectorAll('textarea')].find((field) => field.value.includes(${JSON.stringify(projectRoot)})); const prompt = textArea?.value ?? editor?.textContent ?? ''; return !document.querySelector('[data-testid="first-success-template-dialog"]') && prompt.includes(${JSON.stringify(projectRoot)}) && (prompt.includes('只读') || prompt.includes('READ-ONLY')) })()`,
-      Boolean,
+      `(() => {
+        const dialog = document.querySelector('[data-testid="first-success-template-dialog"]')
+        const editor = document.querySelector('[role="textbox"][contenteditable="true"]')
+        const textArea = [...document.querySelectorAll('textarea')].find((field) => field.value.includes(${JSON.stringify(projectRoot)}))
+        const styles = dialog ? getComputedStyle(dialog) : null
+        return {
+          dialog: {
+            present: Boolean(dialog),
+            state: dialog?.getAttribute('data-state') ?? null,
+            animation: styles?.animationName ?? '',
+            play: styles?.animationPlayState ?? ''
+          },
+          prompt: textArea?.value ?? editor?.textContent ?? '',
+          motion: { ...document.documentElement.dataset },
+          overlay: document.querySelectorAll('[data-slot="dialog-overlay"]').length,
+          bodyPointerEvents: getComputedStyle(document.body).pointerEvents,
+          visibility: document.visibilityState
+        }
+      })()`,
+      (value) =>
+        !value?.dialog.present &&
+        value?.prompt.includes(projectRoot) === true &&
+        (value.prompt.includes('只读') || value.prompt.includes('READ-ONLY')),
       'the prepared read-only project review prompt with the selected directory'
     )
     const reopenProjectSelector = await devToolsCall(socket, 'Runtime.evaluate', {
@@ -1072,10 +1146,34 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       (text) => text.includes('Runs and attention') || text.includes('运行与待处理'),
       'the unified runs center'
     )
+    // The list titles each row by its business task, so this run falls back to its
+    // source session title; the run id itself only appears in the details pane.
+    const selectArtifactRun = await waitForExpression<{
+      clicked: boolean
+      rowCount: number
+      rowTitles: string[]
+      hash: string
+    }>(
+      socket,
+      `(() => {
+        const rows = Array.from(document.querySelectorAll('button[class*="mb-2"][class*="w-full"][class*="rounded-lg"]'))
+        const row = rows.find((item) => item.textContent?.includes('Terminal dock e2e session'))
+        if (row) row.click()
+        return {
+          clicked: Boolean(row),
+          rowCount: rows.length,
+          rowTitles: rows.slice(0, 4).map((item) => item.textContent?.trim().slice(0, 40) ?? ''),
+          hash: location.hash
+        }
+      })()`,
+      (value) => value?.clicked === true,
+      'the persisted run row after the scoped IPC request'
+    )
+    expect(selectArtifactRun.rowCount).toBeGreaterThan(1)
     await waitForPageText(
       socket,
       (text) => text.includes('artifact-run-e2e'),
-      'the persisted run after the scoped IPC request'
+      'the selected run id in the details pane'
     )
     await waitForPageText(
       socket,
@@ -1133,10 +1231,18 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       returnByValue: true
     })
     expect(confirmCronDeliverySent.result?.value).toBe(true)
-    await waitForExpression<boolean>(
+    await waitForExpression<{
+      sentVisible: boolean
+      confirmVisible: boolean
+      detailHeadings: string[]
+    }>(
       socket,
-      `(document.body.innerText.includes('Sent') || document.body.innerText.includes('已送达')) && !Array.from(document.querySelectorAll('button')).some((button) => button.textContent?.includes('Confirm delivered') || button.textContent?.includes('确认已送达'))`,
-      Boolean,
+      `(() => ({
+        sentVisible: document.body.innerText.includes('Sent') || document.body.innerText.includes('已送达'),
+        confirmVisible: Array.from(document.querySelectorAll('button')).some((button) => button.textContent?.includes('Confirm delivered') || button.textContent?.includes('确认已送达')),
+        detailHeadings: Array.from(document.querySelectorAll('h2')).map((heading) => heading.textContent?.trim().slice(0, 40) ?? '')
+      }))()`,
+      (value) => Boolean(value?.sentVisible) && !value?.confirmVisible,
       'the reconciled Cron delivery status'
     )
     const reconciledCronDelivery = await devToolsCall(socket, 'Runtime.evaluate', {
@@ -1880,6 +1986,11 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       runtimePanelVisible: boolean
       runtimePanelBottom: number
       queueTop: number
+      panelOverlapsQueueBox: boolean
+      queueHitClear: boolean
+      actionHitClear: boolean
+      runtimePanelBox: { left: number; top: number; right: number; bottom: number }
+      queueBox: { left: number; top: number; right: number; bottom: number }
     }>(
       socket,
       `(() => {
@@ -1895,6 +2006,29 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
         const editorRect = editor?.getBoundingClientRect()
         const sendRect = sendButton?.getBoundingClientRect()
         const runtimePanelRect = runtimePanel?.getBoundingClientRect()
+        const box = (rect) => ({
+          left: Math.round(rect?.left ?? -1),
+          top: Math.round(rect?.top ?? -1),
+          right: Math.round(rect?.right ?? -1),
+          bottom: Math.round(rect?.bottom ?? -1)
+        })
+        const panelOverlapsQueueBox = Boolean(
+          queueRect &&
+            runtimePanelRect &&
+            queueRect.left < runtimePanelRect.right &&
+            queueRect.right > runtimePanelRect.left &&
+            queueRect.top < runtimePanelRect.bottom &&
+            queueRect.bottom > runtimePanelRect.top
+        )
+        const queueHit =
+          queueRect &&
+          document.elementFromPoint(
+            (queueRect.left + queueRect.right) / 2,
+            (queueRect.top + queueRect.bottom) / 2
+          )
+        const actionHit =
+          actionRect && document.elementFromPoint((actionRect.left + actionRect.right) / 2,
+            (actionRect.top + actionRect.bottom) / 2)
         return {
           viewportWidth: window.innerWidth,
           documentWidth: document.documentElement.scrollWidth,
@@ -1909,7 +2043,12 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
           sendButtonBottom: sendRect?.bottom ?? 0,
           runtimePanelVisible: Boolean(runtimePanelRect && runtimePanelRect.height > 0),
           runtimePanelBottom: runtimePanelRect?.bottom ?? 0,
-          queueTop: queueRect?.top ?? 0
+          queueTop: queueRect?.top ?? 0,
+          panelOverlapsQueueBox,
+          queueHitClear: Boolean(queue && queueHit && (queue === queueHit || queue.contains(queueHit))),
+          actionHitClear: Boolean(action && actionHit && (action === actionHit || action.contains(actionHit))),
+          runtimePanelBox: box(runtimePanelRect),
+          queueBox: box(queueRect)
         }
       })()`,
       (layout) =>
@@ -1920,7 +2059,9 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
           layout.composerEditorFullyVisible &&
           layout.sendButtonFullyVisible &&
           layout.runtimePanelVisible &&
-          layout.runtimePanelBottom <= layout.queueTop
+          layout.runtimePanelBottom <= layout.queueTop &&
+          layout.queueHitClear &&
+          layout.actionHitClear
         ),
       'the queue and recovery action to remain visible in a minimum-size window'
     )
@@ -1939,6 +2080,8 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       narrowQueueLayout.runtimePanelBottom,
       JSON.stringify(narrowQueueLayout)
     ).toBeLessThanOrEqual(narrowQueueLayout.queueTop)
+    expect(narrowQueueLayout.queueHitClear, JSON.stringify(narrowQueueLayout)).toBe(true)
+    expect(narrowQueueLayout.actionHitClear, JSON.stringify(narrowQueueLayout)).toBe(true)
     const screenshotDirectory = process.env.OLA_E2E_SCREENSHOT_DIR
     if (screenshotDirectory) {
       await writeFile(
@@ -2456,8 +2599,7 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
 
     socket.close()
     socket = undefined
-    child.kill('SIGTERM')
-    await Promise.race([once(child, 'exit'), new Promise((resolve) => setTimeout(resolve, 2_000))])
+    await stopChild(child)
     child = undefined
 
     repository = new BusinessRepository({ path: join(root, 'data.db'), mode: 'direct' })
@@ -2481,6 +2623,9 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
         ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
         '--no-sandbox',
         '--disable-gpu',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
         `--remote-debugging-port=${restartPort}`,
         `--user-data-dir=${join(root, 'electron-user-data')}`
       ],
@@ -2539,12 +2684,57 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
     ) as { board?: { dueDate?: string } }
     expect(restartedMetadata.board?.dueDate).toBe('2026-10-04')
     restartedDateDb.close()
-    await waitForExpression<boolean>(
-      socket,
-      `(() => { const tab = document.querySelector('[data-workspace-id="local-personal"]'); if (!tab) return false; if (tab.getAttribute('aria-selected') !== 'true') tab.click(); return tab.getAttribute('aria-selected') === 'true' })()`,
-      Boolean,
-      'the personal workspace to be active after restarting Electron'
-    )
+    // A timeout here has several causes (the strip needs two workspaces and the
+    // workspace surface), so report the observed state instead of a bare boolean.
+    let restartedWorkspaceTab: {
+      selected: boolean
+      tabIds: string[]
+      hasTitlebar: boolean
+      hash: string
+      account: { apiBaseUrl: string | null; signedIn: boolean }
+      storageKeys: string[]
+    }
+    try {
+      restartedWorkspaceTab = await waitForExpression<typeof restartedWorkspaceTab>(
+        socket,
+        `(() => {
+          const tabs = [...document.querySelectorAll('[data-workspace-id]')]
+          const tab = document.querySelector('[data-workspace-id="local-personal"]')
+          if (tab && tab.getAttribute('aria-selected') !== 'true') tab.click()
+          let account = null
+          try {
+            account = JSON.parse(localStorage.getItem('ola.remote.account') ?? 'null')
+          } catch {
+            account = null
+          }
+          return {
+            selected: tab?.getAttribute('aria-selected') === 'true',
+            tabIds: tabs.map((item) => item.getAttribute('data-workspace-id') ?? ''),
+            hasTitlebar: Boolean(document.querySelector('.workspace-titlebar-surface')),
+            hash: location.hash,
+            account: {
+              apiBaseUrl: account?.apiBaseUrl ?? null,
+              signedIn: Boolean(account?.account)
+            },
+            storageKeys: Object.keys(localStorage).slice(0, 12)
+          }
+        })()`,
+        (value) => value?.selected === true,
+        'the personal workspace to be active after restarting Electron',
+        // The restarted renderer reloads the account from disk before the strip can render.
+        120
+      )
+    } catch (error) {
+      // Distinguish "the directory was never persisted" from "it persisted but the
+      // restarted renderer cleared it" before the failure is reported.
+      const settings = await readFile(join(root, 'settings.json'), 'utf8').catch(() => '')
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)} SettingsHasTeam=${settings.includes(
+          'e2e-team'
+        )}`
+      )
+    }
+    expect(restartedWorkspaceTab.tabIds).toContain('e2e-team')
     await waitForPageText(
       socket,
       (text) => text.includes('Terminal dock e2e session'),
@@ -2833,7 +3023,8 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
     await waitForPageText(
       socket,
       (text) => text.includes('E2E report generated from supplied release notes.'),
-      'the real runtime response for the report scenario template'
+      'the real runtime response for the report scenario template',
+      120
     )
 
     const requestsBeforeDynamicSkill = modelRequestBodies.length
@@ -2967,6 +3158,15 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       Boolean,
       'the second code session response after removing the Skill and SubAgent'
     )
+    // The fixture seeded the extension state by writing the registry file, so it has no durable
+    // capability approval baseline and every tool call fails closed. Approve it over the product
+    // channel the settings UI uses before exercising an HTTP tool.
+    const approveExtensionCapabilities = await devToolsCall(socket, 'Runtime.evaluate', {
+      expression: `window.ola.ipc.invokeMessagePack('extension:capability-approve:msgpack', { id: 'e2e-view' })`,
+      awaitPromise: true,
+      returnByValue: true
+    })
+    expect(approveExtensionCapabilities.result?.value).toEqual({ success: true })
     const extensionArtifactsExpression = `window.ola.ipc.invokeMessagePack('execution-artifacts:list:msgpack', { workspaceId: 'local-personal', projectId: 'project-terminal-second-e2e', category: 'link' }).then((result) => result.artifacts)`
     for (const [marker, expectedUrl] of [
       ['E2E_EXTENSION_REPORT_OK', 'https://reports.example.test/e2e-ok'],
@@ -3100,8 +3300,7 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
 
     socket.close()
     socket = undefined
-    child.kill('SIGTERM')
-    await Promise.race([once(child, 'exit'), new Promise((resolve) => setTimeout(resolve, 2_000))])
+    await stopChild(child)
     child = undefined
 
     const artifactRestartPort = 11_000 + Math.floor(Math.random() * 40_000)
@@ -3111,6 +3310,9 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
         ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
         '--no-sandbox',
         '--disable-gpu',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-background-timer-throttling',
         `--remote-debugging-port=${artifactRestartPort}`,
         `--user-data-dir=${join(root, 'electron-user-data')}`
       ],

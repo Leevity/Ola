@@ -8,6 +8,7 @@ import { join, resolve, sep } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { BusinessRepository } from '../../src/runtime/storage/business-repository'
+import { SETTINGS_REGISTRY } from '../../src/renderer/src/components/settings/settings-registry'
 
 const require = createRequire(import.meta.url)
 const electronBinary = require('electron') as string
@@ -120,6 +121,9 @@ async function startApp(): Promise<void> {
       ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
       '--no-sandbox',
       '--disable-gpu',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-background-timer-throttling',
       `--remote-debugging-port=${port}`,
       `--user-data-dir=${join(root, 'electron-user-data')}`
     ],
@@ -522,6 +526,12 @@ describe.skipIf(!enabled)('top-level pages in Electron', () => {
           mobile: false
         })
         await new Promise((resolveWait) => setTimeout(resolveWait, 350))
+        // The sidebar collapse is React state driven by the window resize event, so the
+        // narrow columns only exist after it has been applied.
+        await waitFor(
+          '!document.querySelector(".workspace-sidebar-surface")',
+          'the workspace sidebar to auto-collapse at the narrow viewport'
+        )
         const narrowLayout = await evaluate<{
           viewport: { width: number; height: number }
           documentWidth: number
@@ -938,7 +948,8 @@ describe.skipIf(!enabled)('top-level pages in Electron', () => {
         /\{\s*id:\s*'([^']+)'[\s\S]*?section:\s*'([^']+)'[\s\S]*?\n\s*\}/g
       )
     ].map((match) => `#/settings/${match[2]}/${match[1]}`)
-    expect(settingsRoutes).toHaveLength(22)
+    const expectedRoutes = SETTINGS_REGISTRY.map((page) => `#/settings/${page.section}/${page.id}`)
+    expect(settingsRoutes, 'the route scrape must cover the whole registry').toEqual(expectedRoutes)
     for (const route of settingsRoutes) {
       await evaluate(`window.location.hash = ${JSON.stringify(route)}`)
       await waitFor(`location.hash === ${JSON.stringify(route)}`, `${route} navigation`)

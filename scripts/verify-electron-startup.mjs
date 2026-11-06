@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRequire } from 'node:module'
@@ -10,7 +11,85 @@ const WebSocket = require('ws')
 
 const root = process.cwd()
 const port = 9250 + Math.floor(Math.random() * 100)
-const userDataDir = mkdtempSync(join(tmpdir(), 'ola-electron-e2e-'))
+// The packaged harness already boots against a throwaway data root; the source
+// harness has to match, otherwise this check reads and writes the real ~/.ola.
+const dataRoot = mkdtempSync(join(tmpdir(), 'ola-electron-e2e-'))
+const userDataDir = join(dataRoot, 'electron-user-data')
+writeFileSync(join(dataRoot, '.ola-e2e-root'), 'OLA_ISOLATED_E2E_ROOT\n')
+// An isolated root is a brand-new install, so the app would stop on the
+// onboarding screen; mark it completed to enter the workspace like a real user.
+writeFileSync(
+  join(dataRoot, 'settings.json'),
+  JSON.stringify({
+    'ola-settings': {
+      state: { onboardingCompleted: true, onboardingCompletedAt: Date.now() },
+      version: 29
+    }
+  }),
+  'utf8'
+)
+// The translate step needs a real conversation, and a CI runner has no prior state,
+// so the harness brings its own OpenAI-compatible fixture and points a provider at it.
+const startupPrompt = 'E2E startup prompt: summarise this workspace in one line.'
+const startupReply = 'E2E startup reply: the workspace is ready.'
+const modelTranscript = []
+const modelServer = createServer((request, response) => {
+  const requestPath = new URL(request.url ?? '/', 'http://127.0.0.1').pathname
+  if (requestPath !== '/v1/chat/completions') {
+    response.writeHead(404).end()
+    return
+  }
+  let body = ''
+  request.setEncoding('utf8')
+  request.on('data', (chunk) => {
+    body += chunk
+  })
+  request.on('end', () => {
+    modelTranscript.push(body)
+    response.writeHead(200, { 'content-type': 'text/event-stream' })
+    response.end(
+      `data: {"choices":[{"delta":{"content":${JSON.stringify(startupReply)}}}]}\n\ndata: [DONE]\n\n`
+    )
+  })
+})
+await new Promise((resolveListen) => modelServer.listen(0, '127.0.0.1', resolveListen))
+const modelAddress = modelServer.address()
+if (!modelAddress || typeof modelAddress === 'string') {
+  throw new Error('The model fixture server did not bind to a port')
+}
+writeFileSync(
+  join(dataRoot, 'config.json'),
+  JSON.stringify({
+    'ola-providers': {
+      state: {
+        providers: [
+          {
+            id: 'e2e-startup-provider',
+            name: 'E2E Startup Provider',
+            type: 'openai-chat',
+            apiKey: '',
+            baseUrl: `http://127.0.0.1:${modelAddress.port}/v1`,
+            enabled: true,
+            requiresApiKey: false,
+            createdAt: Date.now(),
+            models: [
+              {
+                id: 'e2e-startup-model',
+                name: 'E2E Startup Model',
+                enabled: true,
+                category: 'chat'
+              }
+            ]
+          }
+        ],
+        activeProviderId: 'e2e-startup-provider',
+        activeModelId: 'e2e-startup-model'
+      },
+      version: 0
+    }
+  }),
+  'utf8'
+)
 const evidenceDir = join(root, 'docs/migrations/ts-runtime/evidence')
 const evidenceDate = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Shanghai',
@@ -32,10 +111,20 @@ const child = spawn(
     join(root, 'out/main/index.js'),
     '--no-sandbox',
     '--disable-gpu',
+    // The suite runner keeps the window in the background; without these switches
+    // Chromium throttles frames for an occluded window, so every enter/exit
+    // animation freezes and coordinate clicks land on a half-moved panel.
+    '--disable-backgrounding-occluded-windows',
+    '--disable-renderer-backgrounding',
+    '--disable-background-timer-throttling',
     `--remote-debugging-port=${port}`,
     `--user-data-dir=${userDataDir}`
   ],
-  { cwd: root, stdio: ['ignore', 'pipe', 'pipe'] }
+  {
+    cwd: root,
+    env: { ...process.env, OLA_E2E_DATA_ROOT: dataRoot },
+    stdio: ['ignore', 'pipe', 'pipe']
+  }
 )
 
 let stdout = ''
@@ -48,6 +137,19 @@ child.stderr.on('data', (chunk) => {
 })
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+async function pressEscape(ws) {
+  for (const type of ['keyDown', 'keyUp']) {
+    await cdp(ws, 'Input.dispatchKeyEvent', {
+      type,
+      key: 'Escape',
+      code: 'Escape',
+      windowsVirtualKeyCode: 27,
+      nativeVirtualKeyCode: 53
+    })
+  }
+  await sleep(250)
+}
 
 async function getTargets() {
   const response = await fetch(`http://127.0.0.1:${port}/json`)
@@ -100,6 +202,52 @@ async function clickAt(ws, x, y) {
     button: 'left',
     clickCount: 1
   })
+}
+
+async function waitFor(ws, expression, description, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs
+  let last
+  for (;;) {
+    const result = await cdp(ws, 'Runtime.evaluate', {
+      expression: `(() => { try { return Boolean(${expression}) } catch (error) { return String(error) } })()`,
+      returnByValue: true
+    })
+    last = result.result?.value
+    if (last === true) return last
+    if (Date.now() >= deadline) break
+    await sleep(250)
+  }
+  const page = await cdp(ws, 'Runtime.evaluate', {
+    expression: `({ hash: location.hash, title: document.title, tail: document.body?.innerText?.slice(-700) ?? '' })`,
+    returnByValue: true
+  })
+  throw new Error(
+    `Timed out waiting for ${description}: ${JSON.stringify({
+      last,
+      modelRequests: modelTranscript.length,
+      page: page.result?.value,
+      mainLogTail: `${stdout}${stderr}`.slice(-1500)
+    })}`
+  )
+}
+
+// Animation-driven UI (Framer Motion panels, Radix layers) only settles while the
+// renderer keeps painting. An occluded or background window stops requestAnimationFrame,
+// which leaves panels frozen mid-transition and swallows coordinate clicks, so record the
+// frame health before every click and keep it in the failure diagnostics.
+async function frameHealth(ws) {
+  const result = await cdp(ws, 'Runtime.evaluate', {
+    expression: `(async () => {
+      const tick = await Promise.race([
+        new Promise((resolve) => requestAnimationFrame(() => resolve('raf'))),
+        new Promise((resolve) => setTimeout(() => resolve('starved'), 800)),
+      ]);
+      return { visibility: document.visibilityState, hasFocus: document.hasFocus(), tick };
+    })()`,
+    returnByValue: true,
+    awaitPromise: true
+  })
+  return result.result?.value
 }
 
 function readSettingsRoutes() {
@@ -281,13 +429,24 @@ async function main() {
   await sleep(250)
   await cdp(ws, 'Runtime.evaluate', { expression: `window.location.hash = '#/'` })
   await sleep(350)
+  // A surface visited earlier in the flow can leave an overlay mounted, which then
+  // swallows the coordinate click below.
+  await pressEscape(ws)
 
   const accountTrigger = await cdp(ws, 'Runtime.evaluate', {
-    expression: `(() => { const trigger = Array.from(document.querySelectorAll('button')).find((item) => /未登录|Not signed in/i.test(item.textContent ?? '')); if (!trigger) return null; const rect = trigger.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } })()`,
+    expression: `(() => { const box = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } }; const chain = (el) => { const out = []; let node = el; for (let i = 0; i < 5 && node; i += 1) { out.push({ tag: node.tagName, label: node.getAttribute('aria-label') || node.id || node.className?.toString().slice(0, 70), pointerEvents: getComputedStyle(node).pointerEvents, z: getComputedStyle(node).zIndex, position: getComputedStyle(node).position }); node = node.parentElement } return out }; const trigger = Array.from(document.querySelectorAll('button')).find((item) => /未登录|Not signed in/i.test(item.textContent ?? '')); if (!trigger) return null; trigger.scrollIntoView({ block: 'center' }); const rect = trigger.getBoundingClientRect(); const x = rect.x + rect.width / 2; const y = rect.y + rect.height / 2; const hit = document.elementFromPoint(x, y); return { x, y, triggerBox: box(trigger), viewport: [innerWidth, innerHeight], hit: hit === trigger || trigger.contains(hit) ? 'trigger' : (hit?.getAttribute('aria-label') || hit?.id || hit?.className?.toString().slice(0, 80) || 'none'), hitBox: hit && hit !== trigger ? box(hit) : undefined, hitChain: hit ? chain(hit) : [], sidebarBox: box(document.querySelector('[class*="sidebar" i]') ?? document.body) } })()`,
     returnByValue: true
   })
   const accountTriggerPosition = accountTrigger.result?.value
   if (!accountTriggerPosition) throw new Error('Could not find the account menu trigger')
+  if (accountTriggerPosition.hit !== 'trigger') {
+    throw new Error(
+      `Account menu trigger is not clickable: ${JSON.stringify({
+        frameHealth: await frameHealth(ws),
+        trigger: accountTriggerPosition
+      })}`
+    )
+  }
   await clickAt(ws, accountTriggerPosition.x, accountTriggerPosition.y)
   await sleep(150)
   const openAccountAuth = await cdp(ws, 'Runtime.evaluate', {
@@ -324,21 +483,60 @@ async function main() {
   await sleep(350)
 
   const openConversation = await cdp(ws, 'Runtime.evaluate', {
-    expression: `(() => { const session = Array.from(document.querySelectorAll('button')).find((item) => item.classList.contains('group/session') && /New Conversation/.test(item.textContent ?? '')); if (!session) return false; session.click(); return true })()`,
+    expression: `(() => { const editor = document.querySelector('[role="textbox"][contenteditable="true"]'); if (!editor) return false; editor.focus(); return document.activeElement === editor })()`,
     returnByValue: true
   })
   if (openConversation.result?.value !== true) {
-    throw new Error('Could not open an existing conversation for the translate flow')
+    throw new Error(
+      'The home composer is not editable, so the translate flow cannot create its own conversation'
+    )
   }
-  await sleep(600)
-  // The message toolbar only renders inside the scroll viewport; without this the
-  // button sits at a negative y and the synthesized click lands on nothing.
-  const userMessageMenuPosition = await cdp(ws, 'Runtime.evaluate', {
-    expression: `(() => { const messages = Array.from(document.querySelectorAll('[class~="group/user"]')); const message = messages.find((item) => item.textContent?.trim()); const button = message?.querySelector('button[aria-label="显示更多"], button[aria-label="Show more"]'); if (!button) return null; button.scrollIntoView({ block: 'center' }); const rect = button.getBoundingClientRect(); return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 } })()`,
+  await cdp(ws, 'Input.insertText', { text: startupPrompt })
+  await waitFor(
+    ws,
+    `(() => { const button = document.querySelector('[data-tour="composer"] .composer-send') || document.querySelector('.composer-send'); return button && button.disabled === false })()`,
+    'the composer send button to enable',
+    10_000
+  )
+  const sendStartupPrompt = await cdp(ws, 'Runtime.evaluate', {
+    expression: `(() => { const button = document.querySelector('[data-tour="composer"] .composer-send') || document.querySelector('.composer-send'); if (!button || button.disabled) return false; button.click(); return true })()`,
     returnByValue: true
   })
-  const userMessageMenuPoint = userMessageMenuPosition.result?.value
-  if (!userMessageMenuPoint) {
+  if (sendStartupPrompt.result?.value !== true) {
+    throw new Error('Could not send the startup prompt through the composer')
+  }
+  // A template-backed prompt can ask to switch the execution mode before running.
+  await cdp(ws, 'Runtime.evaluate', {
+    expression: `(() => { const button = [...document.querySelectorAll('button')].find((item) => item.textContent?.includes('切换并继续') || item.textContent?.includes('Switch and continue')); button?.click(); return Boolean(button) })()`,
+    returnByValue: true
+  })
+  await waitFor(
+    ws,
+    `document.body?.innerText?.includes(${JSON.stringify(startupPrompt)})`,
+    'the startup prompt to render as a user message'
+  )
+  await waitFor(
+    ws,
+    `document.body?.innerText?.includes(${JSON.stringify(startupReply)})`,
+    'the fixture model response to render',
+    45_000
+  )
+  if (modelTranscript.length === 0) {
+    throw new Error('The fixture provider never received a model request for the startup prompt')
+  }
+  await sleep(600)
+  // The runtime status panel opens by default and floats over the top-right of the
+  // conversation, which is exactly where the hover-revealed message toolbar lives.
+  // Escape is the supported close gesture, so the flow below gets a deterministic UI.
+  await pressEscape(ws)
+  // The message toolbar only renders inside the scroll viewport; without this the
+  // button sits at a negative y and the synthesized click lands on nothing.
+  const moreButtonProbe = `(() => { const messages = Array.from(document.querySelectorAll('[class~="group/user"]')); const message = messages.find((item) => item.textContent?.trim()); const button = message?.querySelector('button[aria-label="显示更多"], button[aria-label="Show more"]'); if (!button) return null; const rect = button.getBoundingClientRect(); const x = rect.x + rect.width / 2; const y = rect.y + rect.height / 2; const hit = document.elementFromPoint(x, y); const box = (el) => { const r = el.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) } }; return { x, y, buttonBox: box(button), buttonStyle: { position: getComputedStyle(button).position, zIndex: getComputedStyle(button).zIndex, opacity: getComputedStyle(button.closest('div[class*="opacity-0"]') ?? button).opacity }, scrollable: (message?.closest('[class*="overflow-y"]')?.scrollTop ?? -1).toFixed(0), hit: hit === button || button.contains(hit) ? 'trigger' : (hit?.getAttribute('aria-label') || hit?.className?.toString().slice(0, 60) || 'none'), hitBox: hit && hit !== button ? box(hit) : undefined, hitTag: hit?.tagName, hitParent: hit?.parentElement?.className?.toString().slice(0, 60) } })()`
+  const scrollingProbe = `(() => { const messages = Array.from(document.querySelectorAll('[class~="group/user"]')); const message = messages.find((item) => item.textContent?.trim()); const button = message?.querySelector('button[aria-label="显示更多"], button[aria-label="Show more"]'); if (!button) return false; button.scrollIntoView({ block: 'center' }); return true })()`
+  if (
+    (await cdp(ws, 'Runtime.evaluate', { expression: scrollingProbe, returnByValue: true })).result
+      ?.value !== true
+  ) {
     const userMessageState = await cdp(ws, 'Runtime.evaluate', {
       expression: `Array.from(document.querySelectorAll('[class~="group/user"]')).map((item) => ({ text: item.textContent?.trim()?.slice(0, 100), buttons: Array.from(item.querySelectorAll('button')).map((button) => button.getAttribute('aria-label')) }))`,
       returnByValue: true
@@ -347,14 +545,35 @@ async function main() {
       `Could not open the user-message actions for the translate flow: ${JSON.stringify(userMessageState.result?.value)}`
     )
   }
+  // scrollIntoView does not commit in the same task, so the rect is only trustworthy
+  // after the scroll has settled; clicking the pre-scroll point hits whatever was
+  // under the viewport centre and the menu never opens.
+  await sleep(300)
+  const userMessageMenuPoint = (
+    await cdp(ws, 'Runtime.evaluate', { expression: moreButtonProbe, returnByValue: true })
+  ).result?.value
+  if (!userMessageMenuPoint) {
+    throw new Error('The user-message more button disappeared after scrolling')
+  }
+  if (userMessageMenuPoint.hit !== 'trigger') {
+    throw new Error(
+      `User-message more button is not clickable: ${JSON.stringify(userMessageMenuPoint)}`
+    )
+  }
   await clickAt(ws, userMessageMenuPoint.x, userMessageMenuPoint.y)
-  await sleep(120)
+  await sleep(200)
   const sendToTranslate = await cdp(ws, 'Runtime.evaluate', {
     expression: `(() => { const item = Array.from(document.querySelectorAll('[role="menuitem"]')).find((candidate) => /^(翻译|Translate)$/.test(candidate.textContent?.trim() ?? '')); if (!item) return false; item.click(); return true })()`,
     returnByValue: true
   })
   if (sendToTranslate.result?.value !== true) {
-    throw new Error('Could not open the translate page from a user message')
+    const menuState = await cdp(ws, 'Runtime.evaluate', {
+      expression: `({ locale: document.documentElement.lang || navigator.language, menuRoots: document.querySelectorAll('[role="menu"]').length, items: Array.from(document.querySelectorAll('[role="menuitem"]')).map((item) => item.textContent?.trim()?.slice(0, 40)), overlays: Array.from(document.querySelectorAll('[data-radix-popper-content-wrapper],[role="dialog"]')).length, hash: window.location.hash })`,
+      returnByValue: true
+    })
+    throw new Error(
+      `Could not open the translate page from a user message: ${JSON.stringify(menuState.result?.value)}`
+    )
   }
   await sleep(500)
   const translatePage = await cdp(ws, 'Runtime.evaluate', {
@@ -450,4 +669,6 @@ try {
   child.kill('SIGTERM')
   await sleep(250)
   if (!child.killed) child.kill('SIGKILL')
+  modelServer.closeAllConnections()
+  modelServer.close()
 }
