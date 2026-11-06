@@ -8,6 +8,7 @@ import {
   findPackagedArchive,
   readPackagedInventory
 } from '../../scripts/release-sbom.mjs'
+import { bundledBinaryComponents } from '../../scripts/agent-desktop-sbom.mjs'
 
 const asar = createRequire(import.meta.url)('@electron/asar')
 const temporary: string[] = []
@@ -100,6 +101,7 @@ describe('packaged release dependency inventory', () => {
       app,
       [{ name: 'ssh2', versionInfo: '1.0.0', path: 'node_modules/ssh2/package.json' }],
       [{ name: 'Ola.zip', sha256: 'a'.repeat(64) }],
+      [],
       '2026-10-17T00:00:00.000Z'
     )
     expect(document.packages).toHaveLength(2)
@@ -118,6 +120,117 @@ describe('packaged release dependency inventory', () => {
       expect(ids.has(relation.relatedSpdxElement)).toBe(true)
     }
     expect(document.comment).toContain('does not claim complete binary composition')
+  })
+  it('registers bundled native binaries as their own SPDX package', () => {
+    const document = createReleaseSbom(
+      app,
+      [{ name: 'ssh2', versionInfo: '1.0.0', path: 'node_modules/ssh2/package.json' }],
+      [{ name: 'Ola.zip', sha256: 'a'.repeat(64) }],
+      [
+        {
+          name: 'agent-desktop',
+          versionInfo: '1.1.0',
+          licenseDeclared: 'Apache-2.0',
+          downloadLocation: 'https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0',
+          source: 'resources/agent-desktop.lock.json',
+          repository: 'https://github.com/vercel-labs/agent-desktop',
+          checksumsFile: 'https://example.invalid/checksums.txt',
+          checksumsSha256: 'b'.repeat(64),
+          files: [
+            {
+              fileName: './resources/agent-desktop/darwin-arm64/agent-desktop',
+              sha256: 'c'.repeat(64),
+              size: 3757904
+            }
+          ]
+        }
+      ]
+    )
+    const bundled = document.packages.find((entry) => entry.SPDXID === 'SPDXRef-Bundled-1')
+    expect(bundled).toMatchObject({
+      name: 'agent-desktop',
+      versionInfo: '1.1.0',
+      licenseDeclared: 'Apache-2.0',
+      licenseConcluded: 'Apache-2.0',
+      filesAnalyzed: true
+    })
+    expect(bundled.downloadLocation).toMatch(/^https:\/\//)
+    expect(bundled.comment).toContain('resources/agent-desktop.lock.json')
+    const file = document.files.find((entry) => entry.SPDXID === 'SPDXRef-BundledFile-1-1')
+    expect(file).toMatchObject({
+      fileName: './resources/agent-desktop/darwin-arm64/agent-desktop',
+      licenseConcluded: 'Apache-2.0',
+      checksums: [{ algorithm: 'SHA256', checksumValue: 'c'.repeat(64) }]
+    })
+    // A package the document cannot account for would make the SBOM unreadable downstream.
+    const ids = new Set([
+      document.SPDXID,
+      ...document.packages.map((entry) => entry.SPDXID),
+      ...document.files.map((entry) => entry.SPDXID)
+    ])
+    for (const relation of document.relationships) {
+      expect(ids.has(relation.spdxElementId)).toBe(true)
+      expect(ids.has(relation.relatedSpdxElement)).toBe(true)
+      expect(relation).not.toHaveProperty('comment')
+    }
+    expect(
+      document.relationships.filter(
+        (relation) => relation.relatedSpdxElement === 'SPDXRef-Bundled-1'
+      )
+    ).toHaveLength(1)
+    expect(
+      document.relationships.filter((relation) => relation.spdxElementId === 'SPDXRef-Bundled-1')
+    ).toHaveLength(1)
+  })
+  it('refuses an unlicensed, unversioned or non-https bundled component', () => {
+    const base = {
+      name: 'agent-desktop',
+      versionInfo: '1.1.0',
+      licenseDeclared: 'Apache-2.0',
+      downloadLocation: 'https://example.invalid/releases',
+      source: 'resources/agent-desktop.lock.json',
+      repository: 'https://example.invalid',
+      checksumsFile: 'https://example.invalid/checksums.txt',
+      checksumsSha256: 'b'.repeat(64),
+      files: [{ fileName: './a', sha256: 'c'.repeat(64), size: 1 }]
+    }
+    expect(() => createReleaseSbom(app, [], [], [{ ...base, licenseDeclared: '' }])).toThrow(
+      'lacks name/version/license'
+    )
+    expect(() =>
+      createReleaseSbom(app, [], [], [{ ...base, downloadLocation: 'http://x' }])
+    ).toThrow('https source URL')
+    expect(() =>
+      createReleaseSbom(app, [], [], [{ ...base, files: [{ ...base.files[0], sha256: 'zz' }] }])
+    ).toThrow('Invalid bundled binary SHA256')
+    expect(() => createReleaseSbom(app, [], [], [{ ...base, versionInfo: '' }])).toThrow(
+      'lacks name/version/license'
+    )
+  })
+  it('pins every published triple of the shipped agent-desktop lock', async () => {
+    const component = await bundledBinaryComponents()
+    expect(component).toMatchObject({
+      name: 'agent-desktop',
+      versionInfo: '1.1.0',
+      licenseDeclared: 'Apache-2.0'
+    })
+    expect(component.files.length).toBeGreaterThanOrEqual(6)
+    for (const file of component.files) {
+      expect(file.fileName).toMatch(/^\.\/resources\/agent-desktop\/[a-z0-9-]+\/[a-z0-9.-]+$/)
+      expect(file.sha256).toMatch(/^[a-f0-9]{64}$/)
+      expect(file.size).toBeGreaterThan(0)
+    }
+    // The CLI executable is named in every triple, so the SBOM cannot list helpers only.
+    for (const key of [
+      'darwin-arm64',
+      'darwin-x64',
+      'linux-arm64',
+      'linux-x64',
+      'win32-arm64',
+      'win32-x64'
+    ]) {
+      expect(component.files.some((file) => file.fileName.includes(`/${key}/`))).toBe(true)
+    }
   })
   it('rejects base64 or truncated artifact checksum values', () => {
     expect(() =>

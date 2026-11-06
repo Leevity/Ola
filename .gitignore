@@ -17,6 +17,7 @@ bin/
 obj/
 resources/sidecar/
 resources/native-worker/
+resources/agent-desktop/*/
 sidecars/*/bin/
 sidecars/*/obj/
 *.dSYM/

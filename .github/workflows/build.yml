@@ -344,6 +344,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Windows 与 Linux 的构建 job 此前完全不跑测试；agent-desktop 的门是平台相关的，
+      # 所以至少要让供应链解包和 argv/审批门在真正的目标 runner 上跑一次。
+      - name: Fetch the pinned agent-desktop binary
+        timeout-minutes: 5
+        run: npm run fetch:agent-desktop
+
+      - name: Verify the pinned agent-desktop supply chain
+        timeout-minutes: 2
+        run: npm run verify:agent-desktop
+
+      - name: Run the agent-desktop contract tests
+        timeout-minutes: 5
+        run: npm run test:agent-desktop
+
+      - name: Verify the agent-desktop acceptance gate
+        timeout-minutes: 2
+        run: npm run verify:desktop-ax-gate
+
       # 将 Release 版本号同步写入 package.json
       - name: Sync version to package.json
         run: npm version ${{ needs.prepare.outputs.version }} --no-git-tag-version --allow-same-version
@@ -659,6 +677,24 @@ jobs:
       - name: Verify Electron workspace IPC frame isolation
         timeout-minutes: 2
         run: npm run test:electron-ipc
+
+      # agent-desktop 的供应链与契约测试按目标 triple 在真实平台上各跑一次：
+      # 下载/解包只有在本机 triple 上才算被证明，argv 与审批门在 mac 上跑一次才有 Windows 之外的第二份证据。
+      - name: Fetch the pinned agent-desktop binary
+        timeout-minutes: 5
+        run: npm run fetch:agent-desktop
+
+      - name: Verify the pinned agent-desktop supply chain
+        timeout-minutes: 2
+        run: npm run verify:agent-desktop
+
+      - name: Run the agent-desktop contract tests
+        timeout-minutes: 5
+        run: npm run test:agent-desktop
+
+      - name: Verify the agent-desktop acceptance gate
+        timeout-minutes: 2
+        run: npm run verify:desktop-ax-gate
 
       # 将 Release 版本号同步写入 package.json
       - name: Sync version to package.json

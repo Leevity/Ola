@@ -1,0 +1,106 @@
+{
+  "name": "agent-desktop",
+  "version": "1.1.0",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/vercel-labs/agent-desktop",
+  "archiveBaseUrl": "https://github.com/vercel-labs/agent-desktop/releases/download/v1.1.0",
+  "checksumsFile": "checksums.txt",
+  "checksumsSha256": "3f6372d8a74a1fca5e59e549251100aee6cada7d5e992c1c8234ebe68e3b9925",
+  "comment": "Release-scoped supply pins for the agent-desktop accessibility CLI. scripts/stage-agent-desktop.mjs downloads each archive, verifies its sha256, and extracts only the listed binaries into resources/agent-desktop/<key>/. The first member of every archive is the CLI executable; the remaining members are helpers that upstream installs beside it under their own names.",
+  "platforms": {
+    "darwin-arm64": {
+      "target": "aarch64-apple-darwin",
+      "archive": "agent-desktop-v1.1.0-aarch64-apple-darwin.tar.gz",
+      "sha256": "3048e00aa0741bf25ffe0326f78c966408be4490ce13513f3f94ecf2a0b5270d",
+      "size": 2196168,
+      "cli": "agent-desktop",
+      "binaries": {
+        "agent-desktop": {
+          "sha256": "a89c781a3b2cf29bc0467c30a4e1063b6f564858540f2dc58a75c79ce2c9d9f3",
+          "size": 3757904
+        },
+        "agent-desktop-macos-helper": {
+          "sha256": "d81e5aa7ad8edb0e3eda72f010b1947ce7d6ad6d6d4ae95a69f4cce39bbbfe63",
+          "size": 529600
+        }
+      }
+    },
+    "darwin-x64": {
+      "target": "x86_64-apple-darwin",
+      "archive": "agent-desktop-v1.1.0-x86_64-apple-darwin.tar.gz",
+      "sha256": "b6352ac66aa49e0280c6f690de791dc03c827623a838950856b20ddbebcdc382",
+      "size": 2319991,
+      "cli": "agent-desktop",
+      "binaries": {
+        "agent-desktop": {
+          "sha256": "bfbb387446e615687dfe345158f7ac1e37197f5de203fa36bb621e474e016d77",
+          "size": 4407880
+        },
+        "agent-desktop-macos-helper": {
+          "sha256": "e32196af41669f531cb1d7779a84e53e865c6c05d224b9dc30239b749906e865",
+          "size": 571156
+        }
+      }
+    },
+    "linux-arm64": {
+      "target": "aarch64-unknown-linux-gnu",
+      "archive": "agent-desktop-v1.1.0-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "252c17e271a444352a5ba1e9f8fcbace89fa7b6b0bfcc4abebad2b35eb1f7a4d",
+      "size": 3305800,
+      "cli": "agent-desktop",
+      "binaries": {
+        "agent-desktop": {
+          "sha256": "7fb3d9a08ca5c8c7019d85520dca174d0e066c65f069513d6d2e8d4cee423bbc",
+          "size": 5755304
+        },
+        "agent-desktop-linux-clipboard-owner": {
+          "sha256": "278976a31a84d764fede58cfb923639a688f44d91f7f7a8d17ece6e56d9ea0f4",
+          "size": 512640
+        }
+      }
+    },
+    "linux-x64": {
+      "target": "x86_64-unknown-linux-gnu",
+      "archive": "agent-desktop-v1.1.0-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "efbdcf4caf10132e4fe915db1ec643184c947c65e0511845aeb4839445d7ea43",
+      "size": 3427576,
+      "cli": "agent-desktop",
+      "binaries": {
+        "agent-desktop": {
+          "sha256": "e03d67b7e61d358eb62c411376fc7bbd3dc5923cb01131c968f3113c56687bbf",
+          "size": 7103032
+        },
+        "agent-desktop-linux-clipboard-owner": {
+          "sha256": "0ce10ee444a570f1485234ba4111ff07e4cafd420a2f2d0f35de8fb2ce8f8d84",
+          "size": 586512
+        }
+      }
+    },
+    "win32-arm64": {
+      "target": "aarch64-pc-windows-msvc",
+      "archive": "agent-desktop-v1.1.0-aarch64-pc-windows-msvc.tar.gz",
+      "sha256": "20e2a2a029bc7e86aaacf2003afa78708d66e4cb51f3c216597e1f5d79d496bf",
+      "size": 1650739,
+      "cli": "agent-desktop.exe",
+      "binaries": {
+        "agent-desktop.exe": {
+          "sha256": "bb8eb196e8ee8292617b15995561a85d51a0207b6c150eddb4ee3004310e3378",
+          "size": 3264512
+        }
+      }
+    },
+    "win32-x64": {
+      "target": "x86_64-pc-windows-msvc",
+      "archive": "agent-desktop-v1.1.0-x86_64-pc-windows-msvc.tar.gz",
+      "sha256": "5c13b932add079c141da18631d65b1680d1b9bcb73942f2f99146c9ee13877f6",
+      "size": 1699387,
+      "cli": "agent-desktop.exe",
+      "binaries": {
+        "agent-desktop.exe": {
+          "sha256": "2c8e9a627d87649a4562bfe5678450d045b793ab6f3fdec8af05c9571f32d5ef",
+          "size": 3701248
+        }
+      }
+    }
+  }
+}

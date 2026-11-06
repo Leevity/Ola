@@ -1,5 +1,6 @@
-import { access, lstat, readdir, realpath, stat } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { access, lstat, readFile, readdir, realpath, stat } from 'node:fs/promises'
+import { dirname, join, relative, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { isLegacyRuntimeArtifactPath } from './legacy-runtime-artifact-patterns.mjs'
 import { packagedCodegraphGrammarNames } from './stage-codegraph-grammars.mjs'
@@ -8,9 +9,12 @@ const asar = createRequire(import.meta.url)('@electron/asar')
 
 const args = process.argv.slice(2)
 const platform = args.find((arg) => arg.startsWith('--platform='))?.slice('--platform='.length)
+const arch = args.find((arg) => arg.startsWith('--arch='))?.slice('--arch='.length) ?? process.arch
 const rootArg = args.find((arg) => !arg.startsWith('--'))
 if (!platform || !rootArg || !['darwin', 'linux', 'win32'].includes(platform)) {
-  throw new Error('Usage: verify-runtime-staging.mjs <unpacked-dir> --platform=darwin|linux|win32')
+  throw new Error(
+    'Usage: verify-runtime-staging.mjs <unpacked-dir> --platform=darwin|linux|win32 [--arch=arm64|x64]'
+  )
 }
 
 const root = await realpath(resolve(rootArg))
@@ -36,6 +40,38 @@ for (const path of required) {
   const info = await stat(path)
   if (!info.isFile() && !info.isDirectory()) throw new Error(`Invalid staging artifact: ${path}`)
 }
+
+// The accessibility CLI is supplied per build triple; only the triple this artifact was
+// built for may ship, so a host that fetched every target cannot leak foreign binaries.
+const agentDesktopKey = `${platform}-${arch}`
+const agentDesktopLock = JSON.parse(
+  await readFile(
+    join(dirname(fileURLToPath(import.meta.url)), '..', 'resources', 'agent-desktop.lock.json'),
+    'utf8'
+  )
+)
+const agentDesktopEntry = agentDesktopLock.platforms[agentDesktopKey]
+if (!agentDesktopEntry) {
+  throw new Error(`agent-desktop lock has no entry for ${agentDesktopKey}`)
+}
+const agentDesktopRoot = join(appUnpacked, 'resources', 'agent-desktop')
+const packedTriples = (await readdir(agentDesktopRoot)).filter((name) =>
+  Object.keys(agentDesktopLock.platforms).includes(name)
+)
+if (packedTriples.length !== 1 || packedTriples[0] !== agentDesktopKey) {
+  throw new Error(
+    `agent-desktop must ship exactly ${agentDesktopKey}; found ${packedTriples.join(', ') || 'none'}`
+  )
+}
+for (const name of Object.keys(agentDesktopEntry.binaries)) {
+  const binary = join(agentDesktopRoot, agentDesktopKey, name)
+  const info = await lstat(binary)
+  if (!info.isFile()) throw new Error(`agent-desktop binary is not a regular file: ${name}`)
+  if (platform !== 'win32' && !(info.mode & 0o111)) {
+    throw new Error(`agent-desktop binary is not executable: ${name}`)
+  }
+}
+await access(join(agentDesktopRoot, 'NOTICE.md'))
 
 const archiveEntries = asar
   .listPackage(join(resourceRoot, 'app.asar'))

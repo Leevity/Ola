@@ -5,6 +5,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { collectRuntimeMainDependencies } from './runtime-main-dependencies.mjs'
 import { stageCodegraphGrammars } from './stage-codegraph-grammars.mjs'
+import { stageAgentDesktop } from './stage-agent-desktop.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -66,6 +67,7 @@ try {
   })
   const targetPlatform = platform === 'win' ? 'win32' : platform === 'mac' ? 'darwin' : 'linux'
   const targetArch = process.arch
+  await stageAgentDesktop(root, staging, targetPlatform, targetArch)
   const { stdout: rebuildStdout, stderr: rebuildStderr } = await execFileAsync(
     process.execPath,
     [join(root, 'scripts/postinstall.mjs')],

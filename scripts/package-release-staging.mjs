@@ -6,6 +6,7 @@ import { promisify } from 'node:util'
 import { tmpdir } from 'node:os'
 import { collectRuntimeMainDependencies } from './runtime-main-dependencies.mjs'
 import { stageCodegraphGrammars } from './stage-codegraph-grammars.mjs'
+import { stageAgentDesktop } from './stage-agent-desktop.mjs'
 import { createNativeUnsignedDmg } from './native-unsigned-dmg.mjs'
 import { releaseBuilderEnvironment, releaseTargets } from './release-packaging-options.mjs'
 
@@ -110,6 +111,7 @@ try {
 
   const targetPlatform = platform === 'win' ? 'win32' : platform === 'mac' ? 'darwin' : 'linux'
   const targetArch = arch ?? process.arch
+  await stageAgentDesktop(root, staging, targetPlatform, targetArch)
   const { stdout: rebuildStdout, stderr: rebuildStderr } = await execFileAsync(
     process.execPath,
     [join(root, 'scripts/postinstall.mjs')],
@@ -159,7 +161,8 @@ try {
     [
       join(root, 'scripts/verify-runtime-staging.mjs'),
       unpackedOutput,
-      `--platform=${platformName}`
+      `--platform=${platformName}`,
+      `--arch=${targetArch}`
     ],
     { cwd: root, maxBuffer: 10 * 1024 * 1024 }
   )

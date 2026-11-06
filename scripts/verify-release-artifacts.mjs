@@ -4,6 +4,8 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { basename, extname, join, relative, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { createReleaseSbom, findPackagedArchive, readPackagedInventory } from './release-sbom.mjs'
+import { bundledBinaryComponents } from './agent-desktop-sbom.mjs'
+import { verifyAgentDesktopSignatures } from './agent-desktop-mac-sign.mjs'
 
 // Keep the release verifier's static contract visible for verify:ci-core. The
 // generated document includes spdxVersion: 'SPDX-2.3', SPDXRef-Artifact-,
@@ -31,15 +33,18 @@ function sha256(file) {
   return createHash('sha256').update(readFileSync(file)).digest('hex')
 }
 
-function writeSpdxSbom(file, artifacts, smokeDir) {
+async function writeSpdxSbom(file, artifacts, smokeDir) {
   const expected = JSON.parse(readFileSync('package.json', 'utf8'))
   const { manifest, components } = readPackagedInventory(findPackagedArchive(smokeDir))
   if (manifest.name !== expected.name || manifest.version !== expected.version) {
     throw new Error('Packaged app name/version differs from release source')
   }
+  // Dependency manifests inside the archive say nothing about the bare executables staged next to
+  // it, so the pinned third-party CLI is inventoried from its supply lock instead.
+  const bundled = [await bundledBinaryComponents()]
   writeFileSync(
     file,
-    `${JSON.stringify(createReleaseSbom(manifest, components, artifacts), null, 2)}\n`
+    `${JSON.stringify(createReleaseSbom(manifest, components, artifacts, bundled), null, 2)}\n`
   )
 }
 
@@ -73,7 +78,7 @@ function findMacApp(smokeDir) {
   return app.endsWith('.app') && existsSync(join(app, 'Contents', 'Info.plist')) ? app : undefined
 }
 
-function assertMacArtifact(artifacts, smokeDir, requireSignature) {
+async function assertMacArtifact(artifacts, smokeDir, requireSignature) {
   const dmg = artifacts.find((artifact) => extname(artifact).toLowerCase() === '.dmg')
   const zip = artifacts.find((artifact) => extname(artifact).toLowerCase() === '.zip')
   if (!dmg || !zip) {
@@ -98,6 +103,14 @@ function assertMacArtifact(artifacts, smokeDir, requireSignature) {
   } else {
     console.log('macOS package signature verification skipped for unsigned release')
   }
+  // The bundled accessibility CLI is a bare Mach-O, so a valid app signature does not cover it.
+  // Presence and architecture are asserted on every build; the identity check only applies to a
+  // signed release, because an unsigned CI bundle carries an ad-hoc signature by design.
+  await verifyAgentDesktopSignatures({
+    app,
+    executable: basename(app, '.app'),
+    requireSignature
+  })
 }
 
 function assertLinuxArtifact(artifacts) {
@@ -144,7 +157,7 @@ switch (platform) {
     artifacts.forEach((artifact) => assertWindowsArtifact(artifact, requireSignature))
     break
   case 'mac':
-    assertMacArtifact(artifacts, smokeDir, requireSignature)
+    await assertMacArtifact(artifacts, smokeDir, requireSignature)
     break
   case 'linux':
     assertLinuxArtifact(artifacts)
@@ -162,7 +175,7 @@ writeFileSync(
   checksumsPath,
   `${hashedArtifacts.map((artifact) => `${artifact.sha256}  ${artifact.name}`).join('\n')}\n`
 )
-writeSpdxSbom(sbomPath, hashedArtifacts, smokeDir)
+await writeSpdxSbom(sbomPath, hashedArtifacts, smokeDir)
 console.log(
   `release artifact verification passed for ${platform}: ${hashedArtifacts.length} artifact(s)`
 )

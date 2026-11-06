@@ -2,6 +2,9 @@
 /** @typedef {{name: string, version: string}} ApplicationManifest */
 /** @typedef {{name: string, versionInfo: string, path: string}} InstalledComponent */
 /** @typedef {{name: string, sha256: string}} ReleaseArtifact */
+/** @typedef {{name: string, versionInfo: string, licenseDeclared: string, downloadLocation: string,
+ * source: string, repository: string, checksumsFile: string, checksumsSha256: string,
+ * files: {fileName: string, sha256: string, size: number}[]}} BundledComponent */
 import { createRequire } from 'node:module'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join, relative, resolve } from 'node:path'
@@ -140,16 +143,17 @@ export function findPackagedArchive(directory) {
   return archives[0]
 }
 
-/**
- * @param {ApplicationManifest} manifest
+/** @param {ApplicationManifest} manifest
  * @param {InstalledComponent[]} components
  * @param {ReleaseArtifact[]} artifacts
+ * @param {BundledComponent[]} [bundled]
  * @param {string} [created]
  */
 export function createReleaseSbom(
   manifest,
   components,
   artifacts,
+  bundled = [],
   created = new Date().toISOString()
 ) {
   const rootPackageId = 'SPDXRef-Package-Application'
@@ -174,7 +178,26 @@ export function createReleaseSbom(
       licenseDeclared: 'NOASSERTION',
       copyrightText: 'NOASSERTION',
       comment: `Installed manifest: ${component.path}`
-    }))
+    })),
+    ...bundled.map((entry, index) => {
+      if (!entry.name || !entry.versionInfo || !entry.licenseDeclared) {
+        throw new Error('Bundled component lacks name/version/license')
+      }
+      if (!/^https:\/\/[^\s]+$/.test(entry.downloadLocation)) {
+        throw new Error(`Bundled component ${entry.name} lacks an https source URL`)
+      }
+      return {
+        SPDXID: `SPDXRef-Bundled-${index + 1}`,
+        name: entry.name,
+        versionInfo: entry.versionInfo,
+        downloadLocation: entry.downloadLocation,
+        filesAnalyzed: true,
+        licenseConcluded: entry.licenseDeclared,
+        licenseDeclared: entry.licenseDeclared,
+        copyrightText: 'NOASSERTION',
+        comment: `Bundled native binaries, pinned by ${entry.source}; upstream checksums at ${entry.checksumsFile} (sha256 ${entry.checksumsSha256}); source repository ${entry.repository}`
+      }
+    })
   ]
   const files = artifacts.map((artifact, index) => {
     if (!/^[a-f0-9]{64}$/i.test(artifact.sha256))
@@ -188,6 +211,34 @@ export function createReleaseSbom(
       copyrightText: 'NOASSERTION'
     }
   })
+  const bundledFiles = bundled.flatMap((entry, componentIndex) => {
+    const owner = `SPDXRef-Bundled-${componentIndex + 1}`
+    return entry.files.map((file, fileIndex) => {
+      if (!/^[a-f0-9]{64}$/i.test(file.sha256))
+        throw new Error(`Invalid bundled binary SHA256: ${file.fileName}`)
+      return {
+        SPDXID: `SPDXRef-BundledFile-${componentIndex + 1}-${fileIndex + 1}`,
+        owner,
+        fileName: file.fileName,
+        checksums: [{ algorithm: 'SHA256', checksumValue: file.sha256.toLowerCase() }],
+        licenseConcluded: entry.licenseDeclared,
+        licenseInfoInFiles: [entry.licenseDeclared],
+        copyrightText: 'NOASSERTION'
+      }
+    })
+  })
+  const fileEntries = files.concat(
+    bundledFiles.map(
+      ({ SPDXID, fileName, checksums, licenseConcluded, licenseInfoInFiles, copyrightText }) => ({
+        SPDXID,
+        fileName,
+        checksums,
+        licenseConcluded,
+        licenseInfoInFiles,
+        copyrightText
+      })
+    )
+  )
   return {
     SPDXID: 'SPDXRef-DOCUMENT',
     spdxVersion: 'SPDX-2.3',
@@ -196,9 +247,9 @@ export function createReleaseSbom(
     documentNamespace: `https://spdx.org/spdxdocs/${manifest.name}-${manifest.version}-${created.replace(/[:.]/g, '-')}`,
     creationInfo: { created, creators: ['Tool: Ola packaged dependency inventory'] },
     comment:
-      'Application archive dependency manifests and release artifacts. Bundled code, Electron and external system libraries require separate inventories; this document does not claim complete binary composition.',
+      'Application archive dependency manifests, pinned bundled native binaries and release artifacts. Electron, the Node runtime and external system libraries require separate inventories; this document does not claim complete binary composition.',
     packages,
-    files,
+    files: fileEntries,
     relationships: [
       {
         spdxElementId: 'SPDXRef-DOCUMENT',
@@ -207,13 +258,20 @@ export function createReleaseSbom(
       },
       ...packages.slice(1).map((dependency) => ({
         spdxElementId: rootPackageId,
-        relationshipType: 'DEPENDS_ON',
+        relationshipType: dependency.SPDXID.startsWith('SPDXRef-Bundled-')
+          ? 'CONTAINS'
+          : 'DEPENDS_ON',
         relatedSpdxElement: dependency.SPDXID
       })),
       ...files.map((artifact) => ({
         spdxElementId: rootPackageId,
         relationshipType: 'CONTAINS',
         relatedSpdxElement: artifact.SPDXID
+      })),
+      ...bundledFiles.map((file) => ({
+        spdxElementId: file.owner,
+        relationshipType: 'CONTAINS',
+        relatedSpdxElement: file.SPDXID
       }))
     ]
   }
