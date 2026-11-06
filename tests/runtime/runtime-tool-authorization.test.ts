@@ -214,4 +214,59 @@ describe('desktop runtime tool authorization', () => {
       })
     ).toBe(false)
   })
+
+  it('sends every accessibility desktop mutation to the approval dialog', () => {
+    const interactive = run('task', false)
+    interactive.toolNames = ['desktop_ax_launch', 'desktop_ax_click']
+    const background = run('cron:job')
+    background.toolNames = ['desktop_ax_launch', 'desktop_ax_click']
+    const grantedPolicy = {
+      enabled: true,
+      whitelistedTools: ['desktop_ax_launch'],
+      bashAllowRules: [],
+      bashDenyRules: []
+    }
+    // false here means "ask the user", which is the only acceptable answer for a foreground run.
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: interactive,
+        tool: { name: 'desktop_ax_launch', effect: 'write' },
+        input: { app: 'TextEdit' }
+      })
+    ).toBe(false)
+    for (const mutation of ['desktop_ax_click', 'desktop_ax_input_text', 'desktop_ax_adjust']) {
+      expect(
+        isAuthorizedDesktopRuntimeTool({
+          run: interactive,
+          tool: { name: mutation, effect: 'write' },
+          input: { ref: '@s1:e2' }
+        })
+      ).toBe(false)
+      expect(
+        isAuthorizedDesktopRuntimeTool({
+          run: background,
+          tool: { name: mutation, effect: 'write' },
+          input: { ref: '@s1:e2' },
+          permissionPolicy: grantedPolicy
+        })
+      ).toBe(false)
+    }
+    // A remembered grant or a Cron whitelist entry must not self-authorize it either.
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: background,
+        tool: { name: 'desktop_ax_launch', effect: 'write' },
+        input: { app: 'TextEdit' },
+        permissionPolicy: grantedPolicy
+      })
+    ).toBe(false)
+    // Observation stays a read, so it keeps the read-only allowance.
+    expect(
+      isAuthorizedDesktopRuntimeTool({
+        run: background,
+        tool: { name: 'desktop_ax_snapshot', effect: 'read' },
+        input: {}
+      })
+    ).toBe(true)
+  })
 })

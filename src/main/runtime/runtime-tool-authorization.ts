@@ -92,6 +92,10 @@ export function isAuthorizedDesktopRuntimeTool({
     input && typeof input === 'object' && !Array.isArray(input)
       ? (input as Record<string, unknown>)
       : undefined
+  // Deliberately not `interactiveMutationAuthorized`: that returns true and would let the run
+  // skip the approval dialog. A false here routes an interactive run to `tool-approval` and
+  // refuses an unattended one outright, which is the whole point of the accessibility surface.
+  if (tool.name.startsWith('desktop_ax_')) return false
   if (tool.name === 'Task' || tool.name === 'Agent') {
     return interactiveMutationAuthorized(tool, safeInput, run, permissionPolicy)
   }

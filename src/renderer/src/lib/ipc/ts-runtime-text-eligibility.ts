@@ -87,6 +87,14 @@ const TS_RUNTIME_AGENT_TOOL_NAMES = new Set([
   'BrowserClick',
   'BrowserType',
   'BrowserScroll',
+  // Accessibility desktop control is Main-owned and needs no workspace root.
+  'desktop_ax_launch',
+  'desktop_ax_list',
+  'desktop_ax_snapshot',
+  'desktop_ax_inspect',
+  'desktop_ax_click',
+  'desktop_ax_input_text',
+  'desktop_ax_adjust',
   'TeamCreate',
   'SendMessage',
   'TeamStatus',
@@ -105,7 +113,9 @@ const TS_RUNTIME_LOCAL_AGENT_TOOL_NAMES = new Set([
   'PowerShell',
   'Monitor'
 ])
-const TS_RUNTIME_MCP_TOOL_NAME = /^mcp__[A-Za-z0-9_-]{1,96}__[A-Za-z0-9_-]{1,96}$/
+// Alias is lowercase and `_`-free, so the first `__` after the prefix is the separator and the
+// whole name stays within the 64-char provider limit by construction.
+const TS_RUNTIME_MCP_TOOL_NAME = /^mcp__[a-z0-9-]{1,12}__[A-Za-z0-9_-]{1,47}$/
 
 function isTsRuntimeAgentToolName(name: string): boolean {
   return TS_RUNTIME_AGENT_TOOL_NAMES.has(name) || TS_RUNTIME_MCP_TOOL_NAME.test(name)
