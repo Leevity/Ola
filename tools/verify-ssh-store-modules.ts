@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
 import { SSH_STORE_EVENT_CHANNELS } from '../src/renderer/src/stores/ssh/events'
 import { selectSshConnections } from '../src/renderer/src/stores/ssh/connections'
 import { selectSshTransfers } from '../src/renderer/src/stores/ssh/transfers'
@@ -9,15 +8,23 @@ import type { SshSessionsSlice } from '../src/renderer/src/stores/ssh/sessions'
 import type { SshSftpSlice } from '../src/renderer/src/stores/ssh/sftp'
 import type { SshTransfersSlice } from '../src/renderer/src/stores/ssh/transfers'
 import type { SshUiSlice } from '../src/renderer/src/stores/ssh/ui'
+import { readCollapsedSource } from './lib/source-text.ts'
 
-const storeSource = readFileSync('src/renderer/src/stores/ssh-store.ts', 'utf8')
-const hostListSource = readFileSync('src/renderer/src/components/ssh/SshConnectionList.tsx', 'utf8')
-const transferListSource = readFileSync(
-  'src/renderer/src/components/ssh/SshSftpWorkspace.tsx',
-  'utf8'
+// Source assertions are about code, not layout: read collapsed and tolerate a space
+// wherever the formatter may break a line. The negative assertion below stays just as
+// strict — collapsing only lets it see a declaration that was previously wrapped.
+const storeSource = await readCollapsedSource('src/renderer/src/stores/ssh-store.ts')
+const hostListSource = await readCollapsedSource(
+  'src/renderer/src/components/ssh/SshConnectionList.tsx'
 )
-assert.match(storeSource, /export type \* from ['"]\.\.\/\.\.\/\.\.\/shared\/ssh-contract['"]/)
-assert.doesNotMatch(storeSource, /export interface SshConnection \{/)
+const transferListSource = await readCollapsedSource(
+  'src/renderer/src/components/ssh/SshSftpWorkspace.tsx'
+)
+assert.match(
+  storeSource,
+  /export\s+type\s+\*\s+from\s+['"]\.\.\/\.\.\/\.\.\/shared\/ssh-contract['"]/
+)
+assert.doesNotMatch(storeSource, /export\s+interface\s+SshConnection\s*\{/)
 assert.match(storeSource, /extends\s+SshConnectionsSlice/)
 assert.match(storeSource, /SshSessionsSlice/)
 assert.match(storeSource, /SshSftpSlice/)
@@ -38,9 +45,9 @@ const transfers = { uploadTasks: {}, transferTasks: {} }
 const state = { connections, ...transfers }
 assert.equal(selectSshConnections(state as never), connections)
 assert.deepEqual(selectSshTransfers(state as never), transfers)
-assert.match(hostListSource, /const hostVirtualizer = useVirtualizer/)
-assert.match(hostListSource, /hostVirtualizer\.getVirtualItems\(\)/)
-assert.match(transferListSource, /const taskVirtualizer = useVirtualizer/)
-assert.match(transferListSource, /taskVirtualizer\.getVirtualItems\(\)/)
+assert.match(hostListSource, /const hostVirtualizer\s*=\s*useVirtualizer/)
+assert.match(hostListSource, /hostVirtualizer\s*\.\s*getVirtualItems\(\s*\)/)
+assert.match(transferListSource, /const taskVirtualizer\s*=\s*useVirtualizer/)
+assert.match(transferListSource, /taskVirtualizer\s*\.\s*getVirtualItems\(\s*\)/)
 
 console.log('SSH store module verification passed')

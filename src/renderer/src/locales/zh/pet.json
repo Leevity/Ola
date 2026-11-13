@@ -204,12 +204,6 @@
     "hide": "隐藏宠物",
     "requiresLevel": "{{level}}级解锁"
   },
-  "hud": {
-    "level": "Lv.{{level}}",
-    "hunger": "饱食",
-    "clean": "清洁",
-    "mood": "心情"
-  },
   "away": {
     "working": "打工中… {{time}}",
     "studying": "上学中… {{time}}"

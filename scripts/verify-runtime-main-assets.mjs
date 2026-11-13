@@ -10,7 +10,11 @@ const assets = [
   'out/main/business-worker.mjs',
   'out/main/business-schema.mjs',
   'out/main/graph-store-worker.mjs',
-  'out/storage/lease-worker.mjs'
+  'out/storage/lease-worker.mjs',
+  // The isolated runtime is a separate process entry with its own siblings.
+  'out/runtime/isolated.mjs',
+  'out/runtime/journal-worker.mjs',
+  'out/runtime/journal-schema.mjs'
 ]
 
 await execute(process.execPath, ['scripts/build-ts-runtime.mjs'])
@@ -27,23 +31,37 @@ assert.match(journal, /\.\.\/\.\.\/src\/runtime\/storage\/journal-worker\.mjs/)
 const packaging = await readFile('electron-builder.yml', 'utf8')
 assert.doesNotMatch(packaging, /legacy-read-worker\.mjs/)
 assert.match(packaging, /out\/storage\/lease-worker\.mjs/)
+// A Node Worker cannot be loaded from inside an asar archive, so the child
+// entry and the siblings it resolves must all be unpacked together.
+for (const asset of [
+  'out/runtime/isolated.mjs',
+  'out/runtime/journal-worker.mjs',
+  'out/runtime/journal-schema.mjs'
+]) {
+  assert.ok(
+    packaging.includes(`- ${asset}`),
+    `${asset} must be listed in electron-builder.yml asarUnpack`
+  )
+}
 
 const bridge = await readFile('src/renderer/src/lib/ipc/ts-runtime-bridge.ts', 'utf8')
 assert.match(bridge, /return `ts-runtime:\$\{name\}:msgpack`/)
 assert.doesNotMatch(bridge, /messagepack:ts-runtime/)
 
 const main = await readFile('src/main/index.ts', 'utf8')
-assert.ok(
-  main.indexOf('registerTsRuntimeHandlers()') < main.indexOf("'create_main_window', createWindow"),
-  'TS Runtime handlers must be registered before the first renderer window'
-)
-assert.ok(
-  main.indexOf('registerConfigHandlers()') < main.indexOf("'create_main_window', createWindow"),
-  'config handlers must be registered before the first renderer window'
-)
-assert.ok(
-  main.indexOf('registerSettingsHandlers()') < main.indexOf("'create_main_window', createWindow"),
-  'settings handlers must be registered before the first renderer window'
-)
+// The formatter owns the whitespace after the comma, so the anchor is a pattern, not a literal.
+const firstWindow = main.search(/'create_main_window',\s*createWindow/)
+assert.ok(firstWindow >= 0, 'create_main_window handler is missing')
+// A missing registration yields indexOf === -1, which would otherwise sort before the window
+// and pass. Each anchor must be proven present before the ordering means anything.
+for (const [handler, label] of [
+  ['registerTsRuntimeHandlers()', 'TS Runtime handlers'],
+  ['registerConfigHandlers()', 'config handlers'],
+  ['registerSettingsHandlers()', 'settings handlers']
+]) {
+  const at = main.indexOf(handler)
+  assert.ok(at >= 0, `${handler} is not registered in src/main/index.ts`)
+  assert.ok(at < firstWindow, `${label} must be registered before the first renderer window`)
+}
 
 console.log('TS runtime Main worker assets verification passed')

@@ -22,6 +22,7 @@ import {
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { useProviderStore, modelSupportsVision } from '@renderer/stores/provider-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
+import { ensureTokenEncoder } from '@renderer/lib/token-encoder'
 import {
   markChannelTaskAccepted,
   releaseUnacceptedChannelTask,
@@ -319,6 +320,7 @@ function updatePluginRuntimeToolUseInput(
 
 async function _runPluginAgent(task: PluginAutoReplyTask): Promise<void> {
   if (task.workspaceId !== useWorkspaceStore.getState().activeWorkspaceId) return
+  await ensureTokenEncoder()
   const { sessionId, pluginId, pluginType, chatId, supportsStreaming } = task
 
   // ── Check feature toggles ──

@@ -187,6 +187,7 @@ export async function generateSessionTitle(
   options?: {
     maxInputChars?: number
     workspace?: WorkspacePromptCacheScope
+    sessionId?: string
   }
 ): Promise<SessionTitleResult | null> {
   const settings = useSettingsStore.getState()
@@ -221,6 +222,7 @@ export async function generateSessionTitle(
 
   if (!config || (config.requiresApiKey !== false && !config.apiKey)) return null
   const scopedConfig = await withWorkspacePromptCacheKey(config, options?.workspace)
+  if (options?.sessionId) scopedConfig.sessionId = options.sessionId
 
   const messages: UnifiedMessage[] = [
     {

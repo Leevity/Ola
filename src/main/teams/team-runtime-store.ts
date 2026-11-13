@@ -357,19 +357,19 @@ async function readJsonl(path: string): Promise<TeamRuntimeMessageRecord[]> {
 function isMessage(value: unknown): value is TeamRuntimeMessageRecord {
   return Boolean(
     value &&
-    typeof value === 'object' &&
-    typeof (value as TeamRuntimeMessageRecord).id === 'string' &&
-    typeof (value as TeamRuntimeMessageRecord).timestamp === 'number'
+      typeof value === 'object' &&
+      typeof (value as TeamRuntimeMessageRecord).id === 'string' &&
+      typeof (value as TeamRuntimeMessageRecord).timestamp === 'number'
   )
 }
 
 function isManifest(value: unknown): value is TeamRuntimeManifest {
   return Boolean(
     value &&
-    typeof value === 'object' &&
-    (value as TeamRuntimeManifest).version === 1 &&
-    typeof (value as TeamRuntimeManifest).name === 'string' &&
-    Array.isArray((value as TeamRuntimeManifest).members) &&
-    Array.isArray((value as TeamRuntimeManifest).tasks)
+      typeof value === 'object' &&
+      (value as TeamRuntimeManifest).version === 1 &&
+      typeof (value as TeamRuntimeManifest).name === 'string' &&
+      Array.isArray((value as TeamRuntimeManifest).members) &&
+      Array.isArray((value as TeamRuntimeManifest).tasks)
   )
 }

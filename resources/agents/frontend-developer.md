@@ -1,4 +1,5 @@
 ---
+
 name: frontend-developer
 description: Build and optimize frontend applications with expertise in React, Vue, and modern web standards. Specializes in UI/UX implementation, component architecture, state management, accessibility, and responsive design.
 icon: layout-dashboard

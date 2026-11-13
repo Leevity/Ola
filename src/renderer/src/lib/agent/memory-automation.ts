@@ -1,5 +1,6 @@
 import { Allow, parse as parsePartialJSON } from 'partial-json'
 import { estimateTokens } from '@renderer/lib/format-tokens'
+import { ensureTokenEncoder } from '@renderer/lib/token-encoder'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { runTsTextRequest } from '@renderer/lib/ipc/agent-bridge'
@@ -244,8 +245,8 @@ function summarizeMemorySnapshot(snapshot: LayeredMemorySnapshot): string {
 function hasUsableProvider(provider: ProviderConfig | null): provider is ProviderConfig {
   return Boolean(
     provider &&
-    provider.type !== 'openai-images' &&
-    (provider.apiKey || provider.requiresApiKey === false)
+      provider.type !== 'openai-images' &&
+      (provider.apiKey || provider.requiresApiKey === false)
   )
 }
 
@@ -578,7 +579,7 @@ async function extractStage1Outputs(args: {
 }): Promise<PipelineScopeOutput[]> {
   const { systemPrompt, userPrompt } = buildStage1Prompts(args)
   const raw = await runTsTextRequest({
-    provider: args.provider,
+    provider: { ...args.provider, sessionId: args.sessionId },
     messages: [
       { id: 'memory-stage1-system', role: 'system', content: systemPrompt, createdAt: Date.now() },
       { id: 'memory-stage1-user', role: 'user', content: userPrompt, createdAt: Date.now() }
@@ -903,9 +904,10 @@ async function runConsolidation(args: {
   memoryMarkdown: string
   summaryMarkdown: string
   rawMemoriesMarkdown: string
+  runSessionId?: string | null
 }): Promise<ConsolidationOutput | null> {
   const raw = await runTsTextRequest({
-    provider: args.provider,
+    provider: { ...args.provider, sessionId: args.runSessionId ?? undefined },
     messages: [
       {
         id: `memory-phase2-${args.root.id}`,
@@ -938,7 +940,10 @@ async function runPhase2ForRoot(args: {
   root: MemoryRootDescriptor
   provider: ProviderConfig
   sourceSessionId?: string | null
+  /** The daily rollup records under a synthetic id, which Main will not authorize. */
+  runSessionId?: string | null
 }): Promise<void> {
+  await ensureTokenEncoder()
   const phase2Job = await createPhase2Job(args.root, args.sourceSessionId)
   try {
     const outputs = await listStage1Outputs(args.root)
@@ -990,7 +995,8 @@ async function runPhase2ForRoot(args: {
         userMarkdown: userDescriptor.content,
         memoryMarkdown: memoryDescriptor.content,
         summaryMarkdown: summaryDescriptor.content,
-        rawMemoriesMarkdown
+        rawMemoriesMarkdown,
+        runSessionId: args.runSessionId
       })
     } catch (error) {
       console.warn('[MemoryAutomation] Phase 2 model consolidation failed, using fallback:', error)
@@ -1246,7 +1252,8 @@ export async function runMemoryAutomationForSession(options: RunSessionOptions):
       await runPhase2ForRoot({
         root,
         provider,
-        sourceSessionId: options.sessionId
+        sourceSessionId: options.sessionId,
+        runSessionId: options.sessionId
       })
     }
   } catch (error) {

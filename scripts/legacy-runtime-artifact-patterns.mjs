@@ -8,7 +8,6 @@ const forbiddenNames = [
   /^hostpolicy(?:\.dll|\.so|\.dylib)?$/i
 ]
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 export function isLegacyRuntimeArtifactPath(candidate) {
   const segments = candidate.replaceAll('\\', '/').split('/').filter(Boolean)
   if (segments.some((segment) => segment.toLowerCase() === 'native-worker')) return true

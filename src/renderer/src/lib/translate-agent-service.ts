@@ -1,7 +1,7 @@
-import { nanoid } from 'nanoid'
 import type { ProviderConfig, ToolDefinition } from '@renderer/lib/api/types'
 import { resolveLanguageName as resolveAppLanguageName } from '@renderer/lib/i18n-language'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { resolveAuxiliaryRunSessionId } from '@renderer/lib/ipc/auxiliary-run-session'
 import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 
@@ -184,10 +184,12 @@ export async function runTranslationAgent({
     : null
 
   if (workspace && modelSource && (await isTsRuntimeAvailable())) {
+    const sessionId = await resolveAuxiliaryRunSessionId(workspace.id, providerConfig.sessionId)
+    if (!sessionId) throw new Error('TS_RUNTIME_TEXT_SESSION_REQUIRED')
     onEvent({ type: 'iteration', iteration: 1 })
     for await (const event of streamTsRuntimeTextTurn({
       workspaceId: workspace.id,
-      sessionId: `translate-agent:${nanoid()}`,
+      sessionId,
       modelSource,
       modelOptions: {
         systemPrompt,

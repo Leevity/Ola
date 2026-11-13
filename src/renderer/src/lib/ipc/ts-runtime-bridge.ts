@@ -10,6 +10,12 @@ import {
 } from '../../../../shared/runtime/contracts'
 import type { ModelOptions } from '../../../../shared/runtime/model'
 import { invokeMessagePackBinary } from './messagepack-ipc-client'
+import { bindRunToRemoteSession } from '../remote/remote-auto-approval'
+import {
+  beginRemoteTaskRun,
+  endRemoteTaskRun,
+  publishRemoteRunEvent
+} from '../remote/remote-task-progress'
 import { openTsRuntimeRunStream, type TsRuntimeRunStream } from './ts-runtime-stream'
 import {
   createTsRuntimeProjectionState,
@@ -304,7 +310,11 @@ export async function* streamTsRuntimeTextTurn(
     snapshot: RunSnapshot
   ): { projected: TsRuntimeProjectedEvent[]; terminal: boolean } => {
     const events = snapshot.events.filter((event) => event.seq > lastSeq)
-    for (const event of events) lastSeq = Math.max(lastSeq, event.seq)
+    for (const event of events) {
+      lastSeq = Math.max(lastSeq, event.seq)
+      // Replayed events carry the same weight as pushed ones for a controller.
+      publishRemoteRunEvent(run.runId, event)
+    }
     const projected = projectTsRuntimeEvents(events, projectionState)
     for (const interaction of snapshot.pendingInteractions) {
       const key = `${interaction.runId}:${interaction.interactionId}`
@@ -344,6 +354,28 @@ export async function* streamTsRuntimeTextTurn(
     if (!result.accepted) throw new Error(result.error ?? 'TS_RUNTIME_UNAVAILABLE')
     submitted = true
     input.onRunIdAssigned?.(run.runId)
+    // Tell the main process this run exists while the remote session is open.
+    // Only bound runs may have their approvals decided automatically; a run
+    // started before the session never gets a binding, so a controller cannot
+    // inherit a decision the local user made for their own work.
+    void bindRunToRemoteSession(run.runId)
+    // Mirror the run into the projection a controller reads. Registered before
+    // the first snapshot so a controller that connects immediately sees the
+    // prompt instead of an empty task.
+    //
+    // Only runs that fill a visible assistant message are projected. The same
+    // pipeline also drives auxiliary work — the post-run outcome summary, title
+    // generation, translation — and those runs must not take the panel over:
+    // that would wipe the steps a controller is reading the moment the task
+    // finishes, which is exactly when they are worth reading.
+    if (run.assistantMessageId) {
+      beginRemoteTaskRun(
+        run.runId,
+        typeof run.prompt === 'string' ? run.prompt : '',
+        run.sessionId,
+        input.workingDirectory
+      )
+    }
     // Subscribe before the first snapshot so an event committed between the
     // two is buffered by the runtime instead of being missed.
     stream = await subscribe(0)
@@ -396,6 +428,7 @@ export async function* streamTsRuntimeTextTurn(
         continue
       }
       lastSeq = event.seq
+      publishRemoteRunEvent(run.runId, event)
       yield* projectTsRuntimeEvents([event], projectionState)
       const data = event.data as { status?: unknown } | null
       if (event.type !== 'run.status' || typeof data?.status !== 'string') continue
@@ -406,6 +439,9 @@ export async function* streamTsRuntimeTextTurn(
     }
   } finally {
     await stream?.close()
+    // Tell a watching controller that the run stopped even when the runtime
+    // never published a terminal status (aborted turn, dropped stream).
+    endRemoteTaskRun(run.runId, input.signal?.aborted ? 'cancelled' : 'interrupted')
     if (submitted && input.signal?.aborted) {
       await invokeMessagePackBinary<RuntimeResult<{ cancelled: boolean }>>(
         runtimeChannel('run-cancel'),

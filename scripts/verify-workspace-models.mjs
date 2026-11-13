@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import assert from 'node:assert/strict'
 import { build } from 'esbuild'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'

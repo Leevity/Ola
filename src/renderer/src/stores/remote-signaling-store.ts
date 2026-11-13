@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { signalingUrlForApi } from '../../../shared/remote-control'
 
 export type RemoteSignalStatus = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -27,8 +28,13 @@ type RemoteSignalingStore = {
 }
 
 const STORAGE_KEY = 'ola.remote.signaling'
-const DEFAULT_SIGNAL_URL =
-  import.meta.env.VITE_OLA_REMOTE_SIGNAL_URL || 'ws://100.64.0.6:7301/ws/signaling'
+const ACCOUNT_STORAGE_KEY = 'ola.remote.account'
+/**
+ * Only used when the account store has no base URL at all (fresh profile,
+ * storage wiped): fall back to the production host instead of a developer
+ * machine's private address, which no real user could ever reach.
+ */
+const FALLBACK_API_BASE_URL = 'https://lbxai.cn'
 
 let socket: WebSocket | null = null
 const listeners = new Set<RemoteSignalListener>()
@@ -42,27 +48,42 @@ function emitSignalMessage(message: RemoteSignalMessage): void {
   for (const listener of listeners) listener(message)
 }
 
-function loadSignalUrl(): string {
+/**
+ * An explicitly stored address wins; otherwise the endpoint follows wherever
+ * the account points. Resolving on every connect (not once at module load) is
+ * what lets switching servers in settings take effect without a restart.
+ */
+function resolveSignalUrl(): string {
   try {
-    return window.localStorage.getItem(STORAGE_KEY) || DEFAULT_SIGNAL_URL
+    const explicit = window.localStorage.getItem(STORAGE_KEY)
+    if (explicit) return explicit
+    const account = window.localStorage.getItem(ACCOUNT_STORAGE_KEY)
+    const apiBaseUrl = account
+      ? ((JSON.parse(account) as { apiBaseUrl?: string } | null)?.apiBaseUrl ?? '')
+      : ''
+    return (
+      signalingUrlForApi(apiBaseUrl) ||
+      signalingUrlForApi(FALLBACK_API_BASE_URL) ||
+      'wss://lbxai.cn/ws/signaling'
+    )
   } catch {
-    return DEFAULT_SIGNAL_URL
+    return 'wss://lbxai.cn/ws/signaling'
   }
 }
 
-function persistSignalUrl(signalUrl: string): void {
-  window.localStorage.setItem(STORAGE_KEY, signalUrl)
-}
-
-export const useRemoteSignalingStore = create<RemoteSignalingStore>((set, get) => ({
-  signalUrl: loadSignalUrl(),
+export const useRemoteSignalingStore = create<RemoteSignalingStore>((set) => ({
+  signalUrl: resolveSignalUrl(),
   status: 'idle',
   error: null,
   lastMessage: null,
   setSignalUrl: (signalUrl) => {
-    const next = signalUrl.trim() || DEFAULT_SIGNAL_URL
-    set({ signalUrl: next })
-    persistSignalUrl(next)
+    const next = signalUrl.trim()
+    // Clearing the field means "follow the account server again", not "no
+    // endpoint": an empty override would silently break every later connect.
+    if (next) window.localStorage.setItem(STORAGE_KEY, next)
+    else window.localStorage.removeItem(STORAGE_KEY)
+    const resolved = resolveSignalUrl()
+    set({ signalUrl: resolved })
   },
   connect: (deviceToken) =>
     new Promise<void>((resolve, reject) => {
@@ -73,8 +94,9 @@ export const useRemoteSignalingStore = create<RemoteSignalingStore>((set, get) =
         return
       }
       socket?.close()
-      set({ status: 'connecting', error: null })
-      const ws = new WebSocket(get().signalUrl, ['ola-remote-v1', `ola-token.${deviceToken}`])
+      const signalUrl = resolveSignalUrl()
+      set({ status: 'connecting', error: null, signalUrl })
+      const ws = new WebSocket(signalUrl, ['ola-remote-v1', `ola-token.${deviceToken}`])
       socket = ws
       ws.onopen = () => {
         set({ status: 'connected', error: null })

@@ -11,7 +11,10 @@ import { useUIStore } from '@renderer/stores/ui-store'
 export function AccountAuthPage({
   onBack,
   onSignedIn
-}: { onBack?: () => void; onSignedIn?: () => void } = {}): React.JSX.Element {
+}: {
+  onBack?: () => void
+  onSignedIn?: () => void
+} = {}): React.JSX.Element {
   const { t } = useTranslation('layout')
   const close = useUIStore((s) => s.closeAccountAuthPage)
   const returnToApp = onBack ?? close

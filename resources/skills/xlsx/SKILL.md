@@ -1,4 +1,5 @@
 ---
+
 name: xlsx
 description: Create, edit, inspect, and validate spreadsheet files while preserving formulas and formatting. Use for XLSX, XLSM, CSV, or TSV analysis, formula authoring, charts, data visualization, workbook repair, and recalculation workflows.
 ---

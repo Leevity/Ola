@@ -1,10 +1,9 @@
 import { createCipheriv, pbkdf2Sync, randomBytes, createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
-import path from 'node:path'
 import {
   decryptChromiumCbcCookie,
   decryptChromiumGcmCookie
 } from '../src/main/browser/chromium-cookie-crypto'
+import { assertIncludes, assertMatch, readCollapsedSource } from './lib/source-text.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -44,77 +43,91 @@ assert(
   'Windows Chromium GCM cookie decryption failed'
 )
 
-const source = await readFile(
-  path.join(process.cwd(), 'src/main/browser/browser-cookie-import.ts'),
-  'utf8'
-)
-const handlers = await readFile(
-  path.join(process.cwd(), 'src/main/ipc/browser-handlers.ts'),
-  'utf8'
-)
-const packageJson = await readFile(path.join(process.cwd(), 'package.json'), 'utf8')
-assert(
-  source.includes("mkdtemp(join(tmpdir(), 'ola-cookie-import-'))"),
+// Every text assertion here is about tokens, not layout, so the sources are read collapsed.
+// Collapsing turns a wrapped call into `fn( arg )`, so each pattern tolerates a space
+// wherever the formatter may break a line.
+const source = await readCollapsedSource('src/main/browser/browser-cookie-import.ts')
+const handlers = await readCollapsedSource('src/main/ipc/browser-handlers.ts')
+const packageJson = await readCollapsedSource('package.json')
+assertMatch(
+  source,
+  /mkdtemp\(\s*join\(\s*tmpdir\(\s*\),\s*'ola-cookie-import-'\s*\)\s*\)/,
   'isolated temp copy missing'
 )
-assert(
-  source.includes('await rm(tempDir, { recursive: true, force: true })'),
+assertMatch(
+  source,
+  /await\s+rm\(\s*tempDir,\s*\{\s*recursive:\s*true,\s*force:\s*true\s*\}\s*\)/,
   'temp cleanup missing'
 )
-assert(!source.includes('console.log'), 'cookie importer must not log cookie data')
-assert(!source.includes('console.error'), 'cookie importer must not log cookie data')
-assert(
-  source.includes('export async function exportBuiltInBrowserCookies'),
+assert(!/console\s*\.\s*log/.test(source), 'cookie importer must not log cookie data')
+assert(!/console\s*\.\s*error/.test(source), 'cookie importer must not log cookie data')
+assertMatch(
+  source,
+  /export\s+async\s+function\s+exportBuiltInBrowserCookies/,
   'encrypted built-in cookie export is missing'
 )
 assert(
-  source.includes('canPersistSecrets(safeStorage)') &&
-    source.includes("encryption: 'electron-safe-storage'"),
+  /canPersistSecrets\(\s*safeStorage\s*\)/.test(source) &&
+    /encryption:\s*'electron-safe-storage'/.test(source),
   'cookie export must require secure storage and label its ciphertext format'
 )
 assert(
-  /safeStorage\s*\.encryptString/.test(source) && source.includes('mode: 0o600'),
+  /safeStorage\s*\.\s*encryptString/.test(source) && /mode:\s*0o600/.test(source),
   'cookie export must encrypt before writing a user-private archive'
 )
 assert(
-  /registerTrustedBrowserMessagePackHandler<\{ workspaceId: string \}>\(\s*'browser:export-cookies'/.test(
+  /registerTrustedBrowserMessagePackHandler<\s*\{\s*workspaceId:\s*string\s*\}\s*>\(\s*'browser:export-cookies'/.test(
     handlers
-  ) && handlers.includes('exportBuiltInBrowserCookies'),
+  ) &&
+    // Assert the call site, not bare presence: the module-level import of this same
+    // symbol would otherwise satisfy the check even if the handler stopped calling it.
+    /exportBuiltInBrowserCookies\(\s*event\s*\.\s*sender,\s*input\s*\.\s*workspaceId\s*\)/.test(
+      handlers
+    ),
   'encrypted cookie export must be exposed through the Main browser IPC boundary'
 )
-assert(
-  /function isTrustedBrowserIpcSender\(event: IpcMainInvokeEvent\): boolean/.test(handlers),
+assertMatch(
+  handlers,
+  /function\s+isTrustedBrowserIpcSender\(\s*event:\s*IpcMainInvokeEvent\s*\):\s*boolean/,
   'browser IPC sender authorization helper missing'
 )
 assert(
-  /ownerWindow\.webContents === event\.sender/.test(handlers) &&
-    /event\.senderFrame === event\.sender\.mainFrame/.test(handlers),
+  /ownerWindow\s*\.\s*webContents\s*===\s*event\s*\.\s*sender/.test(handlers) &&
+    /event\s*\.\s*senderFrame\s*===\s*event\s*\.\s*sender\s*\.\s*mainFrame/.test(handlers),
   'browser IPC sender must be a top-level BrowserWindow frame'
 )
-assert(
-  /function registerTrustedBrowserMessagePackHandler<TArgs>/.test(handlers),
+assertMatch(
+  handlers,
+  /function\s+registerTrustedBrowserMessagePackHandler<\s*TArgs\s*>/,
   'browser IPC authorization wrapper missing'
 )
 assert(
-  /registerTrustedBrowserMessagePackHandler<\{[\s\S]*workspaceId: string[\s\S]*\}>\('browser:import-cookies'/.test(
+  // `[^>]*` cannot cross a registration's closing `>`, so this cannot start at the
+  // export-cookies trusted wrapper and end at import-cookies' own type literal —
+  // an unbounded `[\s\S]*` did exactly that and hid a downgraded import handler.
+  /registerTrustedBrowserMessagePackHandler<\s*\{[^>]*workspaceId:\s*string[^>]*\}\s*>\(\s*'browser:import-cookies'/.test(
     handlers
   ) &&
-    /registerTrustedBrowserMessagePackHandler<\{ workspaceId: string \}>\(\s*'browser:clear-cookies'/.test(
+    /registerTrustedBrowserMessagePackHandler<\s*\{\s*workspaceId:\s*string\s*\}\s*>\(\s*'browser:clear-cookies'/.test(
       handlers
     ),
   'cookie mutation handlers must use the trusted browser IPC wrapper'
 )
 assert(
-  /importBrowserCookies\(input\.profileId, input\.workspaceId\)/.test(handlers) &&
-    /getBuiltInBrowserStorageSessions\(\[input\.workspaceId\]\)/.test(handlers),
+  /importBrowserCookies\(\s*input\s*\.\s*profileId,\s*input\s*\.\s*workspaceId\s*\)/.test(
+    handlers
+  ) &&
+    /getBuiltInBrowserStorageSessions\(\s*\[\s*input\s*\.\s*workspaceId\s*\]\s*\)/.test(handlers),
   'cookie mutation handlers must scope imports and clears to the requested workspace'
 )
-assert(
-  handlers.includes('Unauthorized browser IPC sender'),
+assertIncludes(
+  handlers,
+  'Unauthorized browser IPC sender',
   'unauthorized browser IPC error missing'
 )
-assert(
-  packageJson.includes('npm run verify:browser-cookie-import'),
+assertIncludes(
+  packageJson,
+  'npm run verify:browser-cookie-import',
   'core verifier registration missing'
 )
 

@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
-import { access, readFile } from 'node:fs/promises'
+import { access } from 'node:fs/promises'
 import path from 'node:path'
+import { readCollapsedSource } from './lib/source-text.ts'
 
 const root = process.cwd()
-const read = (relativePath: string): Promise<string> =>
-  readFile(path.join(root, relativePath), 'utf8')
+// No assertion here is line-anchored, so every source is read with whitespace collapsed:
+// a re-wrap cannot turn this gate red. Needles that span a place where the formatter may
+// break a line use a RegExp with \s* tolerance instead of a literal. Negative assertions
+// stay literal — collapsing only makes them see more, never less.
+const read = (relativePath: string): Promise<string> => readCollapsedSource(relativePath)
 
 const [
   uiStore,
@@ -94,18 +98,18 @@ assert(
 assert(
   workspaceSidebar.includes('IPC.SSH_WINDOW_OPEN') &&
     !workspaceSidebar.includes('openRemoteDialog') &&
-    (workspaceSidebar.match(/navRail\.remote/g) ?? []).length === 1 &&
+    (workspaceSidebar.match(/navRail\s*\.\s*remote/g) ?? []).length === 1 &&
     !layout.includes('<RemotePage') &&
     !layout.includes('remoteDialogOpen') &&
     app.includes('<RemotePage standalone />') &&
-    mainIndex.includes("registerMessagePackHandler<void>('ssh-window:open'") &&
+    mainIndex.match(/registerMessagePackHandler<void>\(\s*'ssh-window:open'/) &&
     mainIndex.includes('showSshWindow()') &&
     remotePage.includes("ipcClient.invoke('window:close')"),
   'remote control must use the dedicated native window without an embedded duplicate'
 )
 assert(
-  mainIndex.includes("registerMessagePackHandler<string>('session-window:open'") &&
-    mainIndex.includes("registerMessagePackHandler<string>('session-window:focus-if-open'") &&
+  mainIndex.match(/registerMessagePackHandler<string>\(\s*'session-window:open'/) &&
+    mainIndex.match(/registerMessagePackHandler<string>\(\s*'session-window:focus-if-open'/) &&
     (mainIndex.match(/UNTRUSTED_IPC_SENDER/g) ?? []).length >= 2,
   'detached session window IPC must reject untrusted frames'
 )
@@ -272,7 +276,7 @@ assert(
 )
 assert(
   uiStore.includes('export type ActiveSurface =') &&
-    uiStore.includes('function activeSurfacePatch(activeSurface: ActiveSurface)') &&
+    uiStore.match(/function activeSurfacePatch\(\s*activeSurface:\s*ActiveSurface\s*\)/) &&
     layout.includes('const activeSurface = useUIStore((s) => s.activeSurface)'),
   'single ActiveSurface navigation state is missing'
 )
@@ -280,7 +284,10 @@ assert(
 for (const action of ['new-task', 'search', 'projects', 'tasks', 'capabilities']) {
   assert(navRail.includes(`value: '${action}'`), `primary navigation is missing ${action}`)
 }
-assert(navRail.includes('aria-current={item.active'), 'primary navigation current state is missing')
+assert(
+  navRail.match(/aria-current=\{\s*item\.active/),
+  'primary navigation current state is missing'
+)
 assert(
   navRail.includes("openSettingsPage('plugin')"),
   'capability center is not directly reachable'
@@ -295,13 +302,15 @@ assert(
     capabilityLifecycle.includes(
       "{ id: 'novnc-remote-desktop', status: 'beta', highImpact: true }"
     ) &&
-    capabilityLifecycle.includes(
-      "CapabilityLifecycleStatus = 'prototype' | 'internal' | 'beta' | 'ga' | 'deprecated'"
+    capabilityLifecycle.match(
+      // The leading `|` is a formatter artifact of a wrapped union, not a member change:
+      // the same five grades in the same order are still required.
+      /CapabilityLifecycleStatus =\s*\|?\s*'prototype'\s*\|\s*'internal'\s*\|\s*'beta'\s*\|\s*'ga'\s*\|\s*'deprecated'/
     ),
   'optional workbenches must keep an explicit lifecycle grade'
 )
 assert(
-  capabilityCenter.includes('t(`capabilityCenter.status.${capability.status}`)') &&
+  capabilityCenter.match(/t\(\s*`capabilityCenter\.status\.\$\{capability\.status\}`\s*\)/) &&
     capabilityCenter.includes("capability.status === 'prototype'"),
   'capability center must render the full lifecycle vocabulary'
 )
@@ -318,7 +327,9 @@ assert(
 )
 assert(
   capabilityCenter.includes("id: 'custom'") &&
-    capabilityCenter.includes("setSettingsTab(tab.id === 'custom' ? 'extension' : 'plugin')") &&
+    capabilityCenter.match(
+      /setSettingsTab\(\s*tab\.id\s*===\s*'custom'\s*\?\s*'extension'\s*:\s*'plugin'\s*\)/
+    ) &&
     settingsRegistry.includes("id: 'mcp'") &&
     settingsRegistry.includes("id: 'skillsmarket'") &&
     settingsRegistry.includes("id: 'channel'") &&

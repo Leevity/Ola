@@ -1,9 +1,8 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
-@import 'markstream-react/index.css';
 @import 'katex/dist/katex.min.css';
 @import './ola-design-tokens.css';
-@plugin "@tailwindcss/typography";
+@plugin '@tailwindcss/typography';
 
 @custom-variant dark (&:is(.dark *));
 
@@ -205,42 +204,6 @@
     color: color-mix(in srgb, var(--foreground) 97%, var(--primary) 3%);
     text-shadow: 0 0 0 transparent;
     filter: brightness(0.985);
-  }
-}
-
-@keyframes ai-live-typewriter-node {
-  0% {
-    opacity: 0;
-  }
-  58% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes ai-live-typewriter-delta-a {
-  0% {
-    opacity: 0;
-  }
-  72% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
-  }
-}
-
-@keyframes ai-live-typewriter-delta-b {
-  0% {
-    opacity: 0;
-  }
-  72% {
-    opacity: 1;
-  }
-  100% {
-    opacity: 1;
   }
 }
 
@@ -940,106 +903,6 @@
     --typewriter-fade-duration: 90ms;
     --stream-update-fade-duration: 82ms;
     --stream-update-steps: 4;
-  }
-
-  .ola-markstream .typewriter-node {
-    animation-name: ai-live-typewriter-node;
-    animation-duration: var(--typewriter-fade-duration, 70ms);
-    animation-timing-function: var(--typewriter-fade-ease, ease-out);
-    will-change: opacity;
-  }
-
-  .ola-markstream .markdown-renderer,
-  .ola-markstream .markdown-renderer.virtualized {
-    content-visibility: visible;
-    contain: none;
-    contain-intrinsic-size: auto;
-  }
-
-  .ola-markstream .node-placeholder {
-    display: none;
-  }
-
-  .ola-markstream .table-node-wrapper {
-    margin-top: 0.75rem !important;
-    margin-bottom: 0.75rem !important;
-    max-width: 100%;
-    overflow-x: auto;
-    border: 1px solid var(--ola-md-table-border) !important;
-    border-radius: 0.5rem;
-  }
-
-  .ola-markstream .table-node {
-    margin: 0 !important;
-    width: 100%;
-    min-width: 0;
-    border-collapse: collapse;
-    table-layout: auto;
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-
-  .ola-markstream .table-node thead {
-    border-color: transparent !important;
-    background: var(--ola-md-table-header-bg);
-  }
-
-  .ola-markstream .table-node tr {
-    border-color: var(--ola-md-table-row-border) !important;
-    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
-    transition-duration: 150ms;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .ola-markstream .table-node tr:hover {
-    background: var(--ola-md-table-row-hover-bg);
-  }
-
-  .ola-markstream .table-node thead tr {
-    border-bottom: 0 !important;
-  }
-
-  .ola-markstream .table-node tbody tr:not(:last-child) {
-    border-bottom: 1px solid var(--ola-md-table-row-border) !important;
-  }
-
-  .ola-markstream .table-node th,
-  .ola-markstream .table-node td {
-    padding: 0.5rem 0.75rem !important;
-    text-align: left !important;
-    white-space: pre-wrap;
-    overflow-wrap: break-word;
-  }
-
-  .ola-markstream .table-node th {
-    border-bottom: 1px solid var(--ola-md-table-border) !important;
-    color: var(--ola-md-table-header-fg);
-    font-weight: 600;
-  }
-
-  .ola-markstream .table-node td {
-    border-right: 1px solid var(--ola-md-table-cell-border) !important;
-    color: var(--ola-md-table-cell-fg);
-  }
-
-  .ola-markstream .table-node td:last-child {
-    border-right: 0 !important;
-  }
-
-  .ola-markstream .text-node-stream-delta {
-    display: inline;
-    animation-duration: var(--stream-update-fade-duration, 62ms);
-    animation-timing-function: var(--stream-update-fade-ease, ease-out);
-    animation-fill-mode: both;
-    will-change: opacity;
-  }
-
-  .ola-markstream .text-node-stream-delta--a {
-    animation-name: ai-live-typewriter-delta-a;
-  }
-
-  .ola-markstream .text-node-stream-delta--b {
-    animation-name: ai-live-typewriter-delta-b;
   }
 
   .ai-live-component {

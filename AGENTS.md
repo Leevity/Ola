@@ -34,10 +34,20 @@ src/
 **Key architectural patterns:**
 
 - **IPC:** Renderer calls `ipcClient.invoke(channel)`, main handles in `src/main/ipc/*-handlers.ts`.
-- **Agent runtime:** TypeScript runtime is the production target. Any remaining compatibility
-  boundary is fail-closed and must not start an external worker; the exact exit state is tracked
-  in the migration acceptance ledger.
+- **Agent runtime:** TypeScript runtime is the production target. Inside Electron it runs in a
+  `utilityProcess` (`src/runtime/host/isolated.ts`) so a crash costs the run, not the window; Main
+  keeps credentials, desktop tools, hooks and approvals and serves them back over reverse RPC
+  (`src/main/runtime/runtime-host-bridge.ts`). Tests and the CLI have no `utilityProcess` and use
+  the in-process host, which is never granted the `host` capability. No sidecar or Native Worker
+  may be started; any remaining compatibility boundary is fail-closed and the exact exit state is
+  tracked in the migration acceptance ledger.
 - **Tool system:** Tools in `src/renderer/src/lib/tools/`, registered in phases (core → skills → sub-agents → teams).
+- **Desktop input backend:** `@jitsi/robotjs` is reached only through `getRobot()` in
+  `src/main/ipc/desktop-control.ts` — memoized, with a single degraded-result path. Swapping the
+  backend means changing that function and `KEY_MAP`, not the call sites. A load failure is recorded
+  to the remote audit log as `input_backend_unavailable`, because the desktop-flow recorder drops
+  events while no flow is recording. Screenshots use Electron `desktopCapturer` and geometry uses
+  `screen.getAllDisplays`; no robotjs screen/pixel API is used.
 - **Session modes:** `chat`, `clarify`, `cowork`, `code` — each with distinct prompts/tools/UI.
 - **Run events:** `RunEvent` (`src/shared/runtime/contracts.ts`) is the single source of truth for
   runtime events. `TsRuntimeProjectedEvent` may only project those into UI vocabulary; never invent a
@@ -55,21 +65,21 @@ npm run build        # Typecheck (main + renderer) then build
 npm run build:win    # Full Windows installer (electron-builder)
 npm run build:mac    # macOS .dmg/zip
 npm run build:linux  # Linux .AppImage/.deb
-npm run lint         # ESLint with cache
+npm run lint         # Biome lint (biome.json)
 npm run typecheck    # TypeScript check (tsc --noEmit for both tsconfig.node.json & tsconfig.web.json)
-npm run format       # Prettier (single quotes, no semicolons, 100-col width)
+npm run format       # Biome format (single quotes, no semicolons, 100-col width)
 npm run postinstall  # Prepare native Electron dependencies
 npm run verify:ts-migration-ledger  # Check migration acceptance inventory
 npm run verify:ts-migration-exit    # Strict final gate; expected to fail until full migration
 ```
 
-**CI:** GitHub Actions (`build.yml`) runs the TypeScript runtime, Electron, CodeGraph and Go quality gates on pull requests and `main`; the manual release workflow builds Windows, macOS and Linux on x64/arm64. No .NET worker or CodeGraph build is part of the production workflow.
+**CI:** GitHub Actions (`build.yml`) runs the TypeScript runtime, Electron and CodeGraph quality gates on pull requests and `main`; the manual release workflow builds Windows, macOS and Linux on x64/arm64. The Go control plane lives in the separate Ola-admin repository with its own CI. No .NET worker or CodeGraph build is part of the production workflow.
 
 ## Coding Style & Naming Conventions
 
 | Rule             | Convention                                                                                 |
 | ---------------- | ------------------------------------------------------------------------------------------ |
-| Formatting       | Prettier: single quotes, no semicolons, 100-col width, no trailing commas                  |
+| Formatting       | Biome: single quotes, no semicolons, 100-col width, no trailing commas                     |
 | Indentation      | 2 spaces, LF line endings, UTF-8, final newline (EditorConfig)                             |
 | React components | PascalCase (`Layout.tsx`)                                                                  |
 | Stores/helpers   | kebab-case (`chat-store.ts`)                                                               |
@@ -77,7 +87,7 @@ npm run verify:ts-migration-exit    # Strict final gate; expected to fail until 
 | i18n             | `t('key', { defaultValue: 'English text' })` — never hardcode Chinese in UI                |
 | Comments         | Explain intent, invariants, boundaries, or non-obvious behavior. Avoid restating the code. |
 
-**Lint/format on save:** ESLint + Prettier enforce these rules automatically. Run `npm run lint` and `npm run format` before pushing.
+**Lint/format on save:** Biome enforces these rules from `biome.json`. Run `npm run lint` and `npm run format` before pushing. The `src/runtime/**` and `src/shared/runtime/**` overrides there forbid `electron`, `react`, `zustand` and any `@renderer/**` / renderer / main import — that boundary is what keeps the Agent runtime independently testable.
 
 ## Testing Guidelines
 
@@ -86,7 +96,7 @@ npm run verify:ts-migration-exit    # Strict final gate; expected to fail until 
 - `npm run test:runtime` — isolated Agent, scheduler, model binding, SQLite, transport and CLI tests
 - `npm run typecheck:runtime` — staged Node runtime and test types
 - `npm run typecheck` — TypeScript compilation check across both main and renderer
-- `npm run lint` — ESLint static analysis
+- `npm run lint` — Biome static analysis
 - Manual smoke testing via `npm run dev`
 
 When adding behavioral changes, run the affected behavioral tests and typechecks.

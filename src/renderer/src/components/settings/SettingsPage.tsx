@@ -1703,7 +1703,6 @@ function MemoryPanel(): React.JSX.Element {
   useEffect(() => {
     void loadGlobalMemoryFiles()
     // Only auto-load once when the panel mounts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const updateDraft = useCallback(

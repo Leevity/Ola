@@ -2,7 +2,13 @@ import { create } from 'zustand'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { useWorkspaceStore } from './workspace-store'
+import { configureRemoteTaskFeed } from '@renderer/lib/remote/remote-task-feed'
 import type { OlaModelResource, WorkspaceContext } from '@renderer/lib/workspace-context'
+import {
+  normalizeRemoteAccessMode,
+  type RemoteAccessMode,
+  type RemoteAccessState
+} from '../../../shared/remote-control'
 
 export type RemoteAccount = {
   id: string
@@ -19,6 +25,14 @@ export type RemoteDevice = {
   isOnline: boolean
   lastSeen?: string
   createdAt: string
+  /**
+   * Durable remote-control permission. Absent when the control plane predates
+   * three-state permissions, which is why callers treat `undefined` as
+   * "unknown" rather than "none".
+   */
+  remoteAccessMode?: RemoteAccessMode
+  remoteAccessUpdatedAt?: string | null
+  remoteAccessUpdatedBy?: string
 }
 
 export type RemoteSessionAudit = {
@@ -110,6 +124,16 @@ type RemoteAccountStore = {
   pairingCode: PairingResponse | null
   resolvedPairing: ResolvedPairing | null
   allowRemoteControl: boolean
+  /** Durable permission reported by the control plane. */
+  remoteAccessMode: RemoteAccessMode
+  /**
+   * False when the control plane never returned a mode (older server), which
+   * the settings UI surfaces as "upgrade required" instead of pretending the
+   * device is off.
+   */
+  remoteAccessSupported: boolean
+  remoteAccessAutoApprove: boolean
+  remoteAccessUpdatedAt: string | null
   loading: boolean
   workspaceSyncState: 'idle' | 'syncing' | 'unavailable'
   setApiBaseUrl: (apiBaseUrl: string) => void
@@ -128,6 +152,9 @@ type RemoteAccountStore = {
   heartbeatDevice: () => Promise<void>
   syncWorkspaces: () => Promise<void>
   setAllowRemoteControl: (allow: boolean) => Promise<void>
+  setRemoteAccessMode: (mode: RemoteAccessMode, confirm?: string) => Promise<void>
+  refreshRemoteAccess: () => Promise<void>
+  endRemoteSession: (sessionId: string) => Promise<void>
   createPairingCode: () => Promise<void>
   revokePairingCode: () => Promise<void>
   resolvePairingCode: (code: string) => Promise<ResolvedPairing>
@@ -203,6 +230,10 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
     pairingCode: null,
     resolvedPairing: null,
     allowRemoteControl: false,
+    remoteAccessMode: 'none',
+    remoteAccessSupported: false,
+    remoteAccessAutoApprove: false,
+    remoteAccessUpdatedAt: null,
     loading: false,
     workspaceSyncState: 'idle',
     setApiBaseUrl: (apiBaseUrl) => {
@@ -235,6 +266,16 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
           return
         }
         set({ token: 'main-process', account: result.account, device: result.device })
+        // Read the permission from the control plane rather than from the
+        // cached device: the cache is from login time, so a grant (or a
+        // revoke) made in the console while the app was closed has to win.
+        // This is also what lets an already-unattended machine start sharing
+        // at launch instead of waiting for the first heartbeat.
+        if (result.device) {
+          await get()
+            .refreshRemoteAccess()
+            .catch(() => undefined)
+        }
         if (result.offline) {
           await get()
             .syncWorkspaces()
@@ -497,6 +538,18 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         deviceId: device.id
       })
       set({ device: result.device })
+      // The control plane owns the permission and heartbeat echoes it, so a
+      // console operator can grant unattended access while this app is running.
+      // Mirroring it here is what makes the app start listening and sharing on
+      // its own: without this the desktop only noticed a change after somebody
+      // opened the remote page, which defeated the point of unattended access.
+      const reportedMode = result.device.remoteAccessMode
+      if (reportedMode) {
+        const mode = normalizeRemoteAccessMode(reportedMode)
+        if (get().remoteAccessMode !== mode) {
+          applyRemoteAccessResult({ remoteAccessMode: mode, autoApprove: mode === 'unattended' })
+        }
+      }
       await request(apiBaseUrl, 'mesh-node-heartbeat', { nodeId: `node-${device.id}` })
     },
     syncWorkspaces: async () => {
@@ -575,12 +628,42 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
       }
     },
     setAllowRemoteControl: async (allow) => {
-      if (allow) {
-        await get().createPairingCode()
-        return
+      // Legacy callers only knew on/off. "On" is attended, never unattended:
+      // nobody can widen to unattended without typing the device name.
+      await get().setRemoteAccessMode(allow ? 'attended' : 'none')
+    },
+    setRemoteAccessMode: async (mode, confirm) => {
+      const { apiBaseUrl, token, device } = get()
+      if (!token) throw new Error('Login is required before changing remote access')
+      if (!device) throw new Error('Register this device before changing remote access')
+      const result = await request<RemoteAccessState>(apiBaseUrl, 'device-access-set', {
+        deviceId: device.id,
+        mode,
+        ...(confirm ? { confirm } : {})
+      })
+      applyRemoteAccessResult(result)
+      if (mode === 'none') {
+        // Drop the live session before the network round trip that persists
+        // "none": input must stop the instant the user withdraws consent.
+        set({ pairingCode: null })
+        await request(apiBaseUrl, 'pairing-revoke', { deviceId: device.id }).catch(() => undefined)
       }
-      await get().revokePairingCode()
-      set({ allowRemoteControl: false, pairingCode: null })
+    },
+    refreshRemoteAccess: async () => {
+      const { apiBaseUrl, token, device } = get()
+      if (!token || !device) return
+      const result = await request<RemoteAccessState>(apiBaseUrl, 'device-access-get', {
+        deviceId: device.id
+      })
+      applyRemoteAccessResult(result)
+    },
+    endRemoteSession: async (sessionId) => {
+      const { apiBaseUrl, token } = get()
+      if (!token || !sessionId) return
+      await request(apiBaseUrl, 'session-end', { sessionId })
+      await get()
+        .loadSessionAudits()
+        .catch(() => undefined)
     },
     createPairingCode: async () => {
       const { apiBaseUrl, token, device } = get()
@@ -590,6 +673,11 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
         deviceId: device.id
       })
       set({ pairingCode: result, allowRemoteControl: true })
+      // The control plane may have kept a wider mode than the pairing window
+      // implies, so read the durable value instead of assuming attended.
+      await get()
+        .refreshRemoteAccess()
+        .catch(() => undefined)
     },
     revokePairingCode: async () => {
       const { apiBaseUrl, token, device } = get()
@@ -625,6 +713,25 @@ export const useRemoteAccountStore = create<RemoteAccountStore>((set, get) => {
     }
   }
 })
+
+/**
+ * Mirrors a control-plane permission response into local state. `none` also
+ * clears the pairing code so a stale code cannot be shown as still valid.
+ */
+function applyRemoteAccessResult(
+  result: Pick<RemoteAccessState, 'remoteAccessMode' | 'autoApprove'> &
+    Partial<Pick<RemoteAccessState, 'updatedAt'>>
+): void {
+  const mode = normalizeRemoteAccessMode(result.remoteAccessMode)
+  useRemoteAccountStore.setState({
+    remoteAccessMode: mode,
+    remoteAccessSupported: true,
+    remoteAccessAutoApprove: result.autoApprove === true,
+    remoteAccessUpdatedAt: result.updatedAt ?? null,
+    allowRemoteControl: mode !== 'none',
+    ...(mode === 'none' ? { pairingCode: null } : {})
+  })
+}
 
 // The primary workspace and the detached remote-control window have separate
 // renderer stores but share Electron's default-session localStorage. Keep the
@@ -662,3 +769,27 @@ if (typeof window !== 'undefined' && typeof window.addEventListener === 'functio
     void useRemoteAccountStore.getState().hydrate()
   })
 }
+
+/**
+ * Keeps the control-plane task feed pointed at the signed-in device.
+ *
+ * Progress is reported only while remote access is allowed: "none" means the
+ * owner does not want this machine observable from the console at all, and a
+ * task's working directory is exactly the kind of thing that must not leak
+ * while that switch is off.
+ */
+let taskFeedKey = ''
+const syncTaskFeed = (): void => {
+  const { apiBaseUrl, token, device, remoteAccessMode } = useRemoteAccountStore.getState()
+  const next =
+    apiBaseUrl && token && device && remoteAccessMode !== 'none'
+      ? { apiBaseUrl, deviceId: device.id, enabled: true }
+      : null
+  const key = next ? `${next.apiBaseUrl}|${next.deviceId}` : ''
+  if (key === taskFeedKey) return
+  taskFeedKey = key
+  configureRemoteTaskFeed(next)
+}
+
+useRemoteAccountStore.subscribe(syncTaskFeed)
+syncTaskFeed()

@@ -6,6 +6,7 @@ import { useGoalStore } from '../../stores/goal-store'
 import { useSettingsStore } from '../../stores/settings-store'
 import { ipcClient } from '../ipc/ipc-client'
 import { estimateTokens } from '../format-tokens'
+import { ensureTokenEncoder } from '../token-encoder'
 import type { AIModelConfig } from '../api/types'
 import type { LayeredMemorySnapshot, SessionMemoryScope } from './memory-files'
 import { buildGoalSessionStateLine } from './goal-context'
@@ -22,6 +23,7 @@ export async function buildRuntimeReminder(options: {
   sessionId: string
   modelConfig?: AIModelConfig | null
 }): Promise<string> {
+  await ensureTokenEncoder()
   const { sessionId, modelConfig } = options
 
   const parts: string[] = []
@@ -132,6 +134,7 @@ async function buildSelectedFileContext(
   sshConnectionId?: string,
   modelConfig?: AIModelConfig | null
 ): Promise<string> {
+  await ensureTokenEncoder()
   const budget = resolveFileContextBudget(modelConfig)
   let usedTokens = 0
   const fileSections: string[] = []

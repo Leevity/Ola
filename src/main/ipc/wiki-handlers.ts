@@ -81,7 +81,16 @@ export function registerWikiHandlers(): void {
   )
   ipcMain.handle('wiki:get', async (event, args: { projectRoot: string; workspaceId: string }) => {
     const workspaceId = await authorizeWikiWorkspace(event, args?.workspaceId)
-    const projectRoot = validateProjectRoot(args.projectRoot)
+    let projectRoot: string
+    try {
+      projectRoot = validateProjectRoot(args.projectRoot)
+    } catch (error) {
+      // The default project directory lives inside the Ola data root in isolated/E2E setups.
+      // Wiki generation is not allowed there, but "no wiki document" is a normal empty state
+      // and must not surface as an unhandled IPC error on every startup.
+      if (error instanceof Error && /cannot be scanned/i.test(error.message)) return null
+      throw error
+    }
     const document =
       (await loadWikiDocument(projectRoot, workspaceId)) ??
       loadProjectWiki(projectRoot, workspaceId)

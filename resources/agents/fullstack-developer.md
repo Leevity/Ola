@@ -1,4 +1,5 @@
 ---
+
 name: fullstack-developer
 description: Build complete features spanning database, API, and frontend layers as a cohesive unit. Expert in end-to-end development with type-safe data flow, authentication, real-time features, and deployment.
 icon: layers

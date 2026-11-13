@@ -6,11 +6,18 @@ import {
 } from '@renderer/stores/remote-signaling-store'
 import {
   getRemoteCaptureDisplayId,
-  getRemoteCaptureStream
+  getRemoteCaptureStream,
+  useRemoteCaptureStore
 } from '@renderer/stores/remote-capture-store'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import type { RemoteInputEnvelope, RemoteInputEvent } from '@renderer/lib/remote/remote-types'
+import type { RemoteTaskSnapshot } from '../../../shared/remote-control'
+import {
+  replayRemoteTask,
+  resetRemoteTaskIfIdle,
+  setRemoteTaskSender
+} from '@renderer/lib/remote/remote-task-progress'
 
 export type RemotePeerStatus =
   | 'idle'
@@ -57,6 +64,8 @@ type RemotePeerStore = {
     iceServers?: IceServer[]
   ) => Promise<void>
   sendInput: (event: RemoteInputEvent) => void
+  /** Pushes the local run projection to the controller; no-op when there is none. */
+  sendTaskSnapshot: (snapshot: RemoteTaskSnapshot) => void
   closeSession: () => void
 }
 
@@ -95,9 +104,23 @@ function cleanupPeer(): void {
   queuedCandidates = []
   offerSent = false
   pendingRemoteCandidates = []
+  // A run can outlive the control session that was watching it; keep its
+  // projection so the next controller can replay it (see resetRemoteTaskIfIdle).
+  resetRemoteTaskIfIdle()
   if (qualityTimer !== null) window.clearInterval(qualityTimer)
   qualityTimer = null
   lastStatsReportAt = 0
+}
+
+/**
+ * Writes the local run projection to the controller. Only the controlled side
+ * publishes: the controller's own runs are none of the machine's business.
+ */
+function writeTaskSnapshot(snapshot: RemoteTaskSnapshot): void {
+  const state = useRemotePeerStore.getState()
+  if (state.role !== 'controlled') return
+  if (!dataChannel || dataChannel.readyState !== 'open') return
+  dataChannel.send(JSON.stringify({ kind: 'task', snapshot }))
 }
 
 function terminateTransportSession(
@@ -228,6 +251,10 @@ function attachDataChannel(
         displayId: getRemoteCaptureDisplayId(),
         peerDeviceId: state.peerDeviceId
       })
+      // A controller that joins mid-run must still see the run in progress, so
+      // the projection is replayed on connect instead of waiting for the next
+      // event (which may be minutes away, or never).
+      replayRemoteTask()
     }
     channel.send('ola-remote-datachannel-ok')
   }
@@ -300,9 +327,25 @@ async function handleIncomingSignal(
   if (message.type === 'offer') {
     if (!allowIncomingControl || !payload.description) return
     const pc = createPeer(message.from, message.sessionId, payload.iceServers, set)
-    const captureStream = getRemoteCaptureStream()
-    if (!captureStream) throw new Error('Screen capture must be active before accepting control')
-    for (const track of captureStream.getTracks()) pc.addTrack(track, captureStream)
+    let captureStream = getRemoteCaptureStream()
+    if (!captureStream) {
+      // A controller can arrive while nobody is at the machine. The permission
+      // is already granted (allowIncomingControl), so the only missing piece is
+      // the stream: start it here instead of failing a session the user asked
+      // for. An attended machine shows the usual OS capture prompt.
+      await useRemoteCaptureStore
+        .getState()
+        .startProbe()
+        .catch(() => undefined)
+      captureStream = getRemoteCaptureStream()
+    }
+    // Screen capture can be refused by the OS (macOS TCC) or fail on a
+    // headless box. Pointer and keyboard do not need pixels, so the session is
+    // still answered without video tracks: the controller gets a blind but
+    // working machine instead of a dead session. `capture_unavailable` is the
+    // hint the console turns into a "no picture" notice.
+    const captureUnavailable = !captureStream
+    for (const track of captureStream?.getTracks() ?? []) pc.addTrack(track, captureStream!)
     set({
       status: 'connecting',
       role: 'controlled',
@@ -312,7 +355,7 @@ async function handleIncomingSignal(
       error: null,
       startedAt: Date.now(),
       connectedAt: null,
-      lastMessage: null,
+      lastMessage: captureUnavailable ? 'capture_unavailable' : null,
       remoteStream: null,
       quality: null
     })
@@ -451,6 +494,9 @@ export const useRemotePeerStore = create<RemotePeerStore>((set, get) => ({
     const envelope: RemoteInputEnvelope = { sessionId: state.sessionId, event }
     dataChannel.send(JSON.stringify({ kind: 'input', envelope }))
   },
+  sendTaskSnapshot: (snapshot) => {
+    writeTaskSnapshot(snapshot)
+  },
   closeSession: () => {
     const state = get()
     if (state.sessionId && state.peerDeviceId) {
@@ -482,3 +528,7 @@ export const useRemotePeerStore = create<RemotePeerStore>((set, get) => ({
     })
   }
 }))
+
+// Registered once so the projection module can publish without importing this
+// store (which would close an import cycle).
+setRemoteTaskSender(writeTaskSnapshot)

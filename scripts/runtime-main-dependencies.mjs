@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { readdir, readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { isBuiltin } from 'node:module'

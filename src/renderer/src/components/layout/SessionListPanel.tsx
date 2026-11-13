@@ -828,6 +828,7 @@ export function SessionListPanel(): React.JSX.Element {
           messages,
           provider: {
             ...providerConfig,
+            sessionId,
             systemPrompt:
               'You are a session title generator. Return only a short accurate title in the same language as the conversation. Do not explain. Do not wrap in punctuation.'
           }

@@ -1,4 +1,5 @@
 ---
+
 name: CronAgent
 description: Scheduled task agent for cron jobs. Executes tasks autonomously on a timer, delivers results via desktop notifications or messaging plugins.
 icon: clock

@@ -1027,5 +1027,23 @@
     "terminalExited": "Comment",
     "terminalExitedWithError": "Comment",
     "exitCode": "Mã thoát: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Yêu cầu tác vụ từ xa",
+    "meshTaskFrom": "Từ {{node}}",
+    "meshTaskAccept": "Chạy tác vụ",
+    "meshTaskReject": "Từ chối",
+    "meshTaskRunning": "Tác vụ từ xa đang chạy: {{running}}",
+    "meshTaskAttendedNote": "Không có gì được chạy khi chưa có sự chấp thuận của bạn.",
+    "meshTaskReason": {
+      "unknown-task": "Yêu cầu này không còn khả dụng.",
+      "already-decided": "Yêu cầu này đã được trả lời.",
+      "user-rejected": "Đã từ chối yêu cầu.",
+      "access-disabled": "Truy cập từ xa đang tắt.",
+      "session-busy": "Một phiên từ xa khác đang hoạt động.",
+      "confirmation-required": "Thiết bị này yêu cầu xác nhận.",
+      "quota-exhausted": "Đã dùng hết hạn mức phê duyệt không giám sát."
+    },
+    "controlInputHint": "Nhấp vào màn hình từ xa để điều khiển. Đầu vào chuột và bàn phím sẽ dừng khi mất tiêu điểm."
   }
 }

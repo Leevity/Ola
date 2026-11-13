@@ -93,10 +93,19 @@ try {
 }
 
 const nodeBin = join(configDir, process.platform === 'win32' ? 'node-bin.exe' : 'node-bin')
-try {
-  await link(process.execPath, nodeBin)
-} catch {
-  await copyFile(process.execPath, nodeBin)
+if (process.platform === 'win32') {
+  try {
+    await link(process.execPath, nodeBin)
+  } catch {
+    await copyFile(process.execPath, nodeBin)
+  }
+} else {
+  // A copied Node binary is not always runnable: Homebrew's build resolves
+  // libnode through @rpath, which breaks once the binary leaves its prefix. An
+  // exec wrapper keeps the command inside the config directory, as the loader
+  // requires, while still running the real interpreter. Windows keeps the copy
+  // because a #!/bin/sh command is not spawnable there (EFTYPE).
+  await writeFile(nodeBin, `#!/bin/sh\nexec "${process.execPath}" "$@"\n`)
 }
 // The runner cases use the Node binary as the command; keep X_OK deterministic
 // when copyFile landed on a platform that normalizes permissions.

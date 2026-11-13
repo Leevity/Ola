@@ -1,4 +1,5 @@
 ---
+
 name: docx
 description: Create, edit, inspect, and validate professional DOCX documents while preserving formatting. Use for document generation, text extraction, tracked changes, comments, OOXML edits, layout-sensitive updates, and render-based quality checks.
 ---
@@ -429,10 +430,12 @@ Example - Changing "30 days" to "60 days" in a sentence:
 
 6. **Final verification**: Do a comprehensive check of the complete document:
    - Convert final document to markdown:
+
      ```bash
      pandoc --track-changes=all reviewed-document.docx -o verification.md
      ```
    - Verify ALL changes were applied correctly:
+
      ```bash
      grep "original phrase" verification.md  # Should NOT find it
      grep "replacement phrase" verification.md  # Should find it
@@ -450,9 +453,11 @@ To visually analyze Word documents, convert them to images using a two-step proc
    ```
 
 2. **Convert PDF pages to JPEG images**:
+
    ```bash
    pdftoppm -jpeg -r 150 document.pdf page
    ```
+
    This creates files like `page-1.jpg`, `page-2.jpg`, etc.
 
 Options:

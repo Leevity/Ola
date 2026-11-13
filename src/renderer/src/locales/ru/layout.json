@@ -1027,5 +1027,23 @@
     "terminalExited": "Завершилась терминальная сессия",
     "terminalExitedWithError": "Терминальная сессия завершена",
     "exitCode": "Код выхода: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Запрос удалённой задачи",
+    "meshTaskFrom": "От {{node}}",
+    "meshTaskAccept": "Выполнить задачу",
+    "meshTaskReject": "Отклонить",
+    "meshTaskRunning": "Выполняется удалённых задач: {{running}}",
+    "meshTaskAttendedNote": "Без вашего одобрения ничего не выполняется.",
+    "meshTaskReason": {
+      "unknown-task": "Этот запрос больше недоступен.",
+      "already-decided": "На этот запрос уже ответили.",
+      "user-rejected": "Запрос отклонён.",
+      "access-disabled": "Удалённый доступ отключён.",
+      "session-busy": "Активен другой удалённый сеанс.",
+      "confirmation-required": "Это устройство требует подтверждения.",
+      "quota-exhausted": "Квота автоматических одобрений исчерпана."
+    },
+    "controlInputHint": "Нажмите на удалённый экран, чтобы управлять им. Ввод мышью и клавиатурой прекращается при потере фокуса."
   }
 }

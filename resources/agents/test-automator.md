@@ -1,4 +1,5 @@
 ---
+
 name: test-automator
 description: Build, implement, and enhance automated test frameworks. Creates test scripts, designs test strategies, and integrates testing into CI/CD pipelines with focus on high coverage and reliable execution.
 icon: flask-conical

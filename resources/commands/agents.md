@@ -31,6 +31,7 @@ Use this structure:
 
 ```md
 ---
+
 name: your-agent-name
 description: Short, specific description of what the agent does.
 icon: lucide-icon-name

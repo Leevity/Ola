@@ -1,4 +1,5 @@
 ---
+
 name: email-drafter
 description: Generate professional email drafts using deterministic Python templates. Use for business correspondence, follow-ups, introductions, meeting requests, multilingual drafts, tone variants, and structured email output.
 ---

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import path from 'node:path'
 
@@ -10,6 +9,7 @@ const baseline = readJson('docs/migrations/ts-runtime/worktree-baseline.json')
 const exitMode = process.argv.includes('--exit')
 const errors = []
 const unaccepted = []
+let missingBuildArtifacts = 0
 const validStatuses = new Set(['未开始', '实现中', '待验收', '通过', '受外部条件阻塞'])
 
 function check(condition, message) {
@@ -217,7 +217,10 @@ if (exitMode) {
     'legacy worker asset remains'
   )
   const mainBundle = path.join(root, 'out/main/index.js')
-  check(existsSync(mainBundle), 'production Main bundle missing')
+  if (!existsSync(mainBundle)) {
+    missingBuildArtifacts += 1
+    errors.push('production Main bundle missing')
+  }
   if (existsSync(mainBundle)) {
     const source = readFileSync(mainBundle, 'utf8')
     check(
@@ -228,7 +231,10 @@ if (exitMode) {
     )
   }
   const rendererAssets = path.join(root, 'out/renderer/assets')
-  check(existsSync(rendererAssets), 'production Renderer assets missing')
+  if (!existsSync(rendererAssets)) {
+    missingBuildArtifacts += 1
+    errors.push('production Renderer assets missing')
+  }
   if (existsSync(rendererAssets)) {
     for (const entry of readdirSync(rendererAssets, { withFileTypes: true })) {
       if (!entry.isFile() || !entry.name.endsWith('.js')) continue
@@ -254,6 +260,17 @@ console.log(
 if (unaccepted.length) {
   errors.push(
     `${unaccepted.length} acceptance entries remain open (first: ${unaccepted.slice(0, 8).join(', ')})`
+  )
+}
+if (exitMode) {
+  // Structured contract for the CI migration-exit job; the prose above is for humans.
+  const otherFailures = errors.length - (unaccepted.length ? 1 : 0) - missingBuildArtifacts
+  console.log(
+    `TS migration exit summary: ${JSON.stringify({
+      openEntries: unaccepted.length,
+      missingBuildArtifacts,
+      otherFailures
+    })}`
   )
 }
 if (errors.length) {

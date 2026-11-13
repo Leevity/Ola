@@ -1159,13 +1159,13 @@ function hasPendingEditPreviewContent(input: Record<string, unknown>): boolean {
 
   return Boolean(
     filePath ||
-    explanation ||
-    oldPreview ||
-    newPreview ||
-    oldChars > 0 ||
-    newChars > 0 ||
-    input.old_string_truncated ||
-    input.new_string_truncated
+      explanation ||
+      oldPreview ||
+      newPreview ||
+      oldChars > 0 ||
+      newChars > 0 ||
+      input.old_string_truncated ||
+      input.new_string_truncated
   )
 }
 

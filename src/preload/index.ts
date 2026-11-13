@@ -119,9 +119,10 @@ if (process.contextIsolated) {
     console.error(error)
   }
 } else {
+  // biome-ignore lint/suspicious/noTsIgnore: the window shape is declared in dts
   // @ts-ignore (define in dts)
   window.ola = ola
-  // @ts-ignore (define in dts)
+  // biome-ignore lint/suspicious/noTsIgnore: the window shape is declared in dts
   // @ts-ignore (define in dts)
   window.api = api
 }

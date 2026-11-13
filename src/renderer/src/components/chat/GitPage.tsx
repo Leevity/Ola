@@ -472,10 +472,10 @@ export function GitPage(): React.JSX.Element {
 
   const viewingHistoryDiff = Boolean(
     selectedRow &&
-    selectedRow.section !== 'untracked' &&
-    historyPick &&
-    historyPick.path === selectedRow.path &&
-    selectedRepoPath
+      selectedRow.section !== 'untracked' &&
+      historyPick &&
+      historyPick.path === selectedRow.path &&
+      selectedRepoPath
   )
 
   const historyDiffCommitHash = viewingHistoryDiff && historyPick ? historyPick.hash : null

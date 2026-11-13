@@ -1027,5 +1027,23 @@
     "terminalExited": "الدورة النهائية",
     "terminalExitedWithError": "الدورة النهائية",
     "exitCode": "رمز الخروج: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "طلب مهمة عن بُعد",
+    "meshTaskFrom": "من {{node}}",
+    "meshTaskAccept": "تنفيذ المهمة",
+    "meshTaskReject": "رفض",
+    "meshTaskRunning": "المهام عن بُعد قيد التنفيذ: {{running}}",
+    "meshTaskAttendedNote": "لن يتم تنفيذ أي شيء قبل موافقتك.",
+    "meshTaskReason": {
+      "unknown-task": "هذا الطلب لم يعد متاحًا.",
+      "already-decided": "تمت الإجابة على هذا الطلب بالفعل.",
+      "user-rejected": "تم رفض الطلب.",
+      "access-disabled": "الوصول عن بُعد متوقف.",
+      "session-busy": "هناك جلسة عن بُعد أخرى نشطة.",
+      "confirmation-required": "يتطلب هذا الجهاز تأكيدًا.",
+      "quota-exhausted": "تم استنفاد حصة الموافقات غير المراقبة."
+    },
+    "controlInputHint": "انقر على الشاشة البعيدة للتحكم بها. يتوقف إدخال الفأرة ولوحة المفاتيح عند فقدان التركيز."
   }
 }

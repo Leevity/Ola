@@ -3,6 +3,7 @@ import type { ProviderConfig, UnifiedMessage } from '../api/types'
 import { streamTsProviderTurn } from '../ipc/agent-bridge'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '../ipc/ts-runtime-bridge'
 import { resolveTsRuntimeModelBinding } from '../ipc/ts-runtime-model-binding'
+import { resolveAuxiliaryRunSessionId } from '../ipc/auxiliary-run-session'
 import type { RiskItem } from '@renderer/stores/skills-store'
 
 /**
@@ -56,9 +57,14 @@ Be thorough but avoid false positives. Network calls and subprocess usage are wa
 
     const binding = resolveTsRuntimeModelBinding(providerConfig)
     if (binding && (await isTsRuntimeAvailable())) {
+      const sessionId = await resolveAuxiliaryRunSessionId(
+        binding.workspaceId,
+        providerConfig.sessionId
+      )
+      if (!sessionId) throw new Error('TS_RUNTIME_TEXT_SESSION_REQUIRED')
       for await (const event of streamTsRuntimeTextTurn({
         workspaceId: binding.workspaceId,
-        sessionId: `skill-review:${nanoid()}`,
+        sessionId,
         modelSource: binding.modelSource,
         modelOptions: { systemPrompt, thinking: { type: 'disabled' } },
         prompt: userMessage.content as string,

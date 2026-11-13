@@ -445,9 +445,9 @@ function isSshSessionOwnedBy(
   const ownerWindow = BrowserWindow.fromWebContents(event.sender)
   return Boolean(
     session &&
-    ownerWindow &&
-    session.ownerWindowId === ownerWindow.id &&
-    session.workspaceId === workspaceId
+      ownerWindow &&
+      session.ownerWindowId === ownerWindow.id &&
+      session.workspaceId === workspaceId
   )
 }
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type -- Native Node JavaScript uses JSDoc types. */
 /** @typedef {{name: string, version: string}} ApplicationManifest */
 /** @typedef {{name: string, versionInfo: string, path: string}} InstalledComponent */
 /** @typedef {{name: string, sha256: string}} ReleaseArtifact */

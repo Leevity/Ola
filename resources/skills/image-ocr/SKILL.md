@@ -1,4 +1,5 @@
 ---
+
 name: image-ocr
 description: Extract and structure text from screenshots, scanned pages, document photos, and other images with Python, Pillow, pytesseract, and Tesseract. Use for PNG, JPEG, TIFF, BMP, or WebP OCR, preprocessing, confidence review, and text export.
 ---

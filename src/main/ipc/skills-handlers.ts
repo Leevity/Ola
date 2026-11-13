@@ -150,8 +150,21 @@ export function registerSkillsHandlers(): void {
       provider?: 'skillsmp'
       apiKey?: string
     },
-    { total: number; skills: MarketSkillInfo[] }
-  >('skills:market-list', async (args) => await marketClient.list(args))
+    { total: number; skills: MarketSkillInfo[]; error?: string }
+  >('skills:market-list', async (args) => {
+    try {
+      return await marketClient.list(args)
+    } catch (error) {
+      // An unreachable market host is a normal offline condition, not an IPC failure. Return a
+      // structured error so the renderer can fall back to locally installed skills instead of
+      // letting Electron log an unhandled handler exception.
+      return {
+        total: 0,
+        skills: [],
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  })
 
   registerMessagePackHandler<
     {

@@ -347,12 +347,14 @@ export function ChatHomePage(): React.JSX.Element {
 
               {homeProject ? (
                 <div className="flex flex-wrap items-center justify-center gap-2">
-                  <span className="truncate text-foreground/88">{homeProject.name}</span>
-                  {homeWorkingFolder ? (
-                    <span className="max-w-[320px] truncate text-[11px] text-muted-foreground">
-                      {homeWorkingFolder}
-                    </span>
-                  ) : null}
+                  {/* The absolute working folder is available on hover (and in the project
+                      selector below); showing it under the hero title broke the layout. */}
+                  <span
+                    className="truncate text-foreground/88"
+                    title={homeWorkingFolder ?? undefined}
+                  >
+                    {homeProject.name}
+                  </span>
                   {homeSshConnectionId ? (
                     <span className="rounded-md border border-border/60 bg-background/70 px-2 py-1 text-[11px] text-muted-foreground">
                       SSH

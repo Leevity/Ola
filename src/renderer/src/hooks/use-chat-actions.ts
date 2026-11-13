@@ -59,6 +59,7 @@ import {
   mergeCompressedMessagesIntoSession
 } from '@renderer/lib/agent/compaction-runtime'
 import { estimateManualCompressionInputTokens } from '@renderer/lib/agent/context-usage'
+import { ensureTokenEncoder } from '@renderer/lib/token-encoder'
 import {
   type ManualCompressionResult,
   type ContextCompressionPreview
@@ -421,6 +422,7 @@ export function useChatActions(): {
 
   const previewContextCompressionAt = useCallback(
     async (messageId: string): Promise<ContextCompressionPreview | null> => {
+      await ensureTokenEncoder()
       const chatStore = useChatStore.getState()
       const agentStore = useAgentStore.getState()
       const sessionId = chatStore.activeSessionId
@@ -521,6 +523,7 @@ export function useChatActions(): {
   )
 
   const manualCompressContext = useCallback(async (focusPrompt?: string) => {
+    await ensureTokenEncoder()
     const compressionToastId = 'manual-context-compression'
     toast.dismiss(compressionToastId)
     const chatStore = useChatStore.getState()

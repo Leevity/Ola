@@ -15,9 +15,8 @@ import { GitPage } from '@renderer/components/chat/GitPage'
 import { KeyboardShortcutsDialog } from '@renderer/components/settings/KeyboardShortcutsDialog'
 import { PermissionDialog } from '@renderer/components/cowork/PermissionDialog'
 import { ConversationGuideDialog } from '@renderer/components/chat/ConversationGuideDialog'
-import { SettingsPage } from '@renderer/components/settings/SettingsPage'
-import { UsagePage } from '@renderer/components/settings/UsagePage'
-import { PetStudioPage } from '@renderer/components/settings/PetStudioPage'
+import { RemoteControlHost } from '@renderer/components/remote/RemoteControlHost'
+import { RemoteMeshTaskInbox } from '@renderer/components/remote/RemoteMeshTaskInbox'
 import { AccountAuthPage } from '@renderer/components/account/AccountAuthPage'
 import { CommandPalette } from './CommandPalette'
 import {
@@ -56,6 +55,23 @@ import { selectSessionPendingApproval } from '@renderer/lib/agent/session-scoped
 const SkillsPage = lazy(async () => {
   const mod = await import('@renderer/components/skills/SkillsPage')
   return { default: mod.SkillsPage }
+})
+
+const SettingsPage = lazy(async () => {
+  const mod = await import('@renderer/components/settings/SettingsPage')
+  return { default: mod.SettingsPage }
+})
+
+// UsagePage imports AnalyticsPanel out of SettingsPage, so keeping it static would
+// pull the whole settings surface — and recharts — back onto first paint.
+const UsagePage = lazy(async () => {
+  const mod = await import('@renderer/components/settings/UsagePage')
+  return { default: mod.UsagePage }
+})
+
+const PetStudioPage = lazy(async () => {
+  const mod = await import('@renderer/components/settings/PetStudioPage')
+  return { default: mod.PetStudioPage }
 })
 
 const SoulsPage = lazy(async () => {
@@ -255,6 +271,13 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
         keywords: ['tasks', 'kanban', 'gantt'],
         group: t('commandPalette.actions'),
         run: () => useUIStore.getState().openTasksPage()
+      }),
+      registerWorkbenchAction({
+        id: 'workspace.open-translate',
+        title: t('navRail.translate'),
+        keywords: ['translate', 'translation', '翻译', 'i18n'],
+        group: t('commandPalette.actions'),
+        run: () => useUIStore.getState().openTranslatePage()
       }),
       registerWorkbenchAction({
         id: 'workspace.import-sessions',
@@ -533,6 +556,9 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
 
   useEffect(() => {
     if (chatView !== 'session' || activeSessionId) return
+    // A standalone surface (tasks, translate, draw, ...) owns activeSurface. Do not let a
+    // stale chat-view effect navigate back to the workspace and overwrite that surface.
+    if (useUIStore.getState().activeSurface !== 'workspace') return
     if (activeProjectId) {
       useUIStore.getState().navigateToProject()
       return
@@ -1071,13 +1097,17 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
   ) : usagePageOpen ? (
     <div className="h-screen overflow-hidden bg-background">
       <PageTransition key="usage-page-shell" className="h-full min-h-0 w-full overflow-hidden">
-        <UsagePage />
+        <Suspense fallback={<LazyPageFallback />}>
+          <UsagePage />
+        </Suspense>
       </PageTransition>
     </div>
   ) : petStudioPageOpen ? (
     <div className="h-screen overflow-hidden bg-background">
       <PageTransition key="pet-studio-page-shell" className="h-full min-h-0 w-full overflow-hidden">
-        <PetStudioPage />
+        <Suspense fallback={<LazyPageFallback />}>
+          <PetStudioPage />
+        </Suspense>
       </PageTransition>
     </div>
   ) : (
@@ -1349,6 +1379,8 @@ export function Layout({ updateInfo, onOpenUpdateDialog }: LayoutProps): React.J
 
       <CommandPalette />
       <KeyboardShortcutsDialog />
+      <RemoteControlHost />
+      <RemoteMeshTaskInbox />
       <ExtensionWorkbenchViewDialog />
       <ConversationGuideDialog
         open={conversationGuideOpen}

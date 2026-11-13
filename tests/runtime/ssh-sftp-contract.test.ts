@@ -21,7 +21,7 @@ import {
 
 // The fake intentionally models the callback-based ssh2 SFTP surface without pulling
 // the concrete native binding into the contract test.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: the fake mirrors the untyped ssh2 callback surface
 function fakeSftp(): Record<string, (...args: any[]) => void> {
   return {
     readFile: (_path, callback) => callback(null, Buffer.from('abcdef')),

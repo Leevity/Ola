@@ -195,7 +195,6 @@ function TransferTaskList({
   const { t } = useTranslation('ssh')
   const taskListRef = useRef<HTMLDivElement>(null)
   // TanStack Virtual intentionally returns mutable measurement callbacks.
-  // eslint-disable-next-line react-hooks/incompatible-library
   const taskVirtualizer = useVirtualizer({
     count: tasks.length,
     getScrollElement: () => taskListRef.current,

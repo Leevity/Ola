@@ -158,9 +158,9 @@ export function matchesKeychainFilter(
   if (filter === 'fido2') return record.isFido2
   return Boolean(
     record.privateKeyPath ||
-    record.publicKeyPath ||
-    record.privateKey.trim() ||
-    record.publicKey.trim()
+      record.publicKeyPath ||
+      record.privateKey.trim() ||
+      record.publicKey.trim()
   )
 }
 

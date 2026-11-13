@@ -124,7 +124,7 @@ Keep entries short. If a memory needs pages of explanation, link to a project do
   - Ola is a four-layer Electron app: main process, preload bridge, renderer UI, and main-process agent runtime.
   - Main process handles system access, IPC, SQLite, shell, SSH, channels, MCP, cron, sync, and TypeScript runtime integration.
   - Preload exposes a narrow safe bridge.
-  - Renderer uses React 19, Tailwind, Zustand, i18n, Monaco, xterm, and chat/workflow UI components.
+  - Renderer uses React 19, Tailwind, Zustand, i18n, CodeMirror 6, xterm, and chat/workflow UI components.
   - Shared contracts live under `src/shared`.
   - TypeScript runtime lives in the Electron Main/runtime boundary and uses typed IPC for local execution.
 - Use When:
@@ -152,11 +152,11 @@ Keep entries short. If a memory needs pages of explanation, link to a project do
 - Confidence: high
 - Content:
   - `npm run dev`: start Electron + Vite development loop.
-  - `npm run lint`: run ESLint with cache.
+  - `npm run lint`: run Biome lint.
   - `npm run typecheck`: run TypeScript checks for node/preload and renderer.
   - `npm run build`: typecheck and build production output.
   - `npm run verify:ts-codegraph`: verify the TypeScript/WASM CodeGraph runtime.
-  - `npm run format`: run Prettier.
+  - `npm run format`: run Biome format.
 - Use When:
   - Verifying changes.
   - Explaining local development workflow.
@@ -164,13 +164,13 @@ Keep entries short. If a memory needs pages of explanation, link to a project do
 ### Coding Conventions
 
 - Status: active
-- Source: `.editorconfig`, `.prettierrc.yaml`, `AGENTS.md`, `CLAUDE.md`
+- Source: `.editorconfig`, `biome.json`, `AGENTS.md`, `CLAUDE.md`
 - Date: 2026-07-02
 - Confidence: high
 - Content:
   - TypeScript, React 19, Electron, Vite, Tailwind, Zustand.
   - 2-space indentation, UTF-8, LF, final newline.
-  - Prettier uses single quotes, no semicolons, 100-column width, no trailing commas.
+  - Biome uses single quotes, no semicolons, 100-column width, no trailing commas.
   - React component files use PascalCase.
   - Stores/helpers use kebab-case.
   - Renderer alias: `@renderer/*` maps to `src/renderer/src/*`.

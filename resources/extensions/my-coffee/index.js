@@ -1,5 +1,3 @@
-﻿/* eslint-disable @typescript-eslint/explicit-function-return-type */
-
 const MCP_URL = 'https://gwmcp.lkcoffee.com/order/user/mcp'
 const TOKEN_GUIDE =
   '请先访问 MCP 开放平台 https://open.lkcoffee.com/mcp 点击“登录”创建 token，并在 Ola 设置 -> 扩展 -> My Coffee 中填写 Luckin MCP Token；随后在输入框 + 菜单的自定义插件里选择 My Coffee。'

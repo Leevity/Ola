@@ -159,8 +159,8 @@ export function FirstSuccessPanel({
     const config = state.getActiveProviderConfig()
     return Boolean(
       activeWorkspaceId &&
-      config?.model &&
-      (config.apiKey.trim().length > 0 || config.requiresApiKey === false)
+        config?.model &&
+        (config.apiKey.trim().length > 0 || config.requiresApiKey === false)
     )
   })
   const providerHealthRecords = useProviderHealthStore((state) => state.providers)

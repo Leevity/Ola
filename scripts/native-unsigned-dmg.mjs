@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type -- Native Node JavaScript helper. */
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { cp, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promises'

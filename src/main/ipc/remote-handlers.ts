@@ -33,12 +33,35 @@ import {
   BrowserWindow,
   desktopCapturer,
   screen,
+  session,
   systemPreferences,
   type IpcMainInvokeEvent
 } from 'electron'
 import { testRemoteEndpoint } from '../remote/connection-tester'
 import type { RemoteConnectionTestResult } from '../../shared/remote-control'
 import { setRemoteControlAllowed } from '../remote/authorization-state'
+import {
+  accessSnapshot,
+  applyAccessMode,
+  beginRemoteSession,
+  bindRunToSession,
+  endRemoteSession,
+  requestAutoApproval
+} from '../remote/access-mode'
+import { reportMeshTaskReceipt, reportRemoteAutoApproval } from '../remote/account-client'
+import type {
+  RemoteAccessSnapshot,
+  RemoteMeshTask,
+  RemoteTaskDecision
+} from '../../shared/remote-control'
+import {
+  decideRemoteMeshTask,
+  finishRemoteMeshTask,
+  getRemoteMeshTask,
+  listRemoteMeshTasks,
+  setMeshTaskReceiptPublisher,
+  startRemoteMeshTask
+} from '../remote/task-dispatch'
 import { listRemoteAudit, recordRemoteAudit } from '../remote/remote-audit'
 
 function isTrustedRemoteIpcSender(event: IpcMainInvokeEvent): boolean {
@@ -84,6 +107,14 @@ function requireExactObject(
 function getRemoteSessionOwner(event: IpcMainInvokeEvent): number {
   if (event.sender.isDestroyed()) throw new Error('Remote session owner is unavailable')
   return event.sender.id
+}
+
+/** Task ids are minted by the dispatcher and constrained by the Mesh verifier. */
+function requireRemoteTaskId(value: Record<string, unknown>): string {
+  if (typeof value.taskId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(value.taskId)) {
+    throw new Error('Invalid task ID')
+  }
+  return value.taskId
 }
 
 async function createConnectionWithCredential(
@@ -353,6 +384,7 @@ export function registerRemoteHandlers(): void {
       const retiredSessionId = value.retiredSessionId as string | null | undefined
       if (retiredSessionId)
         remoteControlEngine.disconnectIncomingOlaDeviceSession(retiredSessionId, ownerWebContentsId)
+      if (success) endRemoteSession()
       recordRemoteAudit({ action: 'input_disable', ownerWebContentsId, success })
       return success
         ? { success: true }
@@ -370,6 +402,9 @@ export function registerRemoteHandlers(): void {
       }
     }
     setRemoteInputSession(sessionId, (value.displayId as string | null) ?? null, ownerWebContentsId)
+    // Only a successful input grant makes the session live for automatic
+    // approval; a connection that cannot drive input cannot approve tools.
+    beginRemoteSession(sessionId)
     recordRemoteAudit({ action: 'input_enable', sessionId, ownerWebContentsId, success: true })
     return { success: true }
   })
@@ -403,6 +438,147 @@ export function registerRemoteHandlers(): void {
     (args) => invokeRemoteAccount(args)
   )
 
+  registerTrustedRemoteMessagePackHandler<undefined, RemoteAccessSnapshot>(
+    'remote:access:snapshot',
+    () => accessSnapshot()
+  )
+
+  // Called right after the runtime accepts a run. The binding is what lets a
+  // later approval know the run belongs to a session that is already open;
+  // runs submitted before the session never get one.
+  registerTrustedRemoteMessagePackHandler<{ runId: string }, { sessionId: string | null }>(
+    'remote:access:bind-run',
+    (args) => {
+      const value = requireExactObject(args, ['runId'], 'remote run binding')
+      if (typeof value.runId !== 'string' || !value.runId || value.runId.length > 128) {
+        throw new Error('Invalid run ID')
+      }
+      return { sessionId: bindRunToSession(value.runId) }
+    }
+  )
+
+  registerTrustedRemoteMessagePackHandler<
+    { runId: string; toolName: string },
+    { approved: boolean; reason?: string; sessionId?: string }
+  >('remote:access:auto-approve', (args) => {
+    const value = requireExactObject(args, ['runId', 'toolName'], 'remote auto approval request')
+    if (typeof value.runId !== 'string' || !value.runId || value.runId.length > 128) {
+      throw new Error('Invalid run ID')
+    }
+    if (typeof value.toolName !== 'string' || !value.toolName || value.toolName.length > 128) {
+      throw new Error('Invalid tool name')
+    }
+    const decision = requestAutoApproval(value.runId)
+    recordRemoteAudit({
+      action: 'auto_approve',
+      sessionId: decision.approved ? decision.sessionId : undefined,
+      success: decision.approved,
+      error: decision.approved ? undefined : decision.reason
+    })
+    if (decision.approved) {
+      // Best effort: the run must not stall because the audit endpoint is
+      // unreachable, and the local audit file already has the entry.
+      void reportRemoteAutoApproval({
+        sessionId: decision.sessionId,
+        runId: value.runId,
+        toolName: value.toolName,
+        decision: 'approved'
+      })
+      return { approved: true, sessionId: decision.sessionId }
+    }
+    return { approved: false, reason: decision.reason }
+  })
+
+  // Withdraws access locally before anything else touches the network: input is
+  // refused from this instant, even if the control-plane write is slow.
+  registerTrustedRemoteMessagePackHandler<undefined, RemoteAccessSnapshot>(
+    'remote:access:revoke',
+    () => {
+      applyAccessMode('none')
+      recordRemoteAudit({ action: 'access_mode', success: true, error: 'revoked_locally' })
+      return accessSnapshot()
+    }
+  )
+
+  // Inbound Mesh tasks. The inbox only ever holds deliveries this process
+  // verified, so these channels let a window decide on a request — never
+  // introduce one. Task admission and remote input stay separate paths: nothing
+  // here authorizes a pointer or a key.
+  setMeshTaskReceiptPublisher((receipt) => {
+    void reportMeshTaskReceipt(receipt)
+  })
+
+  registerTrustedRemoteMessagePackHandler<undefined, { tasks: RemoteMeshTask[] }>(
+    'remote:task:list',
+    () => ({ tasks: listRemoteMeshTasks() })
+  )
+
+  registerTrustedRemoteMessagePackHandler<{ taskId: string; accept: boolean }, RemoteTaskDecision>(
+    'remote:task:decide',
+    (args) => {
+      const value = requireExactObject(args, ['taskId', 'accept'], 'remote task decision')
+      const taskId = requireRemoteTaskId(value)
+      if (typeof value.accept !== 'boolean') throw new Error('Invalid task decision')
+      const decision = decideRemoteMeshTask(taskId, value.accept)
+      recordRemoteAudit({
+        action: decision.accepted ? 'task_admit' : 'task_reject',
+        sessionId: decision.accepted ? decision.sessionId : getRemoteMeshTask(taskId)?.sessionId,
+        success: decision.accepted,
+        error: decision.accepted ? undefined : decision.reason
+      })
+      return decision
+    }
+  )
+
+  registerTrustedRemoteMessagePackHandler<{ taskId: string; runId: string }, { success: boolean }>(
+    'remote:task:started',
+    (args) => {
+      const value = requireExactObject(args, ['taskId', 'runId'], 'remote task start')
+      const taskId = requireRemoteTaskId(value)
+      if (typeof value.runId !== 'string' || !value.runId || value.runId.length > 128) {
+        throw new Error('Invalid run ID')
+      }
+      const result = startRemoteMeshTask(taskId, value.runId)
+      recordRemoteAudit({
+        action: 'task_start',
+        sessionId: getRemoteMeshTask(taskId)?.sessionId,
+        success: result.success,
+        error: result.success ? undefined : 'task-not-admitted'
+      })
+      return result
+    }
+  )
+
+  registerTrustedRemoteMessagePackHandler<
+    { taskId: string; outcome: 'completed' | 'failed'; resultText?: string },
+    { success: boolean }
+  >('remote:task:finish', (args) => {
+    const value = requireExactObject(
+      args,
+      ['taskId', 'outcome', 'resultText'],
+      'remote task finish'
+    )
+    const taskId = requireRemoteTaskId(value)
+    if (value.outcome !== 'completed' && value.outcome !== 'failed') {
+      throw new Error('Invalid task outcome')
+    }
+    if (
+      value.resultText !== undefined &&
+      (typeof value.resultText !== 'string' ||
+        Buffer.byteLength(value.resultText, 'utf8') > 12 * 1024)
+    ) {
+      throw new Error('Invalid task result text')
+    }
+    const result = finishRemoteMeshTask(taskId, value.outcome, value.resultText)
+    recordRemoteAudit({
+      action: 'task_finish',
+      sessionId: getRemoteMeshTask(taskId)?.sessionId,
+      success: result.success,
+      error: result.success ? value.outcome : 'task-not-running'
+    })
+    return result
+  })
+
   registerTrustedRemoteMessagePackHandler<undefined, { status: string }>(
     'remote:capture:permission',
     () => ({
@@ -431,5 +607,58 @@ export function registerRemoteHandlers(): void {
         primary: source.display_id === primaryDisplayId
       }))
     }
+  })
+
+  // getDisplayMedia carries no source hint, so the renderer names the display it
+  // wants before asking. Without this the handler can only guess, and someone who
+  // picked their second monitor would share the first one.
+  let requestedCaptureDisplayId: string | null = null
+
+  registerTrustedRemoteMessagePackHandler<{ displayId: string | null }, { success: true }>(
+    'remote:capture:select',
+    (args) => {
+      const { displayId } = requireExactObject(args, ['displayId'], 'capture selection')
+      if (displayId !== null && (typeof displayId !== 'string' || displayId.length > 64)) {
+        throw new Error('Invalid capture display ID')
+      }
+      requestedCaptureDisplayId = displayId
+      return { success: true }
+    }
+  )
+
+  // Chromium's media machinery gates the renderer's getUserMedia call even
+  // when the OS-level (TCC) screen-recording grant is already verified above.
+  // Without an explicit handler the stream dies with a bare "Permission
+  // denied" — and screen capture is its own permission type (`display-capture`),
+  // separate from camera/microphone (`media`). Only these two are allowed;
+  // every other permission keeps Chromium's conservative default, and webviews
+  // keep their own stricter handlers.
+  const captureAllowed = (permission: string): boolean =>
+    permission === 'media' || permission === 'display-capture'
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission) =>
+    captureAllowed(permission)
+  )
+  session.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(captureAllowed(permission))
+  })
+  // The modern path: getDisplayMedia resolves through Main, which answers with the
+  // display the renderer selected. No system picker is shown, so unattended
+  // capture is never blocked waiting for someone to choose a screen. Legacy
+  // `chromeMediaSource` callers keep working because this handler is only
+  // consulted for getDisplayMedia requests.
+  session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
+    void desktopCapturer
+      .getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } })
+      .then((sources) => {
+        const primaryDisplayId = String(screen.getPrimaryDisplay().id)
+        const selected =
+          sources.find((source) => source.display_id === requestedCaptureDisplayId) ??
+          sources.find((source) => source.display_id === primaryDisplayId) ??
+          sources[0]
+        // An empty answer rejects the renderer's promise. Leaving it unanswered
+        // would hang unattended capture instead of letting it fall back.
+        callback(selected ? { video: selected } : {})
+      })
+      .catch(() => callback({}))
   })
 }

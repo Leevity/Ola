@@ -447,12 +447,13 @@ export function SkillsPage(): React.JSX.Element {
                 </div>
 
                 {marketError && (
-                  <div className="flex items-center justify-center gap-3 py-4 text-xs text-muted-foreground">
+                  <div className="flex flex-col items-center justify-center gap-2 py-4 text-center text-xs text-muted-foreground">
                     <span>{t(`skillsPage.marketError.${marketError}`)}</span>
+                    <span>{t('skillsPage.offlineFallback')}</span>
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => void loadMarketSkills(marketQuery, false)}
+                      onClick={() => void loadMarketSkills(marketQuery, true)}
                     >
                       {t('skillsPage.retry')}
                     </Button>

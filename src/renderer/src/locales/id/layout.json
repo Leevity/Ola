@@ -1027,5 +1027,23 @@
     "terminalExited": "Sesi terminal berakhir",
     "terminalExitedWithError": "Sesi terminal keluar",
     "exitCode": "Kode keluar: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Permintaan tugas jarak jauh",
+    "meshTaskFrom": "Dari {{node}}",
+    "meshTaskAccept": "Jalankan tugas",
+    "meshTaskReject": "Tolak",
+    "meshTaskRunning": "Tugas jarak jauh berjalan: {{running}}",
+    "meshTaskAttendedNote": "Tidak ada yang dijalankan sebelum Anda menyetujui.",
+    "meshTaskReason": {
+      "unknown-task": "Permintaan ini sudah tidak tersedia.",
+      "already-decided": "Permintaan ini sudah dijawab.",
+      "user-rejected": "Permintaan ditolak.",
+      "access-disabled": "Akses jarak jauh dimatikan.",
+      "session-busy": "Sesi jarak jauh lain sedang aktif.",
+      "confirmation-required": "Perangkat ini memerlukan konfirmasi.",
+      "quota-exhausted": "Kuota persetujuan tanpa pengawasan sudah habis."
+    },
+    "controlInputHint": "Klik layar jarak jauh untuk mengendalikannya. Input mouse dan keyboard berhenti saat fokus hilang."
   }
 }

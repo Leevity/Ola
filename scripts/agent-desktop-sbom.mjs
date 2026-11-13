@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 /**
  * Turn the agent-desktop supply lock into SPDX inventory entries.
  *

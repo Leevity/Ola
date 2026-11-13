@@ -1,15 +1,17 @@
 ﻿import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readCollapsedSource } from './lib/source-text.ts'
 
-const dashboard = readFileSync(
-  'src/renderer/src/components/settings/CodeGraphDashboard.tsx',
-  'utf8'
+// Every assertion here is about tokens, not layout, so the sources are read collapsed.
+// Collapsing turns a wrapped expression into `a .b` / `key: value`, so patterns tolerate a
+// space wherever the formatter may break a line.
+const dashboard = await readCollapsedSource(
+  'src/renderer/src/components/settings/CodeGraphDashboard.tsx'
 )
-const panel = readFileSync('src/renderer/src/components/settings/AppPluginPanel.tsx', 'utf8')
-const routing = readFileSync('src/renderer/src/lib/ipc/messagepack-channel-routing.ts', 'utf8')
-const handlers = readFileSync('src/main/ipc/codegraph-handlers.ts', 'utf8')
-const sync = readFileSync('src/main/lib/codegraph-sync.ts', 'utf8')
-const main = readFileSync('src/main/index.ts', 'utf8')
+const panel = await readCollapsedSource('src/renderer/src/components/settings/AppPluginPanel.tsx')
+const routing = await readCollapsedSource('src/renderer/src/lib/ipc/messagepack-channel-routing.ts')
+const handlers = await readCollapsedSource('src/main/ipc/codegraph-handlers.ts')
+const sync = await readCollapsedSource('src/main/lib/codegraph-sync.ts')
+const main = await readCollapsedSource('src/main/index.ts')
 
 for (const method of [
   'codegraph/index-status',
@@ -28,27 +30,30 @@ for (const method of [
   assert.match(dashboard, new RegExp(method.replace('/', '\\/')))
 }
 assert.match(dashboard, /CODEGRAPH_INDEX_PROGRESS/)
-assert.match(dashboard, /workingFolder: projectPath/)
+assert.match(dashboard, /workingFolder:\s*projectPath/)
 assert.match(dashboard, /openFilePreview/)
-assert.match(panel, /selectedPlugin\.id === CODEGRAPH_PLUGIN_ID && selectedPlugin\.enabled/)
+assert.match(
+  panel,
+  /selectedPlugin\s*\.\s*id\s*===\s*CODEGRAPH_PLUGIN_ID\s*&&\s*selectedPlugin\s*\.\s*enabled/
+)
 assert.match(routing, /'codegraph:status'/)
-assert.match(handlers, /workerReady: true/)
+assert.match(handlers, /workerReady:\s*true/)
 assert.doesNotMatch(handlers, /getCodeGraphWorker|resolveCodeGraphWorkerPath|OLA_CODEGRAPH_RUNTIME/)
 assert.match(handlers, /observeCodeGraphOperation/)
 assert.match(handlers, /startCodeGraphSync/)
-assert.match(handlers, /runtime: 'ts-wasm'/)
+assert.match(handlers, /runtime:\s*'ts-wasm'/)
 assert.match(dashboard, /grammarStatus/)
 assert.match(sync, /AUTO_SYNC_DEBOUNCE_MS/)
 assert.match(sync, /MAX_AUTO_SYNC_PROJECTS/)
 assert.match(sync, /MAX_AUTO_SYNC_DIRECTORIES/)
 assert.match(sync, /collectWatchableDirectories/)
-assert.match(sync, /entry\.syncing/)
+assert.match(sync, /entry\s*\.\s*syncing/)
 assert.match(sync, /isIndexedProject/)
-assert.match(sync, /errorKind !== 'not_indexed'/)
+assert.match(sync, /errorKind\s*!==\s*'not_indexed'/)
 assert.match(sync, /codegraph\/list-projects/)
 assert.match(sync, /codegraph\/sync/)
-assert.match(sync, /OLA_CODEGRAPH_AUTO_SYNC !== '0'/)
-assert.match(main, /stopCodeGraphSync\(\)/)
+assert.match(sync, /OLA_CODEGRAPH_AUTO_SYNC\s*!==\s*'0'/)
+assert.match(main, /stopCodeGraphSync\(\s*\)/)
 assert.doesNotMatch(dashboard, /new Worker|WebSocket|canvas|getContext\(/)
 
 console.log('CodeGraph dashboard verification passed')

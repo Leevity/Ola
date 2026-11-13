@@ -56,6 +56,33 @@ export interface MarketSkillInfo {
   installCommand: string
 }
 
+/**
+ * The remote market can be unreachable (DNS/proxy/offline) while locally installed skills are
+ * still perfectly usable. Keep those skills visible in the market grid instead of showing a
+ * blocking empty page. `local:` ids are never installable — the card renders as already installed.
+ */
+function offlineMarketSkills(skills: SkillInfo[], query: string): MarketSkillInfo[] {
+  const needle = query.trim().toLowerCase()
+  return skills
+    .filter(
+      (skill) =>
+        !needle ||
+        skill.name.toLowerCase().includes(needle) ||
+        skill.description.toLowerCase().includes(needle)
+    )
+    .map((skill) => ({
+      id: `local:${skill.name}`,
+      slug: skill.name,
+      name: skill.name,
+      description: skill.description,
+      tags: [],
+      downloads: 0,
+      url: '',
+      downloadUrl: '',
+      installCommand: ''
+    }))
+}
+
 interface SkillsStore {
   skills: SkillInfo[]
   loading: boolean
@@ -270,6 +297,22 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
     const q = query ?? get().marketQuery
     const offset = reset ? 0 : get().marketOffset
     set({ marketLoading: true, marketError: null, marketQuery: q })
+    const applyOfflineFallback = async (marketError: SkillsMarketError): Promise<void> => {
+      // loadSkills() is started in parallel with the first market request; re-read the local
+      // catalog here so the fallback is populated even when the network fails immediately.
+      try {
+        if (!get().loaded) await get().loadSkills()
+      } catch {
+        // A local catalog failure keeps the previous (possibly empty) skill list.
+      }
+      const fallback = offlineMarketSkills(get().skills, q)
+      set({
+        ...(reset || offset === 0
+          ? { marketSkills: fallback, marketTotal: fallback.length, marketOffset: fallback.length }
+          : {}),
+        marketError
+      })
+    }
     try {
       const { useSettingsStore } = await import('@renderer/stores/settings-store')
       const { skillsMarketApiKey } = useSettingsStore.getState()
@@ -282,6 +325,11 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
       })) as {
         total: number
         skills: MarketSkillInfo[]
+        error?: string
+      }
+      if (result.error && !result.skills?.length) {
+        await applyOfflineFallback(classifyMarketError(new Error(result.error)))
+        return
       }
       set({
         marketSkills:
@@ -291,10 +339,7 @@ export const useSkillsStore = create<SkillsStore>((set, get) => ({
         marketError: null
       })
     } catch (error) {
-      set({
-        ...(reset || offset === 0 ? { marketSkills: [], marketTotal: 0 } : {}),
-        marketError: classifyMarketError(error)
-      })
+      await applyOfflineFallback(classifyMarketError(error))
     } finally {
       set({ marketLoading: false })
     }

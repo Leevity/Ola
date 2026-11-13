@@ -4,7 +4,6 @@ import path from 'node:path'
 
 const root = path.resolve(import.meta.dirname, '..')
 // This small script executes at module scope; its result type is inferred by Node.
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 const read = (file) => readFile(path.join(root, file), 'utf8')
 const [
   primitives,
@@ -108,20 +107,20 @@ for (const [name, source, expected] of [
   ['pet list', petList, 2]
 ]) {
   assert.equal(
-    source.match(/<DialogContent className="settings-dialog /g)?.length,
+    source.match(/<DialogContent\s+className="settings-dialog\s/g)?.length,
     expected,
     `${name} dialogs must opt into portal typography`
   )
 }
 assert.ok(
-  stylesheet.includes(".settings-dialog [class~='text-[11px]']") &&
-    stylesheet.includes("body:has(.settings-page) [data-slot='select-content']"),
+  /\.settings-dialog\s+\[class~='text-\[11px\]'\]/.test(stylesheet) &&
+    /body:has\(\.settings-page\)\s+\[data-slot='select-content'\]/.test(stylesheet),
   'settings typography must cover provider and select portals'
 )
 assert.ok(
-  /<PopoverContent\s+className="settings-menu /.test(plugin) &&
-    provider.includes('<ContextMenuContent className="settings-menu ') &&
-    stylesheet.includes(".settings-menu [class~='text-[10px]']"),
+  /<PopoverContent\s+className="settings-menu\s/.test(plugin) &&
+    /<ContextMenuContent\s+className="settings-menu\s/.test(provider) &&
+    /\.settings-menu\s+\[class~='text-\[10px\]'\]/.test(stylesheet),
   'settings menu typography must cover popover and context-menu portals'
 )
 console.log('settings visual contract verification passed')

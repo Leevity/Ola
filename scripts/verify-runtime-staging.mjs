@@ -107,7 +107,6 @@ for (const path of forbiddenLegacyWorkerPaths) {
   throw new Error(`Production staging must not contain legacy native-worker assets: ${path}`)
 }
 
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 async function verifyLinks(path) {
   const info = await lstat(path)
   if (info.isSymbolicLink()) {

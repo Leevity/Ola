@@ -59,9 +59,9 @@ function isIgnoredChange(filename: string | Buffer | null): boolean {
 function isSuccess(result: unknown): result is CodeGraphOperationResult {
   return Boolean(
     result &&
-    typeof result === 'object' &&
-    (result as CodeGraphOperationResult).success === true &&
-    (result as CodeGraphOperationResult).errorKind !== 'not_indexed'
+      typeof result === 'object' &&
+      (result as CodeGraphOperationResult).success === true &&
+      (result as CodeGraphOperationResult).errorKind !== 'not_indexed'
   )
 }
 

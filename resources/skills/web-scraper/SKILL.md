@@ -1,4 +1,5 @@
 ---
+
 name: web-scraper
 description: Scrape web pages, search the internet, and extract structured content with Python. Use to fetch pages, extract links or article text, search the web, or crawl JavaScript-rendered sites with the bundled lightweight and dynamic scripts.
 ---

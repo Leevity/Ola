@@ -5,7 +5,7 @@ interface CommonControlledStateProps<T> {
   defaultValue?: T
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// biome-ignore lint/suspicious/noExplicitAny: the rest-args tuple is caller-supplied
 export function useControlledState<T, Rest extends any[] = []>(
   props: CommonControlledStateProps<T> & {
     onChange?: (value: T, ...args: Rest) => void

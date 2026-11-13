@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 /**
  * Bundled-binary signing and containment rules for the agent-desktop accessibility CLI.
  *

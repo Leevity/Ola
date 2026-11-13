@@ -48,9 +48,9 @@ export function isTrustedRendererUrl(
   const expectedUrl = rendererUrls.get(window)
   return Boolean(
     expectedUrl &&
-    !window.isDestroyed() &&
-    !window.webContents.isDestroyed() &&
-    isSameRendererDocument(expectedUrl, url)
+      !window.isDestroyed() &&
+      !window.webContents.isDestroyed() &&
+      isSameRendererDocument(expectedUrl, url)
   )
 }
 
@@ -58,10 +58,10 @@ export function isTrustedRendererIpcEvent(event: IpcMainEvent | IpcMainInvokeEve
   const window = BrowserWindow.fromWebContents(event.sender)
   return Boolean(
     window &&
-    !window.isDestroyed() &&
-    window.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame &&
-    isTrustedRendererUrl(window, event.senderFrame.url)
+      !window.isDestroyed() &&
+      window.webContents === event.sender &&
+      event.senderFrame === event.sender.mainFrame &&
+      isTrustedRendererUrl(window, event.senderFrame.url)
   )
 }
 

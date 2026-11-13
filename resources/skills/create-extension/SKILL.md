@@ -1,4 +1,5 @@
 ---
+
 name: create-extension
 description: Create or modify Ola Custom Extensions. Use when the user asks to build a custom extension/plugin for Ola that adds Agent tools, declarative HTTP tools, sandboxed JavaScript handlers, extension configuration fields, network allowlists, or custom response UI renderers.
 ---

@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { createHash } from 'node:crypto'
 import { readFile, mkdir, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { format, resolveConfig } from 'prettier'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const workspace = resolve(root, '..')
@@ -11,7 +10,18 @@ const source = await readFile(resolve(root, 'packages/ola-design/tokens.json'), 
 const tokens = JSON.parse(source)
 const sourceHash = createHash('sha256').update(source).digest('hex')
 const checking = process.argv.includes('--check')
-const formatting = await resolveConfig(resolve(root, 'package.json'))
+// The generated files are byte-compared against the working tree, so the generator must
+// use the same formatter the repo enforces. Shelling out to the CLI keeps biome.json the
+// single source of truth instead of duplicating its options here.
+const biomeLauncher = resolve(root, 'node_modules/@biomejs/biome/bin/biome')
+function formatWithBiome(contents, path) {
+  return execFileSync(process.execPath, [biomeLauncher, 'format', `--stdin-file-path=${path}`], {
+    cwd: root,
+    input: contents,
+    encoding: 'utf8',
+    maxBuffer: 32 * 1024 * 1024
+  })
+}
 if (tokens.schemaVersion !== 1) throw new Error('Unsupported Ola design schema')
 const names = Object.keys(tokens.colors.light)
 if (names.join() !== Object.keys(tokens.colors.dark).join()) {
@@ -108,14 +118,7 @@ outputs.set(
   JSON.stringify(accent, null, 2) + '\n'
 )
 for (const [path, contents] of outputs) {
-  const parser = path.endsWith('.ts')
-    ? 'typescript'
-    : path.endsWith('.css')
-      ? 'css'
-      : path.endsWith('.json')
-        ? 'json'
-        : null
-  if (parser) outputs.set(path, await format(contents, { ...formatting, parser }))
+  if (/\.(ts|css|json)$/.test(path)) outputs.set(path, formatWithBiome(contents, path))
 }
 const manifest =
   JSON.stringify(
@@ -135,8 +138,14 @@ const manifest =
   ) + '\n'
 outputs.set('Ola/packages/ola-design/generated/manifest.json', manifest)
 let failed = false
+// The token set fans out to three sibling repositories. --only narrows both the check and
+// the write to one of them, so a formatter change here cannot reach into the others.
+const only = process.argv.find((arg) => arg.startsWith('--only='))?.slice('--only='.length)
+let touched = 0
 for (const [path, contents] of outputs) {
+  if (only && !path.startsWith(only)) continue
   const target = resolve(workspace, path)
+  touched += 1
   if (checking) {
     const existing = await readFile(target, 'utf8').catch(() => null)
     if (existing !== contents) {
@@ -151,5 +160,5 @@ for (const [path, contents] of outputs) {
 if (failed) process.exitCode = 1
 else
   console.log(
-    `Ola design ${tokens.version}: ${outputs.size} outputs ${checking ? 'verified' : 'generated'}; contrast pairs passed`
+    `Ola design ${tokens.version}: ${touched} outputs ${checking ? 'verified' : 'generated'}; contrast pairs passed`
   )

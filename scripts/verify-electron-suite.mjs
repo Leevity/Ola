@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 /**
  * Local aggregate for the Electron-backed acceptance scenarios. Each scenario is the same
  * command an engineer would run by hand; this only sequences them and reports what was

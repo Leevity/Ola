@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { spawn } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
@@ -24,7 +23,10 @@ const archivePath = join(dirname(executable), 'resources', 'app.asar')
 const installedVersion = JSON.parse(
   asar.extractFile(archivePath, 'package.json').toString()
 ).version
-const mainBundle = asar.extractFile(archivePath, 'out\\main\\index.js').toString()
+// asar traverses with `p.split(path.sep)`, so the entry path must use the host separator.
+// A hardcoded `out\main\index.js` only resolved on Windows and threw "was not found in this
+// archive" on macOS/Linux, which made packaged startup unverifiable on those platforms.
+const mainBundle = asar.extractFile(archivePath, join('out', 'main', 'index.js')).toString()
 if (installedVersion !== expectedVersion || !mainBundle.includes('OLA_E2E_DATA_ROOT')) {
   throw new Error('Packaged app must match this source version and support isolated E2E data')
 }

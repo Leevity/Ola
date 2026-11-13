@@ -71,7 +71,6 @@ const staging = await mkdtemp(join(tmpdir(), 'ola-release-package-'))
 const output = join(root, outputName)
 
 // This file is intentionally plain ESM so it can run before the app build.
-// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 async function copyIfPresent(name) {
   try {
     await stat(join(root, name))

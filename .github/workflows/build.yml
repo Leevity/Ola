@@ -66,12 +66,6 @@ jobs:
           restore-keys: |
             ola-build-${{ runner.os }}-${{ runner.arch }}-
 
-      - name: Setup Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
-
       - name: Install dependencies
         run: npm ci
 
@@ -86,7 +80,6 @@ jobs:
           npm run lint:ci
           npm run format:check
           npm run verify:ci-core
-          cd server && go test ./...
 
   # 真实 Electron 冒烟：需要构建产物与显示服务器，因此不与 verify:ci-core 同 job。
   # 这三个门禁此前只在人工验收时执行，改动后一旦回归没有 CI 反馈。
@@ -132,6 +125,11 @@ jobs:
       - name: Reject legacy runtime artifacts in the build output
         run: npm run verify:legacy-artifacts
 
+      # Lives here rather than in verify:ci-core because the quality job never runs
+      # npm run build, and this gate reads the renderer's real module graph.
+      - name: Renderer first-paint bundle budget
+        run: npm run verify:renderer-bundle
+
       - name: Electron startup, routes, feature surfaces and translate flow
         run: xvfb-run --auto-servernum npm run verify:electron-startup
 
@@ -148,8 +146,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
-  # 迁移台账 --exit 必须保持失败：P1/P3/P10/P12 与 5 个 release target 尚无证据。
-  # 这里显式校验「失败原因就是台账未收口」，避免有人改台账或改脚本让它假通过。
+  # 迁移台账 --exit 必须保持失败，直到全部条目凭证据收口。
+  # 用脚本输出的结构化摘要校验「失败原因就是台账未收口」，不依赖阶段名单或文案顺序；
+  # 此 job 不构建产物，missingBuildArtifacts 允许非零，otherFailures 必须为零。
   migration-exit:
     runs-on: ubuntu-latest
     steps:
@@ -173,14 +172,26 @@ jobs:
           set -e
           echo "$output"
           if [ "$status" -eq 0 ]; then
-            echo "::error::verify:ts-migration-exit unexpectedly passed; close P1/P3/P10/P12 and the release targets with evidence before letting this gate go green."
+            echo "::error::verify:ts-migration-exit unexpectedly passed; remove this inverted gate consciously once every entry is accepted with evidence."
             exit 1
           fi
-          if ! printf '%s' "$output" | grep -q "acceptance entries remain open (first: P1, P3, P10, P12"; then
-            echo "::error::verify:ts-migration-exit failed for a reason other than the open ledger entries; fix the failure instead of accepting it."
+          summary=$(printf '%s\n' "$output" | grep '^TS migration exit summary: ' | tail -n 1 | sed 's/^TS migration exit summary: //')
+          if [ -z "$summary" ]; then
+            echo "::error::verify:ts-migration-exit emitted no structured summary; the gate script itself is broken."
             exit 1
           fi
-          echo "Ledger exit gate failed for the expected open entries."
+          SUMMARY="$summary" node -e '
+            const s = JSON.parse(process.env.SUMMARY)
+            if (!(s.openEntries > 0)) {
+              console.error("::error::exit gate failed without open ledger entries; fix the failure instead of accepting it.")
+              process.exit(1)
+            }
+            if (s.otherFailures !== 0) {
+              console.error("::error::exit gate has failures beyond open entries and unbuilt assets; fix them instead of accepting it.")
+              process.exit(1)
+            }
+            console.log(`Ledger exit gate failed for the expected reason: ${s.openEntries} open entries.`)
+          '
 
   # ── 准备阶段：提取版本号与发布内容 ──
   prepare:

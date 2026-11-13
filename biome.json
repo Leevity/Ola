@@ -1,0 +1,175 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!out/**",
+      "!dist/**",
+      "!dist-staged-*/**",
+      "!dist-validation-*/**",
+      "!dist-local-release-smoke/**",
+      "!release-local-smoke/**",
+      "!build/**",
+      "!docs/**",
+      "!security-review/**",
+      "!tmp/**",
+      "!.tmp-*.cjs",
+      "!out-e2e/**",
+      "!.workbuddy/**",
+      "!**/.next/**",
+      "!**/.claude/**",
+      "!pnpm-lock.yaml",
+      "!LICENSE.md",
+      "!tsconfig.json",
+      "!tsconfig.*.json"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "lineEnding": "lf"
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "single",
+      "jsxQuoteStyle": "double",
+      "semicolons": "asNeeded",
+      "trailingCommas": "none",
+      "arrowParentheses": "always",
+      "bracketSpacing": true,
+      "bracketSameLine": false
+    }
+  },
+  "json": {
+    "formatter": {
+      "trailingCommas": "none"
+    }
+  },
+  "yaml": {
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    },
+    "formatter": {
+      "quoteStyle": "single"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "off"
+      }
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended",
+      "a11y": {
+        "preset": "none"
+      },
+      "correctness": {
+        "useExhaustiveDependencies": "warn",
+        "useHookAtTopLevel": "error",
+        "noUnusedVariables": "error",
+        "noUnusedImports": "error",
+        "noUndeclaredVariables": "off",
+        "noUnusedFunctionParameters": "off",
+        "noComponentHookFactories": "off",
+        "noUnsafeOptionalChaining": "off",
+        "useJsxKeyInIterable": "off",
+        "useParseIntRadix": "off"
+      },
+      "style": {
+        "useConst": "error",
+        "noNonNullAssertion": "off",
+        "useNodejsImportProtocol": "off",
+        "useTemplate": "off",
+        "useImportType": "off",
+        "useExponentiationOperator": "off",
+        "noDescendingSpecificity": "off"
+      },
+      "suspicious": {
+        "noVar": "error",
+        "noExplicitAny": "error",
+        "noEmptyInterface": "error",
+        "noTsIgnore": "error",
+        "noConsole": "off",
+        "noArrayIndexKey": "off",
+        "noPrototypeBuiltins": "off",
+        "noShadowRestrictedNames": "off",
+        "useIterableCallbackReturn": "off",
+        "useBiomeIgnoreFolder": "off",
+        "noAssignInExpressions": "off",
+        "noGlobalIsNan": "off",
+        "noImplicitAnyLet": "off",
+        "noConfusingVoidType": "off",
+        "noTemplateCurlyInString": "off",
+        "noDocumentCookie": "off",
+        "noExportsInTest": "off"
+      },
+      "complexity": {
+        "noStaticOnlyClass": "off",
+        "useArrowFunction": "off",
+        "useOptionalChain": "off",
+        "noUselessFragments": "off",
+        "useLiteralKeys": "off",
+        "noUselessSwitchCase": "off",
+        "useMathMinMax": "off",
+        "noUselessContinue": "off",
+        "noUselessTernary": "off",
+        "noUselessLoneBlockStatements": "off",
+        "noImportantStyles": "off"
+      },
+      "security": {
+        "noDangerouslySetInnerHtml": "off"
+      },
+      "nursery": {}
+    }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/runtime/core/**",
+        "src/runtime/providers/**",
+        "src/runtime/tools/**",
+        "src/runtime/scheduler/**",
+        "src/runtime/storage/**",
+        "src/shared/runtime/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "electron": "The TS runtime must stay independent of Electron.",
+                  "react": "The TS runtime must stay independent of React.",
+                  "zustand": "The TS runtime must stay independent of renderer stores."
+                },
+                "patterns": [
+                  {
+                    "group": ["@renderer/**", "**/renderer/**", "**/main/**"],
+                    "message": "The TS runtime must not reach into the renderer or main layers."
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

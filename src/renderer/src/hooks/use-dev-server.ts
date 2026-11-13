@@ -72,7 +72,7 @@ export function useDevServer(projectDir: string | null) {
         ipcClient.invoke(IPC.PROCESS_KILL, { id: processId }).catch(() => {})
       }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   return { isRunning, port, logs, start, stop }
 }

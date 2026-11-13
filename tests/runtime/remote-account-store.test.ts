@@ -53,8 +53,9 @@ afterAll(() => {
 describe('remote account workspace lifecycle', () => {
   it('rehydrates the shared account when another window changes identity', async () => {
     const { useWorkspaceStore } = await import('../../src/renderer/src/stores/workspace-store')
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     invokeHandler = async (_channel, rawRequest) => {
       const request = decodeMessagePackPayload<{ operation: string }>(rawRequest as Uint8Array)
       if (request.operation === 'hydrate') {
@@ -131,8 +132,9 @@ describe('remote account workspace lifecycle', () => {
   })
 
   it('requests a task.execute ticket and signs a task request for an online mobile node', async () => {
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     const desktopDevice = {
       id: 'desktop-device',
       accountId: 'account-a',
@@ -249,8 +251,9 @@ describe('remote account workspace lifecycle', () => {
   })
 
   it('does not request a Mesh ticket for an offline mobile device', async () => {
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     let ticketRequests = 0
     useRemoteAccountStore.setState({
       apiBaseUrl: 'https://ola.example.test',
@@ -312,8 +315,9 @@ describe('remote account workspace lifecycle', () => {
   })
 
   it('does not dispatch when the desktop receipt capability cannot be registered', async () => {
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     const desktopDevice = {
       id: 'desktop-device',
       accountId: 'account-a',
@@ -386,8 +390,9 @@ describe('remote account workspace lifecycle', () => {
 
   it('clears the managed directory when hydration fails', async () => {
     const { useWorkspaceStore } = await import('../../src/renderer/src/stores/workspace-store')
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     useWorkspaceStore.setState({
       activeWorkspaceId: 'team-a',
       olaWorkspaces: [{ id: 'team-a', kind: 'ola-team', name: 'Team A' }],
@@ -426,8 +431,9 @@ describe('remote account workspace lifecycle', () => {
 
   it('keeps an account-bound workspace directory available for local use while offline', async () => {
     const { useWorkspaceStore } = await import('../../src/renderer/src/stores/workspace-store')
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     invokeHandler = async (_channel, rawRequest) => {
       const request = decodeMessagePackPayload<{ operation: string }>(rawRequest as Uint8Array)
       if (request.operation === 'hydrate')
@@ -459,8 +465,9 @@ describe('remote account workspace lifecycle', () => {
 
   it('removes stale teams when the directory explicitly rejects access', async () => {
     const { useWorkspaceStore } = await import('../../src/renderer/src/stores/workspace-store')
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     invokeHandler = async () => {
       throw new Error('Unauthorized')
     }
@@ -478,8 +485,9 @@ describe('remote account workspace lifecycle', () => {
 
   it('ignores a workspace response that arrives after logout', async () => {
     const { useWorkspaceStore } = await import('../../src/renderer/src/stores/workspace-store')
-    const { useRemoteAccountStore } =
-      await import('../../src/renderer/src/stores/remote-account-store')
+    const { useRemoteAccountStore } = await import(
+      '../../src/renderer/src/stores/remote-account-store'
+    )
     let resolveWorkspaces: ((value: unknown) => void) | undefined
     let requestStarted = false
     invokeHandler = async () => {

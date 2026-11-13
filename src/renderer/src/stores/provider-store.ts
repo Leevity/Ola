@@ -25,7 +25,7 @@ export { builtinProviderPresets }
 export type { BuiltinProviderPreset }
 
 const DEFAULT_FAST_PROVIDER_BUILTIN_ID = 'deepseek'
-const DEFAULT_FAST_MODEL_ID = 'deepseek-v4-flash'
+const DEFAULT_FAST_MODEL_ID = 'deepseek-flash'
 // Kimi K2.7 Code rejects thinking.type values other than "enabled"; off means omitting it.
 const KIMI_ENABLED_ONLY_THINKING_MODEL_KEYS = new Set([
   'kimi-for-coding',

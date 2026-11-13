@@ -452,7 +452,6 @@ export function PetView(): React.JSX.Element | null {
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only by design
   }, [])
 
   // Active hit-testing root cause fix. The renderer keeps a continuous reading
@@ -899,7 +898,6 @@ export function PetView(): React.JSX.Element | null {
         bonus ? 11_000 : 6000
       )
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated])
 
   // Stat decay tick

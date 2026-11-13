@@ -37,9 +37,11 @@ export function SkillsMarketPanel(): React.JSX.Element {
         query: '',
         provider: 'skillsmp',
         apiKey: settings.skillsMarketApiKey
-      })) as { total: number; skills: unknown[] }
+      })) as { total: number; skills: unknown[]; error?: string }
 
-      if (result && result.total >= 0) {
+      if (result?.error) {
+        toast.error(t('skillsmarket.testFailed', { error: result.error }))
+      } else if (result && result.total >= 0) {
         toast.success(t('skillsmarket.testSuccess', { count: result.total }))
       } else {
         toast.error(t('skillsmarket.testFailed', { error: 'No results returned' }))

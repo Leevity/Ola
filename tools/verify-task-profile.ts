@@ -8,6 +8,7 @@ import {
   normalizeTaskProfile,
   profileConfigFor
 } from '../src/renderer/src/lib/task-profile.ts'
+import { assertOrder } from './lib/source-text.ts'
 
 assert.equal(normalizeTaskProfile('code'), 'code')
 assert.equal(normalizeTaskProfile('anything-else'), 'work')
@@ -82,9 +83,9 @@ assert(
   workspaceSidebar.includes('IPC.SSH_WINDOW_OPEN'),
   'remote control entry does not open the dedicated window'
 )
-assert(
-  workspaceSidebar.indexOf('sidebar.taskProfileSwitcher') <
-    workspaceSidebar.indexOf('{navItems.slice(0, 3).map(renderNavItem)}'),
+assertOrder(
+  workspaceSidebar,
+  ['sidebar.taskProfileSwitcher', /navItems\s*\.\s*slice\(0,\s*3\)\s*\.\s*map\(renderNavItem\)/],
   'sidebar profile switcher must appear before new conversation'
 )
 assert(onboarding.includes("'profile'"), 'onboarding profile step is missing')

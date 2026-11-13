@@ -51,7 +51,12 @@
         "tests/runtime/cli.test.ts",
         "tests/runtime/desktop-runtime.test.ts",
         "tests/runtime/business-handover-quiesce.test.ts",
-        "tests/runtime/database-initialize-ts.test.ts"
+        "tests/runtime/database-initialize-ts.test.ts",
+        "tests/runtime/runtime-host-callbacks.test.ts",
+        "tests/runtime/isolated-runtime-host.test.ts",
+        "docs/migrations/ts-runtime/evidence/electron-startup-2026-11-13.txt",
+        "docs/migrations/ts-runtime/evidence/electron-startup-2026-11-13.png",
+        "docs/qa/2026-11-12-utilityprocess-isolation.md"
       ],
       "status": "通过"
     },
@@ -103,7 +108,11 @@
         "tests/runtime/ts-cron-agent-background.test.ts",
         "tests/runtime/desktop-runtime-startup-cleanup.test.ts",
         "tests/runtime/desktop-runtime-revocation-stream.test.ts",
-        "tests/runtime/durable-channel-task.test.ts"
+        "tests/runtime/durable-channel-task.test.ts",
+        "tests/runtime/isolated-runtime-crash.test.ts",
+        "docs/qa/2026-11-12-utilityprocess-isolation.md",
+        "scripts/verify-electron-runtime-crash.mjs",
+        "docs/qa/assets/utilityprocess-crash-2026-11-13.json"
       ],
       "status": "通过"
     },
@@ -227,7 +236,11 @@
     {
       "id": "P12",
       "criterion": "删除全部 .NET、真实主站联调与六平台发布验收",
-      "evidence": ["docs/migrations/ts-runtime/acceptance-report-2026-09-20.md"],
+      "evidence": [
+        "docs/migrations/ts-runtime/acceptance-report-2026-09-20.md",
+        "docs/qa/2026-11-12-utilityprocess-isolation.md",
+        "docs/qa/assets/utilityprocess-crash-2026-11-13.json"
+      ],
       "status": "实现中"
     }
   ],

@@ -1,0 +1,89 @@
+[credentials] sanity tests passed
+[DB][TS] initialized {
+  dbPath: '/var/folders/fg/y5wwnhns7f1ccxfg5xkl662w0000gn/T/ola-electron-e2e-TqSqiJ/data.db'
+}
+[Updater] Running in development mode - using dev-app-update.yml
+[Updater] Source checkout detected. Skip startup update check.
+[TS] settings startup ready
+[Main] Using system proxy settings
+[CrashLogger] Logs will be written to /var/folders/fg/y5wwnhns7f1ccxfg5xkl662w0000gn/T/ola-electron-e2e-TqSqiJ/logs
+[CrashLogger] Native crash dumps will be written to /var/folders/fg/y5wwnhns7f1ccxfg5xkl662w0000gn/T/ola-electron-e2e-TqSqiJ/crash-dumps
+[TS] legacy runtime global startup skipped; compatibility routes are lazy
+[TsRuntime] desktop host ready
+[TS] TypeScript runtime is authoritative; legacy executable startup is removed
+[CronScheduler] Loaded 0/0 persisted cron jobs
+[Main] Renderer finished loading: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: false,
+  processId: 4
+}
+[Channels] Loaded 8 channels (8 built-in)
+[Channels] Loaded 8 channels (8 built-in)
+
+
+DevTools listening on ws://127.0.0.1:9250/devtools/browser/bfa9e430-f353-4fa2-8f26-8979c581669b
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '🌐 i18next is maintained with support from Locize — consider powering your project with managed localization (AI, CDN, integrations): https://locize.com 💙',
+  line: 1,
+  sourceId: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/assets/index-MiOLtjnX.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/index.html?layoutWindowScope=primary',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '[PluginAutoReply] Listener initialized',
+  line: 1392,
+  sourceId: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/assets/App-B6lpDUAE.js'
+}
+2026-11-12 23:13:48.338 Electron[18783:773907] TSM AdjustCapsLockLEDForKeyTransitionHandling - _ISSetPhysicalKeyboardCapsLockLED Inhibit
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/index.html?layoutWindowScope=primary#/settings/integrations/plugin',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '[ChannelStore] Loaded 8 plugins: feishu-bot(eJXxSwiDmucDEJVKlarG_),dingtalk-bot(JsrxgXZZRrkx1ymfWrEDz),wecom-bot(Go-qAstYY2gtj21SGwnFJ),qq-bot(2wFEcoj_g2aFyBvRl307-),weixin-official(w5su91Z6tDt95KEX4xvFH),telegram-bot(AuJA6ktjSq_JS40D9J8-M),discord-bot(VSPZArKgApZTinLAigdpv),whatsapp-bot(koLPuavQUr0W8hgeSGMcj)',
+  line: 66,
+  sourceId: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/assets/App-B6lpDUAE.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/index.html?layoutWindowScope=primary#/settings/integrations/channel',
+  title: 'Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '[ChannelStore] Loaded 8 plugins: feishu-bot(eJXxSwiDmucDEJVKlarG_),dingtalk-bot(JsrxgXZZRrkx1ymfWrEDz),wecom-bot(Go-qAstYY2gtj21SGwnFJ),qq-bot(2wFEcoj_g2aFyBvRl307-),weixin-official(w5su91Z6tDt95KEX4xvFH),telegram-bot(AuJA6ktjSq_JS40D9J8-M),discord-bot(VSPZArKgApZTinLAigdpv),whatsapp-bot(koLPuavQUr0W8hgeSGMcj)',
+  line: 66,
+  sourceId: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/assets/App-B6lpDUAE.js'
+}
+[Main] Renderer console message: {
+  windowId: 1,
+  webContentsId: 1,
+  url: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/index.html?layoutWindowScope=primary#/project/oc_75ea825f286043f9b8888bf066d53e23/session/YlIE7DsLFJpHcJiHP6nVQ',
+  title: '⏳ E2E startup reply: the workspace is read... — Ola',
+  isVisible: true,
+  processId: 4,
+  level: 1,
+  message: '[ChatActions] Agent execution path [object Object]',
+  line: 521,
+  sourceId: 'file:///Users/lqy-macmini/Desktop/vibecoding/Ola/out/renderer/assets/App-B6lpDUAE.js'
+}

@@ -1,13 +1,8 @@
 import * as React from 'react'
 import { Check, ImageDown, Eye, Code2, ZoomIn } from 'lucide-react'
-import mermaid from 'mermaid'
 import { Button } from '@renderer/components/ui/button'
 import { Dialog, DialogContent, DialogTitle } from '@renderer/components/ui/dialog'
-import {
-  applyMermaidTheme,
-  copyMermaidToClipboard,
-  useMermaidThemeVersion
-} from '@renderer/lib/utils/mermaid-theme'
+import { useMermaidThemeVersion } from '@renderer/lib/utils/mermaid-theme'
 
 export function MermaidBlock({ code }: { code: string }): React.JSX.Element {
   const [svg, setSvg] = React.useState('')
@@ -23,6 +18,7 @@ export function MermaidBlock({ code }: { code: string }): React.JSX.Element {
     if (!code.trim()) return
     setBusy(true)
     try {
+      const { copyMermaidToClipboard } = await import('@renderer/lib/utils/mermaid-runtime')
       await copyMermaidToClipboard(code, svg)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -45,10 +41,10 @@ export function MermaidBlock({ code }: { code: string }): React.JSX.Element {
       }
 
       try {
-        applyMermaidTheme()
-        const result = await mermaid.render(`mermaid-${renderId}-${Date.now()}`, source)
+        const { renderMermaidDiagram } = await import('@renderer/lib/utils/mermaid-runtime')
+        const rendered = await renderMermaidDiagram(`mermaid-${renderId}-${Date.now()}`, source)
         if (cancelled) return
-        setSvg(result.svg)
+        setSvg(rendered)
         setError('')
       } catch (err) {
         if (cancelled) return

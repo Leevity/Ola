@@ -35,8 +35,10 @@ import type {
 } from '@renderer/lib/remote/remote-types'
 import { useRemoteStore } from '@renderer/stores/remote-store'
 import { useRemoteAccountStore } from '@renderer/stores/remote-account-store'
+import type { RemoteAccessMode } from '../../../../shared/remote-control'
 import { useRemoteSignalingStore } from '@renderer/stores/remote-signaling-store'
 import { useRemotePeerStore } from '@renderer/stores/remote-peer-store'
+import { useRemoteControllerInput } from '@renderer/hooks/use-remote-controller-input'
 import { useRemoteCaptureStore } from '@renderer/stores/remote-capture-store'
 import { useSshStore } from '@renderer/stores/ssh-store'
 import {
@@ -1306,15 +1308,19 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   const devices = useRemoteAccountStore((state) => state.devices)
   const loadDevices = useRemoteAccountStore((state) => state.loadDevices)
   const allowRemoteControl = useRemoteAccountStore((state) => state.allowRemoteControl)
-  const setAllowRemoteControl = useRemoteAccountStore((state) => state.setAllowRemoteControl)
+  const remoteAccessMode = useRemoteAccountStore((state) => state.remoteAccessMode)
+  const remoteAccessSupported = useRemoteAccountStore((state) => state.remoteAccessSupported)
+  const setRemoteAccessMode = useRemoteAccountStore((state) => state.setRemoteAccessMode)
+  const refreshRemoteAccess = useRemoteAccountStore((state) => state.refreshRemoteAccess)
   const issueDeviceSignalToken = useRemoteAccountStore((state) => state.issueDeviceSignalToken)
   const autoResolvePairing = useRemoteAccountStore((state) => state.autoResolvePairing)
   const connectSignaling = useRemoteSignalingStore((state) => state.connect)
   const startControllerSession = useRemotePeerStore((state) => state.startControllerSession)
   const remoteStream = useRemotePeerStore((state) => state.remoteStream)
   const peerStatus = useRemotePeerStore((state) => state.status)
+  const peerRole = useRemotePeerStore((state) => state.role)
+  const sendRemoteInput = useRemotePeerStore((state) => state.sendInput)
   const closePeerSession = useRemotePeerStore((state) => state.closeSession)
-  const listenForIncoming = useRemotePeerStore((state) => state.listenForIncoming)
   const captureStatus = useRemoteCaptureStore((state) => state.status)
   const startCapture = useRemoteCaptureStore((state) => state.startProbe)
   const stopCapture = useRemoteCaptureStore((state) => state.stop)
@@ -1327,40 +1333,56 @@ function ManagedAccountWorkspace(): React.JSX.Element {
   const [error, setError] = useState('')
   const [connectingDeviceId, setConnectingDeviceId] = useState<string | null>(null)
   const [permissionLoading, setPermissionLoading] = useState(false)
+  const [pendingUnattended, setPendingUnattended] = useState(false)
+  const [unattendedConfirm, setUnattendedConfirm] = useState('')
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const [controlInputError, setControlInputError] = useState('')
+  // Input is only forwarded while this machine is the controller of a live
+  // session; the controlled side never sends input back over the same channel.
+  const controllerInputEnabled =
+    peerRole === 'controller' && peerStatus === 'connected' && Boolean(remoteStream)
+  useRemoteControllerInput({
+    videoRef: remoteVideoRef,
+    enabled: controllerInputEnabled,
+    sendInput: sendRemoteInput,
+    onError: setControlInputError
+  })
   useEffect(() => {
     if (account && device) void loadDevices().catch(() => undefined)
   }, [account, device, loadDevices])
+  // The durable permission may have been changed from another device or the
+  // console; read it when the page opens instead of trusting the last snapshot.
   useEffect(() => {
-    if (!account || !device) return undefined
-    let active = true
-    void issueDeviceSignalToken()
-      .then((signalToken) => {
-        if (active) return connectSignaling(signalToken)
-        return undefined
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
+    if (!device) return
+    void refreshRemoteAccess().catch(() => undefined)
+  }, [device, refreshRemoteAccess])
+  // Signalling and the incoming-offer listener live in RemoteControlHost at the
+  // app root: a control session must be accepted even when this page is closed.
+  // Unattended access has to keep the capture stream alive on its own: there is
+  // nobody at the machine to click "share screen". Attended access treats a
+  // stopped share as an explicit withdrawal, which is what the old on/off
+  // toggle did.
+  useEffect(() => {
+    if (remoteAccessMode === 'none') return
+    if (captureStatus === 'capturing' || captureStatus === 'requesting') return
+    if (remoteAccessMode === 'unattended') {
+      void startCapture().catch(() => undefined)
+      return
     }
-  }, [account, device, issueDeviceSignalToken, connectSignaling])
-  useEffect(() => {
-    if (!device) return undefined
-    return listenForIncoming(device.id, true)
-  }, [device, listenForIncoming])
-  useEffect(() => {
-    if (captureStatus === 'capturing' || !allowRemoteControl) return
-    void setAllowRemoteControl(false).catch((reason) => {
+    void setRemoteAccessMode('none').catch((reason) => {
       setError(reason instanceof Error ? reason.message : String(reason))
     })
-  }, [allowRemoteControl, captureStatus, setAllowRemoteControl])
+  }, [remoteAccessMode, captureStatus, setRemoteAccessMode, startCapture])
   useEffect(
     () => () => {
       const account = useRemoteAccountStore.getState()
-      if (account.allowRemoteControl) {
-        void account.setAllowRemoteControl(false).catch(() => undefined)
+      // Leaving the page ends attended access, because the person who granted
+      // it walked away from the screen. Unattended is meant to outlive the
+      // page: the app-level indicator keeps the stream and the session alive.
+      if (account.remoteAccessMode === 'attended') {
+        void account.setRemoteAccessMode('none').catch(() => undefined)
+        useRemoteCaptureStore.getState().stop()
       }
-      useRemoteCaptureStore.getState().stop()
     },
     []
   )
@@ -1376,11 +1398,33 @@ function ManagedAccountWorkspace(): React.JSX.Element {
       setError(reason instanceof Error ? reason.message : String(reason))
     }
   }
-  const updateRemotePermission = async (allow: boolean): Promise<void> => {
+  const updateRemotePermission = async (mode: RemoteAccessMode): Promise<void> => {
+    setError('')
+    if (mode === 'unattended' && remoteAccessMode !== 'unattended') {
+      // Unattended silently approves tool approvals, so the intent has to be
+      // typed out rather than toggled by accident.
+      setPendingUnattended(true)
+      setUnattendedConfirm('')
+      return
+    }
+    setPendingUnattended(false)
+    setPermissionLoading(true)
+    try {
+      await setRemoteAccessMode(mode)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason))
+    } finally {
+      setPermissionLoading(false)
+    }
+  }
+  const confirmUnattended = async (): Promise<void> => {
+    if (!device || unattendedConfirm.trim() !== device.deviceName) return
     setPermissionLoading(true)
     setError('')
     try {
-      await setAllowRemoteControl(allow)
+      await setRemoteAccessMode('unattended', unattendedConfirm.trim())
+      setPendingUnattended(false)
+      setUnattendedConfirm('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason))
     } finally {
@@ -1391,7 +1435,10 @@ function ManagedAccountWorkspace(): React.JSX.Element {
     if (allowRemoteControl) {
       setPermissionLoading(true)
       try {
-        await setAllowRemoteControl(false)
+        // Without a capture stream a controlled device cannot render anything,
+        // so stopping the share also withdraws the permission instead of
+        // leaving a door open that leads nowhere.
+        await setRemoteAccessMode('none')
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : String(reason))
       } finally {
@@ -1463,33 +1510,84 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                     )
                   })}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
-                  <div className="min-w-0 flex-1 text-xs">
-                    <p>
-                      {t(
-                        allowRemoteControl
-                          ? 'remote.controlPermissionEnabled'
-                          : 'remote.controlPermissionDisabled'
-                      )}
+                <div className="rounded-lg border p-3">
+                  <div className="text-xs">
+                    <p className="font-medium">{t('remote.accessModeTitle')}</p>
+                    <p className="mt-1 text-muted-foreground">
+                      {remoteAccessSupported
+                        ? t(
+                            remoteAccessMode === 'unattended'
+                              ? 'remote.accessModeUnattendedHint'
+                              : remoteAccessMode === 'attended'
+                                ? 'remote.accessModeAttendedHint'
+                                : 'remote.accessModeNoneHint'
+                          )
+                        : t('remote.accessModeUnsupported')}
                     </p>
-                    {!allowRemoteControl && captureStatus !== 'capturing' && (
-                      <p className="mt-1 text-muted-foreground">
-                        {t('remote.controlPermissionRequiresCapture')}
-                      </p>
-                    )}
                   </div>
-                  <Button
-                    size="sm"
-                    variant={allowRemoteControl ? 'destructive' : 'outline'}
-                    disabled={
-                      permissionLoading || (!allowRemoteControl && captureStatus !== 'capturing')
-                    }
-                    onClick={() => void updateRemotePermission(!allowRemoteControl)}
-                  >
-                    {permissionLoading
-                      ? t('remote.controlPermissionUpdating')
-                      : t(allowRemoteControl ? 'remote.disableControl' : 'remote.enableControl')}
-                  </Button>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant={remoteAccessMode === 'none' ? 'secondary' : 'outline'}
+                      disabled={permissionLoading || remoteAccessMode === 'none'}
+                      onClick={() => void updateRemotePermission('none')}
+                    >
+                      {t('remote.accessModeNone')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={remoteAccessMode === 'attended' ? 'secondary' : 'outline'}
+                      disabled={permissionLoading || remoteAccessMode === 'attended'}
+                      onClick={() => void updateRemotePermission('attended')}
+                    >
+                      {t('remote.accessModeAttended')}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={remoteAccessMode === 'unattended' ? 'secondary' : 'outline'}
+                      disabled={permissionLoading || remoteAccessMode === 'unattended'}
+                      onClick={() => void updateRemotePermission('unattended')}
+                    >
+                      {t('remote.accessModeUnattended')}
+                    </Button>
+                  </div>
+                  {pendingUnattended && (
+                    <div className="mt-3 space-y-2 rounded-md border border-destructive/40 bg-destructive/5 p-3">
+                      <p className="text-xs text-destructive">{t('remote.unattendedConsent')}</p>
+                      <Input
+                        value={unattendedConfirm}
+                        placeholder={device.deviceName}
+                        onChange={(event) => setUnattendedConfirm(event.target.value)}
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={
+                            permissionLoading || unattendedConfirm.trim() !== device.deviceName
+                          }
+                          onClick={() => void confirmUnattended()}
+                        >
+                          {t('remote.unattendedConfirm')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setPendingUnattended(false)
+                            setUnattendedConfirm('')
+                          }}
+                        >
+                          {t('remote.unattendedCancel')}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  {remoteAccessMode !== 'none' && captureStatus !== 'capturing' && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {t('remote.controlPermissionRequiresCapture')}
+                    </p>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 rounded-lg border p-3">
                   <span className="min-w-0 flex-1 text-xs">
@@ -1540,12 +1638,24 @@ function ManagedAccountWorkspace(): React.JSX.Element {
                     ))}
                 </div>
                 {remoteStream && (
-                  <video
-                    className="aspect-video w-full rounded-lg bg-black object-contain"
-                    autoPlay
-                    playsInline
-                    srcObject={remoteStream as never}
-                  />
+                  <div className="space-y-2">
+                    <video
+                      ref={remoteVideoRef}
+                      className="aspect-video w-full rounded-lg bg-black object-contain outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                      autoPlay
+                      playsInline
+                      tabIndex={controllerInputEnabled ? 0 : -1}
+                      srcObject={remoteStream as never}
+                    />
+                    {controllerInputEnabled && (
+                      <p className="text-xs text-muted-foreground">
+                        {t('remote.controlInputHint')}
+                      </p>
+                    )}
+                    {controlInputError && (
+                      <p className="text-sm text-destructive">{controlInputError}</p>
+                    )}
+                  </div>
                 )}
                 {peerStatus !== 'idle' && (
                   <Button variant="outline" onClick={closePeerSession}>

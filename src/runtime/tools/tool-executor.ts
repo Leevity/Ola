@@ -295,7 +295,20 @@ export class ResourceLocks {
   }
 }
 
-export class ToolExecutor {
+/**
+ * What the agent loop needs from tool execution. The isolated runtime satisfies
+ * it with a proxy so validation, hooks, approval and resource locks stay in Main.
+ */
+export interface AgentToolExecutor {
+  catalog(): Array<Pick<ToolDefinition, 'name' | 'description' | 'inputSchema'>>
+  executeAll(
+    calls: ToolCall[],
+    context: ToolContext,
+    record: (type: string, data: unknown) => Promise<void>
+  ): Promise<ToolResult[]>
+}
+
+export class ToolExecutor implements AgentToolExecutor {
   private definitions: Map<string, ToolDefinition>
   constructor(
     definitions: ToolDefinition[],

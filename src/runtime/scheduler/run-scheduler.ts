@@ -353,6 +353,38 @@ export class RunScheduler {
     return child
   }
 
+  /**
+   * A Main-side tool runs against a run this scheduler owns, so its events,
+   * approvals and nested runs must come back through here. Every entry point
+   * requires the run to be executing right now: a finished run's journal is
+   * closed to new events, and the host cannot address a run it never started.
+   */
+  private hostRun(runId: string, workspaceId: string): RunRecord {
+    const running = this.running.get(runId)
+    if (!running || running.run.workspaceId !== workspaceId) throw new RuntimeError('RUN_NOT_FOUND')
+    return running.run
+  }
+
+  async recordHostEvent(
+    runId: string,
+    workspaceId: string,
+    type: string,
+    data: unknown
+  ): Promise<void> {
+    const run = this.hostRun(runId, workspaceId)
+    if (type === 'run.status') throw new RuntimeError('RESERVED_EVENT_TYPE')
+    this.publish(await this.journal.append(run.runId, run.workspaceId, type, data))
+  }
+
+  requestHostInteraction(
+    runId: string,
+    workspaceId: string,
+    interaction: Omit<PendingRuntimeInteraction, 'runId' | 'workspaceId' | 'createdAt'>
+  ): Promise<unknown> {
+    const run = this.hostRun(runId, workspaceId)
+    return this.requestInteraction(run, this.running.get(runId)!.controller.signal, interaction)
+  }
+
   private async watchNestedTerminal(
     child: RunRecord,
     onTerminal: (snapshot: RunSnapshot) => Promise<void>

@@ -2054,14 +2054,14 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
       (layout) =>
         Boolean(
           layout?.queueVisible &&
-          layout.queueFullyVisible &&
-          layout.actionFullyVisible &&
-          layout.composerEditorFullyVisible &&
-          layout.sendButtonFullyVisible &&
-          layout.runtimePanelVisible &&
-          layout.runtimePanelBottom <= layout.queueTop &&
-          layout.queueHitClear &&
-          layout.actionHitClear
+            layout.queueFullyVisible &&
+            layout.actionFullyVisible &&
+            layout.composerEditorFullyVisible &&
+            layout.sendButtonFullyVisible &&
+            layout.runtimePanelVisible &&
+            layout.runtimePanelBottom <= layout.queueTop &&
+            layout.queueHitClear &&
+            layout.actionHitClear
         ),
       'the queue and recovery action to remain visible in a minimum-size window'
     )
@@ -2130,10 +2130,10 @@ describe.skipIf(!RUN_ELECTRON_E2E)('pending session queue Electron recovery', ()
         (layout) =>
           Boolean(
             layout?.queueVisible &&
-            layout.actionVisible &&
-            layout.runtimePanelVisible &&
-            layout.sidebarCollapsed &&
-            layout.sidebarToggleVisible
+              layout.actionVisible &&
+              layout.runtimePanelVisible &&
+              layout.sidebarCollapsed &&
+              layout.sidebarToggleVisible
           ),
         `the queue, retry action, and runtime panel at ${zoom * 100}% equivalent zoom`
       )

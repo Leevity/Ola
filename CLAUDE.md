@@ -6,9 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - `npm run dev` — start Electron + Vite with hot reload (primary dev loop).
 - `npm run start` — preview the packaged app output (run after `build`).
-- `npm run lint` — ESLint with cache. Minimum validation before committing.
+- `npm run lint` — Biome lint. Minimum validation before committing.
 - `npm run typecheck` — runs both `typecheck:node` (main/preload, `tsconfig.node.json`) and `typecheck:web` (renderer, `tsconfig.web.json`). Strict TS.
-- `npm run format` — Prettier.
+- `npm run format` — Biome format.
 - `npm run build` — typecheck then `electron-vite build`.
 - `npm run build:unpack` — build + unpacked app for packaging checks.
 - `npm run build:{win|mac|linux}` — full packaged installer.
@@ -25,7 +25,7 @@ Four-layer Electron + Node.js app. Keep process boundaries explicit — system a
    SSH, auto-updates, and crash logging. Its `db/` modules expose the Main-owned TypeScript
    BusinessRepository and SQLite schema services through IPC.
 2. **Preload (`src/preload/`)** — secure bridge exposing a narrow API surface to the renderer. All main↔renderer traffic goes through here; do not add `nodeIntegration` shortcuts.
-3. **Renderer (`src/renderer/src/`)** — React 19 UI. Zustand stores (`stores/`), i18n (`locales/`, `react-i18next`, `en`/`zh`), Tailwind v4, Monaco, xterm, recharts. The renderer owns message presentation, approvals, and session UX. `session-runtime-router.ts` buffers message state for background (non-visible) sessions and flushes it when those sessions come to the foreground.
+3. **Renderer (`src/renderer/src/`)** — React 19 UI. Zustand stores (`stores/`), i18n (`locales/`, `react-i18next`, `en`/`zh`), Tailwind v4, CodeMirror 6, xterm, recharts. The renderer owns message presentation, approvals, and session UX. `session-runtime-router.ts` buffers message state for background (non-visible) sessions and flushes it when those sessions come to the foreground.
 4. **TypeScript runtime (`src/runtime/`)** — the provider-agnostic Agent loop, scheduler, storage,
    and CodeGraph implementation. Electron main owns the runtime service and typed IPC projections;
    the renderer remains the interaction surface.
@@ -86,7 +86,7 @@ Renderer code uses `@renderer/*` → `src/renderer/src/*` (configured in `tsconf
 ## Conventions
 
 - `.editorconfig`: UTF-8, LF, 2 spaces, final newline, trimmed trailing whitespace.
-- `.prettierrc.yaml`: single quotes, **no semicolons**, 100-column width, no trailing commas.
+- `biome.json`: single quotes, **no semicolons**, 100-column width, no trailing commas; also owns linting and the `src/runtime/**` import boundary.
 - React component files are PascalCase (`Layout.tsx`); stores/helpers/non-component modules are kebab-case (`settings-store.ts`).
 - Commit style from history: conventional commits — `feat(scope): ...`, `fix(scope): ...`, `chore(scope): ...`, `refactor(scope): ...`, `style(scope): ...`. Keep commits focused; don't mix refactors with behavior changes.
 - When bumping the app version in `package.json`, also update the docs homepage version in `docs/src/app/(home)/page.tsx` and keep download links aligned with release assets.

@@ -8,6 +8,7 @@ import type {
 import { resolveLanguageName as resolveAppLanguageName } from '@renderer/lib/i18n-language'
 import { streamTsProviderTurn } from '@renderer/lib/ipc/agent-bridge'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { resolveAuxiliaryRunSessionId } from '@renderer/lib/ipc/auxiliary-run-session'
 import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 
@@ -98,9 +99,11 @@ export async function streamAiTranslation({
     : null
 
   if (workspace && modelSource && (await isTsRuntimeAvailable())) {
+    const sessionId = await resolveAuxiliaryRunSessionId(workspace.id, providerConfig.sessionId)
+    if (!sessionId) throw new Error('TS_RUNTIME_TEXT_SESSION_REQUIRED')
     for await (const event of streamTsRuntimeTextTurn({
       workspaceId: workspace.id,
-      sessionId: `translate:${nanoid()}`,
+      sessionId,
       modelSource,
       modelOptions: {
         systemPrompt,

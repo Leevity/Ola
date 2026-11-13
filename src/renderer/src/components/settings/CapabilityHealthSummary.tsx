@@ -113,10 +113,10 @@ export function CapabilityHealthSummary(): React.JSX.Element {
   )
   const imageModelConfigured = Boolean(
     imagePlugin?.enabled &&
-    selectedImageProvider?.models.some(
-      (model) =>
-        model.id === imageModelId && model.enabled && (model.category ?? 'chat') === 'image'
-    )
+      selectedImageProvider?.models.some(
+        (model) =>
+          model.id === imageModelId && model.enabled && (model.category ?? 'chat') === 'image'
+      )
   )
   const builtinPluginsNeedingSetup = imagePlugin?.enabled && !imageModelConfigured ? 1 : 0
   const providers = useProviderHealthStore((state) => state.providers)

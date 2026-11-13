@@ -1027,5 +1027,23 @@
     "terminalExited": "Fine sessione terminale",
     "terminalExitedWithError": "Sessione terminale uscita",
     "exitCode": "Codice di uscita: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Richiesta di attività remota",
+    "meshTaskFrom": "Da {{node}}",
+    "meshTaskAccept": "Esegui attività",
+    "meshTaskReject": "Rifiuta",
+    "meshTaskRunning": "Attività remote in esecuzione: {{running}}",
+    "meshTaskAttendedNote": "Nulla viene eseguito senza la tua approvazione.",
+    "meshTaskReason": {
+      "unknown-task": "Questa richiesta non è più disponibile.",
+      "already-decided": "Questa richiesta ha già ricevuto una risposta.",
+      "user-rejected": "Richiesta rifiutata.",
+      "access-disabled": "L'accesso remoto è disattivato.",
+      "session-busy": "Un'altra sessione remota è attiva.",
+      "confirmation-required": "Questo dispositivo richiede una conferma.",
+      "quota-exhausted": "La quota di approvazioni non presidiate è esaurita."
+    },
+    "controlInputHint": "Fai clic sullo schermo remoto per controllarlo. L'input di mouse e tastiera si interrompe quando perde il focus."
   }
 }

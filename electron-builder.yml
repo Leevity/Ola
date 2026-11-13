@@ -15,11 +15,10 @@ files:
   - '!src/*'
   - '!{tools,tests,scripts,docs}/**'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{biome.json,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   # Exclude renderer-only / build-only node_modules (already bundled by Vite)
-  - '!node_modules/monaco-editor/**'
   - '!node_modules/gpt-tokenizer/**'
   - '!node_modules/@lobehub/**'
   - '!node_modules/lucide-react/**'
@@ -29,7 +28,6 @@ files:
   - '!node_modules/tailwind-merge/**'
   - '!node_modules/tw-animate-css/**'
   - '!node_modules/@babel/**'
-  - '!node_modules/rehype-highlight/**'
   - '!node_modules/highlight.js/**'
   - '!node_modules/framer-motion/**'
   - '!node_modules/motion/**'
@@ -66,7 +64,6 @@ files:
   - '!node_modules/mdast*/**'
   - '!node_modules/micromark*/**'
   - '!node_modules/vfile*/**'
-  - '!node_modules/@monaco-editor/**'
   - '!node_modules/@vitejs/**'
   - '!node_modules/@types/**'
   - '!node_modules/marked/**'
@@ -74,7 +71,6 @@ files:
   - '!node_modules/jiti/**'
   - '!node_modules/source-map/**'
   - '!node_modules/scheduler/**'
-  - '!node_modules/ast-types/**'
   - '!node_modules/tslib/**'
   - '!node_modules/csstype/**'
   - '!node_modules/style-to-object/**'
@@ -112,6 +108,11 @@ asarUnpack:
   - out/main/graph-store-worker.mjs
   # DesktopRuntime's service lease Worker resolves from out/main/../storage.
   - out/storage/lease-worker.mjs
+  # The isolated runtime is a utilityProcess entry, and a Node Worker cannot be
+  # loaded from inside an asar archive, so its own siblings must be unpacked too.
+  - out/runtime/isolated.mjs
+  - out/runtime/journal-worker.mjs
+  - out/runtime/journal-schema.mjs
   - resources/**
   - node_modules/ssh2/**
   - node_modules/cpu-features/**

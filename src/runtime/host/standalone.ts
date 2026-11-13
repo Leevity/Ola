@@ -3,15 +3,23 @@ import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { RunJournal } from '../storage/run-journal'
 import { RunScheduler, type RunExecutor } from '../scheduler/run-scheduler'
-import { RuntimeServer, type RuntimeAuthority } from './runtime-server'
+import { RuntimeServer, type HostStreamSink, type RuntimeAuthority } from './runtime-server'
 import { acquireServiceLease } from './service-lease'
-import type { RunSpec } from '../../shared/runtime/contracts'
+import { RUNTIME_CONNECTION_DESCRIPTOR_VERSION, type RunSpec } from '../../shared/runtime/contracts'
+
+/** The slice of the server an isolated executor needs to reach its host. */
+export interface RuntimeHostChannel {
+  requestHost<T>(method: string, params?: unknown, timeout?: number): Promise<T>
+  registerHostStream(streamId: string, sink: HostStreamSink): () => void
+}
 
 export async function startStandaloneRuntime(options: {
   dataDirectory: string
   execute: RunExecutor
   authorize: (run: RunSpec) => Promise<void>
   authority: RuntimeAuthority
+  /** Set only by the isolated child, whose host is Main. */
+  allowHost?: boolean
 }): Promise<{
   recordExternalArtifact: (
     spec: RunSpec,
@@ -19,6 +27,7 @@ export async function startStandaloneRuntime(options: {
   ) => Promise<void>
   endpoint: string
   token: string
+  hostChannel: RuntimeHostChannel
   stop: () => Promise<void>
   revokeUnavailableWorkspaces: (availableIds: ReadonlySet<string>) => void
 }> {
@@ -62,15 +71,23 @@ export async function startStandaloneRuntime(options: {
     journal = new RunJournal(join(directory, 'runs.db'))
     scheduler = new RunScheduler(journal, options.execute, options.authorize)
     await scheduler.initialize()
-    server = new RuntimeServer(scheduler, token, options.authority)
+    server = new RuntimeServer(scheduler, token, options.authority, {
+      allowHost: options.allowHost
+    })
     await server.listen(endpoint)
     await unlink(descriptor).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== 'ENOENT') throw error
     })
-    await writeFile(descriptor, JSON.stringify({ endpoint, token, pid: process.pid, version: 1 }), {
-      mode: 0o600,
-      flag: 'wx'
-    })
+    await writeFile(
+      descriptor,
+      JSON.stringify({
+        endpoint,
+        token,
+        pid: process.pid,
+        version: RUNTIME_CONNECTION_DESCRIPTOR_VERSION
+      }),
+      { mode: 0o600, flag: 'wx' }
+    )
     descriptorWritten = true
     return {
       recordExternalArtifact: async (spec, artifact) => {
@@ -91,6 +108,7 @@ export async function startStandaloneRuntime(options: {
       },
       endpoint,
       token,
+      hostChannel: server,
       stop,
       revokeUnavailableWorkspaces: (availableIds) => {
         // Pushed subscriptions must stop before the runs they describe do, so

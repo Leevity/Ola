@@ -5,7 +5,19 @@ import { join } from 'path'
 
 export interface RemoteAuditEntry {
   id: string
-  action: 'connect' | 'disconnect' | 'input_enable' | 'input' | 'input_disable'
+  action:
+    | 'connect'
+    | 'disconnect'
+    | 'input_enable'
+    | 'input'
+    | 'input_disable'
+    | 'input_backend_unavailable'
+    | 'auto_approve'
+    | 'access_mode'
+    | 'task_admit'
+    | 'task_reject'
+    | 'task_start'
+    | 'task_finish'
   sessionId?: string
   ownerWebContentsId?: number
   success: boolean

@@ -13,6 +13,7 @@ import type {
 } from '@renderer/stores/ui-store'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
 import { resolveTsRuntimeModelBinding } from '@renderer/lib/ipc/ts-runtime-model-binding'
+import { resolveAuxiliaryRunSessionId } from '@renderer/lib/ipc/auxiliary-run-session'
 import {
   RESPONSES_SESSION_SCOPE_AUTO_MODEL_ROUTING,
   withAuxiliaryResponsesRequestPolicy
@@ -953,11 +954,16 @@ export async function selectAutoModel(options: {
 
     const tsBinding = resolveTsRuntimeModelBinding(routingConfig)
     if (tsBinding && (await isTsRuntimeAvailable())) {
+      const sessionId = await resolveAuxiliaryRunSessionId(
+        tsBinding.workspaceId,
+        routingConfig.sessionId
+      )
+      if (!sessionId) throw new Error('TS_RUNTIME_TEXT_SESSION_REQUIRED')
       let output = ''
       try {
         for await (const event of streamTsRuntimeTextTurn({
           workspaceId: tsBinding.workspaceId,
-          sessionId: `auto-model-routing:${crypto.randomUUID()}`,
+          sessionId,
           modelSource: tsBinding.modelSource,
           modelOptions: {
             maxTokens: routingConfig.maxTokens,

@@ -6,7 +6,7 @@ import {
   createLocalWorkspace,
   createSshWorkspace,
   getParentPath
-} from '@renderer/lib/monaco/workspace'
+} from '@renderer/lib/editor/workspace'
 import type { ViewerProps } from '../viewer-registry'
 
 export function FallbackViewer({

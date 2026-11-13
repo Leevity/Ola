@@ -1,6 +1,6 @@
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
-import { guessLanguage } from '@renderer/lib/monaco/languages'
+import { guessLanguage } from '@renderer/lib/editor/languages'
 import { useGitStore, type GitStatusFile } from '@renderer/stores/git-store'
 import { useUIStore, type GitChangeSection } from '@renderer/stores/ui-store'
 import {
@@ -33,7 +33,7 @@ export interface OpenGitDiffParams {
 
 /**
  * Resolve the original/modified content for a git change and open it in the
- * central Monaco diff editor. Original/modified sourcing follows VSCode
+ * central diff editor. Original/modified sourcing follows VSCode
  * semantics (see the plan's matrix):
  *  - unstaged: index → working file (editable)
  *  - staged:   HEAD  → index (read-only)

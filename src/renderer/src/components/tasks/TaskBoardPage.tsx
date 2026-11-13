@@ -361,8 +361,8 @@ export function TaskBoardPage({ onBack }: { onBack: () => void }): React.JSX.Ele
   }, [selectedTaskId])
   const detailDraftChanged = Boolean(
     task &&
-    (detailSubject !== task.subject ||
-      detailTags !== (readTaskBoardMetadata(task.metadata).tags?.join(', ') ?? ''))
+      (detailSubject !== task.subject ||
+        detailTags !== (readTaskBoardMetadata(task.metadata).tags?.join(', ') ?? ''))
   )
   const openCreate = (): void => {
     setCreateSessionId(

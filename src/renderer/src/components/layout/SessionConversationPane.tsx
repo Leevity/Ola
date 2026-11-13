@@ -232,8 +232,8 @@ export function SessionConversationPane({
     hasProjectFolderAction || hasTranscriptActions || allowOpenInNewWindow
   const showTerminalDock = Boolean(
     sessionView.projectId &&
-    terminalDockOpen &&
-    (sessionView.workingFolder || sessionView.sshConnectionId)
+      terminalDockOpen &&
+      (sessionView.workingFolder || sessionView.sshConnectionId)
   )
   const terminalDockLayout = getProjectTerminalDockLayout({
     workspaceWidth: terminalLayoutWidth,

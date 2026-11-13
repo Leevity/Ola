@@ -702,9 +702,9 @@ function configureChromiumCachePaths(): void {
       console.log(
         `[Browser] Using isolated browser storage while emulating ${browserStorageMode.browserName} profile: ${browserStorageMode.browserProfilePath}`
       )
-    } else if (browserStorageMode.reuseEnabled) {
-      console.log('[Browser] Browser profile reuse enabled, but no supported profile was found')
     }
+    // No supported host browser profile is a normal fallback (isolated storage is used).
+    // Do not log it on every startup — it made fresh installs look broken.
   } catch (error) {
     console.error('[Main] Failed to configure Chromium cache paths:', error)
     recordCrash('configure_chromium_cache_failed', { error })
@@ -731,16 +731,32 @@ function resolveRendererHeapLimitMb(systemMemMb: number): number {
   return Math.min(Math.max(defaultLimit, MIN_RENDERER_HEAP_MB), MAX_DEFAULT_RENDERER_HEAP_MB)
 }
 
+/**
+ * Central place for Chromium feature switches. `appendSwitch` replaces any
+ * earlier value of the same switch, so every feature must be decided here.
+ *
+ * `WebRtcHideLocalIpsWithMdns` is disabled because Chromium hides local ICE
+ * candidates behind mDNS hostnames that a peer on the same machine or LAN
+ * cannot resolve; without host candidates, remote control falls back to
+ * public-reflexive candidates only and dies without a TURN relay. An
+ * authorized controller already sees the screen, so a real host candidate
+ * discloses nothing new.
+ */
+function configureChromiumFeatures(): void {
+  const features = new Set<string>(['WebRtcHideLocalIpsWithMdns'])
+  if (process.env.OLA_DISABLE_MEMORY_PRESSURE === '1') {
+    features.add('MemoryPressureBasedSourceBufferGC')
+    app.commandLine.appendSwitch('memory-pressure-off')
+  }
+  app.commandLine.appendSwitch('disable-features', [...features].join(','))
+}
+
 /** Keep renderer V8 headroom bounded while allowing explicit overrides for large local runs. */
 function configureRendererHeapLimit(): void {
   try {
     const systemMemMb = Math.floor(totalmem() / (1024 * 1024))
     const rendererHeapMb = resolveRendererHeapLimitMb(systemMemMb)
     app.commandLine.appendSwitch('js-flags', `--max-old-space-size=${rendererHeapMb}`)
-    if (process.env.OLA_DISABLE_MEMORY_PRESSURE === '1') {
-      app.commandLine.appendSwitch('disable-features', 'MemoryPressureBasedSourceBufferGC')
-      app.commandLine.appendSwitch('memory-pressure-off')
-    }
   } catch (error) {
     console.warn('[Main] Failed to set renderer heap limit:', error)
   }
@@ -1239,10 +1255,24 @@ function registerWindowControlHandlers(): void {
 }
 
 function configureBuiltInBrowserPermissions(): void {
+  // Deny-by-default for embedded web content, but the handler is per
+  // webContents, not per session: the browser panel (a webview) gets nothing,
+  // while the app's own windows keep the screen-capture permission the remote
+  // control feature depends on. Blanket-denying the session also blanket-denied
+  // the main window and silently killed screen capture.
+  const isAppWindow = (webContents: Electron.WebContents | null | undefined): boolean =>
+    Boolean(webContents && !webContents.isDestroyed() && webContents.getType() === 'window')
+  const allowForAppWindow = (
+    webContents: Electron.WebContents | null | undefined,
+    permission: string
+  ): boolean =>
+    isAppWindow(webContents) && (permission === 'media' || permission === 'display-capture')
   for (const browserSession of getBuiltInBrowserStorageSessions()) {
-    browserSession.setPermissionCheckHandler(() => false)
-    browserSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-      callback(false)
+    browserSession.setPermissionCheckHandler((webContents, permission) =>
+      allowForAppWindow(webContents, permission)
+    )
+    browserSession.setPermissionRequestHandler((webContents, permission, callback) => {
+      callback(allowForAppWindow(webContents, permission))
     })
   }
 }
@@ -1509,6 +1539,7 @@ app.on('before-quit', (event) => {
 runLoggedStartupStep('configure_isolated_user_data', () => configureIsolatedElectronUserData(app))
 startNativeCrashReporter()
 runLoggedStartupStep('configure_chromium_cache_paths', configureChromiumCachePaths)
+runLoggedStartupStep('configure_chromium_features', configureChromiumFeatures)
 runLoggedStartupStep('configure_renderer_heap_limit', configureRendererHeapLimit)
 
 // 防止dev环境和生产环境冲突，导致无法启动

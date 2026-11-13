@@ -1,10 +1,9 @@
-﻿import { readFile } from 'node:fs/promises'
-import path from 'node:path'
-import {
+﻿import {
   preserveViewportOffsetAfterPrepend,
   resolveChatAutoScrollState,
   shouldCompensateTranscriptRowResize
 } from '../src/renderer/src/components/chat/chat-scroll-policy'
+import { assertIncludes, assertMatch, readCollapsedSource } from './lib/source-text.ts'
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
@@ -80,208 +79,297 @@ assert(
   'the virtualizer must not compete with streaming bottom-follow'
 )
 
-const root = process.cwd()
-const messageList = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/MessageList.tsx'),
-  'utf8'
+// Every text assertion below is about tokens, not layout, so the sources are read collapsed.
+// Collapsing turns a wrapped call into `fn( arg )` and a wrapped array into `[ 'a', 'b' ]`,
+// so each pattern tolerates a space wherever the formatter may break a line.
+const messageList = await readCollapsedSource('src/renderer/src/components/chat/MessageList.tsx')
+const collapsiblePanel = await readCollapsedSource(
+  'src/renderer/src/components/chat/CollapsibleHeightPanel.tsx'
 )
-const collapsiblePanel = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/CollapsibleHeightPanel.tsx'),
-  'utf8'
+const viewportController = await readCollapsedSource(
+  'src/renderer/src/components/chat/use-message-list-viewport.ts'
 )
-const viewportController = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/use-message-list-viewport.ts'),
-  'utf8'
+const viewportPrimitives = await readCollapsedSource(
+  'src/renderer/src/components/chat/message-list-viewport.ts'
 )
-const viewportPrimitives = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/message-list-viewport.ts'),
-  'utf8'
+const planReviewCard = await readCollapsedSource(
+  'src/renderer/src/components/chat/PlanReviewCard.tsx'
 )
-const planReviewCard = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/PlanReviewCard.tsx'),
-  'utf8'
+const inputArea = await readCollapsedSource('src/renderer/src/components/chat/InputArea.tsx')
+const executionRunSummary = await readCollapsedSource(
+  'src/renderer/src/components/chat/ExecutionRunSummary.tsx'
 )
-const inputArea = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/InputArea.tsx'),
-  'utf8'
+const subAgentCard = await readCollapsedSource('src/renderer/src/components/chat/SubAgentCard.tsx')
+const assistantMessage = await readCollapsedSource(
+  'src/renderer/src/components/chat/AssistantMessage.tsx'
 )
-const executionRunSummary = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/ExecutionRunSummary.tsx'),
-  'utf8'
+const executionTraceCard = await readCollapsedSource(
+  'src/renderer/src/components/chat/ExecutionTraceCard.tsx'
 )
-const subAgentCard = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/SubAgentCard.tsx'),
-  'utf8'
+const finalOutcomeCard = await readCollapsedSource(
+  'src/renderer/src/components/chat/FinalOutcomeCard.tsx'
 )
-const assistantMessage = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/AssistantMessage.tsx'),
-  'utf8'
+const chatSendMessage = await readCollapsedSource('src/renderer/src/lib/agent/chat-send-message.ts')
+const providerStore = await readCollapsedSource('src/renderer/src/stores/provider-store.ts')
+const imageAttachments = await readCollapsedSource('src/renderer/src/lib/image-attachments.ts')
+const presentationRegistry = await readCollapsedSource(
+  'src/renderer/src/components/chat/tool-presentation-registry.ts'
 )
-const executionTraceCard = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/ExecutionTraceCard.tsx'),
-  'utf8'
-)
-const finalOutcomeCard = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/FinalOutcomeCard.tsx'),
-  'utf8'
-)
-const chatSendMessage = await readFile(
-  path.join(root, 'src/renderer/src/lib/agent/chat-send-message.ts'),
-  'utf8'
-)
-const providerStore = await readFile(
-  path.join(root, 'src/renderer/src/stores/provider-store.ts'),
-  'utf8'
-)
-const imageAttachments = await readFile(
-  path.join(root, 'src/renderer/src/lib/image-attachments.ts'),
-  'utf8'
-)
-const presentationRegistry = await readFile(
-  path.join(root, 'src/renderer/src/components/chat/tool-presentation-registry.ts'),
-  'utf8'
-)
-assert(messageList.includes('defaultRangeExtractor'), 'initial tail range optimization is missing')
-assert(
-  messageList.includes('DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL'),
+assertIncludes(messageList, 'defaultRangeExtractor', 'initial tail range optimization is missing')
+assertIncludes(
+  messageList,
+  'DB_MESSAGES_LIST_LOCATOR_MSGPACK_CHANNEL',
   'assistant reply rail index is missing'
 )
-assert(
-  messageList.includes("kind === 'streaming'") &&
-    messageList.includes("activeTurn.kind = 'streaming'"),
+assertMatch(messageList, /kind\s*===\s*'streaming'/, 'streaming rail marker is missing')
+assertMatch(
+  messageList,
+  /activeTurn\s*\.\s*kind\s*=\s*'streaming'/,
   'streaming rail marker is missing'
 )
-assert(
-  messageList.includes('countToolUseBlocks') &&
-    messageList.includes("t('messageList.assistantRail.toolOnlyPreview'"),
+assertIncludes(messageList, 'countToolUseBlocks', 'tool-use locator summary is missing')
+assertMatch(
+  messageList,
+  /t\(\s*'messageList\.assistantRail\.toolOnlyPreview'/,
   'tool-use locator summary is missing'
 )
-assert(
-  collapsiblePanel.includes('useMotionProfile') &&
-    collapsiblePanel.includes('enabled && profile.transform'),
+assertIncludes(collapsiblePanel, 'useMotionProfile', 'reduced-motion handling is missing')
+assertMatch(
+  collapsiblePanel,
+  /enabled\s*&&\s*profile\s*\.\s*transform/,
   'reduced-motion handling is missing'
 )
-assert(
-  collapsiblePanel.includes('new ResizeObserver(measure)'),
+assertMatch(
+  collapsiblePanel,
+  /new\s+ResizeObserver\(\s*measure\s*\)/,
   'dynamic height observer is missing'
 )
-assert(
-  collapsiblePanel.includes("height: canAnimate ? contentHeight : 'auto'"),
+assertMatch(
+  collapsiblePanel,
+  /height:\s*canAnimate\s*\?\s*contentHeight\s*:\s*'auto'/,
   'dynamic content height is not connected to the transition'
 )
-assert(
-  collapsiblePanel.includes("EXECUTION_RESIZE_EVENT = 'ola:execution-resize'") &&
-    collapsiblePanel.includes('notifyExecutionResize') &&
-    collapsiblePanel.includes("collapseMotion?: 'clip' | 'scroll-up'"),
+assertMatch(
+  collapsiblePanel,
+  /EXECUTION_RESIZE_EVENT\s*=\s*'ola:execution-resize'/,
   'execution collapse must notify the virtual transcript and support scroll-up motion'
 )
-assert(
-  viewportController.includes('MessageWindowPhase') &&
-    viewportController.includes("'positioning'") &&
-    viewportController.includes('requestOlderLoad'),
+assertIncludes(
+  collapsiblePanel,
+  'notifyExecutionResize',
+  'execution collapse must notify the virtual transcript and support scroll-up motion'
+)
+assertMatch(
+  collapsiblePanel,
+  /collapseMotion\?:\s*'clip'\s*\|\s*'scroll-up'/,
+  'execution collapse must notify the virtual transcript and support scroll-up motion'
+)
+assertIncludes(
+  viewportController,
+  'MessageWindowPhase',
   'message viewport controller is missing lifecycle and history-load policy'
 )
-assert(
-  viewportPrimitives.includes('getMessageAnchorCorrection') &&
-    viewportPrimitives.includes('historyCorrectFrames') &&
-    viewportPrimitives.includes('maxFillPages'),
+assertIncludes(
+  viewportController,
+  "'positioning'",
+  'message viewport controller is missing lifecycle and history-load policy'
+)
+assertIncludes(
+  viewportController,
+  'requestOlderLoad',
+  'message viewport controller is missing lifecycle and history-load policy'
+)
+assertIncludes(
+  viewportPrimitives,
+  'getMessageAnchorCorrection',
   'message viewport anchor and fill safeguards are missing'
 )
-assert(
-  messageList.includes('getMessageAnchorCorrection(nextRef, anchor)') &&
-    messageList.includes('EXECUTION_RESIZE_EVENT') &&
-    messageList.includes('rowVirtualizer.measure()'),
+assertIncludes(
+  viewportPrimitives,
+  'historyCorrectFrames',
+  'message viewport anchor and fill safeguards are missing'
+)
+assertIncludes(
+  viewportPrimitives,
+  'maxFillPages',
+  'message viewport anchor and fill safeguards are missing'
+)
+assertMatch(
+  messageList,
+  /getMessageAnchorCorrection\(\s*nextRef,\s*anchor\s*\)/,
   'message list must correct anchors and remeasure after execution collapse'
 )
-assert(
-  planReviewCard.includes('navigator.clipboard.writeText'),
+assertIncludes(
+  messageList,
+  'EXECUTION_RESIZE_EVENT',
+  'message list must correct anchors and remeasure after execution collapse'
+)
+assertMatch(
+  messageList,
+  /rowVirtualizer\s*\.\s*measure\(\s*\)/,
+  'message list must correct anchors and remeasure after execution collapse'
+)
+assertMatch(
+  planReviewCard,
+  /navigator\s*\.\s*clipboard\s*\.\s*writeText/,
   'plan markdown copy action is missing'
 )
-assert(planReviewCard.includes('URL.createObjectURL'), 'plan markdown download action is missing')
-assert(planReviewCard.includes('openFilePreview'), 'plan source preview action is missing')
-assert(
-  planReviewCard.includes('<ModelSwitcher sessionId={planExecutionSessionId} />') &&
-    planReviewCard.includes('hasStreamingExecutionMessage'),
+assertMatch(
+  planReviewCard,
+  /URL\s*\.\s*createObjectURL/,
+  'plan markdown download action is missing'
+)
+assertIncludes(planReviewCard, 'openFilePreview', 'plan source preview action is missing')
+assertMatch(
+  planReviewCard,
+  /<ModelSwitcher\s+sessionId=\{\s*planExecutionSessionId\s*\}\s*\/>/,
   'plan execution must expose a session-scoped model choice and use the plan run state'
 )
-assert(
-  inputArea.includes('data-file-suggestion-index'),
+assertIncludes(
+  planReviewCard,
+  'hasStreamingExecutionMessage',
+  'plan execution must expose a session-scoped model choice and use the plan run state'
+)
+assertIncludes(
+  inputArea,
+  'data-file-suggestion-index',
   'file suggestion selection marker is missing'
 )
-assert(
-  inputArea.includes('data-slash-suggestion-index'),
+assertIncludes(
+  inputArea,
+  'data-slash-suggestion-index',
   'slash suggestion selection marker is missing'
 )
-assert(
-  inputArea.includes("scrollIntoView({ block: 'nearest', inline: 'nearest' })"),
+assertMatch(
+  inputArea,
+  /scrollIntoView\(\s*\{\s*block:\s*'nearest',\s*inline:\s*'nearest'\s*\}\s*\)/,
   'suggestion auto-scroll is missing'
 )
-assert(
-  inputArea.includes("openSettingsPage('permission')"),
+assertMatch(
+  inputArea,
+  /openSettingsPage\(\s*'permission'\s*\)/,
   'permission whitelist settings shortcut is missing'
 )
-assert(
-  inputArea.includes("['default', 'whitelist', 'full-access'] as const"),
+assertMatch(
+  inputArea,
+  /\[\s*'default',\s*'whitelist',\s*'full-access'\s*\]\s*as\s+const/,
   'full-access permission mode option is missing'
 )
-assert(
-  inputArea.includes("t('permission.mode.fullAccessConfirmDescription')"),
+assertMatch(
+  inputArea,
+  /t\(\s*'permission\.mode\.fullAccessConfirmDescription'\s*\)/,
   'full-access worker deny-rule explanation is missing'
 )
-assert(
-  executionRunSummary.includes('function categorySummaries'),
+assertMatch(
+  executionRunSummary,
+  /function\s+categorySummaries/,
   'execution category summary breakdown is missing'
 )
-assert(
-  executionRunSummary.includes("run.status === 'failed' || run.status === 'pending-approval'"),
+assertMatch(
+  executionRunSummary,
+  /run\s*\.\s*status\s*===\s*'failed'\s*\|\|\s*run\s*\.\s*status\s*===\s*'pending-approval'/,
   'execution failure and approval indicators are missing'
 )
-assert(executionRunSummary.includes('categoryTags.map'), 'execution category tags are missing')
-assert(subAgentCard.includes('{statusText}'), 'sub-agent persistent status is missing')
-assert(subAgentCard.includes('{formatElapsed(elapsed)}'), 'sub-agent elapsed duration is missing')
-assert(
-  subAgentCard.includes('data-testid="sub-agent-cancel-button"'),
+assertMatch(executionRunSummary, /categoryTags\s*\.\s*map/, 'execution category tags are missing')
+assertMatch(subAgentCard, /\{\s*statusText\s*\}/, 'sub-agent persistent status is missing')
+assertMatch(
+  subAgentCard,
+  /\{\s*formatElapsed\(\s*elapsed\s*\)\s*\}/,
+  'sub-agent elapsed duration is missing'
+)
+assertIncludes(
+  subAgentCard,
+  'data-testid="sub-agent-cancel-button"',
   'sub-agent cancellation control is missing'
 )
-assert(
-  assistantMessage.includes('<ExecutionTraceCard') &&
-    assistantMessage.includes('<FinalOutcomeCard outcome={runOutcome.outcome}'),
+assertIncludes(
+  assistantMessage,
+  '<ExecutionTraceCard',
   'result-first two-layer outcome rendering is missing'
 )
-assert(
-  executionTraceCard.includes('type="button"') &&
-    executionTraceCard.includes('onClick={onViewProcess}') &&
-    assistantMessage.includes('onViewProcess={expandExecutionRuns}'),
+assertMatch(
+  assistantMessage,
+  /<FinalOutcomeCard\s+outcome=\{\s*runOutcome\s*\.\s*outcome\s*\}/,
+  'result-first two-layer outcome rendering is missing'
+)
+assertIncludes(
+  executionTraceCard,
+  'type="button"',
   'completed execution trace must provide a keyboard-accessible process navigation action'
 )
-assert(finalOutcomeCard.includes('React.useId()'), 'final outcome heading ids must be unique')
-assert(
-  presentationRegistry.includes('class ToolPresentationRegistry') &&
-    presentationRegistry.includes("adapter('project-intelligence'") &&
-    presentationRegistry.includes("adapter('mcp-extension'"),
+assertMatch(
+  executionTraceCard,
+  /onClick=\{\s*onViewProcess\s*\}/,
+  'completed execution trace must provide a keyboard-accessible process navigation action'
+)
+assertMatch(
+  assistantMessage,
+  /onViewProcess=\{\s*expandExecutionRuns\s*\}/,
+  'completed execution trace must provide a keyboard-accessible process navigation action'
+)
+assertMatch(
+  finalOutcomeCard,
+  /React\s*\.\s*useId\(\s*\)/,
+  'final outcome heading ids must be unique'
+)
+assertMatch(
+  presentationRegistry,
+  /class\s+ToolPresentationRegistry/,
   'tool presentation registry adapters are incomplete'
 )
-assert(
-  chatSendMessage.includes('modelExplicitlyRejectsVision(healthyProvider.modelConfig') &&
-    chatSendMessage.includes('throw new VisionInputUnsupportedError()') &&
-    chatSendMessage.includes(
-      'content: buildUserMessageContent(textForUserBlock, images, textBlocks)'
-    ),
+assertMatch(
+  presentationRegistry,
+  /adapter\(\s*'project-intelligence'/,
+  'tool presentation registry adapters are incomplete'
+)
+assertMatch(
+  presentationRegistry,
+  /adapter\(\s*'mcp-extension'/,
+  'tool presentation registry adapters are incomplete'
+)
+assertMatch(
+  chatSendMessage,
+  /modelExplicitlyRejectsVision\(\s*healthyProvider\s*\.\s*modelConfig/,
   'image input must be rejected before a text-only model receives it and preserved for vision models'
 )
-assert(
-  providerStore.includes('export function modelExplicitlyRejectsVision') &&
-    providerStore.includes('return model.supportsVision === false'),
+assertMatch(
+  chatSendMessage,
+  /throw\s+new\s+VisionInputUnsupportedError\(\s*\)/,
+  'image input must be rejected before a text-only model receives it and preserved for vision models'
+)
+assertMatch(
+  chatSendMessage,
+  /content:\s*buildUserMessageContent\(\s*textForUserBlock,\s*images,\s*textBlocks\s*\)/,
+  'image input must be rejected before a text-only model receives it and preserved for vision models'
+)
+assertMatch(
+  providerStore,
+  /export\s+function\s+modelExplicitlyRejectsVision/,
   'only explicitly text-only models may block image input'
 )
-assert(
-  inputArea.includes('shouldRejectSelectedModelVisionInput') &&
-    inputArea.includes('isVisionInputUnsupportedError(error)') &&
-    inputArea.includes('setAttachedImages(cloneImageAttachments(submittedDraft.images))'),
+assertMatch(
+  providerStore,
+  /return\s+model\s*\.\s*supportsVision\s*===\s*false/,
+  'only explicitly text-only models may block image input'
+)
+assertIncludes(
+  inputArea,
+  'shouldRejectSelectedModelVisionInput',
   'rejected image sends must stay in the home composer or restore the attachment without a duplicate generic error'
 )
-assert(
-  imageAttachments.includes('export class VisionInputUnsupportedError'),
+assertMatch(
+  inputArea,
+  /isVisionInputUnsupportedError\(\s*error\s*\)/,
+  'rejected image sends must stay in the home composer or restore the attachment without a duplicate generic error'
+)
+assertMatch(
+  inputArea,
+  /setAttachedImages\(\s*cloneImageAttachments\(\s*submittedDraft\s*\.\s*images\s*\)\s*\)/,
+  'rejected image sends must stay in the home composer or restore the attachment without a duplicate generic error'
+)
+assertMatch(
+  imageAttachments,
+  /export\s+class\s+VisionInputUnsupportedError/,
   'vision input rejection needs a typed send error'
 )
 

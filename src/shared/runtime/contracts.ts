@@ -1,15 +1,29 @@
 import { parseModelSource, type ModelSource } from './model-source'
 import type { ModelOptions } from './model'
 
-export const RUNTIME_PROTOCOL_VERSION = 1
+export const RUNTIME_PROTOCOL_VERSION = 2
+/**
+ * Version 1 peers stay usable as observers: they may submit and replay runs but
+ * are never asked to serve host callbacks, so an older CLI cannot be handed
+ * credential or tool authority it does not implement.
+ */
+export const MIN_RUNTIME_PROTOCOL_VERSION = 1
+/** Schema of the on-disk connection.json, which evolves separately from the wire protocol. */
+export const RUNTIME_CONNECTION_DESCRIPTOR_VERSION = 1
 export const MAX_RUNTIME_FRAME_BYTES = 1024 * 1024
+/**
+ * Model context and tool batches are exchanged with the host, not the renderer.
+ * They outgrow the public bound, so only an authenticated host peer may use it.
+ */
+export const MAX_HOST_FRAME_BYTES = 8 * 1024 * 1024
 export const RUNTIME_CAPABILITIES = [
   'runs',
   'replay',
   'cancel',
   'interactions',
   'workspace-switch',
-  'stream'
+  'stream',
+  'host'
 ] as const
 export type RuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number]
 export type RunStatus =

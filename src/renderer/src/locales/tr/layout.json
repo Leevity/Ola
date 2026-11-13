@@ -1027,5 +1027,23 @@
     "terminalExited": "Terminal seansı sona erdi",
     "terminalExitedWithError": "Terminal seansı çıktı",
     "exitCode": "Çıkış kodu: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Uzak görev isteği",
+    "meshTaskFrom": "{{node}} kaynağından",
+    "meshTaskAccept": "Görevi çalıştır",
+    "meshTaskReject": "Reddet",
+    "meshTaskRunning": "Çalışan uzak görevler: {{running}}",
+    "meshTaskAttendedNote": "Siz onaylayana kadar hiçbir şey çalıştırılmaz.",
+    "meshTaskReason": {
+      "unknown-task": "Bu istek artık kullanılamıyor.",
+      "already-decided": "Bu istek zaten yanıtlandı.",
+      "user-rejected": "İstek reddedildi.",
+      "access-disabled": "Uzak erişim kapalı.",
+      "session-busy": "Başka bir uzak oturum etkin.",
+      "confirmation-required": "Bu cihaz onay gerektiriyor.",
+      "quota-exhausted": "Gözetimsiz onay kotası tükendi."
+    },
+    "controlInputHint": "Uzak ekranı kontrol etmek için üzerine tıklayın. Odak kaybolduğunda fare ve klavye girişi durur."
   }
 }

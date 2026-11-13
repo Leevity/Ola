@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // Evidence recorder for docs/agent-desktop-acceptance.md. It drives the pinned agent-desktop CLI
 // through the sequence a platform row claims to have covered and prints a paste-ready block.
 //

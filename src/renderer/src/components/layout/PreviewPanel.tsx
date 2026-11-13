@@ -56,9 +56,9 @@ import {
   AlertDialogTitle
 } from '@renderer/components/ui/alert-dialog'
 
-const MonacoDiffEditor = lazy(() =>
-  import('@renderer/components/editor/MonacoDiffEditor').then((m) => ({
-    default: m.MonacoDiffEditor
+const CodeDiffEditor = lazy(() =>
+  import('@renderer/components/editor/CodeDiffEditor').then((m) => ({
+    default: m.CodeDiffEditor
   }))
 )
 
@@ -653,7 +653,7 @@ export function PreviewPanel({
               </div>
             }
           >
-            <MonacoDiffEditor
+            <CodeDiffEditor
               filePath={activeTab.filePath}
               original={activeTab.diffOriginal ?? ''}
               modified={diffModifiedValue}

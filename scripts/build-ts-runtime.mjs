@@ -21,6 +21,20 @@ await copyFile('src/runtime/storage/journal-schema.mjs', 'out/runtime/journal-sc
 await copyFile('src/runtime/storage/business-worker.mjs', 'out/runtime/business-worker.mjs')
 await copyFile('src/runtime/storage/business-schema.mjs', 'out/runtime/business-schema.mjs')
 
+// The isolated runtime runs as an Electron utilityProcess. It resolves its
+// journal Worker beside itself and the lease Worker one directory up, so it
+// shares the layout above instead of inventing a second one.
+await build({
+  entryPoints: ['src/runtime/host/isolated.ts'],
+  outfile: 'out/runtime/isolated.mjs',
+  bundle: true,
+  platform: 'node',
+  format: 'esm',
+  target: 'node24',
+  external: ['ws'],
+  sourcemap: true
+})
+
 // Electron Main also constructs RunJournal directly. The Worker URL is kept
 // dynamic by design, so Rollup cannot discover this sibling asset.
 await copyFile('src/runtime/storage/journal-worker.mjs', 'out/main/journal-worker.mjs')

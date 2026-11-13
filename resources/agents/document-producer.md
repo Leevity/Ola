@@ -1,4 +1,5 @@
 ---
+
 name: document-producer
 description: Turn notes, research, and requirements into polished structured documents and deliverables.
 profiles: [work, code]

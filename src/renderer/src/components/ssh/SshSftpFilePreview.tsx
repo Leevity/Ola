@@ -8,7 +8,7 @@ import { useFileWatcher } from '@renderer/hooks/use-file-watcher'
 import { ipcClient } from '@renderer/lib/ipc/ipc-client'
 import { IPC } from '@renderer/lib/ipc/channels'
 import { viewerRegistry } from '@renderer/lib/preview/viewer-registry'
-import { createSshWorkspace, getParentPath } from '@renderer/lib/monaco/workspace'
+import { createSshWorkspace, getParentPath } from '@renderer/lib/editor/workspace'
 
 const CodeEditor = React.lazy(() =>
   import('@renderer/components/editor/CodeEditor').then((m) => ({ default: m.CodeEditor }))

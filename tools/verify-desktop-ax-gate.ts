@@ -111,10 +111,15 @@ function sourceFilesUnder(directory: string, into: string[] = []): string[] {
   return into
 }
 
-function slice(text: string, from: string, to: string): string {
-  const start = text.indexOf(from)
+function slice(text: string, from: string | RegExp, to: string | RegExp): string {
+  const at = (needle: string | RegExp, start = 0): number => {
+    if (typeof needle === 'string') return text.indexOf(needle, start)
+    const found = text.slice(start).search(needle)
+    return found === -1 ? -1 : found + start
+  }
+  const start = at(from)
   assert.notEqual(start, -1, `${from} must exist`)
-  const end = text.indexOf(to, start)
+  const end = at(to, start)
   assert.notEqual(end, -1, `${to} must exist after ${from}`)
   return text.slice(start, end)
 }
@@ -175,7 +180,7 @@ prove('argv-red-lines', () => {
   for (const flag of FORBIDDEN_FLAGS) {
     assert.ok(flags.includes(`'${flag}'`), `${flag} must stay on the argv forbidden list`)
   }
-  const verbs = slice(argvBuilder, 'FORBIDDEN_COMMAND_NAMES', '] as const')
+  const verbs = slice(argvBuilder, 'FORBIDDEN_COMMAND_NAMES', /\]\s+as\s+const/)
   for (const verb of FORBIDDEN_VERBS) {
     assert.ok(verbs.includes(`'${verb}'`), `${verb} must stay a forbidden command`)
   }
@@ -250,8 +255,8 @@ prove('binary-integrity-pin', () => {
 
 prove('result-budget-bound', () => {
   const digits = (value: string): number => Number(value.replace(/_/g, ''))
-  const ceiling = digits(shrink.match(/SNAPSHOT_MAX_CHARS = ([\d_]+)/)?.[1] ?? '0')
-  const clip = digits(rendererClip.match(/MAX_TOOL_OUTPUT_TEXT_CHARS = ([\d_]+)/)?.[1] ?? '0')
+  const ceiling = digits(shrink.match(/SNAPSHOT_MAX_CHARS\s*=\s*([\d_]+)/)?.[1] ?? '0')
+  const clip = digits(rendererClip.match(/MAX_TOOL_OUTPUT_TEXT_CHARS\s*=\s*([\d_]+)/)?.[1] ?? '0')
   assert.ok(
     ceiling > 0 && ceiling < clip,
     `the rendered snapshot must stay inside the renderer clip: ${ceiling} vs ${clip}`

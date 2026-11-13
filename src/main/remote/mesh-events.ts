@@ -88,7 +88,8 @@ function verifyTicket(
   controlPlanePublicKeyText: string,
   expected: Pick<MeshTaskReceiptDelivery, 'subjectNodeId' | 'targetNodeId' | 'sessionId'>,
   accountId: string,
-  nowSeconds: number
+  nowSeconds: number,
+  requiredCapability: string
 ): MeshTicketClaims | null {
   const [encodedClaims, encodedSignature, extra] = token.split('.')
   if (!encodedClaims || !encodedSignature || extra !== undefined) return null
@@ -118,7 +119,7 @@ function verifyTicket(
     claims.subjectNodeId !== expected.subjectNodeId ||
     claims.targetNodeId !== expected.targetNodeId ||
     claims.sessionId !== expected.sessionId ||
-    !claims.capabilities?.includes('mesh.event.receive') ||
+    !claims.capabilities?.includes(requiredCapability) ||
     !Number.isInteger(claims.issuedAt) ||
     claims.issuedAt > nowSeconds + 60 ||
     !Number.isInteger(claims.expiresAt) ||
@@ -129,36 +130,41 @@ function verifyTicket(
   return claims
 }
 
-export function verifyMeshTaskReceiptDelivery(
+/**
+ * The parts every signed Mesh delivery shares: envelope, registered source,
+ * capability ticket and Ed25519 signature over canonical JSON. The caller owns
+ * the event-type and payload rules, so opening one direction never loosens the
+ * other.
+ */
+function verifySignedEnvelope(
   delivery: MeshTaskReceiptDelivery,
   nodes: MeshVerificationNode[],
   controlPlanePublicKey: string,
   accountId: string,
   targetNodeId: string,
-  nowSeconds = Math.floor(Date.now() / 1000)
-): MeshTaskReceiptDelivery {
+  nowSeconds: number,
+  requiredCapability: string
+): MeshVerificationNode {
   if (
     !Number.isSafeInteger(delivery.cursor) ||
     delivery.cursor <= 0 ||
     delivery.protocolVersion !== 'v0alpha2' ||
-    !TASK_RECEIPT_TYPES.has(delivery.type) ||
     delivery.targetNodeId !== targetNodeId ||
     !Number.isSafeInteger(delivery.sequence) ||
     delivery.sequence <= 0 ||
-    !delivery.capabilities?.includes('mesh.event.receive')
+    !delivery.capabilities?.includes(requiredCapability)
   ) {
     throw new Error('Invalid Mesh task receipt delivery')
   }
   const source = nodes.find((node) => node.nodeId === delivery.subjectNodeId)
-  if (!source || (source.platform !== 'android' && source.platform !== 'ios')) {
-    throw new Error('Mesh task receipt source is not a registered mobile node')
-  }
+  if (!source) throw new Error('Mesh event source is not a registered node')
   const ticket = verifyTicket(
     delivery.ticket,
     controlPlanePublicKey,
     delivery,
     accountId,
-    nowSeconds
+    nowSeconds,
+    requiredCapability
   )
   if (
     !ticket ||
@@ -171,6 +177,48 @@ export function verifyMeshTaskReceiptDelivery(
   const signature = decodeBase64Url(delivery.signature)
   if (!publicKey || !signature) throw new Error('Invalid Mesh task receipt signature encoding')
 
+  const payloadDigest = createHash('sha256').update(sortedJson(delivery.payload)).digest('hex')
+  const signingInput = [
+    delivery.protocolVersion,
+    delivery.eventId,
+    delivery.subjectNodeId,
+    delivery.targetNodeId,
+    delivery.sessionId,
+    String(delivery.sequence),
+    delivery.type,
+    payloadDigest
+  ].join('\n')
+  const digest = createHash('sha256').update(signingInput).digest()
+  if (!verifyEd25519(publicKey, digest, signature)) {
+    throw new Error('Mesh task receipt signature did not verify')
+  }
+  return source
+}
+
+export function verifyMeshTaskReceiptDelivery(
+  delivery: MeshTaskReceiptDelivery,
+  nodes: MeshVerificationNode[],
+  controlPlanePublicKey: string,
+  accountId: string,
+  targetNodeId: string,
+  nowSeconds = Math.floor(Date.now() / 1000)
+): MeshTaskReceiptDelivery {
+  if (!TASK_RECEIPT_TYPES.has(delivery.type)) {
+    throw new Error('Invalid Mesh task receipt delivery')
+  }
+  const source = verifySignedEnvelope(
+    delivery,
+    nodes,
+    controlPlanePublicKey,
+    accountId,
+    targetNodeId,
+    nowSeconds,
+    'mesh.event.receive'
+  )
+  // Receipts travel back from the node that ran the task, which is still a phone.
+  if (source.platform !== 'android' && source.platform !== 'ios') {
+    throw new Error('Mesh task receipt source is not a registered mobile node')
+  }
   const payload = delivery.payload
   const allowedPayloadKeys = new Set(['task_id', 'task_state', 'result_text'])
   if (
@@ -188,20 +236,54 @@ export function verifyMeshTaskReceiptDelivery(
   ) {
     throw new Error('Invalid Mesh task receipt payload')
   }
-  const payloadDigest = createHash('sha256').update(sortedJson(payload)).digest('hex')
-  const signingInput = [
-    delivery.protocolVersion,
-    delivery.eventId,
-    delivery.subjectNodeId,
-    delivery.targetNodeId,
-    delivery.sessionId,
-    String(delivery.sequence),
-    delivery.type,
-    payloadDigest
-  ].join('\n')
-  const digest = createHash('sha256').update(signingInput).digest()
-  if (!verifyEd25519(publicKey, digest, signature)) {
-    throw new Error('Mesh task receipt signature did not verify')
+  return delivery
+}
+
+/**
+ * Inbound `task.requested`: another node asking this desktop to run an Agent
+ * task. Deliberately a separate entry point from the receipt verifier — it
+ * demands the `task.execute` capability instead of `mesh.event.receive`, and a
+ * receipt ticket must never be replayable as a dispatch.
+ *
+ * Verification only proves the request is authentic. It does not authorize
+ * execution; the attended/unattended decision is made by the caller.
+ */
+export function verifyMeshTaskDispatch(
+  delivery: MeshTaskReceiptDelivery,
+  nodes: MeshVerificationNode[],
+  controlPlanePublicKey: string,
+  accountId: string,
+  targetNodeId: string,
+  nowSeconds = Math.floor(Date.now() / 1000)
+): MeshTaskReceiptDelivery {
+  if (delivery.type !== 'task.requested') {
+    throw new Error('Invalid Mesh task dispatch delivery')
+  }
+  // Either a phone or another desktop may dispatch, so any registered node is a
+  // valid source here; the receipt path keeps its mobile-only rule.
+  verifySignedEnvelope(
+    delivery,
+    nodes,
+    controlPlanePublicKey,
+    accountId,
+    targetNodeId,
+    nowSeconds,
+    'task.execute'
+  )
+  const payload = delivery.payload
+  const allowedPayloadKeys = new Set(['task_id', 'task_text'])
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    Array.isArray(payload) ||
+    Object.keys(payload).some((key) => !allowedPayloadKeys.has(key)) ||
+    typeof payload.task_id !== 'string' ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(payload.task_id) ||
+    typeof payload.task_text !== 'string' ||
+    payload.task_text.trim().length === 0 ||
+    Buffer.byteLength(payload.task_text, 'utf8') > 12 * 1024
+  ) {
+    throw new Error('Invalid Mesh task dispatch payload')
   }
   return delivery
 }

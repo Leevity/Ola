@@ -1,9 +1,12 @@
-import { MAX_RUNTIME_FRAME_BYTES, RuntimeError } from '../../shared/runtime/contracts'
+import {
+  MAX_HOST_FRAME_BYTES,
+  MAX_RUNTIME_FRAME_BYTES,
+  RuntimeError
+} from '../../shared/runtime/contracts'
 
-export function encodeFrame(value: unknown): Buffer {
+export function encodeFrame(value: unknown, maxBytes = MAX_RUNTIME_FRAME_BYTES): Buffer {
   const payload = Buffer.from(JSON.stringify(value))
-  if (!payload.length || payload.length > MAX_RUNTIME_FRAME_BYTES)
-    throw new RuntimeError('FRAME_TOO_LARGE')
+  if (!payload.length || payload.length > maxBytes) throw new RuntimeError('FRAME_TOO_LARGE')
   const frame = Buffer.allocUnsafe(4 + payload.length)
   frame.writeUInt32BE(payload.length)
   payload.copy(frame, 4)
@@ -15,6 +18,15 @@ export class FrameDecoder {
   private headerBytes = 0
   private payload: Buffer | null = null
   private payloadBytes = 0
+  private maxBytes = MAX_RUNTIME_FRAME_BYTES
+  /**
+   * Widens the limit only after a peer proved it is the host. Model context and
+   * tool batches outgrow the renderer-facing bound, and an unauthenticated
+   * socket must never be able to make the service allocate that much.
+   */
+  allowHostFrames(): void {
+    this.maxBytes = MAX_HOST_FRAME_BYTES
+  }
   push(chunk: Buffer): unknown[] {
     const frames: unknown[] = []
     let offset = 0
@@ -26,8 +38,7 @@ export class FrameDecoder {
         this.headerBytes += count
         if (this.headerBytes !== 4) continue
         const length = this.header.readUInt32BE()
-        if (!length || length > MAX_RUNTIME_FRAME_BYTES)
-          throw new RuntimeError('INVALID_FRAME_LENGTH')
+        if (!length || length > this.maxBytes) throw new RuntimeError('INVALID_FRAME_LENGTH')
         this.payload = Buffer.allocUnsafe(length)
         this.headerBytes = 0
       }

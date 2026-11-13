@@ -3,7 +3,10 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DesktopRuntime } from '../../src/main/runtime/desktop-runtime'
-import { RUNTIME_PROTOCOL_VERSION } from '../../src/shared/runtime/contracts'
+import {
+  RUNTIME_CONNECTION_DESCRIPTOR_VERSION,
+  RUNTIME_PROTOCOL_VERSION
+} from '../../src/shared/runtime/contracts'
 import {
   publishDesktopRuntimeConnection,
   readDesktopRuntimeConnection
@@ -18,7 +21,7 @@ it('starts one Main-owned runtime, serves an authenticated client, and removes i
     const descriptor = JSON.parse(
       await readFile(join(dataDirectory, 'runtime-v2', 'connection.json'), 'utf8')
     ) as { endpoint: string; token: string; version: number }
-    expect(descriptor.version).toBe(RUNTIME_PROTOCOL_VERSION)
+    expect(descriptor.version).toBe(RUNTIME_CONNECTION_DESCRIPTOR_VERSION)
 
     await expect(runtime.request('ping')).resolves.toEqual({ version: RUNTIME_PROTOCOL_VERSION })
 

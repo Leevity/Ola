@@ -1,4 +1,5 @@
 ---
+
 name: researcher
 description: Research a topic, compare reliable sources, and produce an evidence-based brief with open questions and next steps.
 profiles: [work, code]

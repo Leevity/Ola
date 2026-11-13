@@ -212,7 +212,6 @@ function ToolExposureSection({
   }, [advertised, filter])
 
   // Virtualized: REA-style servers advertise hundreds of tools.
-  // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer is read within one render pass only
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
@@ -487,7 +486,7 @@ function ServerConfigPanel({
         ? String(server.outputLimits.maxResultBytes)
         : ''
     )
-  }, [server.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [server.id])
 
   // Refresh status on mount
   useEffect(() => {

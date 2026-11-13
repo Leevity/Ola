@@ -16,8 +16,9 @@ it('shares an in-flight registration and waits for the Main acknowledgement', as
         release = resolve
       })
   )
-  const { ensureWindowWorkspaceRegistered } =
-    await import('../../src/renderer/src/lib/window-workspace-registration')
+  const { ensureWindowWorkspaceRegistered } = await import(
+    '../../src/renderer/src/lib/window-workspace-registration'
+  )
   const first = ensureWindowWorkspaceRegistered('team-a')
   const second = ensureWindowWorkspaceRegistered('team-a')
   expect(invoke).toHaveBeenCalledOnce()
@@ -37,8 +38,9 @@ it('invalidates a stale acknowledgement when the workspace directory changes', a
         })
     )
     .mockResolvedValue({ workspaceId: 'team-a' })
-  const { ensureWindowWorkspaceRegistered, invalidateWindowWorkspaceRegistration } =
-    await import('../../src/renderer/src/lib/window-workspace-registration')
+  const { ensureWindowWorkspaceRegistered, invalidateWindowWorkspaceRegistration } = await import(
+    '../../src/renderer/src/lib/window-workspace-registration'
+  )
   const old = ensureWindowWorkspaceRegistered('team-a')
   invalidateWindowWorkspaceRegistration()
   await ensureWindowWorkspaceRegistered('team-a')
@@ -65,8 +67,9 @@ it('waits for the replacement registration when a same-workspace request is supe
           releaseNew = resolve
         })
     )
-  const { ensureWindowWorkspaceRegistered, invalidateWindowWorkspaceRegistration } =
-    await import('../../src/renderer/src/lib/window-workspace-registration')
+  const { ensureWindowWorkspaceRegistered, invalidateWindowWorkspaceRegistration } = await import(
+    '../../src/renderer/src/lib/window-workspace-registration'
+  )
   const old = ensureWindowWorkspaceRegistered('team-a')
   invalidateWindowWorkspaceRegistration()
   const current = ensureWindowWorkspaceRegistered('team-a')
@@ -87,8 +90,9 @@ it('does not accept a superseded registration for a different workspace', async 
         })
     )
     .mockResolvedValueOnce({ workspaceId: 'team-b' })
-  const { ensureWindowWorkspaceRegistered } =
-    await import('../../src/renderer/src/lib/window-workspace-registration')
+  const { ensureWindowWorkspaceRegistered } = await import(
+    '../../src/renderer/src/lib/window-workspace-registration'
+  )
   const old = ensureWindowWorkspaceRegistered('team-a')
   await ensureWindowWorkspaceRegistered('team-b')
   rejectOld?.(new Error('WINDOW_WORKSPACE_SUPERSEDED'))

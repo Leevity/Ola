@@ -28,9 +28,13 @@ export function desktopMeshPlatform(): MeshNodePlatform {
 
 export function desktopMeshCapabilities(): MeshCapability[] {
   // The remote workspace owns the authenticated event inbox while it is open.
-  // This capability only allows a peer to publish a signed receipt back to
-  // this desktop; task execution remains mobile-only.
-  return [{ id: 'mesh.event.receive', risk: 'low', version: '1' }]
+  // task.execute lets a peer enqueue an Agent task for this desktop; it is not
+  // permission to run one. Every dispatch still goes through the attended
+  // confirmation or the unattended auto-approval quota before anything executes.
+  return [
+    { id: 'mesh.event.receive', risk: 'low', version: '1' },
+    { id: 'task.execute', risk: 'high', version: '1' }
+  ]
 }
 
 function identityPath(): string {

@@ -4,7 +4,7 @@ import { resolveLanguageName, type AppLanguage } from '../i18n-language'
 import { streamTsProviderTurn } from '../ipc/agent-bridge'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '../ipc/ts-runtime-bridge'
 import { resolveTsRuntimeModelBinding } from '../ipc/ts-runtime-model-binding'
-import { nanoid } from 'nanoid'
+import { resolveAuxiliaryRunSessionId } from '../ipc/auxiliary-run-session'
 
 export interface OptimizationOption {
   title: string
@@ -153,9 +153,18 @@ Begin with Step 1 now.`,
 
   const binding = resolveTsRuntimeModelBinding(providerConfig)
   if (binding && (await isTsRuntimeAvailable())) {
+    const sessionId = await resolveAuxiliaryRunSessionId(
+      binding.workspaceId,
+      providerConfig.sessionId
+    )
+    if (!sessionId) {
+      console.error('[PromptOptimizer] TS_RUNTIME_TEXT_SESSION_REQUIRED')
+      yield { type: 'result', content: '', options: [] }
+      return
+    }
     for await (const event of streamTsRuntimeTextTurn({
       workspaceId: binding.workspaceId,
-      sessionId: `prompt-optimizer:${nanoid()}`,
+      sessionId,
       modelSource: binding.modelSource,
       modelOptions: {
         systemPrompt: OPTIMIZER_SYSTEM_PROMPT,

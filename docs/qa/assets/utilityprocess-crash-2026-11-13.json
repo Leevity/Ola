@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "utilityProcessPids": [
+    27951,
+    27993
+  ],
+  "runId": "094913ec-e768-417f-8ec5-c269ac29fbb9",
+  "resyncStreamCount": 1,
+  "runtimeReconnected": true,
+  "recoveredStatus": {
+    "status": "interrupted",
+    "finalStatus": {
+      "status": "interrupted",
+      "reason": "RUNTIME_RESTARTED_REVIEW_SIDE_EFFECTS"
+    }
+  },
+  "mainWindowSurvived": true,
+  "fixture": "127.0.0.1 OpenAI-compatible endpoint",
+  "isolatedDataRoot": true
+}

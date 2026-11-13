@@ -33,7 +33,14 @@ export interface ProviderReplay {
 }
 export type AgentMessage =
   | { role: 'system' | 'user'; text: string; images?: ModelImage[] }
-  | { role: 'assistant'; text: string; toolCalls: ModelToolCall[]; replay?: ProviderReplay }
+  | {
+      role: 'assistant'
+      text: string
+      toolCalls: ModelToolCall[]
+      /** Thinking text emitted by reasoning models; replayed as `reasoning_content` when required. */
+      reasoning?: string
+      replay?: ProviderReplay
+    }
   | { role: 'tool'; results: ModelToolResult[] }
 export interface ModelUsage {
   inputTokens: number

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, type KeyboardEvent } from 'react'
 import { Home, X } from 'lucide-react'
 import { motion } from 'motion/react'
 import { useTranslation } from 'react-i18next'
+import { localizeSessionTitle } from '@renderer/lib/session-display'
 import { openSessionOrFocusDetached } from '@renderer/lib/session-window'
 import { workspaceLayoutStorageKey } from '@renderer/lib/workbench/workspace-layout'
 import { useChatStore } from '@renderer/stores/chat-store'
@@ -110,6 +111,7 @@ export function SessionTabStrip(): React.JSX.Element | null {
       {tabIds.map((id) => {
         const session = scopedSessions.get(id)!
         const selected = chatView === 'session' && activeSessionId === id
+        const displayTitle = localizeSessionTitle(session.title, (key: string) => t(key))
         return (
           <div key={id} className="group relative flex min-w-0 shrink-0 items-center">
             <button
@@ -129,16 +131,16 @@ export function SessionTabStrip(): React.JSX.Element | null {
                 const draggedId = event.dataTransfer.getData('text/session-tab')
                 if (draggedId) reorderTab(workspaceId, draggedId, id)
               }}
-              title={session.title}
+              title={displayTitle}
               className={`max-w-48 min-w-24 truncate py-2 pl-3 pr-7 text-left text-muted-foreground transition-colors hover:text-foreground ${selected ? 'text-foreground' : ''}`}
             >
-              {session.title || t('workspaceTabs.untitled', { defaultValue: 'Untitled' })}
+              {displayTitle}
             </button>
             <button
               type="button"
               aria-label={t('workspaceTabs.close', {
                 defaultValue: 'Close {{title}} tab',
-                title: session.title || t('workspaceTabs.untitled', { defaultValue: 'Untitled' })
+                title: displayTitle
               })}
               onClick={() => closeSession(id)}
               className="absolute right-1.5 rounded p-0.5 text-muted-foreground/60 opacity-0 transition-[opacity,color,background-color] hover:bg-muted hover:text-foreground focus:opacity-100 group-hover:opacity-100"

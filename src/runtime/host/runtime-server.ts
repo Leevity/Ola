@@ -2,12 +2,24 @@ import { createServer, type Server, type Socket } from 'node:net'
 import { randomUUID, timingSafeEqual } from 'node:crypto'
 import { chmod } from 'node:fs/promises'
 import {
+  MAX_HOST_FRAME_BYTES,
+  MIN_RUNTIME_PROTOCOL_VERSION,
   RUNTIME_CAPABILITIES,
   RUNTIME_PROTOCOL_VERSION,
   RuntimeError,
+  parseRunSpec,
   type RunEvent,
   type RuntimeCapability
 } from '../../shared/runtime/contracts'
+import {
+  isHostRuntimeMethod,
+  type HostArtifactRecordParams,
+  type HostRunInteractionParams,
+  type HostRunNestedParams,
+  type HostRunRecordParams,
+  type HostStreamFrame,
+  type HostWorkspaceRevokeParams
+} from '../../shared/runtime/host-protocol'
 import { RunScheduler } from '../scheduler/run-scheduler'
 import { ModelBindingError } from '../../shared/runtime/model-source'
 import type { ExecutionPageKey } from '../../shared/execution-record'
@@ -73,7 +85,27 @@ export interface RuntimeAuthority {
 
 export interface RuntimeServerOptions {
   capabilities?: readonly RuntimeCapability[]
+  /**
+   * Only the isolated runtime may ask its client to serve host callbacks. The
+   * in-process server leaves this off so a CLI or test peer can never be handed
+   * credential, tool or approval authority.
+   */
+  allowHost?: boolean
 }
+
+/** Host requests use a distinct id space so a response can never resolve a client request. */
+const HOST_REQUEST_PREFIX = 'h'
+
+/** A model stream the host is feeding into this runtime. */
+export interface HostStreamSink {
+  onDelta: (frame: HostStreamFrame) => void
+}
+
+/**
+ * Host-driven requests wait on humans and on nested runs, so they must not sit
+ * behind each other in the per-socket queue. This bounds them instead.
+ */
+const MAX_CONCURRENT_HOST_REQUESTS = 64
 
 function record(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -126,6 +158,19 @@ export class RuntimeServer {
   private sockets = new Set<Socket>()
   private connections = new Map<Socket, SocketConnection>()
   private releaseSchedulerEvents: (() => void) | null = null
+  private host: SocketConnection | null = null
+  private nextHostId = 0
+  private hostRequests = new Map<
+    string,
+    {
+      resolve: (value: unknown) => void
+      reject: (error: Error) => void
+      timer: ReturnType<typeof setTimeout> | null
+    }
+  >()
+  private readonly allowHost: boolean
+  private hostStreams = new Map<string, HostStreamSink>()
+  private hostInflight = 0
   constructor(
     private scheduler: RunScheduler,
     private token: string,
@@ -133,6 +178,7 @@ export class RuntimeServer {
     options: RuntimeServerOptions = {}
   ) {
     if (token.length < 32) throw new RuntimeError('INVALID_RUNTIME_TOKEN')
+    this.allowHost = options.allowHost === true
     this.capabilities = new Set(options.capabilities ?? RUNTIME_CAPABILITIES)
     this.server = createServer((socket) => this.accept(socket))
     // Subscriptions are fed from the same committed events the journal replays,
@@ -157,6 +203,7 @@ export class RuntimeServer {
     this.connections.set(socket, connection)
     const decoder = new FrameDecoder()
     let authenticated = false
+    let negotiatedVersion = RUNTIME_PROTOCOL_VERSION
     let negotiatedCapabilities: ReadonlySet<RuntimeCapability> = new Set()
     let inflight = 0
     let tail: Promise<unknown> = Promise.resolve()
@@ -169,10 +216,46 @@ export class RuntimeServer {
       this.connections.delete(socket)
       closed?.subscriptions.clear()
       closed?.byRun.clear()
+      if (closed && this.host === closed) {
+        this.host = null
+        this.failHostRequests(new RuntimeError('HOST_UNAVAILABLE'))
+        this.failHostStreams('HOST_UNAVAILABLE')
+      }
     })
     socket.on('data', (chunk: Buffer) => {
       try {
         for (const frame of decoder.push(chunk)) {
+          if (!frame || typeof frame !== 'object' || Array.isArray(frame)) {
+            socket.destroy()
+            return
+          }
+          const candidate = frame as { id?: unknown; method?: unknown; event?: unknown }
+          if (authenticated && this.host === connection) {
+            // A host answer must bypass the request queue: the dispatch waiting for
+            // it occupies that queue, so queueing the answer would deadlock both.
+            if (
+              candidate.method === undefined &&
+              typeof candidate.id === 'string' &&
+              candidate.id.startsWith(HOST_REQUEST_PREFIX)
+            ) {
+              this.resolveHostRequest(candidate.id, frame as Record<string, unknown>)
+              continue
+            }
+            if (candidate.event === 'host.stream') {
+              this.deliverHostStream(frame as unknown as HostStreamFrame)
+              continue
+            }
+            // Host requests wait on approvals and nested runs. Queueing them
+            // behind each other would stall every other request on this socket.
+            if (typeof candidate.method === 'string' && isHostRuntimeMethod(candidate.method)) {
+              this.serveHostRuntimeRequest(
+                socket,
+                frame as Record<string, unknown>,
+                candidate.method
+              )
+              continue
+            }
+          }
           if (++inflight > 32) {
             socket.destroy()
             return
@@ -187,25 +270,50 @@ export class RuntimeServer {
                 method = typeof request.method === 'string' ? request.method : undefined
                 if (!authenticated) {
                   const params = record(request.params)
+                  const version = params.version
                   if (
                     request.method !== 'hello' ||
-                    params.version !== RUNTIME_PROTOCOL_VERSION ||
+                    typeof version !== 'number' ||
+                    !Number.isInteger(version) ||
+                    version < MIN_RUNTIME_PROTOCOL_VERSION ||
+                    version > RUNTIME_PROTOCOL_VERSION ||
                     !matchesToken(params.token, this.token)
                   )
                     throw new RuntimeError('HANDSHAKE_REJECTED')
                   const requested = requestedCapabilities(params.capabilities)
-                  authenticated = true
-                  negotiatedCapabilities = new Set(
+                  const granted = new Set(
                     requested.filter((capability) => this.capabilities.has(capability))
                   )
+                  // A version 1 peer never negotiated the callback contract, so it
+                  // stays an observer even if it asked for the capability.
+                  if (version < 2 || !this.allowHost) granted.delete('host')
+                  if (granted.has('host')) {
+                    // Exactly one host: a second peer would split credential and
+                    // approval authority, and revocation could not name one owner.
+                    if (this.host) throw new RuntimeError('HOST_ALREADY_CONNECTED')
+                    this.host = connection
+                    decoder.allowHostFrames()
+                  }
+                  authenticated = true
+                  negotiatedVersion = version
+                  negotiatedCapabilities = granted
                   clearTimeout(timeout)
                   this.send(socket, {
                     id: requestId,
                     result: {
-                      version: RUNTIME_PROTOCOL_VERSION,
+                      version,
                       capabilities: [...negotiatedCapabilities]
                     }
                   })
+                } else if (method === undefined) {
+                  // A host callback answer carries no method. Anything else without
+                  // one is not a request this server can dispatch.
+                  if (!this.resolveHostRequest(requestId, request))
+                    throw new RuntimeError('INVALID_REQUEST')
+                } else if (method === 'ping') {
+                  // Answer with the version this connection negotiated, so a
+                  // version 1 observer is not told it speaks a contract it never agreed to.
+                  this.send(socket, { id: requestId, result: { version: negotiatedVersion } })
                 } else {
                   const result = await this.dispatch(
                     id(request.method),
@@ -234,6 +342,154 @@ export class RuntimeServer {
       }
     })
   }
+
+  /**
+   * Ask the host (Main) to serve a capability the isolated runtime must not own:
+   * credentials, Main-backed tools, approvals and workspace authority.
+   */
+  requestHost<T>(method: string, params: unknown = {}, timeout = 30000): Promise<T> {
+    const host = this.host
+    if (!host || host.socket.destroyed) return Promise.reject(new RuntimeError('HOST_UNAVAILABLE'))
+    if (this.hostRequests.size >= 64) return Promise.reject(new RuntimeError('TOO_MANY_REQUESTS'))
+    const requestId = `${HOST_REQUEST_PREFIX}${++this.nextHostId}`
+    return new Promise<T>((resolve, reject) => {
+      // A tool batch or an approval can outlive any fixed deadline; 0 means the
+      // caller owns cancellation and only a lost host ends the wait.
+      const timer =
+        timeout > 0
+          ? setTimeout(() => {
+              this.hostRequests.delete(requestId)
+              reject(new RuntimeError('HOST_REQUEST_TIMEOUT'))
+            }, timeout)
+          : null
+      this.hostRequests.set(requestId, {
+        resolve: (value) => resolve(value as T),
+        reject,
+        timer
+      })
+      try {
+        host.socket.write(encodeFrame({ id: requestId, method, params }, MAX_HOST_FRAME_BYTES))
+      } catch (error) {
+        this.hostRequests.delete(requestId)
+        if (timer) clearTimeout(timer)
+        reject(error instanceof Error ? error : new RuntimeError('HOST_UNAVAILABLE'))
+      }
+    })
+  }
+
+  /**
+   * Registers the consumer before the host is asked to produce, so a delta that
+   * arrives with the request's own response is never dropped.
+   */
+  registerHostStream(streamId: string, sink: HostStreamSink): () => void {
+    if (this.hostStreams.has(streamId)) throw new RuntimeError('INVALID_REQUEST')
+    this.hostStreams.set(streamId, sink)
+    return () => {
+      if (this.hostStreams.get(streamId) === sink) this.hostStreams.delete(streamId)
+    }
+  }
+
+  private deliverHostStream(frame: HostStreamFrame): void {
+    if (typeof frame?.streamId !== 'string') return
+    const sink = this.hostStreams.get(frame.streamId)
+    if (!sink) return
+    if (frame.end || typeof frame.error === 'string') this.hostStreams.delete(frame.streamId)
+    sink.onDelta(frame)
+  }
+
+  private failHostStreams(error: string): void {
+    for (const [streamId, sink] of [...this.hostStreams]) {
+      this.hostStreams.delete(streamId)
+      sink.onDelta({ streamId, end: true, error })
+    }
+  }
+
+  private serveHostRuntimeRequest(
+    socket: Socket,
+    frame: Record<string, unknown>,
+    method: string
+  ): void {
+    const requestId = typeof frame.id === 'string' ? frame.id : undefined
+    if (this.hostInflight >= MAX_CONCURRENT_HOST_REQUESTS) {
+      this.send(socket, { id: requestId, error: 'TOO_MANY_REQUESTS' })
+      return
+    }
+    this.hostInflight++
+    void this.dispatchHostRuntimeRequest(method, frame.params)
+      .then(
+        (result) => this.send(socket, { id: requestId, result }),
+        (error: unknown) => this.send(socket, { id: requestId, error: requestFailureCode(error) })
+      )
+      .finally(() => {
+        this.hostInflight--
+      })
+  }
+
+  private async dispatchHostRuntimeRequest(method: string, input: unknown): Promise<unknown> {
+    const params = record(input)
+    switch (method) {
+      case 'host.run.record': {
+        const { workspaceId, runId, type, data } = params as unknown as HostRunRecordParams
+        await this.scheduler.recordHostEvent(id(runId), id(workspaceId), id(type), data)
+        return { ok: true }
+      }
+      case 'host.run.interaction': {
+        const { workspaceId, runId, interaction } = params as unknown as HostRunInteractionParams
+        const response = await this.scheduler.requestHostInteraction(
+          id(runId),
+          id(workspaceId),
+          record(interaction) as unknown as HostRunInteractionParams['interaction']
+        )
+        return { response: response ?? null }
+      }
+      case 'host.run.submit-nested': {
+        const { workspaceId, spec } = params as unknown as HostRunNestedParams
+        const allowed = await this.authority.workspaceIds()
+        if (!allowed.has(id(workspaceId))) throw new RuntimeError('WORKSPACE_FORBIDDEN')
+        return await this.scheduler.submit(spec)
+      }
+      case 'host.workspace.revoke': {
+        const { workspaceIds } = params as unknown as HostWorkspaceRevokeParams
+        if (!Array.isArray(workspaceIds)) throw new RuntimeError('INVALID_REQUEST')
+        const available = new Set(workspaceIds.map((value) => id(value)))
+        this.revokeUnavailableWorkspaces(available)
+        this.scheduler.revokeUnavailableWorkspaces(available)
+        return { ok: true }
+      }
+      case 'host.artifact.record': {
+        const { spec, artifact } = params as unknown as HostArtifactRecordParams
+        const run = parseRunSpec(spec)
+        if (!(await this.authority.workspaceIds()).has(run.workspaceId))
+          throw new RuntimeError('WORKSPACE_FORBIDDEN')
+        const target = record(artifact)
+        await this.scheduler.journal.recordExternalArtifact(run, {
+          path: id(target.path),
+          mediaType: id(target.mediaType)
+        })
+        return { ok: true }
+      }
+      default:
+        throw new RuntimeError('UNKNOWN_METHOD')
+    }
+  }
+
+  private resolveHostRequest(requestId: string, frame: Record<string, unknown>): boolean {
+    const pending = this.hostRequests.get(requestId)
+    if (!pending) return false
+    this.hostRequests.delete(requestId)
+    if (pending.timer) clearTimeout(pending.timer)
+    if (typeof frame.error === 'string') pending.reject(new RuntimeError(frame.error))
+    else pending.resolve(frame.result)
+    return true
+  }
+
+  private failHostRequests(error: Error): void {
+    for (const pending of this.hostRequests.values()) {
+      if (pending.timer) clearTimeout(pending.timer)
+      pending.reject(error)
+    }
+    this.hostRequests.clear()
+  }
   private send(socket: Socket, value: unknown): void {
     if (socket.destroyed) return
     // A stalled UI can reconnect/replay; it must not consume unbounded service memory.
@@ -241,7 +497,9 @@ export class RuntimeServer {
       socket.destroy()
       return
     }
-    socket.write(encodeFrame(value))
+    socket.write(
+      encodeFrame(value, this.host?.socket === socket ? MAX_HOST_FRAME_BYTES : undefined)
+    )
   }
 
   /** Fans a committed event out to every socket subscribed to its run. */
@@ -317,7 +575,6 @@ export class RuntimeServer {
     connection: SocketConnection
   ): Promise<unknown> {
     const params = record(input)
-    if (method === 'ping') return { version: RUNTIME_PROTOCOL_VERSION }
     const workspaceId = id(params.workspaceId)
     const allowed = await this.authority.workspaceIds()
     if (!allowed.has(workspaceId)) throw new RuntimeError('WORKSPACE_FORBIDDEN')
@@ -510,6 +767,9 @@ export class RuntimeServer {
   async close(): Promise<void> {
     this.releaseSchedulerEvents?.()
     this.releaseSchedulerEvents = null
+    this.host = null
+    this.failHostRequests(new RuntimeError('RUNTIME_STOPPED'))
+    this.failHostStreams('RUNTIME_STOPPED')
     for (const socket of this.sockets) socket.destroy()
     this.connections.clear()
     if (this.server.listening)

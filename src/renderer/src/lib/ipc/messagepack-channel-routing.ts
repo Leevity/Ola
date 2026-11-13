@@ -149,10 +149,22 @@ const MESSAGEPACK_INVOKE_CHANNELS = new Set<string>([
   'remote:vnc:detect',
   'remote:input:set-session',
   'remote:input:dispatch',
+  // The three-state remote permission handlers are registered as messagepack
+  // handlers in main; without these entries the renderer would call the plain
+  // channel and get "No handler registered" for every permission action.
+  'remote:access:snapshot',
+  'remote:access:bind-run',
+  'remote:access:auto-approve',
+  'remote:access:revoke',
+  'remote:task:list',
+  'remote:task:decide',
+  'remote:task:started',
+  'remote:task:finish',
   'remote:audit:list',
   'remote:account:invoke',
   'remote:capture:permission',
   'remote:capture:sources',
+  'remote:capture:select',
   'ssh:group:list',
   'ssh:group:create',
   'ssh:group:update',

@@ -182,8 +182,9 @@ export function supportsTsRuntimeAgentTools(input: {
 
 /**
  * The TS bridge replays plain text plus bounded image content. Reasoning cards, error cards and
- * tool traffic are dropped because the run contract has no field for them; block shapes it does
- * not know, oversized images and provider-specific features still fail closed.
+ * tool traffic are dropped because the run contract has no field for them; unprojectable history
+ * turns are skipped as well, so a past tool round cannot disable later turns. The current prompt
+ * and provider-specific features still fail closed.
  */
 export function assessTsRuntimeTextEligibility(input: {
   messages: readonly UnifiedMessage[]
@@ -253,15 +254,16 @@ export function assessTsRuntimeTextEligibility(input: {
   const history: RuntimeTextMessage[] = []
   const historyMessages = [...input.messages.slice(0, currentUserIndex), ...trailingContext]
   for (const message of historyMessages) {
+    // History is a lossy replay: the run contract only carries system/user/assistant text plus
+    // bounded images. A tool round (role 'tool'), a transcript block shape we cannot project,
+    // or a turn whose content did not survive projection leaves the history instead of failing
+    // the whole request. Rejecting here used to disable *every later turn* of a session after
+    // its first tool call — the current prompt is still validated strictly above.
     if (message.role !== 'system' && message.role !== 'user' && message.role !== 'assistant')
-      return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
-    const content = extractRuntimeContent(message.content)
-    if (!content) return { eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' }
-    if (!content.text && content.images.length === 0) {
-      // Nothing survived projection. A tool round or a reasoning-only turn keeps no replayable
-      // text, so it leaves the history instead of disabling every later turn.
       continue
-    }
+    const content = extractRuntimeContent(message.content)
+    if (!content) continue
+    if (!content.text && content.images.length === 0) continue
     history.push({
       role: message.role,
       text: content.text,

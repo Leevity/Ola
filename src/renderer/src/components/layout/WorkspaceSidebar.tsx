@@ -1,4 +1,5 @@
 import { LOCAL_PERSONAL_WORKSPACE } from '@renderer/lib/workspace-context'
+import { localizeSessionTitle } from '@renderer/lib/session-display'
 import { OlaBrand } from '@renderer/components/brand/OlaBrand'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
@@ -23,6 +24,7 @@ import {
   FolderOpen,
   GitBranch,
   Image,
+  Languages,
   ListFilter,
   Loader2,
   MessageSquare,
@@ -604,7 +606,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
     !translatePageOpen &&
     !tasksPageOpen
   const featureMenuActive =
-    resourcesPageOpen || skillsPageOpen || soulsPageOpen || syncPageOpen || drawPageOpen
+    resourcesPageOpen ||
+    skillsPageOpen ||
+    soulsPageOpen ||
+    syncPageOpen ||
+    drawPageOpen ||
+    translatePageOpen
   const sessionsByProject = useMemo(() => {
     const next = new Map<string, SessionListItem[]>()
     for (const session of sessions) {
@@ -1016,6 +1023,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
 
         const result = await generateSessionTitle(titleInput, {
           maxInputChars: 6000,
+          sessionId,
           workspace: {
             projectId: session.projectId,
             workingFolder: session.workingFolder,
@@ -1212,7 +1220,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
               )}
             </span>
             <span className={cn('min-w-0 flex-1 truncate font-medium', SIDEBAR_TREE_LABEL_CLASS)}>
-              {session.title}
+              {localizeSessionTitle(session.title, (key: string) => t(key))}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-1">
               {hasWaitingReply && (
@@ -1535,6 +1543,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
             {navItems.slice(0, 3).map(renderNavItem)}
 
             <DropdownMenu
+              modal={false}
               open={featureMenuOpen}
               onOpenChange={(open) => {
                 if (open) {
@@ -1604,6 +1613,13 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 >
                   <CloudSync className="size-4" />
                   <span>{t('navRail.sync')}</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => useUIStore.getState().openTranslatePage()}
+                  className={cn(translatePageOpen && 'bg-accent text-accent-foreground')}
+                >
+                  <Languages className="size-4" />
+                  <span>{t('navRail.translate')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

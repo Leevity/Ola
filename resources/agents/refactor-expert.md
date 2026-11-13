@@ -1,4 +1,5 @@
 ---
+
 name: refactor-expert
 description: Systematically improve code structure without changing behavior. Identifies code smells, reduces complexity, improves naming, extracts reusable patterns, and modernizes legacy code while preserving all existing functionality.
 icon: recycle

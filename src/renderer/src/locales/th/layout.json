@@ -1027,5 +1027,23 @@
     "terminalExited": "จบวาระงานของเทอร์มินัล",
     "terminalExitedWithError": "วาระการทํางานเทอร์มินัล",
     "exitCode": "รหัสออก: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "คำขอทำงานระยะไกล",
+    "meshTaskFrom": "จาก {{node}}",
+    "meshTaskAccept": "เรียกใช้งาน",
+    "meshTaskReject": "ปฏิเสธ",
+    "meshTaskRunning": "งานระยะไกลที่กำลังทำงาน: {{running}}",
+    "meshTaskAttendedNote": "จะไม่มีอะไรทำงานจนกว่าคุณจะอนุมัติ",
+    "meshTaskReason": {
+      "unknown-task": "คำขอนี้ใช้ไม่ได้อีกแล้ว",
+      "already-decided": "คำขอนี้ได้รับการตอบกลับแล้ว",
+      "user-rejected": "ปฏิเสธคำขอแล้ว",
+      "access-disabled": "การเข้าถึงระยะไกลปิดอยู่",
+      "session-busy": "มีเซสชันระยะไกลอื่นใช้งานอยู่",
+      "confirmation-required": "อุปกรณ์นี้ต้องมีการยืนยัน",
+      "quota-exhausted": "โควตาการอนุมัติแบบไม่มีผู้ดูแลหมดแล้ว"
+    },
+    "controlInputHint": "คลิกหน้าจอระยะไกลเพื่อควบคุม การป้อนข้อมูลด้วยเมาส์และแป้นพิมพ์จะหยุดเมื่อสูญเสียโฟกัส"
   }
 }

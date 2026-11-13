@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { useTranslation } from 'react-i18next'
 import { Layout } from './components/layout/Layout'
 import { DetachedSessionPage } from './components/layout/DetachedSessionPage'
-import { RemotePage } from './components/remote/RemotePage'
 import { FirstRunAccessPage } from './components/onboarding/FirstRunAccessPage'
 import { OnboardingPage } from './components/onboarding/OnboardingPage'
 import { Toaster } from './components/ui/sonner'
@@ -82,6 +81,13 @@ import {
   subscribeGlobalMemoryUpdates,
   type GlobalMemorySnapshot
 } from './lib/agent/memory-files'
+
+// Only the SSH/remote window renders this, and it carries the RDP WASM and noVNC
+// clients. Keeping it static put both on every window's first paint.
+const RemotePage = lazy(async () => {
+  const mod = await import('./components/remote/RemotePage')
+  return { default: mod.RemotePage }
+})
 
 // Register synchronous viewers immediately at startup
 registerAllViewers()
@@ -282,10 +288,14 @@ function App(): React.JSX.Element {
   useEffect(() => {
     void reattachActiveTsRuntimeRuns(useWorkspaceStore.getState().activeWorkspaceId).catch(
       (error) => {
-        console.warn(
-          '[App] Failed to recover active TS runtime runs',
-          error instanceof Error ? error.message : String(error)
-        )
+        const message = error instanceof Error ? error.message : String(error)
+        // Startup race: the runtime socket is not connected yet, and a fresh data directory has
+        // no active runs to reattach. This is a no-op, not a user-facing failure.
+        if (/RUNTIME_DISCONNECTED/.test(message)) {
+          console.debug('[App] No TS runtime runs to recover yet')
+          return
+        }
+        console.warn('[App] Failed to recover active TS runtime runs', message)
       }
     )
   }, [])
@@ -360,7 +370,7 @@ function App(): React.JSX.Element {
           useUIStore.getState().navigateToSession(detachedSessionId)
         }
       } else {
-        useUIStore.getState().applyRouteFromLocation()
+        useUIStore.getState().applyRouteFromLocation({ deferred: true })
       }
 
       const activeSessionId = useChatStore.getState().activeSessionId
@@ -579,8 +589,8 @@ function App(): React.JSX.Element {
         existingSession?.messageCount ?? existingSession?.messages.length ?? 0
       const hasResidentMessages = Boolean(
         existingSession &&
-        (existingSession.messages.length > 0 ||
-          (existingSession.messagesLoaded && existingSession.messageCount > 0))
+          (existingSession.messages.length > 0 ||
+            (existingSession.messagesLoaded && existingSession.messageCount > 0))
       )
       const isAppendReason = reason === 'message-added' || reason === 'session-created-with-message'
       const isReplaceReason = reason === 'messages-replaced' || reason === 'messages-truncated'
@@ -1018,7 +1028,15 @@ function App(): React.JSX.Element {
       <ErrorBoundary>
         <ThemeProvider defaultTheme={theme}>
           <ThemeRuntimeSync />
-          <RemotePage standalone />
+          <Suspense
+            fallback={
+              <div className="flex h-full items-center justify-center">
+                <Loader2 className="size-5 animate-spin text-muted-foreground" />
+              </div>
+            }
+          >
+            <RemotePage standalone />
+          </Suspense>
           <Toaster position="bottom-left" theme="system" richColors />
           <ConfirmDialogProvider />
           <NotifyToastContainer />

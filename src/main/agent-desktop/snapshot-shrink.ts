@@ -110,7 +110,7 @@ function clean(value: unknown, maximum: number): string {
   // A node name is application text: newlines would let it split a line, forge a sibling node, or
   // replay the end-of-snapshot marker as its own line.
   const flat = value
-    // eslint-disable-next-line no-control-regex -- stripping these is the point
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping these is the point
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

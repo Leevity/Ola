@@ -1,4 +1,5 @@
 ---
+
 name: release-readiness
 description: Audit a software repository for concrete release blockers and verification gaps. Use before packaging, tagging, publishing, deploying, or handing off a release candidate, including checks for source state, tests, build outputs, migrations, secrets, artifacts, and rollback readiness.
 ---

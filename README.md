@@ -20,7 +20,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
-  <img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version">
   <img src="https://img.shields.io/github/stars/Leevity/Ola?style=social" alt="Stars">
   <img src="https://img.shields.io/github/forks/Leevity/Ola?style=social" alt="Forks">
 </p>
@@ -43,19 +43,19 @@ Most AI chat interfaces are isolated from your actual work environment. You spen
 ### ⚙️ Runtime
 
 - **4-layer Electron architecture** — Main process, Preload bridge, Renderer UI (React 19), and provider-agnostic TypeScript agent runtime.
-- **Typed cross-runtime contracts** — TypeScript DTOs and audited C# protocol mirrors from SQLite
-  routes through IPC to the UI.
+- **Typed cross-runtime contracts** — TypeScript DTOs carry SQLite routes through IPC to the UI,
+  with the TypeScript runtime as the single production target.
 - **SSH remote support** — Agents operate on remote hosts transparently via SSH with xterm.js terminal integration.
 
-### 🔄 4 Agent Modes
+### 🔄 Agent Modes
 
 Every conversation picks the right mode:
 
-| Mode      | Purpose                                                                                          |
-| --------- | ------------------------------------------------------------------------------------------------ |
-| `clarify` | Ask grounded questions, resolve ambiguity, produce a reviewable plan before any code is written. |
-| `cowork`  | Full agent: code search, file I/O, shell, browser, sub-agent delegation, and more.               |
-| `code`    | Pair programming — focused code generation and surgical editing with Monaco Editor integration.  |
+| Mode      | Purpose                                                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `chat`    | Default conversation mode for everyday questions and tasks.                                                                        |
+| `clarify` | Ask grounded questions, resolve ambiguity, produce a reviewable plan before any code is written.                                   |
+| `execute` | Full agent: code search, file I/O, shell, browser, sub-agent delegation, and more. Legacy `cowork`/`code` sessions normalize here. |
 
 ### 🧰 Tool System
 
@@ -88,11 +88,11 @@ Ola ships with integrations for several messaging platforms so the agent can rea
 ### ⏰ Persistence
 
 - **SQLite** — Messages, sessions, projects, tasks, and plans survive restarts.
-- **Additive schema** — Columns are added when absent; no migration files, no data loss.
+- **Versioned migrations** — the TypeScript BusinessRepository owns desktop writes through an append-only migration ledger; historical data is preserved.
 
 ### 🌐 Internationalization
 
-13+ languages including English, Chinese, Vietnamese, Turkish, and more — all via i18next.
+16 languages including English, Chinese, Vietnamese, Turkish, and more — all via i18next.
 
 ## 🏗️ Architecture
 
@@ -117,7 +117,7 @@ Renderer (React 19)  ←→  Preload (contextBridge)  ←→  Main Process
 
 ## 🛠️ Quick Start
 
-**Prerequisites:** Node.js ≥ 22 and npm ≥ 10. CodeGraph development additionally uses the platform native build toolchain.
+**Prerequisites:** Node.js ≥ 22 and npm ≥ 10. The native build toolchain is only used to rebuild Electron native modules on postinstall; CodeGraph runs on TypeScript/WASM.
 
 ```bash
 git clone https://github.com/Leevity/Ola.git

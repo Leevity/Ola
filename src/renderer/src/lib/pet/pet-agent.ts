@@ -4,8 +4,10 @@ import { recordUsageEvent } from '@renderer/lib/usage-analytics'
 import { useProviderStore } from '@renderer/stores/provider-store'
 import { useSettingsStore } from '@renderer/stores/settings-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
+import { ensureTokenEncoder } from '@renderer/lib/token-encoder'
 import { usePetsStore } from '@renderer/stores/pets-store'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from '@renderer/lib/ipc/ts-runtime-bridge'
+import { resolveAuxiliaryRunSessionId } from '@renderer/lib/ipc/auxiliary-run-session'
 import { explicitTsRuntimeModelSource } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
 import type { RuntimeImage, RuntimeTextMessage } from '../../../../shared/runtime/contracts'
@@ -184,9 +186,11 @@ async function tryRunPetChatOnTsRuntime(
   if (!currentMessage || history.some((message) => !message))
     throw new Error('TS_RUNTIME_PET_MESSAGE_INVALID')
   let reply = ''
+  const sessionId = await resolveAuxiliaryRunSessionId(workspace.id, input.config.sessionId)
+  if (!sessionId) throw new Error('TS_RUNTIME_TEXT_SESSION_REQUIRED')
   for await (const event of streamTsRuntimeTextTurn({
     workspaceId: workspace.id,
-    sessionId: `pet:${args.petId ?? usePetsStore.getState().activePetId ?? 'active'}`,
+    sessionId,
     modelSource,
     modelOptions: {
       systemPrompt: `${input.systemPrompt}\n\n<system-remind>\n${args.persona}\n</system-remind>`,
@@ -270,6 +274,7 @@ export interface PetChatArgs {
  * by the TypeScript runtime inside the project's working folder.
  */
 export async function runPetChat(args: PetChatArgs): Promise<string> {
+  await ensureTokenEncoder()
   await ensureProviderAuthReady(args.providerId)
   const config = useProviderStore.getState().getProviderConfigById(args.providerId, args.modelId)
   if (!config) throw new Error('pet agent model is not configured')

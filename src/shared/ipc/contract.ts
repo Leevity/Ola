@@ -416,8 +416,17 @@ export const IPC = {
   REMOTE_INPUT_SET_SESSION: 'remote:input:set-session',
   REMOTE_INPUT_DISPATCH: 'remote:input:dispatch',
   REMOTE_ACCOUNT_INVOKE: 'remote:account:invoke',
+  REMOTE_ACCESS_SNAPSHOT: 'remote:access:snapshot',
+  REMOTE_ACCESS_BIND_RUN: 'remote:access:bind-run',
+  REMOTE_ACCESS_AUTO_APPROVE: 'remote:access:auto-approve',
+  REMOTE_ACCESS_REVOKE: 'remote:access:revoke',
+  REMOTE_TASK_LIST: 'remote:task:list',
+  REMOTE_TASK_DECIDE: 'remote:task:decide',
+  REMOTE_TASK_STARTED: 'remote:task:started',
+  REMOTE_TASK_FINISH: 'remote:task:finish',
   REMOTE_CAPTURE_PERMISSION: 'remote:capture:permission',
   REMOTE_CAPTURE_SOURCES: 'remote:capture:sources',
+  REMOTE_CAPTURE_SELECT: 'remote:capture:select',
 
   // SSH Management
   SSH_GROUP_LIST: 'ssh:group:list',

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { rm } from 'node:fs/promises'
 import net from 'node:net'
 import path from 'node:path'

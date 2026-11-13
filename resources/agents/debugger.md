@@ -1,4 +1,5 @@
 ---
+
 name: debugger
 description: Diagnose and fix bugs, identify root causes of failures, analyze error logs and stack traces. Applies systematic debugging methodology to efficiently resolve issues and prevent recurrence.
 icon: bug

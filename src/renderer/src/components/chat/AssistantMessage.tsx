@@ -3,12 +3,7 @@ import { useState, useCallback, useMemo, useEffect, useId, type ReactNode } from
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import Markdown, { type Components } from 'react-markdown'
-import mermaid from 'mermaid'
-import {
-  applyMermaidTheme,
-  copyMermaidToClipboard,
-  useMermaidThemeVersion
-} from '@renderer/lib/utils/mermaid-theme'
+import { useMermaidThemeVersion } from '@renderer/lib/utils/mermaid-theme'
 import {
   Copy,
   Check,
@@ -945,6 +940,7 @@ function MermaidImageCopyButton({ svg }: { svg: string }): React.JSX.Element {
     if (!svg.trim()) return
     setBusy(true)
     try {
+      const { copyMermaidToClipboard } = await import('@renderer/lib/utils/mermaid-runtime')
       await copyMermaidToClipboard(svg)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -987,10 +983,13 @@ function MermaidCodeBlock({ code }: { code: string }): React.JSX.Element {
         return
       }
       try {
-        applyMermaidTheme()
-        const result = await mermaid.render(`mermaid-chat-${diagramKey}-${Date.now()}`, source)
+        const { renderMermaidDiagram } = await import('@renderer/lib/utils/mermaid-runtime')
+        const rendered = await renderMermaidDiagram(
+          `mermaid-chat-${diagramKey}-${Date.now()}`,
+          source
+        )
         if (cancelled) return
-        setSvg(result.svg)
+        setSvg(rendered)
         setError('')
       } catch (err) {
         if (cancelled) return
@@ -1170,7 +1169,6 @@ function isMarkdownCodeBlock(rawCode: string, node?: MarkdownCodeElementProps): 
 
 // Extracted as a proper capitalized component so eslint-plugin-react-hooks lets us call
 // useContext inside. The markdown renderer will pass it the standard `code` props.
-// eslint-disable-next-line react/prop-types
 const MarkdownCode: NonNullable<Components['code']> = ({ children, className, node, ...props }) => {
   const isStreaming = React.useContext(IsStreamingContext)
   const match = /language-([\w-]+)/.exec(className || '')

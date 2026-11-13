@@ -239,9 +239,7 @@ async function assertSize(filePath: string, limit: number): Promise<void> {
   if (metadata.size > limit) {
     throw new Error(
       `File too large (${(metadata.size / 1024 / 1024).toFixed(1)} MB, limit ${(
-        limit /
-        1024 /
-        1024
+        limit / 1024 / 1024
       ).toFixed(0)} MB): ${filePath}`
     )
   }

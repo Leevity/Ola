@@ -23,9 +23,9 @@ export async function refreshExtensionWorkbenchContributions(): Promise<void> {
     )
     const openedViewStillAvailable = Boolean(
       openedView &&
-      openedExtension?.enabled &&
-      activeIds.has(openedView.extensionId) &&
-      openedExtension.manifest.views?.some((view) => view.name === openedView.view.name)
+        openedExtension?.enabled &&
+        activeIds.has(openedView.extensionId) &&
+        openedExtension.manifest.views?.some((view) => view.name === openedView.view.name)
     )
     if (openedView && !openedViewStillAvailable) {
       useUIStore.getState().closeExtensionWorkbenchView()

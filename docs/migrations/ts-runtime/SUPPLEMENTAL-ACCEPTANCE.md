@@ -16,6 +16,17 @@
 
 解包产物检查命令为 `npm run verify:legacy-artifacts -- <unpacked-app-root>`。每个目标平台须分别保存其输出作为台账的 `noDotnetEvidence`。
 
+### 运行时进程边界（utilityProcess 隔离）
+
+Electron 内的 Agent runtime 现在跑在 `utilityProcess` 子进程（`src/runtime/host/isolated.ts`），Main 通过反向 RPC 提供凭证、桌面工具、hooks 与审批。这不是外部 worker：没有 sidecar、没有 Native Worker，进程边界与能力协商由 `RUNTIME_PROTOCOL_VERSION = 2` 和 `host` capability 约束，进程内宿主与 v1 客户端永不获得 `host`。证据见 [隔离备忘](../../qa/2026-11-12-utilityprocess-isolation.md)，台账挂在 P2／P5／P12。
+
+验收这一边界时有两条硬规则：
+
+- **`verify:electron-startup` 不重新构建**，它只 spawn Electron 跑现有 `out/`。改完运行时源码必须先 `npm run build` 再跑，否则拿到的是旧 bundle 的假绿证据。
+- 该门禁现在**正向要求**日志出现 `[TsRuntime] isolated runtime ready (pid <n>)` 并把 pid 写进结果 JSON。窗口能打开不等于隔离生效；缺少该标记即判红。`[TsRuntime] desktop host ready` 字符串保持不变。
+
+崩溃语义：子进程死亡后监管器重启并重新握手，未完成的 run 由 `journal.recover()` 标记 `interrupted`（reason `RUNTIME_RESTARTED_REVIEW_SIDE_EFFECTS`），**不自动重放副作用**；连续失败超过阈值后对外为 `RUNTIME_UNAVAILABLE`。跨重启续跑仍未实现，属刻意边界。六平台打包态的 socket 权限、named pipe ACL、asarUnpack 实际解包与崩溃注入仍需实机，P12 保持「实现中」。
+
 ## 收口顺序
 
 1. 为各入口建立旧新契约及失败场景，逐域将 Agent、Cron、渠道、团队、子 Agent 和其余业务迁到统一 TS 服务和调度器；每批更新台账。

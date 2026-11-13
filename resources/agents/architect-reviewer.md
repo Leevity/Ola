@@ -1,4 +1,5 @@
 ---
+
 name: architect-reviewer
 description: Evaluate system design decisions, architectural patterns, and technology choices at the macro level. Provides strategic recommendations for scalability, maintainability, and long-term evolution.
 icon: blocks

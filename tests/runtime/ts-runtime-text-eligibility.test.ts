@@ -196,7 +196,7 @@ describe('TS runtime text eligibility', () => {
     ).toEqual({ eligible: false, reason: 'PROVIDER_OPTIONS_NOT_MIGRATED' })
   })
 
-  it('rejects tool and rich-content transcript entries', () => {
+  it('skips tool and rich-content transcript entries instead of disabling later turns', () => {
     const toolMessages: UnifiedMessage[] = [{ ...messages[0], role: 'tool' }, messages[1]]
     const richMessages = [
       {
@@ -211,6 +211,8 @@ describe('TS runtime text eligibility', () => {
       messages[1]
     ] as unknown as UnifiedMessage[]
     // A completed tool round is real conversation content the run contract cannot carry yet.
+    // Dropping that one history turn must not reject the current prompt — otherwise the first
+    // tool call would permanently disable the session (QA 2026-11-06 P0-1).
     for (const input of [toolMessages, richMessages]) {
       expect(
         assessTsRuntimeTextEligibility({
@@ -218,8 +220,44 @@ describe('TS runtime text eligibility', () => {
           provider,
           modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
         })
-      ).toEqual({ eligible: false, reason: 'MESSAGE_CONTENT_NOT_MIGRATED' })
+      ).toMatchObject({ eligible: true, prompt: 'Current question', history: [] })
     }
+  })
+
+  it('keeps a session usable across three turns after a tool round', () => {
+    const toolSession = [
+      { id: 'u1', role: 'user', content: '读取 /tmp/demo.txt', createdAt: 1 },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: [
+          { type: 'text', text: '我来读取' },
+          { type: 'tool_use', id: 'call-1', name: 'Read', input: { path: '/tmp/demo.txt' } }
+        ]
+      },
+      { id: 't1', role: 'tool', content: 'HELLO-OLA', createdAt: 3 },
+      { id: 'a2', role: 'assistant', content: '文件内容是 HELLO-OLA', createdAt: 4 },
+      { id: 'u2', role: 'user', content: '请总结', createdAt: 5 },
+      { id: 'a3', role: 'assistant', content: '已总结', createdAt: 6 },
+      { id: 'u3', role: 'user', content: '最后一轮', createdAt: 7 }
+    ] as unknown as UnifiedMessage[]
+    expect(
+      assessTsRuntimeTextEligibility({
+        messages: toolSession,
+        provider,
+        modelSource: { kind: 'local', providerId: 'provider', modelId: 'model' }
+      })
+    ).toMatchObject({
+      eligible: true,
+      prompt: '最后一轮',
+      history: [
+        { role: 'user', text: '读取 /tmp/demo.txt' },
+        { role: 'assistant', text: '我来读取' },
+        { role: 'assistant', text: '文件内容是 HELLO-OLA' },
+        { role: 'user', text: '请总结' },
+        { role: 'assistant', text: '已总结' }
+      ]
+    })
   })
 
   it('replays a reasoning-model transcript by dropping the blocks the contract cannot carry', () => {

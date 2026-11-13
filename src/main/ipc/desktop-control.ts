@@ -1,6 +1,7 @@
 import { desktopCapturer, screen, systemPreferences } from 'electron'
 import { createRequire } from 'module'
 import { recordDesktopFlowStep } from '../desktop/desktop-flow-recorder'
+import { recordRemoteAudit } from '../remote/remote-audit'
 
 export const DESKTOP_SCREENSHOT_CAPTURE = 'desktop:screenshot:capture'
 export const DESKTOP_INPUT_CLICK = 'desktop:input:click'
@@ -90,6 +91,14 @@ function getRobot(): RobotJsModule | null {
     robotModule = null
     robotLoadError = error instanceof Error ? error.message : String(error)
     console.error('[DesktopControl] Failed to load @jitsi/robotjs:', error)
+    // A platform-level backend failure must survive without an active flow:
+    // recordDesktopFlowStep drops everything while no recording is running, so
+    // the audit log is the only channel that makes this discoverable.
+    recordRemoteAudit({
+      action: 'input_backend_unavailable',
+      success: false,
+      error: robotLoadError
+    })
   }
 
   return robotModule

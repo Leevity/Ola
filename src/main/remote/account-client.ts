@@ -7,13 +7,17 @@ import { mkdir, readFile, rename, writeFile, unlink } from 'fs/promises'
 import { join } from 'path'
 import { createHash, createPrivateKey, randomBytes, randomUUID, sign } from 'crypto'
 import { setRemoteControlAllowed } from './authorization-state'
+import { applyAccessMode, currentAccessMode } from './access-mode'
+import { normalizeRemoteAccessMode, type RemoteAccessState } from '../../shared/remote-control'
 import { notifyRemoteAccountCleared, notifyWorkspaceDirectoryChanged } from './account-lifecycle'
 import { desktopMeshCapabilities, desktopMeshPlatform, loadDesktopMeshIdentity } from './mesh-node'
 import {
+  verifyMeshTaskDispatch,
   verifyMeshTaskReceiptDelivery,
   type MeshTaskReceiptDelivery,
   type MeshVerificationNode
 } from './mesh-events'
+import { recordVerifiedMeshTask, type MeshTaskReceiptState } from './task-dispatch'
 import {
   cachedWorkspaceExpiresAt,
   cachedWorkspaceDirectory,
@@ -54,6 +58,11 @@ export type RemoteAccountOperation =
   | 'pairing-revoke'
   | 'pairing-resolve'
   | 'pairing-auto-resolve'
+  | 'device-access-get'
+  | 'device-access-set'
+  | 'session-end'
+  | 'auto-approval-report'
+  | 'device-task-publish'
 
 export type RemoteAccountRequest = {
   apiBaseUrl: string
@@ -206,9 +215,9 @@ async function saveState(
   const previousAccess = memoryState
   const accessChanged = Boolean(
     previousAccess?.token &&
-    (!state ||
-      previousAccess.token !== state.token ||
-      previousAccess.apiBaseUrl !== state.apiBaseUrl)
+      (!state ||
+        previousAccess.token !== state.token ||
+        previousAccess.apiBaseUrl !== state.apiBaseUrl)
   )
   if (revokeModelAuthorization) {
     modelAuthorization.abort()
@@ -302,10 +311,11 @@ async function apiRequest<T>(
   body: Record<string, unknown> | undefined,
   token?: string,
   deviceToken?: string,
-  timeoutMs = 30_000
+  timeoutMs = 30_000,
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
 ): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, {
-    method: body ? 'POST' : 'GET',
+    method: method ?? (body ? 'POST' : 'GET'),
     headers: {
       'content-type': 'application/json',
       ...(token ? { authorization: `Bearer ${token}` } : {}),
@@ -363,7 +373,12 @@ const REMOTE_ACCOUNT_OPERATIONS = new Set<RemoteAccountOperation>([
   'pairing-create',
   'pairing-revoke',
   'pairing-resolve',
-  'pairing-auto-resolve'
+  'pairing-auto-resolve',
+  'device-access-get',
+  'device-access-set',
+  'session-end',
+  'auto-approval-report',
+  'device-task-publish'
 ])
 
 function validateAccountRequest(request: RemoteAccountRequest): Record<string, unknown> {
@@ -424,7 +439,12 @@ function validateAccountRequest(request: RemoteAccountRequest): Record<string, u
     'pairing-create': ['deviceId'],
     'pairing-revoke': ['deviceId'],
     'pairing-resolve': ['deviceId', 'code', 'sessionId'],
-    'pairing-auto-resolve': ['controllerDeviceId', 'controlledDeviceId', 'sessionId']
+    'pairing-auto-resolve': ['controllerDeviceId', 'controlledDeviceId', 'sessionId'],
+    'device-access-get': ['deviceId'],
+    'device-access-set': ['deviceId', 'mode', 'confirm'],
+    'session-end': ['sessionId'],
+    'auto-approval-report': ['deviceId', 'sessionId', 'runId', 'toolName', 'decision'],
+    'device-task-publish': ['deviceId', 'task']
   }
   const allowed = new Set(allowedByOperation[request.operation])
   const unknownPayloadKey = Object.keys(payload).find((key) => !allowed.has(key))
@@ -527,7 +547,7 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     )
   }
   if (request.operation === 'logout') {
-    setRemoteControlAllowed(false)
+    applyAccessMode('none')
     if (state?.token && state.device?.id) {
       await apiRequest(
         apiBaseUrl,
@@ -557,6 +577,12 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
       )
       state.account = result.account
       await saveState(state)
+      // The remembered device carries the last known durable permission. A
+      // stale value can only be too permissive if it was written by a newer
+      // server, and heartbeat re-syncs it within one beacon either way.
+      if (state.device && 'remoteAccessMode' in state.device) {
+        applyAccessMode(normalizeRemoteAccessMode(state.device.remoteAccessMode))
+      }
       return { account: state.account, device: state.device }
     } catch (error) {
       await revokeCachedWorkspaceDirectoryOnDenial(state, error)
@@ -570,7 +596,7 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     }
   }
   if (request.operation === 'device-register') {
-    setRemoteControlAllowed(false)
+    applyAccessMode('none')
     const result = await apiRequest<{ device: Record<string, unknown> }>(
       apiBaseUrl,
       '/api/devices/register',
@@ -754,6 +780,21 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     const verifiedEvents: MeshTaskReceiptDelivery[] = []
     for (const event of events) {
       try {
+        if (event.type === 'task.requested') {
+          // An inbound request is verified against task.execute and lands in the
+          // main-process inbox. It is deliberately not returned as a receipt:
+          // the renderer may only decide on a task this process authenticated.
+          recordVerifiedMeshTask(
+            verifyMeshTaskDispatch(
+              event,
+              nodeResponse.nodes,
+              keyResponse.publicKey,
+              String(state.account.id),
+              targetNodeID
+            )
+          )
+          continue
+        }
         verifiedEvents.push(
           verifyMeshTaskReceiptDelivery(
             event,
@@ -787,9 +828,90 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     setRemoteControlAllowed(true)
     return result
   }
+  if (request.operation === 'session-end') {
+    const sessionID = requiredString(payload, 'sessionId')
+    return apiRequest(
+      apiBaseUrl,
+      `/api/sessions/${encodeURIComponent(sessionID)}/end`,
+      {},
+      state.token
+    )
+  }
+  if (request.operation === 'auto-approval-report') {
+    const deviceID = requiredString(payload, 'deviceId')
+    return apiRequest(
+      apiBaseUrl,
+      `/api/devices/${encodeURIComponent(deviceID)}/auto-approvals`,
+      {
+        sessionId: requiredString(payload, 'sessionId'),
+        runId: requiredString(payload, 'runId'),
+        toolName: requiredString(payload, 'toolName'),
+        decision: requiredString(payload, 'decision')
+      },
+      state.token
+    )
+  }
+  if (request.operation === 'device-task-publish') {
+    const deviceID = requiredString(payload, 'deviceId')
+    const task = payload.task
+    if (!task || typeof task !== 'object' || Array.isArray(task)) {
+      throw new Error('task must be an object')
+    }
+    // Progress is time-sensitive and tiny: a long timeout would only pile up
+    // retries behind a network that is already failing.
+    return apiRequest(
+      apiBaseUrl,
+      `/api/devices/${encodeURIComponent(deviceID)}/task`,
+      task as Record<string, unknown>,
+      state.token,
+      undefined,
+      8_000
+    )
+  }
   const deviceID = requiredString(payload, 'deviceId')
+  if (request.operation === 'device-access-get') {
+    const result = await apiRequest<RemoteAccessState>(
+      apiBaseUrl,
+      `/api/devices/${encodeURIComponent(deviceID)}/remote-access`,
+      undefined,
+      state.token
+    )
+    // The control plane is the source of truth: mirror what it reports so the
+    // local approval chain and the settings control cannot drift from it.
+    applyAccessMode(normalizeRemoteAccessMode(result.remoteAccessMode))
+    return result
+  }
+  if (request.operation === 'device-access-set') {
+    const rawMode = requiredString(payload, 'mode')
+    if (rawMode !== 'none' && rawMode !== 'attended' && rawMode !== 'unattended') {
+      throw new Error('mode must be none, attended or unattended')
+    }
+    const confirm = typeof payload.confirm === 'string' ? payload.confirm.trim() : ''
+    const result = await apiRequest<RemoteAccessState>(
+      apiBaseUrl,
+      `/api/devices/${encodeURIComponent(deviceID)}/remote-access`,
+      { mode: rawMode, ...(confirm ? { confirm } : {}) },
+      state.token,
+      undefined,
+      30_000,
+      'PUT'
+    )
+    applyAccessMode(normalizeRemoteAccessMode(result.remoteAccessMode))
+    return result
+  }
   if (request.operation === 'device-heartbeat') {
-    return apiRequest(apiBaseUrl, `/api/devices/${deviceID}/heartbeat`, {}, state.token)
+    const result = await apiRequest<{ device: Record<string, unknown> }>(
+      apiBaseUrl,
+      `/api/devices/${deviceID}/heartbeat`,
+      {},
+      state.token
+    )
+    // Heartbeat echoes the persisted mode, so a change made in the console
+    // reaches this machine within one beacon.
+    if (result.device && 'remoteAccessMode' in result.device) {
+      applyAccessMode(normalizeRemoteAccessMode(result.device.remoteAccessMode))
+    }
+    return result
   }
   if (request.operation === 'device-signaling-token') {
     return apiRequest(apiBaseUrl, `/api/devices/${deviceID}/signaling-token`, {}, state.token)
@@ -801,11 +923,14 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
       { deviceId: deviceID },
       state.token
     )
-    setRemoteControlAllowed(true)
+    // A pairing code is attended access by definition: somebody is at the
+    // machine to read it. Never let the legacy path widen an existing mode.
+    if (currentAccessMode() === 'none') applyAccessMode('attended')
     return result
   }
   if (request.operation === 'pairing-revoke') {
-    setRemoteControlAllowed(false)
+    // Revoking codes withdraws the pairing window, not the durable permission.
+    // Downgrading the mode is an explicit action through device-access-set.
     return apiRequest(apiBaseUrl, '/api/pairing/revoke', { deviceId: deviceID }, state.token)
   }
   if (request.operation === 'pairing-resolve') {
@@ -821,6 +946,94 @@ export async function invokeRemoteAccount(request: RemoteAccountRequest): Promis
     )
   }
   throw new Error('Unsupported remote account operation')
+}
+
+/**
+ * Records one automatic approval on the control plane. Unattended access is a
+ * privilege granted to nobody-in-particular, so every decision it makes is
+ * attributed to the session and the run that caused it. Failure is logged by
+ * the caller and never blocks the run: the local audit ring buffer still holds
+ * the entry.
+ */
+export async function reportRemoteAutoApproval(input: {
+  sessionId: string
+  runId: string
+  toolName: string
+  decision: 'approved' | 'denied'
+}): Promise<boolean> {
+  const state = memoryState
+  const deviceID = state?.device?.id
+  if (!state?.token || typeof deviceID !== 'string' || !deviceID) return false
+  try {
+    await apiRequest(
+      state.apiBaseUrl,
+      `/api/devices/${encodeURIComponent(deviceID)}/auto-approvals`,
+      { ...input },
+      state.token
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Sends one task receipt back to the node that dispatched it.
+ *
+ * The receipt travels under `mesh.event.receive`, not `task.execute`: running a
+ * task and reporting on it are different capabilities, and a dispatch ticket
+ * must not be reusable as a receipt ticket. Best effort by design — a task that
+ * ran locally did run, whether or not the peer can be reached.
+ */
+export async function reportMeshTaskReceipt(input: {
+  targetNodeId: string
+  sessionId: string
+  taskId: string
+  state: MeshTaskReceiptState
+  sequence: number
+  resultText?: string
+}): Promise<boolean> {
+  const state = memoryState
+  const deviceID = state?.device?.id
+  if (!state?.token || typeof deviceID !== 'string' || !deviceID) return false
+  const subjectNodeId = `node-${deviceID}`
+  if (!input.targetNodeId || input.targetNodeId === subjectNodeId) return false
+  try {
+    const ticket = (await invokeRemoteAccount({
+      apiBaseUrl: state.apiBaseUrl,
+      operation: 'mesh-capability-ticket',
+      payload: {
+        subjectNodeId,
+        targetNodeId: input.targetNodeId,
+        sessionId: input.sessionId,
+        capabilities: ['mesh.event.receive']
+      }
+    })) as { ticket?: string }
+    if (!ticket?.ticket) return false
+    await invokeRemoteAccount({
+      apiBaseUrl: state.apiBaseUrl,
+      operation: 'mesh-event-publish',
+      payload: {
+        ticket: ticket.ticket,
+        eventId: `event-${randomUUID()}`,
+        subjectNodeId,
+        targetNodeId: input.targetNodeId,
+        sessionId: input.sessionId,
+        sequence: input.sequence,
+        type: `task.${input.state}`,
+        payload: {
+          task_id: input.taskId,
+          task_state: input.state,
+          ...(input.state === 'completed' && input.resultText
+            ? { result_text: input.resultText }
+            : {})
+        }
+      }
+    })
+    return true
+  } catch {
+    return false
+  }
 }
 
 export async function handleRemoteOAuthCallback(callbackUrl: string): Promise<unknown> {

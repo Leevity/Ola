@@ -11,6 +11,7 @@ import { useAgentStore } from '@renderer/stores/agent-store'
 import { useTeamStore, type ActiveTeam } from '@renderer/stores/team-store'
 import { useRuntimeProjectionStore } from '@renderer/stores/runtime-projection-store'
 import { cn } from '@renderer/lib/utils'
+import { Skeleton } from '@renderer/components/ui/skeleton'
 import { MessageItem } from './MessageItem'
 import { LiveCompressionStatus } from './CompressionStatusMessage'
 import {
@@ -2185,9 +2186,9 @@ function MessageListInner(props: MessageListProps): React.JSX.Element {
               index % 2 === 0 ? 'self-start' : 'self-end'
             }`}
           >
-            <div className="h-3 w-3/5 animate-pulse rounded-md bg-muted/50" />
-            <div className="h-3 w-4/5 animate-pulse rounded-md bg-muted/40" />
-            <div className="h-3 w-1/2 animate-pulse rounded-md bg-muted/30" />
+            <Skeleton className="h-3 w-3/5 bg-muted/50" />
+            <Skeleton className="h-3 w-4/5 bg-muted/40" />
+            <Skeleton className="h-3 w-1/2 bg-muted/30" />
           </div>
         ))}
       </div>

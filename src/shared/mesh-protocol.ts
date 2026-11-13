@@ -30,7 +30,13 @@ export type MeshTaskEvent = {
   sequence: number
   taskId: string
   sessionId: string
-  type: 'task.started' | 'task.progress' | 'task.completed' | 'task.failed' | 'task.cancelled'
+  type:
+    | 'task.requested'
+    | 'task.started'
+    | 'task.progress'
+    | 'task.completed'
+    | 'task.failed'
+    | 'task.cancelled'
   timestamp: number
   payload: Record<string, unknown>
 }

@@ -32,8 +32,8 @@ function normalizeScopePart(value?: string | null): string {
 function hasWorkspaceIdentity(scope: WorkspacePromptCacheScope): boolean {
   return Boolean(
     normalizeScopePart(scope.projectId) ||
-    normalizeScopePart(scope.workingFolder) ||
-    normalizeScopePart(scope.sshConnectionId)
+      normalizeScopePart(scope.workingFolder) ||
+      normalizeScopePart(scope.sshConnectionId)
   )
 }
 

@@ -1,0 +1,63 @@
+{
+  "probe": "streaming-profiler",
+  "date": "2026-11-13",
+  "rendererMode": "vite-dev (import.meta.env.DEV=true)",
+  "mainBundle": "out/main/index.js (built)",
+  "monitorInstalled": true,
+  "replyBytes": 6867,
+  "replyChunks": 90,
+  "modelRequests": 4,
+  "streamWallClockMs": 3489,
+  "electronReadyMs": 6878,
+  "reactCommit": {
+    "count": 53,
+    "p50Ms": 0.1,
+    "p95Ms": 10.9,
+    "maxMs": 46.4,
+    "totalMs": 123.3
+  },
+  "summary": {
+    "toolArgs": {
+      "count": 0,
+      "p95Ms": 0,
+      "maxMs": 0
+    },
+    "foregroundFlush": {
+      "count": 2,
+      "p95Ms": 0.29999999701976776,
+      "maxMs": 0.29999999701976776
+    },
+    "reactCommit": {
+      "count": 53,
+      "p95Ms": 10.899999991059303,
+      "maxMs": 46.400000020861626
+    },
+    "renderPool": {
+      "count": 10,
+      "p95Ms": 0.20000000298023224,
+      "maxMs": 0.20000000298023224
+    },
+    "rafGap": {
+      "count": 246,
+      "p95Ms": 17.700000000000273,
+      "maxMs": 100.10000000000036
+    },
+    "longTask": {
+      "count": 1,
+      "p95Ms": 103,
+      "maxMs": 103
+    }
+  },
+  "failures": [
+    "longTask max 103.0ms > 50ms",
+    "rafGap max 100.1ms > 80ms"
+  ],
+  "sampleCounts": {
+    "toolArgs": 0,
+    "foregroundFlush": 2,
+    "reactCommit": 53,
+    "renderPool": 10,
+    "rafGap": 246,
+    "longTask": 1
+  }
+}

@@ -340,10 +340,10 @@ function isSafeRevision(value: string | undefined): boolean {
 function isSafePath(value: string | undefined): boolean {
   return Boolean(
     value &&
-    !value.includes('\0') &&
-    !value.includes('\\') &&
-    !value.startsWith('/') &&
-    !value.split('/').some((part) => part === '.' || part === '..' || !part)
+      !value.includes('\0') &&
+      !value.includes('\\') &&
+      !value.startsWith('/') &&
+      !value.split('/').some((part) => part === '.' || part === '..' || !part)
   )
 }
 

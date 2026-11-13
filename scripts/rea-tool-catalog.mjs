@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // Capture REA's authoritative MCP tool inventory and emit tests/fixtures/rea-tools.json.
 //
 // The fixture is what makes the REA presets auditable: every preset is a literal name list drawn

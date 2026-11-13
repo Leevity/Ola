@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type -- Native Node JavaScript helper. */
 /** @param {'mac'|'win'|'linux'} platform @param {boolean} directoryOnly @param {boolean} unsigned */
 export function releaseTargets(platform, directoryOnly, unsigned) {
   if (directoryOnly) return ['--dir']

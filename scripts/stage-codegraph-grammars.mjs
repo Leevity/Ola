@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { cp, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 

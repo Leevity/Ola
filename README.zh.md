@@ -20,7 +20,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/License-Apache_2.0-green" alt="License">
-  <img src="https://img.shields.io/badge/Version-1.0.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/Version-1.0.6-orange" alt="Version">
   <img src="https://img.shields.io/github/stars/Leevity/Ola?style=social" alt="Stars">
   <img src="https://img.shields.io/github/forks/Leevity/Ola?style=social" alt="Forks">
 </p>
@@ -43,19 +43,18 @@
 ### ⚙️ 运行时
 
 - **4 层 Electron 架构** — 主进程、Preload 安全桥接、渲染进程 UI（React 19）、提供商无关的 TypeScript Agent 运行时。
-- **跨运行时类型契约** — 通过 TypeScript DTO 和经过审计的 C# 协议镜像连接 SQLite 路由、
-  IPC 与 UI。
+- **跨运行时类型契约** — TypeScript DTO 贯穿 SQLite 路由、IPC 与 UI，TypeScript 运行时是唯一生产目标。
 - **SSH 远程支持** — 智能体通过 SSH 透明操作远程主机，集成 xterm.js 终端。
 
-### 🔄 4 种 Agent 模式
+### 🔄 Agent 模式
 
 每次对话选择最合适的模式：
 
-| 模式      | 用途                                                             |
-| --------- | ---------------------------------------------------------------- |
-| `clarify` | 提出有据可查的问题，解决歧义，在任何代码编写前产出可审阅的计划。 |
-| `cowork`  | 完整 Agent：代码搜索、文件 I/O、Shell、浏览器、子智能体委派等。  |
-| `code`    | 结对编程 — 聚焦代码生成和精准编辑，集成 Monaco Editor。          |
+| 模式      | 用途                                                                                                     |
+| --------- | -------------------------------------------------------------------------------------------------------- |
+| `chat`    | 默认对话模式，处理日常问答与任务。                                                                       |
+| `clarify` | 提出有据可查的问题，解决歧义，在任何代码编写前产出可审阅的计划。                                         |
+| `execute` | 完整 Agent：代码搜索、文件 I/O、Shell、浏览器、子智能体委派等。旧版 `cowork`/`code` 会话归一化到此模式。 |
 
 ### 🧰 工具体系
 
@@ -88,11 +87,11 @@ Ola 默认集成多个主流通讯平台，让智能体在你能看到的地方�
 ### ⏰ 持久化
 
 - **SQLite** — 消息、会话、项目、任务和计划重启不丢失。
-- **增量 Schema** — 仅在列不存在时添加，无迁移文件，无数据丢失。
+- **版本化迁移** — TypeScript BusinessRepository 独占桌面写入，追加式迁移台账保留历史数据。
 
 ### 🌐 国际化
 
-支持 13+ 种语言，包括中文、英文、越南语、土耳其语等 — 全部通过 i18next 实现。
+支持 16 种语言，包括中文、英文、越南语、土耳其语等 — 全部通过 i18next 实现。
 
 ## 🏗️ 架构
 

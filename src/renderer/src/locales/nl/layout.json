@@ -1027,5 +1027,23 @@
     "terminalExited": "Terminalsessie beëindigd",
     "terminalExitedWithError": "Terminalsessie afgesloten",
     "exitCode": "Afsluitcode: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Verzoek voor externe taak",
+    "meshTaskFrom": "Van {{node}}",
+    "meshTaskAccept": "Taak uitvoeren",
+    "meshTaskReject": "Weigeren",
+    "meshTaskRunning": "Actieve externe taken: {{running}}",
+    "meshTaskAttendedNote": "Er wordt niets uitgevoerd zonder jouw goedkeuring.",
+    "meshTaskReason": {
+      "unknown-task": "Dit verzoek is niet meer beschikbaar.",
+      "already-decided": "Dit verzoek is al beantwoord.",
+      "user-rejected": "Verzoek geweigerd.",
+      "access-disabled": "Externe toegang is uitgeschakeld.",
+      "session-busy": "Er is nog een externe sessie actief.",
+      "confirmation-required": "Dit apparaat vereist bevestiging.",
+      "quota-exhausted": "Het quotum voor onbeheerde goedkeuringen is op."
+    },
+    "controlInputHint": "Klik op het externe scherm om het te bedienen. Muis- en toetsenbordinvoer stopt wanneer de focus verloren gaat."
   }
 }

@@ -3266,10 +3266,10 @@ function ToolCallCardInner({
     isCommandTool &&
     Boolean(
       status === 'running' ||
-      status === 'streaming' ||
-      outputText ||
-      getBashInputTerminalId(input) ||
-      getShellInputCommand(input)
+        status === 'streaming' ||
+        outputText ||
+        getBashInputTerminalId(input) ||
+        getShellInputCommand(input)
     )
   const hasFocusedOutput =
     shouldRenderOutputPanels &&
@@ -3283,9 +3283,9 @@ function ToolCallCardInner({
       (isCommandTool &&
         Boolean(
           status === 'running' ||
-          status === 'streaming' ||
-          getBashInputTerminalId(input) ||
-          getShellInputCommand(input)
+            status === 'streaming' ||
+            getBashInputTerminalId(input) ||
+            getShellInputCommand(input)
         )))
 
   return (

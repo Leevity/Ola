@@ -110,6 +110,18 @@ import {
   publishDesktopRuntimeConnection
 } from '../../runtime/host/desktop-connection'
 import { LOCAL_PERSONAL_WORKSPACE_ID } from '../../shared/runtime/model-source'
+import { createRuntimeHostBridge, type RuntimeHostBridge } from './runtime-host-bridge'
+import {
+  isolatedRuntimeSupported,
+  startIsolatedRuntimeService,
+  type IsolatedRuntimeService
+} from './isolated-runtime-service'
+
+/** What Main needs from the runtime, whether it is a child process or in-process. */
+type RuntimeServiceHandle = Pick<
+  IsolatedRuntimeService,
+  'endpoint' | 'token' | 'stop' | 'revokeUnavailableWorkspaces' | 'recordExternalArtifact'
+>
 
 const protocols = new Set<ModelProtocol>([
   'openai-chat',
@@ -169,11 +181,12 @@ async function enforceScenarioToolPolicy(run: RunSpec): Promise<ScenarioPolicy |
  * All desktop turns and tools are executed by this TypeScript runtime.
  */
 export class DesktopRuntime {
-  private service: Awaited<ReturnType<typeof startStandaloneRuntime>> | null = null
+  private service: RuntimeServiceHandle | null = null
   private client: RuntimeClient | null = null
   private starting: Promise<void> | null = null
   private unsubscribeAccountEvents: Array<() => void> = []
   private expiryMonitor: OfflineWorkspaceExpiryMonitor | null = null
+  private bridge: RuntimeHostBridge | null = null
 
   constructor(private readonly connectionDescriptorPath = desktopRuntimeDescriptorPath()) {}
 
@@ -428,15 +441,55 @@ export class DesktopRuntime {
           }
         )
       }
-      const service = await startStandaloneRuntime({
-        dataDirectory,
-        execute: createAgentExecutor(adapter, tools),
-        authorize,
-        authority: { workspaceIds: () => permittedWorkspaceIds(loadOfflineWorkspaceIds) }
-      })
+      const workspaceIds = (): Promise<ReadonlySet<string>> =>
+        permittedWorkspaceIds(loadOfflineWorkspaceIds)
       const client = new RuntimeClient()
+      // Registered before connecting: the child's first callback must never be
+      // answered with "no handler" while Main is still wiring itself up.
+      const bridge = createRuntimeHostBridge({
+        client,
+        authorize,
+        provider: adapter,
+        tools,
+        workspaceIds
+      })
+      client.onRequest(bridge.handle)
+      let service: RuntimeServiceHandle
+      if (isolatedRuntimeSupported()) {
+        service = await startIsolatedRuntimeService({
+          dataDirectory,
+          client,
+          capabilities: requestedRuntimeCapabilities(),
+          onDisconnected: bridge.reset,
+          onRestarted: () => {
+            console.log('[TsRuntime] isolated runtime reconnected after journal recovery')
+            // The child marked every unfinished run interrupted while recovering
+            // its journal, so observers reconcile instead of waiting for events
+            // that will never arrive.
+            void loadOfflineWorkspaceIds()
+              .then((ids) =>
+                service.revokeUnavailableWorkspaces(new Set([LOCAL_PERSONAL_WORKSPACE_ID, ...ids]))
+              )
+              .catch(() => undefined)
+          },
+          onUnavailable: (code) => {
+            console.error('[TsRuntime] isolated runtime unavailable', code)
+          }
+        })
+      } else {
+        // Tests and the CLI have no Electron utilityProcess. The in-process
+        // server never grants the host capability, so this path keeps owning
+        // its tools and credentials directly.
+        const inProcess = await startStandaloneRuntime({
+          dataDirectory,
+          execute: createAgentExecutor(adapter, tools),
+          authorize,
+          authority: { workspaceIds }
+        })
+        await client.connect(inProcess.endpoint, inProcess.token, requestedRuntimeCapabilities())
+        service = inProcess
+      }
       try {
-        await client.connect(service.endpoint, service.token, requestedRuntimeCapabilities())
         await publishDesktopRuntimeConnection(
           { endpoint: service.endpoint, token: service.token },
           this.connectionDescriptorPath
@@ -467,11 +520,13 @@ export class DesktopRuntime {
         expiryMonitor.refreshSchedule()
         this.service = service
         this.client = client
+        this.bridge = bridge
       } catch (error) {
         this.expiryMonitor?.stop()
         this.expiryMonitor = null
         for (const unsubscribe of this.unsubscribeAccountEvents.splice(0)) unsubscribe()
         client.close()
+        bridge.reset()
         await clearDesktopRuntimeConnection(service.token, this.connectionDescriptorPath).catch(
           (cleanupError) => {
             console.warn(
@@ -503,6 +558,8 @@ export class DesktopRuntime {
     this.service = null
     this.client?.close()
     this.client = null
+    this.bridge?.reset()
+    this.bridge = null
     try {
       if (service) await clearDesktopRuntimeConnection(service.token, this.connectionDescriptorPath)
     } finally {

@@ -4464,10 +4464,10 @@ export function InputArea({
                 suggestionText={suggestionText}
                 showSuggestion={Boolean(
                   suggestionText &&
-                  text.length > 0 &&
-                  !hasFileReferences &&
-                  !activeFileMention &&
-                  !slashMenuOpen
+                    text.length > 0 &&
+                    !hasFileReferences &&
+                    !activeFileMention &&
+                    !slashMenuOpen
                 )}
                 highlightedFileId={highlightedFileId}
                 onDocumentChange={handleEditorDocumentChange}

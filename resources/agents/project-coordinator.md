@@ -1,4 +1,5 @@
 ---
+
 name: project-coordinator
 description: Break down multi-step work, coordinate focused agents, track dependencies, and consolidate results.
 profiles: [work, code]

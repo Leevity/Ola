@@ -1,0 +1,35 @@
+
+Packaged Electron startup attempt (macOS arm64, local runtime-staging app)
+Date: 2026-11-13
+Artifact: /tmp/ola-runtime-package-AQwQLh/dist/mac-arm64/Ola.app
+
+Command:
+  node scripts/verify-packaged-electron-startup.mjs \
+    /tmp/ola-runtime-package-AQwQLh/dist/mac-arm64/Ola.app/Contents/MacOS/Ola
+
+Result: FAIL after 60 seconds: Timed out waiting for the packaged Electron renderer page.
+The follow-up process-startup check did not run because the command used `&&`.
+
+Observed details:
+- Electron's main executable remained alive during the timeout.
+- Captured stdout and stderr were empty; no Renderer or utilityProcess child appeared.
+- CDP at 127.0.0.1 did not expose a page.
+- A 5-second macOS `sample` of the main process showed the main thread blocked in
+  `-[NSAlert runModal]`. The responsible alert and its text could not be identified from
+  available UI automation, so this is recorded as an unresolved native modal, not attributed
+  to an application or OS prompt.
+- The packaged app's Info.plist ElectronAsarIntegrity hash matched SHA-256 of the ASAR header;
+  the archive integrity metadata itself was consistent.
+- The app was ad-hoc signed (no Developer ID identity was available). This staging artifact is
+  not a signed/notarized release package.
+
+This attempt does not pass packaged startup acceptance. Investigate the native modal and rerun
+both packaged startup checks before claiming Phase 1/4/7 packaged acceptance.
+
+Second reproduction (same artifact, isolated roots, 2026-11-13):
+- Started the app with `--enable-logging=stderr --v=1`; Chromium logged one connected display,
+  but no app startup or crash-logger records were written under the isolated data root.
+- `lsof` confirmed the main process had `app.asar` and `node-pty/build/Release/pty.node` open.
+- The app process was still present. `cua.getApp(appBundle).getAXStateAndScreenshot()` timed out,
+  so the native dialog text could not be read via the available UI automation.
+- The process was terminated after collecting this evidence. No user data root was used.

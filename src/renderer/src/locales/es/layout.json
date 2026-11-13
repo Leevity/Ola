@@ -1027,5 +1027,23 @@
     "terminalExited": "Sesión final",
     "terminalExitedWithError": "Terminal session exited",
     "exitCode": "Código de salida: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Solicitud de tarea remota",
+    "meshTaskFrom": "De {{node}}",
+    "meshTaskAccept": "Ejecutar tarea",
+    "meshTaskReject": "Rechazar",
+    "meshTaskRunning": "Tareas remotas en ejecución: {{running}}",
+    "meshTaskAttendedNote": "No se ejecuta nada sin tu aprobación.",
+    "meshTaskReason": {
+      "unknown-task": "Esta solicitud ya no está disponible.",
+      "already-decided": "Esta solicitud ya fue respondida.",
+      "user-rejected": "Solicitud rechazada.",
+      "access-disabled": "El acceso remoto está desactivado.",
+      "session-busy": "Hay otra sesión remota activa.",
+      "confirmation-required": "Este equipo requiere confirmación.",
+      "quota-exhausted": "Se agotó la cuota de aprobaciones desatendidas."
+    },
+    "controlInputHint": "Haga clic en la pantalla remota para controlarla. La entrada de ratón y teclado se detiene cuando pierde el foco."
   }
 }

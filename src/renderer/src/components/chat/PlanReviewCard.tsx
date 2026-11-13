@@ -12,6 +12,7 @@ import {
   TriangleAlert
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { localizeSessionTitle } from '@renderer/lib/session-display'
 import { Button } from '@renderer/components/ui/button'
 import { Badge } from '@renderer/components/ui/badge'
 import { useChatStore } from '@renderer/stores/chat-store'
@@ -342,7 +343,7 @@ export function PlanReviewCard({
               {executionSession && executionSession.id !== activeSessionId
                 ? t('planReview.runningInSession', {
                     defaultValue: 'This plan is running in session “{{title}}”.',
-                    title: executionSession.title || 'New Conversation'
+                    title: localizeSessionTitle(executionSession.title, (key: string) => t(key))
                   })
                 : t('planReview.runningHint', {
                     defaultValue: 'The current session is implementing this plan.'

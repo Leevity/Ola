@@ -1027,5 +1027,23 @@
     "terminalExited": "Terminalsitzung beendet",
     "terminalExitedWithError": "Terminalsitzung verlassen",
     "exitCode": "Ausfahrtscode: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Entfernte Task-Anfrage",
+    "meshTaskFrom": "Von {{node}}",
+    "meshTaskAccept": "Task ausführen",
+    "meshTaskReject": "Ablehnen",
+    "meshTaskRunning": "Laufende entfernte Tasks: {{running}}",
+    "meshTaskAttendedNote": "Ohne deine Zustimmung wird nichts ausgeführt.",
+    "meshTaskReason": {
+      "unknown-task": "Diese Anfrage ist nicht mehr verfügbar.",
+      "already-decided": "Diese Anfrage wurde bereits beantwortet.",
+      "user-rejected": "Anfrage abgelehnt.",
+      "access-disabled": "Fernzugriff ist ausgeschaltet.",
+      "session-busy": "Eine andere Fernsitzung ist aktiv.",
+      "confirmation-required": "Dieses Gerät erfordert eine Bestätigung.",
+      "quota-exhausted": "Das Kontingent für unbeaufsichtigte Freigaben ist aufgebraucht."
+    },
+    "controlInputHint": "Klicken Sie auf den entfernten Bildschirm, um ihn zu steuern. Maus- und Tastatureingaben enden, wenn der Fokus verloren geht."
   }
 }

@@ -1,4 +1,5 @@
 ---
+
 name: reverse-engineer-anything
 description: Reverse engineer shipped binaries, packages, Electron/JavaScript apps, Android APKs, firmware and browser traffic with REA MCP tools; build AgentEnv bundles from a live web app or capture. Use when a claim depends on a shipped artifact, decompilation, or requested runtime evidence; skip ordinary source-repo architecture analysis.
 ---

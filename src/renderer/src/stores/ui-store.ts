@@ -636,7 +636,7 @@ interface UIStore {
   navigateToChannels: (projectId?: string | null) => void
   navigateToGit: (projectId?: string | null) => void
   navigateToSession: (sessionId?: string | null) => void
-  applyRouteFromLocation: () => void
+  applyRouteFromLocation: (options?: { deferred?: boolean }) => void
   applyChatRouteFromLocation: () => void
 }
 
@@ -2178,7 +2178,7 @@ export const useUIStore = create<UIStore>()(
           sessionId: resolvedSessionId
         })
       },
-      applyRouteFromLocation: () => {
+      applyRouteFromLocation: (options) => {
         if (window.location.hash === buildUsageRoute()) {
           set({ ...activeSurfacePatch('usage'), settingsOpen: false, ...closeRightSidePanels() })
           return
@@ -2214,6 +2214,20 @@ export const useUIStore = create<UIStore>()(
           return
         }
 
+        // A standalone surface (tasks, translate, draw, skills, ...) owns activeSurface while the
+        // hash may still point at the previous chat route. The bootstrap sync runs after async
+        // hydration, so by then the user may have navigated to one of those surfaces; that deferred
+        // sync must not reset it. An explicit location change is real navigation and must win.
+        if (
+          options?.deferred &&
+          get().activeSurface !== 'workspace' &&
+          get().activeSurface !== 'settings'
+        ) {
+          return
+        }
+        if (get().activeSurface !== 'workspace' && get().activeSurface !== 'settings') {
+          set(activeSurfacePatch('workspace'))
+        }
         get().applyChatRouteFromLocation()
       },
       applyChatRouteFromLocation: () => {

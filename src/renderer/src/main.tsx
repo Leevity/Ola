@@ -26,7 +26,15 @@ function RegisteredRoot(): React.JSX.Element | null {
     const registerInitialWorkspace = async (): Promise<void> => {
       const workspaceId = useWorkspaceStore.getState().activeWorkspaceId
       try {
-        await ensureWindowWorkspaceRegistered(workspaceId)
+        // Imported here rather than at module scope: the notification window renders
+        // without this gate and has no translations, so it must not pay for them.
+        const localeReady = import('./locales').then(({ i18nReady }) => i18nReady)
+        await Promise.all([
+          ensureWindowWorkspaceRegistered(workspaceId),
+          localeReady.catch((error: unknown) => {
+            console.warn('[Renderer] Locale load failed, falling back to English', error)
+          })
+        ])
       } catch (error) {
         console.warn('[Renderer] Initial workspace registration failed', error)
         if (workspaceId !== 'local-personal') {

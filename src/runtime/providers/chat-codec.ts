@@ -1,5 +1,5 @@
 import { RuntimeError } from '../../shared/runtime/contracts'
-import type { AgentMessage, ModelDelta, ModelInput } from '../../shared/runtime/model'
+import type { AgentMessage, ModelDelta, ModelInput, ModelOptions } from '../../shared/runtime/model'
 import type { ModelCodec } from './codec'
 import { applyBodyOptions, type ModelTarget } from './transport'
 import { runtimeImageSource } from './image-source'
@@ -14,7 +14,25 @@ import {
   text
 } from './stream'
 
-function messages(input: readonly AgentMessage[], workspaceId: string): unknown[] {
+/** DeepSeek (and compatible reasoning providers) reject a tool result whose preceding assistant
+ * message has `tool_calls` but no `reasoning_content` while thinking is enabled. Preserve the
+ * thinking text in the replay, and always send the field when thinking was explicitly requested.
+ */
+function thinkingRequested(options: ModelOptions): boolean {
+  const bodyThinking = options.bodyOverrides?.thinking as { type?: unknown } | undefined
+  return (
+    options.thinking?.type === 'enabled' ||
+    options.thinking?.type === 'adaptive' ||
+    bodyThinking?.type === 'enabled'
+  )
+}
+
+function messages(
+  input: readonly AgentMessage[],
+  workspaceId: string,
+  options: ModelOptions
+): unknown[] {
+  const replayThinking = thinkingRequested(options)
   return input.flatMap((message): unknown[] => {
     if (message.role === 'tool') {
       const toolMessages = message.results.map((result) => ({
@@ -49,6 +67,9 @@ function messages(input: readonly AgentMessage[], workspaceId: string): unknown[
                   function: { name: call.name, arguments: JSON.stringify(call.input) }
                 }))
               }
+            : {}),
+          ...(message.toolCalls.length && (replayThinking || message.reasoning)
+            ? { reasoning_content: message.reasoning ?? '' }
             : {})
         }
       ]
@@ -76,7 +97,7 @@ export const chatCodec: ModelCodec = {
       body: applyBodyOptions(
         {
           model: target.model,
-          messages: messages(history, input.run.workspaceId),
+          messages: messages(history, input.run.workspaceId, options),
           stream: true,
           stream_options: { include_usage: true },
           ...(options.maxTokens ? { max_completion_tokens: options.maxTokens } : {}),

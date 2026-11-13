@@ -1,4 +1,5 @@
 ---
+
 name: browser-operator
 description: Investigate and operate browser-based workflows while keeping external actions visible and approval-gated.
 profiles: [work]

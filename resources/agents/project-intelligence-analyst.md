@@ -1,4 +1,5 @@
 ---
+
 name: project-intelligence-analyst
 description: Analyze a software project with Wiki, CodeGraph, indexes, architecture evidence, and actionable risk findings.
 profiles: [code]

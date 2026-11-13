@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 // Contract-test double for the pinned agent-desktop CLI. It speaks the real JSON envelope and
 // exit-code convention so Ola's client is tested against the upstream shape, not a mock.
 //

@@ -11,6 +11,7 @@ import {
   useProviderStore
 } from '@renderer/stores/provider-store'
 import { ensureProviderAuthReady } from '@renderer/lib/auth/provider-auth'
+import { ensureTokenEncoder } from '@renderer/lib/token-encoder'
 import { useAgentStore } from '@renderer/stores/agent-store'
 import {
   clearSessionAbortController,
@@ -113,6 +114,7 @@ import {
 } from '@renderer/lib/agent/memory-files'
 import { runMemoryAutomationForSession } from '@renderer/lib/agent/memory-automation'
 import { IMAGE_GENERATE_TOOL_NAME } from '@renderer/lib/app-plugin/types'
+import { resolveDroppedCapabilities } from '@renderer/lib/run-capability-notice'
 import { updateAppPluginToolRegistration } from '@renderer/lib/app-plugin'
 import {
   isDesktopControlToolName,
@@ -142,7 +144,6 @@ import type {
 import {
   assessTsRuntimeTextEligibility,
   explicitTsRuntimeModelSource,
-  isUnmigratedTsRuntimeCapabilityTool,
   supportsTsRuntimeReadOnlyTools
 } from '@renderer/lib/ipc/ts-runtime-text-eligibility'
 import { assessTsRuntimeAgentEligibility } from '@renderer/lib/ipc/ts-runtime-agent-eligibility'
@@ -256,6 +257,10 @@ export async function sendChatMessage(
   reuseAssistantMessageId?: string,
   options?: SendMessageOptions
 ): Promise<void> {
+  // Context budgets below are computed by sync helpers, so the tokenizer must already
+  // be resident before the turn starts.
+  await ensureTokenEncoder()
+
   // Reset auto-trigger counter and unpause when user manually sends a message
   if (source !== 'team') {
     resumeTeamAutoTrigger()
@@ -762,7 +767,7 @@ export async function sendChatMessage(
     const session = useChatStore.getState().sessions.find((s) => s.id === sessionId)
     if (shouldAppendUserMessage && session && canAutoGenerateSessionTitle(session.title)) {
       const capturedSessionId = sessionId
-      generateSessionTitle(effectiveResolvedCommand.titleInput)
+      generateSessionTitle(effectiveResolvedCommand.titleInput, { sessionId: capturedSessionId })
         .then((result) => {
           if (result) {
             const store = useChatStore.getState()
@@ -889,12 +894,19 @@ export async function sendChatMessage(
     )
     // A capability the TS runtime has no Main-owned tool for leaves the run's catalog instead of
     // refusing the conversation, so it must leave the system prompt too — and the assistant
-    // message records what the model was not given.
-    const droppedCapabilityNames = requestToolSnapshot
-      .filter((definition) => isUnmigratedTsRuntimeCapabilityTool(definition.name))
-      .map((definition) => definition.name)
+    // message records what the model was not given. Derive the notice from the settings/app-plugin
+    // switches as well as the snapshot: registration is asynchronous, so the snapshot alone can
+    // miss a switched-on capability and drop it silently (QA 2026-11-06 P1-3).
+    const pluginState = useAppPluginStore.getState()
+    const droppedCapabilityNames = resolveDroppedCapabilities({
+      advancedDrawEnabled: settings.advancedDrawEnabled,
+      videoGenerationEnabled: settings.videoGenerationEnabled,
+      codeGraphEnabled: pluginState.isCodeGraphToolAvailable(session?.projectId ?? null),
+      desktopControlEnabled: pluginState.isDesktopControlToolAvailable(),
+      snapshotToolNames: requestToolSnapshot.map((definition) => definition.name)
+    })
     const registeredToolDefs = requestToolSnapshot.filter(
-      (definition) => !isUnmigratedTsRuntimeCapabilityTool(definition.name)
+      (definition) => !droppedCapabilityNames.includes(definition.name)
     )
     const scenarioToolDefs = session?.scenarioPolicy
       ? registeredToolDefs.filter((definition) =>
@@ -1640,6 +1652,9 @@ export async function sendChatMessage(
               capabilityNotice: { toolNames: droppedCapabilityNames }
             }
           })
+          // The notice is written before the stream starts; flush it now so a later message
+          // reload cannot restore a snapshot without the meta.
+          flushRuntimeForegroundMutations()
         }
 
         const loop: AsyncIterable<AgentEvent> | AsyncIterable<TsRuntimeProjectedEvent> =
@@ -2922,6 +2937,8 @@ async function runSimpleChat(
     toolDefinitions?: ToolDefinition[]
   }
 ): Promise<'completed' | 'failed' | 'canceled'> {
+  await ensureTokenEncoder()
+
   const chatStore = useChatStore.getState()
   const chatModelConfig = findProviderModel(config.providerId, config.model).modelConfig
   let requestMessages = ensureRequestContainsExpectedUserMessage(

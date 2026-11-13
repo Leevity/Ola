@@ -27,6 +27,13 @@ type RemoteCaptureStore = {
 }
 
 let captureStream: MediaStream | null = null
+/**
+ * An in-flight startProbe, so concurrent callers share one attempt. Unattended
+ * access starts capture on its own AND the inbound offer starts one; without
+ * coalescing, the second call's stopStream() tears down the stream the first
+ * call just built, and the controller receives an answer with no video track.
+ */
+let probeInFlight: Promise<void> | null = null
 
 export function getRemoteCaptureStream(): MediaStream | null {
   return captureStream
@@ -84,9 +91,48 @@ export const useRemoteCaptureStore = create<RemoteCaptureStore>((set) => ({
       displayId: null
     })
   },
-  startProbe: async () => {
+  startProbe: () => {
+    if (probeInFlight) return probeInFlight
+    const attempt = runProbe()
+    probeInFlight = attempt.finally(() => {
+      if (probeInFlight === attempt) probeInFlight = null
+    })
+    return probeInFlight
+  }
+}))
+
+/**
+ * getDisplayMedia is the supported path. Main answers it with the display named
+ * here rather than showing a system picker, which is what keeps unattended
+ * capture from waiting for someone to choose a screen. The legacy
+ * chromeMediaSource call stays as the fallback: it is the path that has shipped,
+ * and a renderer whose display-media request goes unanswered must still share.
+ */
+async function openCaptureStream(source: RemoteCaptureSource): Promise<MediaStream> {
+  await ipcClient.invoke(IPC.REMOTE_CAPTURE_SELECT, { displayId: source.displayId })
+  if (navigator.mediaDevices.getDisplayMedia) {
+    try {
+      return await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+    } catch {
+      // The legacy error below is the one worth surfacing: it names the source
+      // it actually tried, where getDisplayMedia only reports a bare denial.
+    }
+  }
+  return await navigator.mediaDevices.getUserMedia({
+    video: {
+      mandatory: {
+        chromeMediaSource: 'desktop',
+        chromeMediaSourceId: source.id
+      }
+    } as MediaTrackConstraints,
+    audio: false
+  })
+}
+
+async function runProbe(): Promise<void> {
+  {
     stopStream()
-    set({
+    useRemoteCaptureStore.setState({
       status: 'requesting',
       error: null,
       label: null,
@@ -113,24 +159,16 @@ export const useRemoteCaptureStore = create<RemoteCaptureStore>((set) => ({
         sources.find((item) => item.primary) ??
         sources[0]
       if (!source) throw new Error('No screen capture source is available')
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          mandatory: {
-            chromeMediaSource: 'desktop',
-            chromeMediaSourceId: source.id
-          }
-        } as MediaTrackConstraints,
-        audio: false
-      })
+      const stream = await openCaptureStream(source)
       captureStream = stream
       const [track] = stream.getVideoTracks()
       if (!track) throw new Error('No video track was returned')
       const settings = track.getSettings()
       track.onended = () => {
         captureStream = null
-        set({ status: 'idle' })
+        useRemoteCaptureStore.setState({ status: 'idle' })
       }
-      set({
+      useRemoteCaptureStore.setState({
         status: 'capturing',
         error: null,
         label: track.label || 'Screen capture track',
@@ -143,7 +181,7 @@ export const useRemoteCaptureStore = create<RemoteCaptureStore>((set) => ({
       })
     } catch (error) {
       stopStream()
-      set({
+      useRemoteCaptureStore.setState({
         status: 'error',
         error: error instanceof Error ? error.message : String(error),
         label: null,
@@ -155,4 +193,4 @@ export const useRemoteCaptureStore = create<RemoteCaptureStore>((set) => ({
       throw error
     }
   }
-}))
+}

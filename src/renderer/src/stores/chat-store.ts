@@ -3858,9 +3858,9 @@ export const useChatStore = create<ChatStore>()(
       const projectHasModelBinding = Boolean(projectModelSource || projectHasLegacyModelBinding)
       const hasFixedDefaultModel = Boolean(
         !projectHasModelBinding &&
-        newSessionDefaultModel?.useGlobalActiveModel === false &&
-        newSessionDefaultModel.providerId &&
-        newSessionDefaultModel.modelId
+          newSessionDefaultModel?.useGlobalActiveModel === false &&
+          newSessionDefaultModel.providerId &&
+          newSessionDefaultModel.modelId
       )
       const localSelection = useProviderStore.getState()
       const workspaceSelection =
@@ -4664,7 +4664,7 @@ export const useChatStore = create<ChatStore>()(
         runStatus === 'running' ||
         runStatus === 'retrying' ||
         (agentState.isRunning && agentState.liveSessionId === sessionId) ||
-        Boolean(get().streamingMessages[sessionId])
+        get().streamingMessages[sessionId]
       ) {
         toast.error(
           i18n.t('chat:input.clearConversationRunning', {

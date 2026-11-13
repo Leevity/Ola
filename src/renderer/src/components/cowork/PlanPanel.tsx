@@ -1,6 +1,7 @@
 import { ClipboardList, FileText, Loader2, PenLine, CheckCircle, ExternalLink } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { localizeSessionTitle } from '@renderer/lib/session-display'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Separator } from '@renderer/components/ui/separator'
@@ -193,7 +194,7 @@ function PlanContent({ plan, content }: { plan: Plan; content: string }): React.
             <span>
               {t('plan.runningInSession', {
                 defaultValue: 'This plan is running in session "{{title}}".',
-                title: executionSession.title || 'New Conversation'
+                title: localizeSessionTitle(executionSession.title, (key: string) => t(key))
               })}
             </span>
             <Button

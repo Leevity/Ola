@@ -1,4 +1,5 @@
 ---
+
 name: data-analyst
 description: Analyze datasets, generate insights, create visualizations, and produce data-driven reports. Expert in statistical analysis, trend identification, data cleaning, and presenting findings in clear, actionable formats.
 icon: bar-chart-3

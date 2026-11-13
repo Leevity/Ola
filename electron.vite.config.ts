@@ -1,7 +1,9 @@
 import { resolve } from 'path'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import type { Plugin, Rollup } from 'vite'
 
 const productionRendererCsp =
   "default-src 'self'; script-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; frame-src 'self' http://localhost:* http://127.0.0.1:*"
@@ -10,7 +12,7 @@ const productionRendererCsp =
 // exception limited to the local dev server; packaged renderer HTML uses the
 // strict production policy above.
 const developmentRendererCsp =
-  "default-src 'self'; script-src 'self' 'unsafe-inline' http://localhost:5173; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; frame-src 'self' http://localhost:* http://127.0.0.1:*"
+  "default-src 'self'; script-src 'self' 'unsafe-inline' http://localhost:5173; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss: ws: http://localhost:* http://127.0.0.1:*; frame-src 'self' http://localhost:* http://127.0.0.1:*"
 
 const rendererCspPlugin = {
   name: 'ola-renderer-csp',
@@ -20,9 +22,36 @@ const rendererCspPlugin = {
   }
 }
 
+// The bundle budget gate needs Rollup's real module graph. Sniffing library names
+// out of minified code reports locale strings and tokenizer vocabulary as hits.
+// Written outside out/renderer so it never ships inside the packaged app.
+const bundleManifestPlugin: Plugin = {
+  name: 'ola-bundle-manifest',
+  apply: 'build',
+  writeBundle(_options, bundle) {
+    const chunks = Object.values(bundle)
+      .filter((item): item is Rollup.OutputChunk => item.type === 'chunk')
+      .map((chunk) => ({
+        fileName: chunk.fileName,
+        isEntry: chunk.isEntry,
+        bytes: Buffer.byteLength(chunk.code, 'utf8'),
+        imports: chunk.imports,
+        dynamicImports: chunk.dynamicImports,
+        modules: Object.entries(chunk.modules).map(([id, mod]) => ({
+          id,
+          bytes: mod.renderedLength
+        }))
+      }))
+    const target = resolve('out/bundle-manifest.json')
+    mkdirSync(resolve('out'), { recursive: true })
+    writeFileSync(target, JSON.stringify({ chunks }))
+  }
+}
+
 export default defineConfig({
   main: {
     build: {
+      minify: 'esbuild',
       rollupOptions: {
         external: ['better-sqlite3', '@jitsi/robotjs']
       }
@@ -31,11 +60,17 @@ export default defineConfig({
   },
   preload: {
     build: {
+      minify: 'esbuild',
       isolatedEntries: true,
       externalizeDeps: false
     }
   },
   renderer: {
+    // electron-vite defaults minify to false for all three targets, so the
+    // shipped app was paying parse cost for unminified source.
+    build: {
+      minify: 'esbuild'
+    },
     server: {
       port: 5173,
       strictPort: true
@@ -64,13 +99,13 @@ export default defineConfig({
         'motion',
         'framer-motion'
       ],
-      exclude: ['@monaco-editor/react', '@monaco-editor/loader', 'html-to-image', 'monaco-editor']
+      exclude: ['html-to-image']
     },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [rendererCspPlugin, react(), tailwindcss()]
+    plugins: [rendererCspPlugin, bundleManifestPlugin, react(), tailwindcss()]
   }
 })

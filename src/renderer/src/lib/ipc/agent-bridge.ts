@@ -11,6 +11,7 @@ import {
 import { invokeMessagePackBinary } from '@renderer/lib/ipc/messagepack-ipc-client'
 import { isTsRuntimeAvailable, streamTsRuntimeTextTurn } from './ts-runtime-bridge'
 import { resolveTsRuntimeModelBinding } from './ts-runtime-model-binding'
+import { resolveAuxiliaryRunSessionId } from './auxiliary-run-session'
 import { assessTsRuntimeTextEligibility } from './ts-runtime-text-eligibility'
 import { toMessagePackChannel } from '../../../../shared/messagepack/binary-ipc'
 import { useWorkspaceStore } from '@renderer/stores/workspace-store'
@@ -114,9 +115,23 @@ export async function* streamTsProviderTurn(args: {
     text: String(message.content ?? '')
   }))
   try {
+    const sessionId = await resolveAuxiliaryRunSessionId(
+      binding.workspaceId,
+      args.provider.sessionId
+    )
+    if (!sessionId) {
+      yield {
+        type: 'error',
+        error: {
+          type: 'ts_runtime_error',
+          message: 'TS_RUNTIME_TEXT_SESSION_REQUIRED'
+        }
+      }
+      return
+    }
     for await (const event of streamTsRuntimeTextTurn({
       workspaceId: binding.workspaceId,
-      sessionId: `ts-provider:${crypto.randomUUID()}`,
+      sessionId,
       modelSource: binding.modelSource,
       modelOptions: {
         systemPrompt: args.provider.systemPrompt,
@@ -157,11 +172,13 @@ export async function runTsTextRequest(args: {
       modelSource: binding.modelSource
     })
     if (eligibility.eligible) {
+      const sessionId = await resolveAuxiliaryRunSessionId(binding.workspaceId, provider.sessionId)
+      if (!sessionId) throw new Error('TS_RUNTIME_TEXT_SESSION_REQUIRED')
       let text = ''
       try {
         for await (const event of streamTsRuntimeTextTurn({
           workspaceId: binding.workspaceId,
-          sessionId: `auxiliary-text:${crypto.randomUUID()}`,
+          sessionId,
           modelSource: binding.modelSource,
           modelOptions: eligibility.modelOptions,
           prompt: eligibility.prompt,

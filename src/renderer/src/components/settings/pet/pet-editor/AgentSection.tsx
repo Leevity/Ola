@@ -100,7 +100,6 @@ export function AgentSection({ pet }: AgentSectionProps): React.JSX.Element {
     setVoiceTagDraft(agent.voiceTag)
     // Intentionally only depend on pet.id: switching pets re-seeds; in-place
     // edits to the current pet are committed via Save, not draft.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pet.id])
 
   const chatModelGroups = useMemo(

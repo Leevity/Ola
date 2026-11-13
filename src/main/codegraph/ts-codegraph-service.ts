@@ -725,9 +725,9 @@ export class TsCodeGraphService {
 
   private async listProjects(): Promise<unknown> {
     if (!existsSync(this.dataRoot)) return { success: true, projects: [] }
-    const directories = await (
-      await import('node:fs/promises')
-    ).readdir(this.dataRoot, { withFileTypes: true })
+    const directories = await (await import('node:fs/promises')).readdir(this.dataRoot, {
+      withFileTypes: true
+    })
     const projects = await Promise.all(
       directories
         .filter((entry) => entry.isDirectory())

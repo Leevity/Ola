@@ -1,4 +1,5 @@
 ---
+
 name: security-auditor
 description: Conduct comprehensive security audits, vulnerability assessments, and compliance evaluations across codebases and infrastructure. Provides actionable findings with remediation recommendations.
 icon: shield-check

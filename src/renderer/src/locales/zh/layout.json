@@ -1465,6 +1465,7 @@
       "server": "技能市场服务暂时不可用，请稍后重试。",
       "unknown": "加载技能市场失败，请重试。"
     },
+    "offlineFallback": "技能市场暂不可达，以下显示本机已安装的技能，可继续正常使用。",
     "retry": "重试",
     "skillFiles": "技能文件",
     "noFiles": "暂无文件",
@@ -1514,6 +1515,22 @@
     "cancel": "取消"
   },
   "remote": {
+    "meshTaskTitle": "远程任务请求",
+    "meshTaskFrom": "来自 {{node}}",
+    "meshTaskAccept": "执行任务",
+    "meshTaskReject": "拒绝",
+    "meshTaskRunning": "远程任务执行中：{{running}}",
+    "meshTaskAttendedNote": "未经你批准不会执行任何操作。",
+    "meshTaskReason": {
+      "unknown-task": "该请求已不可用。",
+      "already-decided": "该请求已被处理。",
+      "user-rejected": "已拒绝该请求。",
+      "access-disabled": "远程访问已关闭。",
+      "session-busy": "另一个远程会话正在进行。",
+      "confirmation-required": "此设备需要人工确认。",
+      "quota-exhausted": "无人值守审批额度已用尽。"
+    },
+    "controlInputHint": "点击远程画面即可控制。失去焦点后鼠标与键盘输入会停止。",
     "accountRequired": "请输入邮箱和密码。",
     "accountReady": "远控账号已就绪。",
     "deviceRegistered": "当前设备已注册。",
@@ -1521,10 +1538,26 @@
     "allowControlDisabled": "远程控制已关闭。",
     "controlPermissionEnabled": "屏幕共享期间已允许远端键盘和指针输入。",
     "controlPermissionDisabled": "已禁止远端键盘和指针输入。",
-    "controlPermissionRequiresCapture": "请先开启屏幕共享，再允许远程控制。",
+    "controlPermissionRequiresCapture": "请先开启屏幕共享，远控才能生效。",
     "controlPermissionUpdating": "正在更新远控权限…",
     "enableControl": "允许远程控制",
     "disableControl": "关闭远程控制",
+    "accessModeTitle": "本机远控许可",
+    "accessModeNone": "已关闭",
+    "accessModeAttended": "我在时允许",
+    "accessModeUnattended": "无人值守",
+    "accessModeNoneHint": "任何设备都无法连接到这台机器。",
+    "accessModeAttendedHint": "本机 Ola 运行且屏幕共享开启时允许连接。停止共享或退出即失效。",
+    "accessModeUnattendedHint": "无人值守也允许连接。远端会话中的工具审批将自动通过，并记入审计日志。",
+    "accessModeUnsupported": "当前控制面还不支持三态许可，请先升级服务端再在此修改远控设置。",
+    "unattendedConsent": "无人值守会让远端会话无需询问即可批准工具调用。请输入本机设备名以确认。",
+    "unattendedConfirm": "开启无人值守",
+    "unattendedCancel": "取消",
+    "bannerAttended": "远控许可：我在时允许",
+    "bannerAttendedDetail": "只有屏幕共享保持开启时，远端会话才能操作这台机器。",
+    "bannerUnattended": "远控许可：无人值守",
+    "bannerUnattendedDetail": "该账户下任何已登录设备都可操作本机。12 小时内已自动批准 {{used}}/{{limit}} 次。",
+    "bannerRevoke": "立即关闭",
     "pairingRefreshed": "配对码已刷新。",
     "pairingCodeRequired": "请输入配对码。",
     "pairingResolved": "配对码解析成功。",
@@ -1760,7 +1793,7 @@
     "configureServiceLater": "配置远端服务",
     "crossPlatform": "跨平台控制",
     "mobileTitle": "向 Ola Mobile 节点发送任务",
-    "mobileDescription": "选择一台在线的 Android 或 iOS 节点。任务会经 Ola 服务签名并排队，手机必须先向用户展示并取得批准才会执行。",
+    "mobileDescription": "选择一台在线的 Android 或 iOS 节点。任务由 Ola 服务签名并排队，目标手机按本机 Mesh 策略自动执行或等待人工批准。",
     "refreshMobileNodes": "刷新节点",
     "mobileRefreshFailed": "无法刷新 Ola Mobile 节点。",
     "mobileLoginRequired": "请先登录 Ola 账户，再向移动节点发送任务。",
@@ -1769,13 +1802,13 @@
     "mobileTarget": "目标手机",
     "mobileNodeMustBeOnline": "手机必须保持在线并轮询 Mesh 收件箱才能收到任务。",
     "mobileTaskPrompt": "任务内容",
-    "mobileTaskPlaceholder": "描述要交给手机 Agent 的任务；执行前手机会向用户请求批准。",
-    "mobileTaskApprovalNote": "手机用户批准前不会运行任何 Agent 工具",
+    "mobileTaskPlaceholder": "描述要交给手机 Agent 的任务；手机会按该节点的 Mesh 执行策略处理。",
+    "mobileTaskApprovalNote": "执行前是否需要人工批准，由目标手机上的 Mesh 策略决定",
     "sendMobileTask": "发送任务",
     "mobileTaskSending": "发送中…",
     "mobileTaskSent": "任务请求已发送到移动节点。",
     "mobileTaskSendFailed": "无法发送任务请求。",
-    "mobileTaskQueued": "Ola 服务已接收任务请求。请在手机上查看并批准。",
+    "mobileTaskQueued": "Ola 服务已接收任务请求。目标手机将按本机 Mesh 策略自动执行或等待人工批准。",
     "mobileReceipt": {
       "task": {
         "accepted": "手机已接受任务。",
@@ -1951,5 +1984,18 @@
     "signIn": "登录或创建账户",
     "local": "暂不登录，本机使用",
     "localDescription": "本机模式的数据保留在此设备。调用外部模型服务仍需要网络与模型配置。"
+  },
+  "workspaceTabs": {
+    "label": "打开的会话",
+    "home": "首页",
+    "untitled": "未命名会话",
+    "close": "关闭 {{title}} 标签页",
+    "busy": "工作区正忙",
+    "workspaces": "工作区",
+    "personal": "个人"
+  },
+  "profile": {
+    "code": "编程",
+    "work": "工作"
   }
 }

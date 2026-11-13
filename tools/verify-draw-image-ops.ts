@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
-import fs from 'node:fs'
 import { decodeDrawAssetDataUrl } from '../src/main/draw/draw-asset-codec'
+import { readCollapsedSource } from './lib/source-text.ts'
 
-const schema = fs.readFileSync('src/shared/draw-graph.ts', 'utf8')
-const canvas = fs.readFileSync('src/renderer/src/components/draw/DrawGraphCanvas.tsx', 'utf8')
-const handlers = fs.readFileSync('src/main/ipc/draw-graph-handlers.ts', 'utf8')
-const settings = fs.readFileSync('src/renderer/src/stores/settings-store.ts', 'utf8')
+// The source assertions are about code, not layout, so each file is read with whitespace
+// collapsed. Patterns tolerate a space wherever the formatter may break a line: after
+// `:` and `,`, inside brackets/parens, and around the dots of a wrapped member chain.
+const schema = await readCollapsedSource('src/shared/draw-graph.ts')
+const canvas = await readCollapsedSource('src/renderer/src/components/draw/DrawGraphCanvas.tsx')
+const handlers = await readCollapsedSource('src/main/ipc/draw-graph-handlers.ts')
+const settings = await readCollapsedSource('src/renderer/src/stores/settings-store.ts')
 
 for (const operation of ['crop', 'mask', 'expand', 'outpaint', 'upscale', 'angle']) {
   assert.match(schema, new RegExp(`'${operation}'`))
@@ -14,20 +17,23 @@ for (const operation of ['cropRaster', 'buildMask', 'expandRaster', 'upscaleRast
   assert.match(canvas, new RegExp(operation))
 }
 assert.match(schema, /export type DrawGraphOperationState/)
-assert.match(schema, /state\?: DrawGraphOperationState/)
+assert.match(schema, /state\?:\s*DrawGraphOperationState/)
 assert.match(schema, /interface DrawGraphAssetRef/)
-assert.match(settings, /advancedDrawEnabled: false/)
-assert.match(canvas, /advancedDrawEnabled && nodeMap/)
+assert.match(settings, /advancedDrawEnabled:\s*false/)
+assert.match(canvas, /advancedDrawEnabled\s*&&\s*nodeMap/)
 assert.match(canvas, /optionalCapabilityDisabled/)
 assert.match(canvas, /draw-graph:asset-save/)
 assert.match(canvas, /maskAssetId/)
-assert.match(canvas, /nodes: \[\.\.\.current\.nodes, outputNode\]/)
-assert.match(canvas, /source: sourceNode\.id, target: outputNodeId/)
+assert.match(canvas, /nodes:\s*\[\s*\.\.\.current\s*\.\s*nodes,\s*outputNode\s*\]/)
+assert.match(canvas, /source:\s*sourceNode\s*\.\s*id,\s*target:\s*outputNodeId/)
 assert.match(canvas, /AngleGenerationDialog/)
 assert.match(canvas, /generateTsOpenAIImages/)
 assert.match(canvas, /Extend this image naturally into the transparent border/)
 assert.match(canvas, /imageOperationControllers/)
-assert.match(canvas, /setOperationState\(sourceNode\.id, operation\.id, 'cancelled'\)/)
+assert.match(
+  canvas,
+  /setOperationState\(\s*sourceNode\s*\.\s*id,\s*operation\s*\.\s*id,\s*'cancelled'\s*\)/
+)
 const png = Buffer.alloc(24)
 Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(png)
 png.writeUInt32BE(640, 16)

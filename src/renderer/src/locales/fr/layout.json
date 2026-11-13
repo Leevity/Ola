@@ -1027,5 +1027,23 @@
     "terminalExited": "Fin de la session finale",
     "terminalExitedWithError": "Session du terminal sortie",
     "exitCode": "Code de sortie: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "Demande de tâche distante",
+    "meshTaskFrom": "De {{node}}",
+    "meshTaskAccept": "Exécuter la tâche",
+    "meshTaskReject": "Refuser",
+    "meshTaskRunning": "Tâches distantes en cours : {{running}}",
+    "meshTaskAttendedNote": "Rien ne s'exécute sans votre accord.",
+    "meshTaskReason": {
+      "unknown-task": "Cette demande n'est plus disponible.",
+      "already-decided": "Cette demande a déjà été traitée.",
+      "user-rejected": "Demande refusée.",
+      "access-disabled": "L'accès à distance est désactivé.",
+      "session-busy": "Une autre session distante est active.",
+      "confirmation-required": "Cette machine exige une confirmation.",
+      "quota-exhausted": "Le quota d'approbations sans surveillance est épuisé."
+    },
+    "controlInputHint": "Cliquez sur l'écran distant pour le contrôler. La saisie souris et clavier s'arrête lorsqu'il perd le focus."
   }
 }

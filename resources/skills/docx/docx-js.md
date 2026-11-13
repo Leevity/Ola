@@ -767,12 +767,12 @@ new Paragraph({
 
 ```javascript
 // Manual page break
-;(new Paragraph({ children: [new PageBreak()] }),
+new Paragraph({ children: [new PageBreak()] }),
   // Page break before paragraph
   new Paragraph({
     pageBreakBefore: true,
     children: [new TextRun('This starts on a new page')]
-  }))
+  })
 
 // ⚠️ CRITICAL: NEVER use PageBreak standalone - it will create invalid XML that Word cannot open
 // ❌ WRONG: new PageBreak()

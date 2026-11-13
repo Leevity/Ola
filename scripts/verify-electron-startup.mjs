@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import { spawn } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
@@ -105,6 +104,7 @@ mkdirSync(evidenceDir, { recursive: true })
 // Windows because the extension-less shim is not executable there.
 const electronBinary = require('electron')
 
+const spawnedAt = Date.now()
 const child = spawn(
   electronBinary,
   [
@@ -256,11 +256,11 @@ function readSettingsRoutes() {
     'utf8'
   )
   const registrySource = source.slice(
-    source.indexOf('export const SETTINGS_REGISTRY'),
-    source.indexOf('const pageById')
+    source.search(/export\s+const\s+SETTINGS_REGISTRY/),
+    source.search(/const\s+pageById/)
   )
   const routes = []
-  const pagePattern = /\{\s*id:\s*'([^']+)'[\s\S]*?section:\s*'([^']+)'[\s\S]*?\n\s*\}/g
+  const pagePattern = /\{\s*id:\s*'([^']+)'[\s\S]*?section:\s*'([^']+)'[\s\S]*?\}/g
   for (const match of registrySource.matchAll(pagePattern)) {
     routes.push(`#/settings/${match[2]}/${match[1]}`)
   }
@@ -288,6 +288,21 @@ async function main() {
 
   await cdp(ws, 'Runtime.enable')
   await cdp(ws, 'Page.enable')
+  const targetReadyMs = Date.now() - spawnedAt
+  // Cold-start evidence: poll for the first React commit instead of relying on the
+  // fixed settle sleep below, which would otherwise dominate the number.
+  let firstPaintMs = null
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const probe = await cdp(ws, 'Runtime.evaluate', {
+      expression: 'Boolean(document.querySelector("#root")?.firstElementChild)',
+      returnByValue: true
+    })
+    if (probe.result?.value === true) {
+      firstPaintMs = Date.now() - spawnedAt
+      break
+    }
+    await sleep(100)
+  }
   await sleep(4_000)
 
   const evaluation = await cdp(ws, 'Runtime.evaluate', {
@@ -641,6 +656,16 @@ async function main() {
     )
   }
 
+  // The window opens even when the runtime child never starts, so a forbidden
+  // pattern list cannot prove isolation. Require the positive marker instead:
+  // a misresolved or stale child bundle must turn this gate red.
+  const isolatedReady = combinedLogs.match(/\[TsRuntime\] isolated runtime ready \(pid (\d+)\)/)
+  if (!isolatedReady) {
+    throw new Error(
+      'Electron startup never reported an isolated runtime child; the utilityProcess path was not exercised'
+    )
+  }
+
   const logPath = join(evidenceDir, `electron-startup-${evidenceDate}.txt`)
   writeFileSync(logPath, combinedLogs)
   console.log(
@@ -650,6 +675,9 @@ async function main() {
         title: page.title,
         url: page.url,
         bodyTextLength: page.bodyTextLength,
+        targetReadyMs,
+        firstPaintMs,
+        isolatedRuntimePid: Number(isolatedReady[1]),
         routeCount: routes.length,
         featureSurfaceCount: featureSurfaces.length,
         accountAuthChecked: true,

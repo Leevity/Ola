@@ -1,4 +1,5 @@
 ---
+
 name: excel-processor
 description: Read, write, analyze, and format Excel workbooks with Python and openpyxl. Use for creating .xlsx files, extracting data, applying formulas and styles, building charts, conditional formatting, or generating multi-sheet reports.
 ---

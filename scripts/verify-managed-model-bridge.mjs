@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
 import assert from 'node:assert/strict'
 import { build } from 'esbuild'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
@@ -48,7 +47,8 @@ try {
                   ? `export const desktopMeshCapabilities = []; export const desktopMeshPlatform = () => 'macos'; export const loadDesktopMeshIdentity = async () => ({});`
                   : args.path.endsWith('sessions-dao')
                     ? `export const getSession = async (id) => id === 'session-a' ? { workspace_id: 'team-a' } : undefined;`
-                    : `export const setRemoteControlAllowed = () => {};`
+                    : `export const setRemoteControlAllowed = () => {};
+          export const setRemoteAccessMode = () => {};`
           }))
         }
       }

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { connect, type Socket } from 'node:net'
 import {
+  MAX_HOST_FRAME_BYTES,
   RUNTIME_CAPABILITIES,
   RUNTIME_PROTOCOL_VERSION,
   RuntimeError,
@@ -8,6 +9,7 @@ import {
   type RunSnapshot,
   type RuntimeCapability
 } from '../../shared/runtime/contracts'
+import type { HostStreamFrame } from '../../shared/runtime/host-protocol'
 import { FrameDecoder, encodeFrame } from './framing'
 
 export interface RuntimeRunStream {
@@ -39,7 +41,7 @@ export class RuntimeClient {
     {
       resolve: (value: unknown) => void
       reject: (error: Error) => void
-      timer: ReturnType<typeof setTimeout>
+      timer: ReturnType<typeof setTimeout> | null
     }
   >()
   private streams = new Map<
@@ -47,6 +49,15 @@ export class RuntimeClient {
     RuntimeRunStreamOptions & { buffered: RunEvent[]; ready: boolean }
   >()
   private negotiated = new Set<RuntimeCapability>()
+  private hostHandler: ((method: string, params: unknown) => Promise<unknown>) | null = null
+  /**
+   * Register the host callback handler before connecting. Only a peer that
+   * negotiated the `host` capability is ever asked, and an unregistered handler
+   * answers with an error rather than silently dropping the request.
+   */
+  onRequest(handler: (method: string, params: unknown) => Promise<unknown>): void {
+    this.hostHandler = handler
+  }
   get capabilities(): ReadonlySet<RuntimeCapability> {
     return this.negotiated
   }
@@ -65,6 +76,8 @@ export class RuntimeClient {
           if (!frame || typeof frame !== 'object') throw new RuntimeError('INVALID_RESPONSE')
           const message = frame as {
             id?: string
+            method?: unknown
+            params?: unknown
             error?: string
             result?: unknown
             event?: unknown
@@ -78,10 +91,16 @@ export class RuntimeClient {
             this.dispatchNotification(message)
             continue
           }
+          // A frame that carries a method is the server asking *us* to serve a
+          // host callback, not an answer to one of our requests.
+          if (typeof message.method === 'string') {
+            this.serveHostRequest(socket, message.id, message.method, message.params)
+            continue
+          }
           const request = this.pending.get(message.id)
           if (!request) continue
           this.pending.delete(message.id)
-          clearTimeout(request.timer)
+          if (request.timer) clearTimeout(request.timer)
           if (message.error) request.reject(new RuntimeError(message.error))
           else request.resolve(message.result)
         }
@@ -117,6 +136,7 @@ export class RuntimeClient {
       if (new Set(capabilities).size !== capabilities.length)
         throw new RuntimeError('INVALID_RESPONSE')
       this.negotiated = new Set(capabilities)
+      if (this.negotiated.has('host')) decoder.allowHostFrames()
     } catch (error) {
       this.close()
       throw error
@@ -127,15 +147,34 @@ export class RuntimeClient {
       return Promise.reject(new RuntimeError('RUNTIME_DISCONNECTED'))
     if (this.pending.size >= 32) return Promise.reject(new RuntimeError('TOO_MANY_REQUESTS'))
     const id = String(++this.nextId)
-    const frame = encodeFrame({ id, method, params })
+    const frame = encodeFrame({ id, method, params }, this.frameLimit())
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id)
-        reject(new RuntimeError('REQUEST_TIMEOUT'))
-      }, timeout)
+      // An approval or a nested run has no deadline; 0 leaves the wait to the
+      // caller's own cancellation and to a lost connection.
+      const timer =
+        timeout > 0
+          ? setTimeout(() => {
+              this.pending.delete(id)
+              reject(new RuntimeError('REQUEST_TIMEOUT'))
+            }, timeout)
+          : null
       this.pending.set(id, { resolve: (value) => resolve(value as T), reject, timer })
       this.socket!.write(frame)
     })
+  }
+
+  private frameLimit(): number | undefined {
+    return this.negotiated.has('host') ? MAX_HOST_FRAME_BYTES : undefined
+  }
+
+  /**
+   * Feeds a model stream the runtime asked for. Deltas are notifications, not
+   * answers, so a slow turn never occupies one of the request slots.
+   */
+  sendHostStream(frame: HostStreamFrame): void {
+    const socket = this.socket
+    if (!socket || socket.destroyed || !this.negotiated.has('host')) return
+    socket.write(encodeFrame({ event: 'host.stream', ...frame }, MAX_HOST_FRAME_BYTES))
   }
 
   /**
@@ -200,6 +239,44 @@ export class RuntimeClient {
     }
   }
 
+  /**
+   * Host callbacks are answered concurrently, never queued behind each other:
+   * the runtime can be waiting on a tool result while Main needs to submit a
+   * nested run back through this same socket.
+   */
+  private serveHostRequest(
+    socket: Socket,
+    requestId: string,
+    method: string,
+    params: unknown
+  ): void {
+    const answer = (frame: Record<string, unknown>): void => {
+      if (socket.destroyed) return
+      try {
+        socket.write(encodeFrame({ id: requestId, ...frame }, MAX_HOST_FRAME_BYTES))
+      } catch {
+        socket.destroy()
+      }
+    }
+    const handler = this.hostHandler
+    if (!handler) {
+      answer({ error: 'HOST_CALLBACK_UNAVAILABLE' })
+      return
+    }
+    void handler(method, params).then(
+      (result) => answer({ result: result ?? null }),
+      (error: unknown) => {
+        const code =
+          error &&
+          typeof error === 'object' &&
+          typeof (error as { code?: unknown }).code === 'string'
+            ? (error as { code: string }).code
+            : 'HOST_CALLBACK_FAILED'
+        answer({ error: code })
+      }
+    )
+  }
+
   private dispatchNotification(message: {
     event?: unknown
     subscriptionId?: unknown
@@ -226,10 +303,24 @@ export class RuntimeClient {
 
   private fail(error: Error): void {
     for (const request of this.pending.values()) {
-      clearTimeout(request.timer)
+      if (request.timer) clearTimeout(request.timer)
       request.reject(error)
     }
     this.pending.clear()
+    // A dropped subscription must ask its consumer to reconcile. Clearing the
+    // map silently would leave a run waiting for events that never arrive.
+    if (this.streams.size > 0) {
+      console.warn(
+        `[TsRuntime] requesting resync for ${this.streams.size} run stream(s) (${error instanceof RuntimeError ? error.code : 'RESYNC_REQUIRED'})`
+      )
+    }
+    for (const entry of this.streams.values()) {
+      try {
+        entry.onResync(error instanceof RuntimeError ? error.code : 'RESYNC_REQUIRED')
+      } catch {
+        /* A failed consumer cannot stop the rest from being told. */
+      }
+    }
     this.streams.clear()
   }
   close(): void {

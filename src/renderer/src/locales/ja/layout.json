@@ -1027,5 +1027,23 @@
     "terminalExited": "ターミナルセッション終了",
     "terminalExitedWithError": "ターミナルセッション終了",
     "exitCode": "出口コード: {{code}}"
+  },
+  "remote": {
+    "meshTaskTitle": "リモートタスクの要求",
+    "meshTaskFrom": "{{node}} から",
+    "meshTaskAccept": "タスクを実行",
+    "meshTaskReject": "拒否",
+    "meshTaskRunning": "実行中のリモートタスク：{{running}}",
+    "meshTaskAttendedNote": "承認するまで何も実行されません。",
+    "meshTaskReason": {
+      "unknown-task": "この要求は利用できなくなりました。",
+      "already-decided": "この要求にはすでに回答済みです。",
+      "user-rejected": "要求を拒否しました。",
+      "access-disabled": "リモートアクセスはオフです。",
+      "session-busy": "別のリモートセッションが使用中です。",
+      "confirmation-required": "この端末では確認が必要です。",
+      "quota-exhausted": "無人承認の上限に達しました。"
+    },
+    "controlInputHint": "リモート画面をクリックすると操作できます。フォーカスが外れるとマウスとキーボードの入力は停止します。"
   }
 }

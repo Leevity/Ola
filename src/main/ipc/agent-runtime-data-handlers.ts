@@ -9,9 +9,9 @@ function trusted(event: IpcMainInvokeEvent): boolean {
   const window = BrowserWindow.fromWebContents(event.sender)
   return Boolean(
     window &&
-    !window.isDestroyed() &&
-    window.webContents === event.sender &&
-    event.senderFrame === event.sender.mainFrame
+      !window.isDestroyed() &&
+      window.webContents === event.sender &&
+      event.senderFrame === event.sender.mainFrame
   )
 }
 

@@ -1,6 +1,6 @@
 import { RuntimeError, type RunSpec } from '../../shared/runtime/contracts'
 import type { ExecutionContext } from '../scheduler/run-scheduler'
-import { ToolExecutor, type ToolCall } from '../tools/tool-executor'
+import type { AgentToolExecutor, ToolCall } from '../tools/tool-executor'
 
 import type {
   AgentMessage,
@@ -10,7 +10,9 @@ import type {
 } from '../../shared/runtime/model'
 export type { AgentMessage, ModelDelta, ProviderAdapter } from '../../shared/runtime/model'
 
-export type ToolExecutorResolver = ToolExecutor | ((run: RunSpec) => Promise<ToolExecutor>)
+export type ToolExecutorResolver =
+  | AgentToolExecutor
+  | ((run: RunSpec) => Promise<AgentToolExecutor>)
 
 export function createAgentExecutor(
   provider: ProviderAdapter,
@@ -18,7 +20,7 @@ export function createAgentExecutor(
   defaultMaxTurns = 64
 ) {
   return async (run: RunSpec, context: ExecutionContext): Promise<void> => {
-    const toolExecutor = tools instanceof ToolExecutor ? tools : await tools(run)
+    const toolExecutor = typeof tools === 'function' ? await tools(run) : tools
     const executedToolIds = new Set<string>()
     const maxTurns = run.maxTurns ?? defaultMaxTurns
     const maxToolCalls = run.maxToolCalls ?? 256
@@ -43,6 +45,7 @@ export function createAgentExecutor(
       context.signal.throwIfAborted()
       await context.emit('turn.started', { turn })
       let text = ''
+      let reasoning = ''
       const toolCalls: ToolCall[] = []
       let replay: ProviderReplay | undefined
       let usage: ModelUsage | undefined
@@ -59,9 +62,13 @@ export function createAgentExecutor(
             throw new RuntimeError('MODEL_OUTPUT_TOO_LARGE')
           await context.emit('message.delta', { text: delta.text })
         } else if (delta.type === 'tool') toolCalls.push(delta.call)
-        else if (delta.type === 'thinking')
+        else if (delta.type === 'thinking') {
+          // Reasoning providers (e.g. DeepSeek thinking mode) require the thinking text to be
+          // passed back on the assistant message that carries tool_calls. Keep a bounded copy
+          // in the model context so the next request can replay it.
+          if (new TextEncoder().encode(reasoning).byteLength <= 128 * 1024) reasoning += delta.text
           await context.emit('thinking.delta', { text: delta.text })
-        else if (delta.type === 'replay') replay = delta.replay
+        } else if (delta.type === 'replay') replay = delta.replay
         else if (delta.type === 'tool.start' || delta.type === 'tool.arguments')
           await context.emit(delta.type, delta)
         else {
@@ -83,7 +90,13 @@ export function createAgentExecutor(
           })
         }
       }
-      messages.push({ role: 'assistant', text, toolCalls, ...(replay ? { replay } : {}) })
+      messages.push({
+        role: 'assistant',
+        text,
+        toolCalls,
+        ...(reasoning ? { reasoning } : {}),
+        ...(replay ? { replay } : {})
+      })
       // Signed provider replay belongs to model context, not the public UI event stream.
       await context.emit('message.completed', {
         turn,

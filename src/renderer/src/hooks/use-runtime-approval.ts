@@ -7,6 +7,7 @@ import type { TsRuntimeInteractionEvent } from '@renderer/lib/ipc/ts-runtime-pro
 import { normalizeRuntimeApprovalRequest } from '@renderer/lib/ipc/runtime-approval-protocol'
 import { resolveTsRuntimeBrowserInteraction } from '@renderer/lib/ipc/browser-runtime-interaction'
 import { handleNativeAskUserRequest } from '@renderer/lib/tools/ask-user-tool'
+import { requestRemoteAutoApproval } from '@renderer/lib/remote/remote-auto-approval'
 
 export interface RuntimeInteractionContext {
   sessionId: string
@@ -92,6 +93,21 @@ export async function resolveRuntimeInteraction(
       runId: event.interaction.runId,
       interactionId: event.interaction.interactionId,
       response: { approved: false, reason: 'Invalid TS runtime tool approval request' }
+    })
+    return
+  }
+
+  // A live unattended session may answer this approval on behalf of the absent
+  // user. The main process refuses unless the run was submitted while that
+  // session was already open, so a local run in the same window is never
+  // auto-approved. Nothing is added to the local allowlist: when the session
+  // ends the next approval asks a human again.
+  if (await requestRemoteAutoApproval(event.interaction.runId, request.toolCall.name)) {
+    await respondTsRuntimeInteraction({
+      workspaceId: event.interaction.workspaceId,
+      runId: event.interaction.runId,
+      interactionId: event.interaction.interactionId,
+      response: { approved: true }
     })
     return
   }
