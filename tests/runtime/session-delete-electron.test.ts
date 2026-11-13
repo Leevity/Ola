@@ -186,7 +186,7 @@ describe.skipIf(!enabled)('session deletion Electron synchronization', () => {
     child = spawn(
       packagedExe ?? electronBinary,
       [
-        ...(packagedExe ? [] : [join(process.cwd(), 'out/main/index.js')]),
+        ...(packagedExe ? [] : [process.cwd()]),
         '--no-sandbox',
         '--disable-gpu',
         '--disable-backgrounding-occluded-windows',
