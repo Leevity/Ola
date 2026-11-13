@@ -4,6 +4,21 @@ import { cp, mkdir, mkdtemp, rm, stat, symlink, writeFile } from 'node:fs/promis
 import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 const execute = promisify(execFile)
 
+async function createImage(args, output) {
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await execute('/usr/bin/hdiutil', args, { maxBuffer: 10 * 1024 * 1024 })
+    } catch (error) {
+      const message = `${error?.message ?? ''}\n${error?.stderr ?? ''}`
+      if (attempt === 3 || !/resource busy/i.test(message)) throw error
+      await rm(output, { force: true })
+      console.warn(`hdiutil reported a busy output; retrying (${attempt}/2)`)
+      await new Promise((resolve) => setTimeout(resolve, attempt * 1000))
+    }
+  }
+  throw new Error('Unable to create unsigned DMG')
+}
+
 /** @param {string} content @param {string} output @param {string} volumeName */
 export function nativeDmgArguments(content, output, volumeName) {
   if (!isAbsolute(content) || !isAbsolute(output)) throw new Error('DMG paths must be absolute')
@@ -45,7 +60,7 @@ export async function createNativeUnsignedDmg({ appPath, output, volumeName }) {
     await writeFile(join(content, '.metadata_never_index'), '')
     await cp(appPath, join(content, basename(appPath)), { recursive: true, verbatimSymlinks: true })
     await symlink('/Applications', join(content, 'Applications'))
-    const result = await execute('/usr/bin/hdiutil', args, { maxBuffer: 10 * 1024 * 1024 })
+    const result = await createImage(args, output)
     process.stdout.write(result.stdout)
     process.stderr.write(result.stderr)
     await execute('/usr/bin/hdiutil', ['verify', output], { maxBuffer: 10 * 1024 * 1024 })
