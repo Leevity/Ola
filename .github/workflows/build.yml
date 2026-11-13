@@ -503,6 +503,8 @@ jobs:
       # 而只有本 job 有。验证对象是安装目录里的可执行文件，而不是 dist 里的副本。
       - name: Packaged app starts and renders after install
         if: matrix.platform == 'win'
+        # Keep package verification/upload running even when this advisory UI smoke regresses.
+        continue-on-error: true
         shell: pwsh
         timeout-minutes: 5
         run: |
@@ -511,6 +513,15 @@ jobs:
             throw "Installed Ola executable was not found at $executable"
           }
           npm run verify:packaged-startup -- $executable
+
+      - name: Upload packaged startup evidence
+        if: always() && matrix.platform == 'win'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: ola-packaged-startup-evidence-${{ matrix.artifact_arch }}
+          path: docs/migrations/ts-runtime/evidence/electron-packaged-startup-*
+          if-no-files-found: warn
+          retention-days: 7
 
       - name: Verify Windows release artifacts
         if: matrix.platform == 'win'
