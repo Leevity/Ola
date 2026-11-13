@@ -108,7 +108,7 @@ const spawnedAt = Date.now()
 const child = spawn(
   electronBinary,
   [
-    join(root, 'out/main/index.js'),
+    root,
     '--no-sandbox',
     '--disable-gpu',
     // The suite runner keeps the window in the background; without these switches

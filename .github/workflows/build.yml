@@ -339,7 +339,7 @@ jobs:
             platform: linux
             build_arch: x64
             artifact_arch: amd64
-          - os: ubuntu-24.04-arm
+          - os: ubuntu-26.04-arm
             platform: linux
             build_arch: arm64
             artifact_arch: arm64
