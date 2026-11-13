@@ -269,7 +269,19 @@ function readSettingsRoutes() {
 }
 
 async function main() {
-  const target = await waitForTarget()
+  let target
+  try {
+    target = await waitForTarget()
+  } catch (error) {
+    const details = [
+      `Electron exit code: ${child.exitCode ?? 'still running'}`,
+      stdout.trim() && `Electron stdout:\n${stdout.trim()}`,
+      stderr.trim() && `Electron stderr:\n${stderr.trim()}`
+    ]
+      .filter(Boolean)
+      .join('\n\n')
+    throw new Error(`${error instanceof Error ? error.message : String(error)}\n${details}`)
+  }
   const ws = new WebSocket(target.webSocketDebuggerUrl)
   await new Promise((resolve, reject) => {
     ws.once('open', resolve)

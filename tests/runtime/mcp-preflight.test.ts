@@ -29,7 +29,7 @@ beforeAll(async () => {
   binDir = await mkdtemp(join(tmpdir(), 'ola-mcp-preflight-'))
   // `existsSync` is the only check a PATH walk can make without executing anything.
   await writeFile(join(binDir, 'node'), '#!/bin/sh\n', { mode: 0o755 })
-  await writeFile(join(binDir, 'node.exe'), '', { mode: 0o755 })
+  await writeFile(join(binDir, 'node.EXE'), '', { mode: 0o755 })
   await writeFile(join(binDir, 'adb'), '#!/bin/sh\n', { mode: 0o755 })
 })
 

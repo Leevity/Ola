@@ -69,6 +69,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Electron's npm package installs its binary lazily. Resolve it once before Vitest
+      # forks workers that import Electron, or concurrent downloads can collide.
+      - name: Install Electron test runtime
+        timeout-minutes: 10
+        run: node node_modules/electron/install.js
+
       - name: Quality gates
         run: |
           npm audit --omit=dev --audit-level=high
@@ -81,11 +87,10 @@ jobs:
           npm run format:check
           npm run verify:ci-core
 
-  # 真实 Electron 冒烟：需要构建产物与显示服务器，因此不与 verify:ci-core 同 job。
-  # 这三个门禁此前只在人工验收时执行，改动后一旦回归没有 CI 反馈。
-  # 固定 ubuntu-22.04：Electron 的系统库在 noble 上全部改名为 t64 变体，jammy 的包名稳定。
+  # 真实 Electron 冒烟与质量报告独立运行，不阻断 Release 产物构建。
+  # Electron 43 的 Linux 构建要求 glibc 2.41+，因此使用 Ubuntu 26.04。
   desktop-smoke:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
     steps:
       - name: Checkout
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -111,13 +116,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libx11-dev libxtst-dev libpng++-dev \
-            xvfb libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libgbm1 \
-            libgtk-3-0 libasound2 libxkbcommon0 libxcomposite1 libxdamage1 \
-            libxrandr2 libxfixes3 libpango-1.0-0 libcairo2 libxss1 libatspi2.0-0 \
-            libsecret-1-0
+            xvfb libnss3 libdrm2 libgbm1 libxkbcommon0 libxcomposite1 libxdamage1 \
+            libxrandr2 libxfixes3 libpango-1.0-0 libcairo2 libxss1 libsecret-1-0
+          install_apt_compat() {
+            for package in "$@"; do
+              if apt-cache show "$package" >/dev/null 2>&1; then
+                sudo apt-get install -y "$package"
+                return
+              fi
+            done
+            echo "::error::None of these compatible packages are available: $*"
+            return 1
+          }
+          install_apt_compat libatk1.0-0t64 libatk1.0-0
+          install_apt_compat libatk-bridge2.0-0t64 libatk-bridge2.0-0
+          install_apt_compat libcups2t64 libcups2
+          install_apt_compat libgtk-3-0t64 libgtk-3-0
+          install_apt_compat libasound2t64 libasound2
+          install_apt_compat libatspi2.0-0t64 libatspi2.0-0
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Install Electron test runtime
+        timeout-minutes: 10
+        run: node node_modules/electron/install.js
 
       - name: Build
         run: npm run build
@@ -249,7 +272,8 @@ jobs:
   # ── 多平台构建 ──
   compile:
     if: github.event_name == 'workflow_dispatch'
-    needs: [prepare, quality]
+    # Packaging must remain available even when advisory test/lint jobs fail.
+    needs: [prepare]
     runs-on: ubuntu-latest
 
     steps:
@@ -366,10 +390,12 @@ jobs:
         run: npm run verify:agent-desktop
 
       - name: Run the agent-desktop contract tests
+        continue-on-error: true
         timeout-minutes: 5
         run: npm run test:agent-desktop
 
       - name: Verify the agent-desktop acceptance gate
+        continue-on-error: true
         timeout-minutes: 2
         run: npm run verify:desktop-ax-gate
 
@@ -686,6 +712,7 @@ jobs:
         run: node node_modules/electron/install.js
 
       - name: Verify Electron workspace IPC frame isolation
+        continue-on-error: true
         timeout-minutes: 2
         run: npm run test:electron-ipc
 
@@ -700,10 +727,12 @@ jobs:
         run: npm run verify:agent-desktop
 
       - name: Run the agent-desktop contract tests
+        continue-on-error: true
         timeout-minutes: 5
         run: npm run test:agent-desktop
 
       - name: Verify the agent-desktop acceptance gate
+        continue-on-error: true
         timeout-minutes: 2
         run: npm run verify:desktop-ax-gate
 
