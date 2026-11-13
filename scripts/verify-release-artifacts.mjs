@@ -106,7 +106,7 @@ async function assertMacArtifact(artifacts, smokeDir, requireSignature) {
   // Presence and architecture are asserted on every build; the identity check only applies to a
   // signed release, because an unsigned CI bundle carries an ad-hoc signature by design.
   await verifyAgentDesktopSignatures({
-    app,
+    appPath: app,
     executable: basename(app, '.app'),
     requireSignature
   })
